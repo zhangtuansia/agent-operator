@@ -1,4 +1,4 @@
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { CoworkAppIcon } from "@/components/icons/CoworkAppIcon"
 import { StepFormLayout, ContinueButton } from "./primitives"
 import { useTranslation } from "@/i18n"
 
@@ -24,7 +24,7 @@ export function WelcomeStep({
     <StepFormLayout
       iconElement={
         <div className="flex size-16 items-center justify-center">
-          <CraftAgentsSymbol className="size-10 text-accent" />
+          <CoworkAppIcon size={56} className="rounded-xl" />
         </div>
       }
       title={isExistingUser ? t('onboarding.updateSettings') : t('onboarding.welcome')}

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@agent-operator/ui"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { CoworkAppIcon } from "@/components/icons/CoworkAppIcon"
 import { StepFormLayout } from "./primitives"
 import { useTranslation } from "@/i18n"
 
@@ -33,7 +33,7 @@ export function CompletionStep({
         </div>
       ) : (
         <div className="flex size-16 items-center justify-center">
-          <CraftAgentsSymbol className="size-10 text-accent" />
+          <CoworkAppIcon size={56} className="rounded-xl" />
         </div>
       )}
       title={isSaving ? t('onboarding.settingUp') : t('onboarding.youreAllSet')}

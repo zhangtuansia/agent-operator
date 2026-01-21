@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { CraftAgentsSymbol } from './icons/CraftAgentsSymbol'
+import { CoworkAppIcon } from './icons/CoworkAppIcon'
 
 interface SplashScreenProps {
   isExiting: boolean
@@ -7,10 +7,10 @@ interface SplashScreenProps {
 }
 
 /**
- * SplashScreen - Shows Craft symbol during app initialization
+ * SplashScreen - Shows app logo during initialization
  *
- * Displays centered symbol on app background, fades out when app is fully ready.
- * On exit, the symbol scales up and fades out quickly while the background fades slower.
+ * Displays centered logo on app background, fades out when app is fully ready.
+ * On exit, the logo scales up and fades out quickly while the background fades slower.
  */
 export function SplashScreen({ isExiting, onExitComplete }: SplashScreenProps) {
   return (
@@ -26,9 +26,9 @@ export function SplashScreen({ isExiting, onExitComplete }: SplashScreenProps) {
       }}
     >
       <motion.div
-        initial={{ scale: 1.5, opacity: 1 }}
+        initial={{ scale: 1, opacity: 1 }}
         animate={{
-          scale: isExiting ? 3 : 1.5,
+          scale: isExiting ? 1.5 : 1,
           opacity: isExiting ? 0 : 1
         }}
         transition={{
@@ -36,7 +36,7 @@ export function SplashScreen({ isExiting, onExitComplete }: SplashScreenProps) {
           ease: [0.16, 1, 0.3, 1] // Exponential out curve
         }}
       >
-        <CraftAgentsSymbol className="h-8 text-accent" />
+        <CoworkAppIcon size={96} className="rounded-2xl shadow-lg" />
       </motion.div>
     </motion.div>
   )

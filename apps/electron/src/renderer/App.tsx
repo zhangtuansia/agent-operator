@@ -1216,8 +1216,10 @@ export default function App() {
 
   // Reauth state - session expired, need to re-login
   // ModalProvider + WindowCloseHandler ensures X button works on Windows
+  // LanguageProvider needed for translated reauth screens
   if (appState === 'reauth') {
     return (
+      <LanguageProvider initialLanguage={initialLanguage}>
       <ModalProvider>
         <WindowCloseHandler />
         <ReauthScreen
@@ -1230,6 +1232,7 @@ export default function App() {
           onCancel={() => setShowResetDialog(false)}
         />
       </ModalProvider>
+      </LanguageProvider>
     )
   }
 
