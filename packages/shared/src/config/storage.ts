@@ -62,6 +62,8 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
+  // UI Language
+  uiLanguage?: 'en' | 'zh';  // UI display language. Default: system language
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch

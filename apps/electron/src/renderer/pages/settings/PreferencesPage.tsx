@@ -21,6 +21,7 @@ import {
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { useLanguage } from '@/context/LanguageContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -184,6 +185,8 @@ export default function PreferencesPage() {
     await window.electronAPI.openFile(preferencesPath)
   }, [preferencesPath])
 
+  const { t } = useLanguage()
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -194,38 +197,38 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Preferences" />
+      <PanelHeader title={t('preferences.title')} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
           {/* Basic Info */}
           <SettingsSection
-            title="Basic Info"
-            description="Help Cowork personalize responses to you."
+            title={t('preferences.basicInfo')}
+            description={t('preferences.basicInfoDescription')}
           >
             <SettingsCard divided>
               <SettingsInput
-                label="Name"
-                description="How Cowork should address you."
+                label={t('preferences.yourName')}
+                description={t('preferences.yourNameDescription')}
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
-                placeholder="Your name"
+                placeholder={t('preferences.yourNamePlaceholder')}
                 inCard
               />
               <SettingsInput
-                label="Timezone"
-                description="Used for relative dates like 'tomorrow' or 'next week'."
+                label={t('preferences.timezone')}
+                description={t('preferences.timezoneDescription')}
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
-                placeholder="e.g., America/New_York"
+                placeholder={t('preferences.timezonePlaceholder')}
                 inCard
               />
               <SettingsInput
-                label="Language"
-                description="Preferred language for Cowork's responses."
+                label={t('preferences.preferredLanguage')}
+                description={t('preferences.preferredLanguageDescription')}
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
-                placeholder="e.g., English"
+                placeholder={t('preferences.preferredLanguagePlaceholder')}
                 inCard
               />
             </SettingsCard>
@@ -233,24 +236,24 @@ export default function PreferencesPage() {
 
           {/* Location */}
           <SettingsSection
-            title="Location"
-            description="Enables location-aware responses like weather, local time, and regional context."
+            title={t('preferences.location')}
+            description={t('preferences.locationDescription')}
           >
             <SettingsCard divided>
               <SettingsInput
-                label="City"
-                description="Your city for local information and context."
+                label={t('preferences.city')}
+                description={t('preferences.cityDescription')}
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
-                placeholder="e.g., New York"
+                placeholder={t('preferences.cityPlaceholder')}
                 inCard
               />
               <SettingsInput
-                label="Country"
-                description="Your country for regional formatting and context."
+                label={t('preferences.country')}
+                description={t('preferences.countryDescription')}
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
-                placeholder="e.g., USA"
+                placeholder={t('preferences.countryPlaceholder')}
                 inCard
               />
             </SettingsCard>
@@ -258,8 +261,8 @@ export default function PreferencesPage() {
 
           {/* Notes */}
           <SettingsSection
-            title="Notes"
-            description="Free-form context that helps Cowork understand your preferences."
+            title={t('preferences.notes')}
+            description={t('preferences.notesDescription')}
             action={
               // EditPopover for AI-assisted notes editing with "Edit File" as secondary action
               preferencesPath ? (
@@ -267,7 +270,7 @@ export default function PreferencesPage() {
                   trigger={<EditButton />}
                   {...getEditConfig('preferences-notes', preferencesPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('common.editFile'),
                     onClick: handleEditPreferences,
                   }}
                 />
@@ -278,7 +281,7 @@ export default function PreferencesPage() {
               <SettingsTextarea
                 value={formState.notes}
                 onChange={(v) => updateField('notes', v)}
-                placeholder="Any additional context you'd like Cowork to know..."
+                placeholder={t('preferences.notesPlaceholder')}
                 rows={5}
                 inCard
               />

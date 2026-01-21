@@ -28,6 +28,7 @@ import {
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { useLanguage } from '@/context/LanguageContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -190,9 +191,11 @@ export default function PermissionsSettingsPage() {
     return unsubscribe
   }, [])
 
+  const { t } = useLanguage()
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Permissions" actions={<HeaderMenu route={routes.view.settings('permissions')} />} />
+      <PanelHeader title={t('permissionsSettings.title')} actions={<HeaderMenu route={routes.view.settings('permissions')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
@@ -205,8 +208,8 @@ export default function PermissionsSettingsPage() {
                 <>
                   {/* Default Permissions Section */}
                   <SettingsSection
-                    title="Default Permissions"
-                    description="App-level patterns allowed in Explore mode. Commands not on this list are blocked."
+                    title={t('permissionsSettings.defaultPermissions')}
+                    description={t('permissionsSettings.defaultPermissionsDescription')}
                     action={
                       // EditPopover for AI-assisted default permissions editing
                       defaultPermissionsPath ? (
@@ -214,7 +217,7 @@ export default function PermissionsSettingsPage() {
                           trigger={<EditButton />}
                           {...getEditConfig('default-permissions', defaultPermissionsPath)}
                           secondaryAction={{
-                            label: 'Edit File',
+                            label: t('common.editFile'),
                             onClick: () => {
                               window.electronAPI.openFile(defaultPermissionsPath)
                             },
@@ -230,13 +233,13 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle="Default Permissions"
+                          fullscreenTitle={t('permissionsSettings.defaultPermissions')}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">No default permissions found.</p>
+                          <p className="text-sm">{t('permissionsSettings.noDefaultPermissions')}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            Default permissions should be at <code className="bg-foreground/5 px-1 rounded">~/.agent-operator/permissions/default.json</code>
+                            {t('permissionsSettings.defaultPermissionsPath')} <code className="bg-foreground/5 px-1 rounded">~/.agent-operator/permissions/default.json</code>
                           </p>
                         </div>
                       )}
@@ -245,8 +248,8 @@ export default function PermissionsSettingsPage() {
 
                   {/* Custom Permissions Section */}
                   <SettingsSection
-                    title="Workspace Customizations"
-                    description="Workspace-level patterns that extend the app defaults above."
+                    title={t('permissionsSettings.workspaceCustomizations')}
+                    description={t('permissionsSettings.workspaceCustomizationsDescription')}
                     action={
                       (() => {
                         // Get centralized edit config - all strings defined in EditPopover.tsx
@@ -257,7 +260,7 @@ export default function PermissionsSettingsPage() {
                             example={example}
                             context={context}
                             secondaryAction={activeWorkspace ? {
-                              label: 'Edit File',
+                              label: t('common.editFile'),
                               onClick: () => {
                                 const permissionsPath = `${activeWorkspace.rootPath}/permissions.json`
                                 window.electronAPI.openFile(permissionsPath)
@@ -275,13 +278,13 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle="Workspace Customizations"
+                          fullscreenTitle={t('permissionsSettings.workspaceCustomizations')}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">No custom permissions configured.</p>
+                          <p className="text-sm">{t('permissionsSettings.noCustomPermissions')}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            Create a <code className="bg-foreground/5 px-1 rounded">permissions.json</code> file in your workspace to add custom rules.
+                            {t('permissionsSettings.customPermissionsHint')}
                           </p>
                         </div>
                       )}

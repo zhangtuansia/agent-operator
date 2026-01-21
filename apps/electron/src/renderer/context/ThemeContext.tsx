@@ -10,9 +10,11 @@ import {
   type ThemeFile,
   type ShikiThemeConfig,
 } from '@config/theme'
+import { FONTS, getFontById, SYSTEM_FONT, type FontConfig } from '@/config/fonts'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type FontFamily = 'inter' | 'system'
+/** Font ID - 'system' or any font ID from fonts.ts */
+export type FontFamily = string
 
 interface ThemeContextType {
   // Preferences (persisted)
@@ -160,10 +162,76 @@ export function ThemeProvider({
     const root = document.documentElement
 
     // Apply font
-    if (font === 'inter') {
-      root.dataset.font = 'inter'
+    if (font && font !== 'system') {
+      const fontConfig = getFontById(font)
+      if (fontConfig) {
+        // Set font data attribute for CSS targeting
+        root.dataset.font = font
+
+        // Load Google Font if specified and not already loaded
+        if (fontConfig.googleFontsUrl) {
+          const linkId = `google-font-${font}`
+          if (!document.getElementById(linkId)) {
+            const link = document.createElement('link')
+            link.id = linkId
+            link.rel = 'stylesheet'
+            link.href = fontConfig.googleFontsUrl
+            document.head.appendChild(link)
+          }
+        }
+
+        // Load local font files if specified
+        if (fontConfig.localFiles && fontConfig.localFiles.length > 0) {
+          const styleId = `local-font-${font}`
+          if (!document.getElementById(styleId)) {
+            // Get fonts directory path from Electron
+            const fontsPath = window.electronAPI?.getFontsPath?.() || './resources/fonts'
+
+            // Generate @font-face rules
+            const fontFaces = fontConfig.localFiles.map(file => {
+              const fontUrl = `${fontsPath}/${file.src}`
+              return `@font-face {
+  font-family: ${fontConfig.fontFamily.split(',')[0].trim()};
+  src: url("${fontUrl}") format("${file.format}");
+  font-weight: ${file.weight || 'normal'};
+  font-style: ${file.style || 'normal'};
+  font-display: swap;
+}`
+            }).join('\n\n')
+
+            // Inject @font-face styles
+            const style = document.createElement('style')
+            style.id = styleId
+            style.textContent = fontFaces
+            document.head.appendChild(style)
+          }
+        }
+
+        // Apply font-family CSS variable
+        root.style.setProperty('--font-sans', fontConfig.fontFamily)
+        root.style.setProperty('--font-default', 'var(--font-sans)')
+
+        // Apply font features if specified
+        if (fontConfig.fontFeatures) {
+          root.style.setProperty('font-feature-settings', fontConfig.fontFeatures)
+        } else {
+          root.style.removeProperty('font-feature-settings')
+        }
+
+        // Apply optical sizing if specified
+        if (fontConfig.opticalSizing) {
+          root.style.setProperty('font-optical-sizing', 'auto')
+        } else {
+          root.style.removeProperty('font-optical-sizing')
+        }
+      }
     } else {
+      // System font
       delete root.dataset.font
+      root.style.setProperty('--font-sans', SYSTEM_FONT.fontFamily)
+      root.style.setProperty('--font-default', 'var(--font-sans)')
+      root.style.removeProperty('font-feature-settings')
+      root.style.removeProperty('font-optical-sizing')
     }
 
     // Apply color theme data attribute

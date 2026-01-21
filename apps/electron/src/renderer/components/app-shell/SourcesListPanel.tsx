@@ -26,6 +26,7 @@ import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-
 import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { LoadedSource, SourceConnectionStatus } from '../../../shared/types'
 
 export interface SourcesListPanelProps {
@@ -49,19 +50,20 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { t } = useTranslation()
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
         {sources.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No sources configured.
+              {t('sources.noSourcesConfigured')}
             </p>
             {workspaceRootPath && (
               <EditPopover
                 trigger={
                   <button className="mt-2 text-sm text-foreground hover:underline">
-                    Add your first source
+                    {t('sources.addFirstSource')}
                   </button>
                 }
                 {...getEditConfig('add-source', workspaceRootPath)}
@@ -100,14 +102,14 @@ interface SourceItemProps {
 /**
  * Get display label for source type
  */
-function getSourceTypeLabel(type: string): string {
+function getSourceTypeLabel(type: string, t: ReturnType<typeof useTranslation>['t']): string {
   switch (type) {
     case 'mcp':
-      return 'MCP'
+      return t('sources.typeMcp')
     case 'api':
-      return 'API'
+      return t('sources.typeApi')
     case 'local':
-      return 'Local'
+      return t('sources.typeLocal')
     default:
       return type
   }
@@ -133,18 +135,18 @@ function getSourceTypeBadgeClasses(type: string): string {
  * Get status badge info for non-connected sources
  * Returns null if source is connected (no badge needed)
  */
-function getStatusBadge(status: SourceConnectionStatus): { label: string; classes: string } | null {
+function getStatusBadge(status: SourceConnectionStatus, t: ReturnType<typeof useTranslation>['t']): { label: string; classes: string } | null {
   switch (status) {
     case 'connected':
       return null // No badge for connected sources
     case 'needs_auth':
-      return { label: 'Needs Auth', classes: 'bg-info/10 text-info' }
+      return { label: t('sources.statusNeedsAuth'), classes: 'bg-info/10 text-info' }
     case 'failed':
-      return { label: 'Failed', classes: 'bg-destructive/10 text-destructive' }
+      return { label: t('sources.statusFailed'), classes: 'bg-destructive/10 text-destructive' }
     case 'untested':
-      return { label: 'Not Tested', classes: 'bg-foreground/10 text-foreground/50' }
+      return { label: t('sources.statusNotTested'), classes: 'bg-foreground/10 text-foreground/50' }
     case 'local_disabled':
-      return { label: 'Disabled', classes: 'bg-foreground/10 text-foreground/50' }
+      return { label: t('sources.statusDisabled'), classes: 'bg-foreground/10 text-foreground/50' }
     default:
       return null
   }
@@ -153,6 +155,7 @@ function getStatusBadge(status: SourceConnectionStatus): { label: string; classe
 function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onDelete }: SourceItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
+  const { t } = useTranslation()
   const { config } = source
 
   // Build subtitle text: provider or tagline
@@ -160,7 +163,7 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
 
   // Get connection status and badge info (pass localMcpEnabled for stdio sources)
   const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
-  const statusBadge = getStatusBadge(connectionStatus)
+  const statusBadge = getStatusBadge(connectionStatus, t)
 
   return (
     <div className="source-item" data-selected={isSelected || undefined} data-tutorial={isFirst ? "source-item-first" : undefined}>
@@ -205,7 +208,7 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
                 "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded",
                 getSourceTypeBadgeClasses(config.type)
               )}>
-                {getSourceTypeLabel(config.type)}
+                {getSourceTypeLabel(config.type, t)}
               </span>
               {/* Status badge (only shown for non-connected sources) */}
               {statusBadge && (

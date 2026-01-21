@@ -17,12 +17,15 @@ import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface ChatPageProps {
   sessionId: string
 }
 
 const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
+  const { t } = useLanguage()
+
   // Diagnostic: mark when component runs
   React.useLayoutEffect(() => {
     rendererPerf.markSessionSwitch(sessionId, 'panel.mounted')
@@ -189,7 +192,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // Get display title for header - use getSessionTitle for consistent fallback logic with SessionList
   // Priority: name > first user message > preview > "New chat"
-  const displayTitle = session ? getSessionTitle(session) : (sessionMeta ? getSessionTitle(sessionMeta) : 'Chat')
+  const displayTitle = session ? getSessionTitle(session) : (sessionMeta ? getSessionTitle(sessionMeta) : t('chat.title'))
   const isFlagged = session?.isFlagged || sessionMeta?.isFlagged || false
   const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
   const currentTodoState = session?.todoState || sessionMeta?.todoState || 'todo'
@@ -342,11 +345,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
           <RenameDialog
             open={renameDialogOpen}
             onOpenChange={setRenameDialogOpen}
-            title="Rename Chat"
+            title={t('chat.renameChat')}
             value={renameName}
             onValueChange={setRenameName}
             onSubmit={handleRenameSubmit}
-            placeholder="Enter chat name..."
+            placeholder={t('chat.enterChatName')}
           />
         </>
       )
@@ -355,10 +358,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     // Session truly doesn't exist
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader  title="Chat" rightSidebarButton={rightSidebarButton} />
+        <PanelHeader  title={t('chat.title')} rightSidebarButton={rightSidebarButton} />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
           <AlertCircle className="h-10 w-10" />
-          <p className="text-sm">This session no longer exists</p>
+          <p className="text-sm">{t('chat.sessionNoLongerExists')}</p>
         </div>
       </div>
     )
@@ -408,11 +411,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       <RenameDialog
         open={renameDialogOpen}
         onOpenChange={setRenameDialogOpen}
-        title="Rename Chat"
+        title={t('chat.renameChat')}
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
-        placeholder="Enter chat name..."
+        placeholder={t('chat.enterChatName')}
       />
     </>
   )

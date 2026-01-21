@@ -34,6 +34,7 @@ import {
   SettingsToggle,
   SettingsMenuSelectRow,
 } from '@/components/settings'
+import { useLanguage } from '@/context/LanguageContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -289,13 +290,15 @@ export default function WorkspaceSettingsPage() {
     [enabledModes, updateWorkspaceSetting]
   )
 
+  const { t } = useLanguage()
+
   // Show empty state if no workspace is active
   if (!activeWorkspaceId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
+        <PanelHeader title={t('workspaceSettings.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">No workspace selected</p>
+          <p className="text-sm text-muted-foreground">{t('workspaceSettings.noWorkspaceSelected')}</p>
         </div>
       </div>
     )
@@ -305,7 +308,7 @@ export default function WorkspaceSettingsPage() {
   if (isLoadingWorkspace) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
+        <PanelHeader title={t('workspaceSettings.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-muted-foreground" />
         </div>
@@ -315,17 +318,17 @@ export default function WorkspaceSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
+      <PanelHeader title={t('workspaceSettings.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
             {/* Workspace Info */}
-            <SettingsSection title="Workspace Info">
+            <SettingsSection title={t('workspaceSettings.workspaceInfo')}>
               <SettingsCard>
                 <SettingsRow
-                  label="Name"
-                  description={wsName || 'Untitled'}
+                  label={t('workspaceSettings.name')}
+                  description={wsName || t('workspaceSettings.untitled')}
                   action={
                     <button
                       type="button"
@@ -335,12 +338,12 @@ export default function WorkspaceSettingsPage() {
                       }}
                       className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                     >
-                      Edit
+                      {t('common.edit')}
                     </button>
                   }
                 />
                 <SettingsRow
-                  label="Icon"
+                  label={t('workspaceSettings.icon')}
                   action={
                     <label className="cursor-pointer">
                       <input
@@ -351,7 +354,7 @@ export default function WorkspaceSettingsPage() {
                         disabled={isUploadingIcon}
                       />
                       <span className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors">
-                        {isUploadingIcon ? 'Uploading...' : 'Change'}
+                        {isUploadingIcon ? t('common.uploading') : t('common.change')}
                       </span>
                     </label>
                   }
@@ -378,7 +381,7 @@ export default function WorkspaceSettingsPage() {
               <RenameDialog
                 open={renameDialogOpen}
                 onOpenChange={setRenameDialogOpen}
-                title="Rename workspace"
+                title={t('workspaceSettings.name')}
                 value={wsNameEditing}
                 onValueChange={setWsNameEditing}
                 onSubmit={() => {
@@ -390,16 +393,16 @@ export default function WorkspaceSettingsPage() {
                   }
                   setRenameDialogOpen(false)
                 }}
-                placeholder="Enter workspace name..."
+                placeholder={t('workspaceSettings.name')}
               />
             </SettingsSection>
 
             {/* Model */}
-            <SettingsSection title="Model">
+            <SettingsSection title={t('workspaceSettings.model')}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Default model"
-                  description="AI model for new chats"
+                  label={t('workspaceSettings.defaultModel')}
+                  description={t('workspaceSettings.defaultModelDescription')}
                   value={wsModel}
                   onValueChange={handleModelChange}
                   options={getModelsForProvider(currentProvider).map((model) => ({
@@ -409,8 +412,8 @@ export default function WorkspaceSettingsPage() {
                   }))}
                 />
                 <SettingsMenuSelectRow
-                  label="Thinking level"
-                  description="Reasoning depth for new chats"
+                  label={t('workspaceSettings.thinkingLevel')}
+                  description={t('workspaceSettings.thinkingLevelDescription')}
                   value={wsThinkingLevel}
                   onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
                   options={THINKING_LEVELS.map(({ id, name, description }) => ({
@@ -423,17 +426,17 @@ export default function WorkspaceSettingsPage() {
             </SettingsSection>
 
             {/* Permissions */}
-            <SettingsSection title="Permissions">
+            <SettingsSection title={t('workspaceSettings.permissions')}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Default mode"
-                  description="Control what AI can do"
+                  label={t('workspaceSettings.defaultMode')}
+                  description={t('workspaceSettings.defaultModeDescription')}
                   value={permissionMode}
                   onValueChange={(v) => handlePermissionModeChange(v as PermissionMode)}
                   options={[
-                    { value: 'safe', label: 'Explore', description: 'Read-only, no changes allowed' },
-                    { value: 'ask', label: 'Ask', description: 'Prompts before making edits' },
-                    { value: 'allow-all', label: 'Auto', description: 'Full autonomous execution' },
+                    { value: 'safe', label: t('workspaceSettings.modeExplore'), description: t('workspaceSettings.modeExploreDescription') },
+                    { value: 'ask', label: t('workspaceSettings.modeAsk'), description: t('workspaceSettings.modeAskDescription') },
+                    { value: 'allow-all', label: t('workspaceSettings.modeAuto'), description: t('workspaceSettings.modeAutoDescription') },
                   ]}
                 />
               </SettingsCard>
@@ -441,8 +444,8 @@ export default function WorkspaceSettingsPage() {
 
             {/* Mode Cycling */}
             <SettingsSection
-              title="Mode Cycling"
-              description="Select which modes to cycle through with Shift+Tab"
+              title={t('workspaceSettings.modeCycling')}
+              description={t('workspaceSettings.modeCyclingDescription')}
             >
               <SettingsCard>
                 {(['safe', 'ask', 'allow-all'] as const).map((m) => {
@@ -468,18 +471,18 @@ export default function WorkspaceSettingsPage() {
                     transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
                     className="text-xs text-destructive mt-1 overflow-hidden"
                   >
-                    {modeCyclingError}
+                    {t('workspaceSettings.atLeast2ModesRequired')}
                   </motion.p>
                 )}
               </AnimatePresence>
             </SettingsSection>
 
             {/* Advanced */}
-            <SettingsSection title="Advanced">
+            <SettingsSection title={t('workspaceSettings.advanced')}>
               <SettingsCard>
                 <SettingsRow
-                  label="Default Working Directory"
-                  description={workingDirectory || 'Not set (uses session folder)'}
+                  label={t('workspaceSettings.workingDirectory')}
+                  description={workingDirectory || t('workspaceSettings.workingDirectoryNotSet')}
                   action={
                     <div className="flex items-center gap-2">
                       {workingDirectory && (
@@ -488,7 +491,7 @@ export default function WorkspaceSettingsPage() {
                           onClick={handleClearWorkingDirectory}
                           className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
                         >
-                          Clear
+                          {t('common.clear')}
                         </button>
                       )}
                       <button
@@ -496,14 +499,14 @@ export default function WorkspaceSettingsPage() {
                         onClick={handleChangeWorkingDirectory}
                         className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                       >
-                        Change...
+                        {t('common.change')}...
                       </button>
                     </div>
                   }
                 />
                 <SettingsToggle
-                  label="Local MCP Servers"
-                  description="Enable stdio subprocess servers"
+                  label={t('workspaceSettings.localMcpServers')}
+                  description={t('workspaceSettings.localMcpServersDescription')}
                   checked={localMcpEnabled}
                   onCheckedChange={handleLocalMcpEnabledChange}
                 />

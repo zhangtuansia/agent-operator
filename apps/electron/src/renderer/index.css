@@ -334,14 +334,10 @@ html[data-scenic] {
   --background: oklch(0.2 0.005 270 / 0.55);
 }
 
-/* Inter Font - Opt-in via data-font="inter" attribute
-   Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
-html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-default: var(--font-sans);
-  font-optical-sizing: auto;
-  font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
-}
+/* Custom Font Support
+   Fonts are configured in /config/fonts.ts and loaded dynamically.
+   The ThemeContext applies --font-sans via inline styles when a custom font is selected.
+   Font features and optical sizing are also applied via inline styles by ThemeContext. */
 
 /* Theme integration for Tailwind v4 */
 @theme inline {

@@ -309,6 +309,21 @@ const api: ElectronAPI = {
   getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
 
+  // Fonts (local font files path)
+  // In development: relative to app root
+  // In production: uses Electron's resourcesPath
+  getFontsPath: () => {
+    // Check if we're in development (running via Vite)
+    const isDev = process.env.NODE_ENV === 'development' || location.protocol === 'http:'
+    if (isDev) {
+      // In development, fonts are served from the app root
+      return './resources/fonts'
+    }
+    // In production, use file:// protocol with resourcesPath
+    // Note: process.resourcesPath is available in preload with nodeIntegration
+    return `file://${process.resourcesPath}/fonts`
+  },
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl: (serviceUrl: string, provider?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),
@@ -343,6 +358,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
   setNotificationsEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+
+  // Language
+  getLanguage: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.LANGUAGE_GET) as Promise<'en' | 'zh' | null>,
+  setLanguage: (language: 'en' | 'zh') =>
+    ipcRenderer.invoke(IPC_CHANNELS.LANGUAGE_SET, language),
+
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>

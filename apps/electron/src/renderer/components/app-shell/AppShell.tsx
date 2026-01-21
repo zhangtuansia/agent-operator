@@ -65,6 +65,7 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
+import { useTranslation } from "@/i18n"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
@@ -219,6 +220,7 @@ function AppShellContent({
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode } = useTheme()
+  const { t } = useTranslation()
   const { canGoBack, canGoForward, goBack, goForward } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
@@ -695,7 +697,7 @@ function AppShellContent({
         <HeaderIconButton
           icon={<PanelRightRounded className="h-5 w-6" />}
           onClick={() => setIsRightSidebarVisible(true)}
-          tooltip="Open sidebar"
+          tooltip={t('sidebar.openSidebar')}
           className="text-foreground"
         />
       </motion.div>
@@ -710,7 +712,7 @@ function AppShellContent({
       <HeaderIconButton
         icon={<PanelLeftRounded className="h-5 w-6" />}
         onClick={() => setIsRightSidebarVisible(false)}
-        tooltip="Close sidebar"
+        tooltip={t('sidebar.closeSidebar')}
         className="text-foreground"
       />
     )
@@ -992,30 +994,30 @@ function AppShellContent({
   const listTitle = React.useMemo(() => {
     // Sources navigator
     if (isSourcesNavigation(navState)) {
-      return 'Sources'
+      return t('sidebar.sources')
     }
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return 'All Skills'
+      return t('sidebar.skills')
     }
 
     // Settings navigator
-    if (isSettingsNavigation(navState)) return 'Settings'
+    if (isSettingsNavigation(navState)) return t('sidebar.settings')
 
     // Chats navigator - use chatFilter
-    if (!chatFilter) return 'All Chats'
+    if (!chatFilter) return t('sessionList.allChats')
 
     switch (chatFilter.kind) {
       case 'flagged':
-        return 'Flagged'
+        return t('sessionList.flagged')
       case 'state':
         const state = todoStates.find(s => s.id === chatFilter.stateId)
-        return state?.label || 'All Chats'
+        return state?.label || t('sessionList.allChats')
       default:
-        return 'All Chats'
+        return t('sessionList.allChats')
     }
-  }, [navState, chatFilter, todoStates])
+  }, [navState, chatFilter, todoStates, t])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1086,7 +1088,7 @@ function AppShellContent({
                         data-tutorial="new-chat-button"
                       >
                         <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                        New Chat
+                        {t('chat.newChat')}
                       </Button>
                     </ContextMenuTrigger>
                     <StyledContextMenuContent>
@@ -1104,7 +1106,7 @@ function AppShellContent({
                   links={[
                     {
                       id: "nav:allChats",
-                      title: "All Chats",
+                      title: t('sessionList.allChats'),
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
@@ -1140,7 +1142,7 @@ function AppShellContent({
                         // Flagged at the bottom
                         {
                           id: "nav:flagged",
-                          title: "Flagged",
+                          title: t('sessionList.flagged'),
                           label: String(flaggedCount),
                           icon: <Flag className="h-3.5 w-3.5 fill-current" />,
                           iconColor: "text-info",
@@ -1156,7 +1158,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:sources",
-                      title: "Sources",
+                      title: t('sidebar.sources'),
                       label: String(sources.length),
                       icon: DatabaseZap,
                       variant: isSourcesNavigation(navState) ? "default" : "ghost",
@@ -1170,7 +1172,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:skills",
-                      title: "Skills",
+                      title: t('sidebar.skills'),
                       label: String(skills.length),
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
@@ -1184,7 +1186,7 @@ function AppShellContent({
                     { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
-                      title: "Settings",
+                      title: t('sidebar.settings'),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
@@ -1266,7 +1268,7 @@ function AppShellContent({
                       <StyledDropdownMenuContent align="end" light minWidth="min-w-[200px]">
                         {/* Header with title and clear button */}
                         <div className="flex items-center justify-between px-2 py-1.5 border-b border-foreground/5">
-                          <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
+                          <span className="text-xs font-medium text-muted-foreground">{t('sessionList.filterChats')}</span>
                           {listFilter.size > 0 && (
                             <button
                               onClick={(e) => {
@@ -1275,7 +1277,7 @@ function AppShellContent({
                               }}
                               className="text-xs text-muted-foreground hover:text-foreground"
                             >
-                              Clear
+                              {t('common.clear')}
                             </button>
                           )}
                         </div>
@@ -1317,7 +1319,7 @@ function AppShellContent({
                           }}
                         >
                           <Search className="h-3.5 w-3.5" />
-                          <span className="flex-1">Search</span>
+                          <span className="flex-1">{t('common.search')}</span>
                         </StyledDropdownMenuItem>
                       </StyledDropdownMenuContent>
                     </DropdownMenu>
@@ -1335,7 +1337,7 @@ function AppShellContent({
                           }}
                         >
                           <Search className="h-3.5 w-3.5" />
-                          <span className="flex-1">Search</span>
+                          <span className="flex-1">{t('common.search')}</span>
                         </StyledDropdownMenuItem>
                       </StyledDropdownMenuContent>
                     </DropdownMenu>
@@ -1346,7 +1348,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Source"
+                          tooltip={t('sources.addSource')}
                           data-tutorial="add-source-button"
                         />
                       }
@@ -1359,7 +1361,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Skill"
+                          tooltip={t('skills.addSkill')}
                           data-tutorial="add-skill-button"
                         />
                       }

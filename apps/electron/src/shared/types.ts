@@ -617,6 +617,10 @@ export const IPC_CHANNELS = {
   NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
   NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
 
+  // Language
+  LANGUAGE_GET: 'language:get',
+  LANGUAGE_SET: 'language:set',
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
@@ -831,6 +835,9 @@ export interface ElectronAPI {
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
 
+  // Fonts (local font files)
+  getFontsPath(): string
+
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
 
@@ -841,6 +848,10 @@ export interface ElectronAPI {
   showNotification(title: string, body: string, workspaceId: string, sessionId: string): Promise<void>
   getNotificationsEnabled(): Promise<boolean>
   setNotificationsEnabled(enabled: boolean): Promise<void>
+
+  // Language
+  getLanguage(): Promise<'en' | 'zh' | null>
+  setLanguage(language: 'en' | 'zh'): Promise<void>
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

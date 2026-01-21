@@ -23,6 +23,8 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
+import { LanguageProvider } from '@/context/LanguageContext'
+import type { Language } from '@/i18n'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
 import { DEFAULT_MODEL, getDefaultModelForProvider } from '@config/models'
@@ -184,6 +186,8 @@ export default function App() {
 
   // Theme state (app-level only)
   const [appTheme, setAppTheme] = useState<ThemeOverrides | null>(null)
+  // Language state (loaded from config on mount)
+  const [initialLanguage, setInitialLanguage] = useState<Language | undefined>(undefined)
   // Reset confirmation dialog
   const [showResetDialog, setShowResetDialog] = useState(false)
 
@@ -376,6 +380,12 @@ export default function App() {
       } else {
         // If no stored model, use provider-specific default
         setCurrentModel(getDefaultModelForProvider(billingInfo.provider))
+      }
+    })
+    // Load UI language preference
+    window.electronAPI.getLanguage?.().then((lang) => {
+      if (lang) {
+        setInitialLanguage(lang)
       }
     })
     // Load persisted input drafts into ref (no re-render needed)
@@ -1255,6 +1265,7 @@ export default function App() {
 
   // Ready state - main app with splash overlay during data loading
   return (
+    <LanguageProvider initialLanguage={initialLanguage}>
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
       <FocusProvider>
@@ -1299,6 +1310,7 @@ export default function App() {
       </FocusProvider>
     </ShikiThemeProvider>
     </PlatformProvider>
+    </LanguageProvider>
   )
 }
 

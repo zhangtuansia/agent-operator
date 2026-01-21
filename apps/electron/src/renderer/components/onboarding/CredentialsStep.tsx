@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "@/i18n"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -140,6 +141,7 @@ export function CredentialsStep({
   onSubmitAuthCode,
   onCancelOAuth,
 }: CredentialsStepProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
   const [authCode, setAuthCode] = useState('')
@@ -190,8 +192,8 @@ export function CredentialsStep({
     if (isWaitingForCode) {
       return (
         <StepFormLayout
-          title="Enter Authorization Code"
-          description="Copy the code from the browser page and paste it below."
+          title={t('auth.enterAuthCode')}
+          description={t('auth.enterAuthCodeDesc')}
           actions={
             <>
               <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
@@ -207,7 +209,7 @@ export function CredentialsStep({
         >
           <form id="auth-code-form" onSubmit={handleAuthCodeSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="auth-code">Authorization Code</Label>
+              <Label htmlFor="auth-code">{t('auth.authorizationCode')}</Label>
               <div className={cn(
                 "relative rounded-md shadow-minimal transition-colors",
                 "bg-foreground-2 focus-within:bg-background"
@@ -217,7 +219,7 @@ export function CredentialsStep({
                   type="text"
                   value={authCode}
                   onChange={(e) => setAuthCode(e.target.value)}
-                  placeholder="Paste your authorization code here"
+                  placeholder={t('auth.authCodePlaceholder')}
                   className={cn(
                     "border-0 bg-transparent shadow-none font-mono text-sm",
                     status === 'error' && "focus-visible:ring-destructive"
@@ -243,12 +245,12 @@ export function CredentialsStep({
             {hasExistingToken ? (
               <ContinueButton onClick={onUseExistingClaudeToken} className="gap-2">
                 <CheckCircle2 className="size-4" />
-                Use Existing Token
+                {t('auth.useExistingToken')}
               </ContinueButton>
             ) : (
               <ContinueButton onClick={onStartOAuth} className="gap-2">
                 <ExternalLink className="size-4" />
-                Sign in with Claude
+                {t('auth.signInWithClaude')}
               </ContinueButton>
             )}
           </>
@@ -298,7 +300,7 @@ export function CredentialsStep({
               onClick={onStartOAuth}
               className="text-sm text-muted-foreground hover:text-foreground underline"
             >
-              Or sign in with a different account
+              {t('auth.signInDifferentAccount')}
             </button>
           </div>
         )}
@@ -442,17 +444,17 @@ export function CredentialsStep({
   // API Key flow (Anthropic)
   return (
     <StepFormLayout
-      title="Enter API Key"
+      title={t('auth.enterApiKey')}
       description={
         <>
-          Get your API key from{' '}
+          {t('auth.getApiKeyFrom')}{' '}
           <a
             href="https://console.anthropic.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-foreground hover:underline"
           >
-            console.anthropic.com
+            {t('auth.anthropicConsole')}
           </a>
         </>
       }
@@ -471,7 +473,7 @@ export function CredentialsStep({
     >
       <form id="api-key-form" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <Label htmlFor="api-key">Anthropic API Key</Label>
+          <Label htmlFor="api-key">{t('auth.anthropicApiKey')}</Label>
           <div className={cn(
             "relative rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"

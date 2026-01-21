@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/styled-dropdown"
 import { CrossfadeAvatar } from "@/components/ui/avatar"
 import { FadingText } from "@/components/ui/fading-text"
+import { useTranslation } from "@/i18n"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import type { Workspace } from "../../../shared/types"
 
@@ -45,6 +46,7 @@ export function WorkspaceSwitcher({
   onSelect,
   onWorkspaceCreated,
 }: WorkspaceSwitcherProps) {
+  const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   // Cache stores { dataUrl, sourceUrl } to detect when icon file changes
@@ -141,7 +143,7 @@ export function WorkspaceSwitcher({
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isCollapsed && "h-9 w-9 shrink-0 justify-center p-0"
           )}
-          aria-label="Select workspace"
+          aria-label={t('sidebar.selectWorkspace')}
         >
           {/* Workspace Avatar: Image with crossfade, border, first letter fallback */}
           <CrossfadeAvatar
@@ -155,7 +157,7 @@ export function WorkspaceSwitcher({
           {!isCollapsed && (
             <>
               <FadingText className="ml-1 font-sans min-w-0 text-sm" fadeWidth={36}>
-                {selectedWorkspace?.name || 'Select workspace'}
+                {selectedWorkspace?.name || t('sidebar.selectWorkspace')}
               </FadingText>
               <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
             </>
@@ -196,7 +198,7 @@ export function WorkspaceSwitcher({
                     e.stopPropagation()
                     onSelect(workspace.id, true)
                   }}
-                  title="Open in new window"
+                  title={t('common.openInNewWindow')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
@@ -215,7 +217,7 @@ export function WorkspaceSwitcher({
           className="font-sans"
         >
           <FolderPlus className="h-4 w-4" />
-          Add Workspace...
+          {t('sidebar.addWorkspace')}
         </StyledDropdownMenuItem>
       </StyledDropdownMenuContent>
     </DropdownMenu>

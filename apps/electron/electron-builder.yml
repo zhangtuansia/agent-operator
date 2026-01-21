@@ -1,5 +1,5 @@
-appId: com.agentoperator.app
-productName: Agent Operator
+appId: com.cowork.app
+productName: Cowork
 copyright: Copyright © 2025
 
 electronVersion: "39.2.7"
@@ -37,6 +37,15 @@ extraResources:
   # Linux AppImage self-update script
   - from: scripts/self-update-linux.sh
     to: self-update-linux.sh
+  # Local font files (TTF, OTF, WOFF, WOFF2)
+  - from: resources/fonts
+    to: fonts
+    filter:
+      - "**/*.ttf"
+      - "**/*.otf"
+      - "**/*.woff"
+      - "**/*.woff2"
+      - "!README.md"
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false

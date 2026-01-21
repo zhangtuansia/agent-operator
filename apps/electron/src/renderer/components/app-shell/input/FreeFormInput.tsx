@@ -56,6 +56,7 @@ import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@agent-operator/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { useTranslation } from '@/i18n'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -189,6 +190,7 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
 }: FreeFormInputProps) {
+  const { t } = useTranslation()
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
   // Sync TO parent on blur/submit (debounced persistence)
@@ -1072,15 +1074,15 @@ export function FreeFormInput({
             // Show count ("1 file" / "X files") instead of filename for cleaner UI
             label={attachments.length > 0
               ? attachments.length === 1
-                ? "1 file"
-                : `${attachments.length} files`
-              : "Attach Files"
+                ? t('input.oneFile')
+                : t('input.nFiles').replace('{n}', String(attachments.length))
+              : t('input.attachFiles')
             }
             isExpanded={isEmptySession}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
-            tooltip="Attach files"
+            tooltip={t('input.attachFile')}
             disabled={disabled}
           />
 
@@ -1125,12 +1127,12 @@ export function FreeFormInput({
                 }
                 label={
                   optimisticSourceSlugs.length === 0
-                    ? "Choose Sources"
+                    ? t('input.chooseSources')
                     : (() => {
                         const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
                         if (enabledSources.length === 1) return enabledSources[0].config.name
                         if (enabledSources.length === 2) return enabledSources.map(s => s.config.name).join(', ')
-                        return `${enabledSources.length} sources`
+                        return t('input.nSources').replace('{n}', String(enabledSources.length))
                       })()
                 }
                 isExpanded={isEmptySession}
@@ -1154,7 +1156,7 @@ export function FreeFormInput({
                   }
                   setSourceDropdownOpen(!sourceDropdownOpen)
                 }}
-                tooltip="Sources"
+                tooltip={t('sidebar.sources')}
               />
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
@@ -1175,9 +1177,9 @@ export function FreeFormInput({
                   >
                     {sources.length === 0 ? (
                       <div className="text-xs text-muted-foreground p-3">
-                        No sources configured.
+                        {t('sources.noSourcesConfigured')}
                         <br />
-                        Add sources in Settings.
+                        {t('sources.addSourcesInSettings')}
                       </div>
                     ) : (
                       <CommandPrimitive
@@ -1189,7 +1191,7 @@ export function FreeFormInput({
                             ref={sourceFilterInputRef}
                             value={sourceFilter}
                             onValueChange={setSourceFilter}
-                            placeholder="Search sources..."
+                            placeholder={t('sources.searchSources')}
                             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                           />
                         </div>
@@ -1271,7 +1273,7 @@ export function FreeFormInput({
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top">Model</TooltipContent>
+              <TooltipContent side="top">{t('input.model')}</TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
               {/* Model options - dynamically loaded based on provider */}
@@ -1302,7 +1304,7 @@ export function FreeFormInput({
                 <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
                   <div className="text-left flex-1">
                     <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
-                    <div className="text-xs text-muted-foreground">Extended reasoning depth</div>
+                    <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
                   </div>
                 </StyledDropdownMenuSubTrigger>
                 <StyledDropdownMenuSubContent className="min-w-[220px]">
@@ -1333,7 +1335,7 @@ export function FreeFormInput({
                   <StyledDropdownMenuSeparator className="my-1" />
                   <div className="px-2 py-1.5">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Context</span>
+                      <span>{t('input.context')}</span>
                       <span className="flex items-center gap-1.5">
                         {contextStatus.isCompacting && (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -1392,8 +1394,8 @@ export function FreeFormInput({
                 </TooltipTrigger>
                 <TooltipContent side="top">
                   {isProcessing
-                    ? `${usagePercent}% context used — wait for current operation`
-                    : `${usagePercent}% context used — click to compact`
+                    ? t('input.contextUsedWait').replace('{percent}', String(usagePercent))
+                    : t('input.contextUsedClick').replace('{percent}', String(usagePercent))
                   }
                 </TooltipContent>
               </Tooltip>
@@ -1469,6 +1471,7 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const { t } = useTranslation()
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
@@ -1533,7 +1536,7 @@ function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : 'Work in Folder'
+  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : t('input.workInFolder')
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
@@ -1557,10 +1560,10 @@ function WorkingDirectoryBadge({
             tooltip={
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">Working directory</span>
+                  <span className="font-medium">{t('input.workInFolder')}</span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
                 </span>
-              ) : "Choose working directory"
+              ) : t('input.chooseWorkingDir')
             }
           />
         </span>
@@ -1574,7 +1577,7 @@ function WorkingDirectoryBadge({
                 ref={inputRef}
                 value={filter}
                 onValueChange={setFilter}
-                placeholder="Filter folders..."
+                placeholder={t('input.filterFolders')}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               />
             </div>
@@ -1624,7 +1627,7 @@ function WorkingDirectoryBadge({
             {/* Empty state when filtering */}
             {showFilter && (
               <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-                No folders found
+                {t('input.noFoldersFound')}
               </CommandPrimitive.Empty>
             )}
           </CommandPrimitive.List>
@@ -1636,7 +1639,7 @@ function WorkingDirectoryBadge({
               onClick={handleChooseFolder}
               className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
             >
-              Choose Folder...
+              {t('input.chooseFolder')}
             </button>
             {showReset && (
               <button
@@ -1644,7 +1647,7 @@ function WorkingDirectoryBadge({
                 onClick={handleReset}
                 className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
               >
-                Reset
+                {t('input.reset')}
               </button>
             )}
           </div>

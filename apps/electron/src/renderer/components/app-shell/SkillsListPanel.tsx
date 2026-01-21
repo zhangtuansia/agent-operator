@@ -25,6 +25,7 @@ import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-
 import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
@@ -47,19 +48,20 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslation()
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
         {skills.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No skills configured.
+              {t('skills.noSkills')}
             </p>
             {workspaceRootPath && (
               <EditPopover
                 trigger={
                   <button className="mt-2 text-sm text-foreground hover:underline">
-                    Add your first skill
+                    {t('skills.addFirstSkill')}
                   </button>
                 }
                 {...getEditConfig('add-skill', workspaceRootPath)}

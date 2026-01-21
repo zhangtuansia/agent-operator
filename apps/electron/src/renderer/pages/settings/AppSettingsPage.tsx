@@ -45,7 +45,10 @@ import {
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useLanguage } from '@/context/LanguageContext'
+import { LANGUAGES, type Language } from '@/i18n'
 import type { PresetTheme } from '@config/theme'
+import { FONTS, getFontLabel, SYSTEM_FONT } from '@/config/fonts'
 import {
   Dialog,
   DialogContent,
@@ -323,6 +326,7 @@ function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
 
 export default function AppSettingsPage() {
   const { mode, setMode, colorTheme, setColorTheme, setPreviewColorTheme, font, setFont } = useTheme()
+  const { language, setLanguage, t } = useLanguage()
 
   // Get workspace ID from context for loading preset themes
   const { activeWorkspaceId } = useAppShellContext()
@@ -562,59 +566,78 @@ export default function AppSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} />
+      <PanelHeader title={t('appSettings.title')} actions={<HeaderMenu route={routes.view.settings('app')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
             {/* Appearance */}
-            <SettingsSection title="Appearance">
+            <SettingsSection title={t('appSettings.appearance')}>
               <SettingsCard>
-                <SettingsRow label="Mode">
+                <SettingsRow label={t('appSettings.mode')}>
                   <SettingsSegmentedControl
                     value={mode}
                     onValueChange={setMode}
                     options={[
-                      { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
-                      { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-                      { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+                      { value: 'system', label: t('appSettings.modeSystem'), icon: <Monitor className="w-4 h-4" /> },
+                      { value: 'light', label: t('appSettings.modeLight'), icon: <Sun className="w-4 h-4" /> },
+                      { value: 'dark', label: t('appSettings.modeDark'), icon: <Moon className="w-4 h-4" /> },
                     ]}
                   />
                 </SettingsRow>
-                <SettingsRow label="Color theme">
+                <SettingsRow label={t('appSettings.colorTheme')}>
                   <SettingsMenuSelect
                     value={colorTheme}
                     onValueChange={setColorTheme}
                     options={[
                       { value: 'default', label: 'Default' },
                       ...presetThemes
-                        .filter(t => t.id !== 'default')
-                        .map(t => ({
-                          value: t.id,
-                          label: t.theme.name || t.id,
+                        .filter(theme => theme.id !== 'default')
+                        .map(theme => ({
+                          value: theme.id,
+                          label: theme.theme.name || theme.id,
                         })),
                     ]}
                   />
                 </SettingsRow>
-                <SettingsRow label="Font">
-                  <SettingsSegmentedControl
+                <SettingsRow label={t('appSettings.font')}>
+                  <SettingsMenuSelect
                     value={font}
                     onValueChange={setFont}
                     options={[
-                      { value: 'inter', label: 'Inter' },
-                      { value: 'system', label: 'System' },
+                      { value: SYSTEM_FONT.id, label: t('appSettings.modeSystem') },
+                      ...FONTS.map(f => ({
+                        value: f.id,
+                        label: getFontLabel(f),
+                      })),
                     ]}
                   />
                 </SettingsRow>
               </SettingsCard>
             </SettingsSection>
 
+            {/* Language */}
+            <SettingsSection title={t('appSettings.language')} description={t('appSettings.languageDescription')}>
+              <SettingsCard>
+                <SettingsRow label={t('appSettings.language')}>
+                  <SettingsSegmentedControl
+                    value={language}
+                    onValueChange={(v) => setLanguage(v as Language)}
+                    options={LANGUAGES.map(lang => ({
+                      value: lang.value,
+                      label: lang.nativeLabel,
+                    }))}
+                  />
+                </SettingsRow>
+              </SettingsCard>
+            </SettingsSection>
+
             {/* Notifications */}
-            <SettingsSection title="Notifications">
+            <SettingsSection title={t('appSettings.notifications')}>
               <SettingsCard>
                 <SettingsToggle
-                  label="Desktop notifications"
-                  description="Get notified when AI finishes working in a chat."
+                  label={t('appSettings.desktopNotifications')}
+                  description={t('appSettings.desktopNotificationsDesc')}
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
                 />
@@ -622,22 +645,22 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* Billing */}
-            <SettingsSection title="Billing" description="Choose how you pay for AI usage">
+            <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Payment method"
+                  label={t('appSettings.paymentMethod')}
                   description={
                     authType === 'api_key' && hasCredential
-                      ? 'API key configured'
+                      ? t('appSettings.apiKeyConfigured')
                       : authType === 'oauth_token' && hasCredential
-                        ? 'Claude connected'
-                        : 'Select a method'
+                        ? t('appSettings.claudeConnected')
+                        : t('appSettings.selectMethod')
                   }
                   value={authType}
                   onValueChange={(v) => handleMethodClick(v as AuthType)}
                   options={[
-                    { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
-                    { value: 'api_key', label: 'API Key', description: 'Pay-as-you-go with your Anthropic key' },
+                    { value: 'oauth_token', label: t('appSettings.claudeProMax'), description: t('appSettings.claudeProMaxDesc') },
+                    { value: 'api_key', label: t('appSettings.apiKey'), description: t('appSettings.apiKeyDesc') },
                   ]}
                 />
               </SettingsCard>
@@ -646,9 +669,9 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancel()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>API Key</DialogTitle>
+                    <DialogTitle>{t('appSettings.apiKey')}</DialogTitle>
                     <DialogDescription>
-                      Configure your Anthropic API key
+                      {t('appSettings.configureApiKey')}
                     </DialogDescription>
                   </DialogHeader>
                   <ApiKeyDialogContent
@@ -667,9 +690,9 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Claude Max</DialogTitle>
+                    <DialogTitle>{t('appSettings.claudeProMax')}</DialogTitle>
                     <DialogDescription>
-                      Connect your Claude subscription
+                      {t('appSettings.configureClaudeMax')}
                     </DialogDescription>
                   </DialogHeader>
                   {isWaitingForCode ? (
@@ -703,12 +726,12 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* About */}
-            <SettingsSection title="About">
+            <SettingsSection title={t('appSettings.about')}>
               <SettingsCard>
-                <SettingsRow label="Version">
+                <SettingsRow label={t('appSettings.version')}>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">
-                      {updateChecker.updateInfo?.currentVersion ?? 'Loading...'}
+                      {updateChecker.updateInfo?.currentVersion ?? t('common.loading')}
                     </span>
                     {updateChecker.updateAvailable && updateChecker.updateInfo?.latestVersion && (
                       <Button
@@ -716,12 +739,12 @@ export default function AppSettingsPage() {
                         size="sm"
                         onClick={updateChecker.installUpdate}
                       >
-                        Update to {updateChecker.updateInfo.latestVersion}
+                        {t('appSettings.updateTo')} {updateChecker.updateInfo.latestVersion}
                       </Button>
                     )}
                   </div>
                 </SettingsRow>
-                <SettingsRow label="Check for updates">
+                <SettingsRow label={t('appSettings.checkForUpdates')}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -731,20 +754,20 @@ export default function AppSettingsPage() {
                     {isCheckingForUpdates ? (
                       <>
                         <Spinner className="mr-1.5" />
-                        Checking...
+                        {t('appSettings.checking')}
                       </>
                     ) : (
-                      'Check Now'
+                      t('appSettings.checkNow')
                     )}
                   </Button>
                 </SettingsRow>
                 {updateChecker.isReadyToInstall && (
-                  <SettingsRow label="Install update">
+                  <SettingsRow label={t('appSettings.installUpdate')}>
                     <Button
                       size="sm"
                       onClick={updateChecker.installUpdate}
                     >
-                      Restart to Update
+                      {t('appSettings.restartToUpdate')}
                     </Button>
                   </SettingsRow>
                 )}

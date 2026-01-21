@@ -118,6 +118,7 @@ import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
+import { useLanguage } from '@/context/LanguageContext'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -133,47 +134,47 @@ interface SettingsNavigatorProps {
 
 interface SettingsItem {
   id: SettingsSubpage
-  label: string
+  labelKey: keyof typeof import('@/i18n/en').en.settings
   icon: React.ComponentType<{ className?: string }>
-  description: string
+  descriptionKey: keyof typeof import('@/i18n/en').en.settings
 }
 
 const settingsItems: SettingsItem[] = [
   {
     id: 'app',
-    label: 'App',
+    labelKey: 'app',
     icon: AppSettingsIcon,
-    description: 'Appearance, notifications, billing',
+    descriptionKey: 'appDescription',
   },
   {
     id: 'workspace',
-    label: 'Workspace',
+    labelKey: 'workspace',
     icon: WorkspaceIcon,
-    description: 'Model, mode cycling, advanced',
+    descriptionKey: 'workspaceDescription',
   },
   {
     id: 'api',
-    label: 'API',
+    labelKey: 'api',
     icon: ApiIcon,
-    description: 'Provider, endpoint, API key',
+    descriptionKey: 'apiDescription',
   },
   {
     id: 'permissions',
-    label: 'Permissions',
+    labelKey: 'permissions',
     icon: ShieldIcon,
-    description: 'Allowed commands in Explore mode',
+    descriptionKey: 'permissionsDescription',
   },
   {
     id: 'shortcuts',
-    label: 'Shortcuts',
+    labelKey: 'shortcuts',
     icon: KeyboardIcon,
-    description: 'Keyboard shortcuts reference',
+    descriptionKey: 'shortcutsDescription',
   },
   {
     id: 'preferences',
-    label: 'Preferences',
+    labelKey: 'preferences',
     icon: PreferencesIcon,
-    description: 'Your personal preferences',
+    descriptionKey: 'preferencesDescription',
   },
 ]
 
@@ -182,13 +183,14 @@ interface SettingsItemRowProps {
   isSelected: boolean
   isFirst: boolean
   onSelect: () => void
+  t: ReturnType<typeof useLanguage>['t']
 }
 
 /**
  * SettingsItemRow - Individual settings item with dropdown menu
  * Tracks menu open state to keep "..." button visible when menu is open
  */
-function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+function SettingsItemRow({ item, isSelected, isFirst, onSelect, t }: SettingsItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 
@@ -239,10 +241,10 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 isSelected ? 'text-foreground' : 'text-foreground/80'
               )}
             >
-              {item.label}
+              {t(`settings.${item.labelKey}`)}
             </span>
             <span className="text-xs text-foreground/60 line-clamp-1">
-              {item.description}
+              {t(`settings.${item.descriptionKey}`)}
             </span>
           </div>
         </button>
@@ -264,7 +266,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{t('common.openInNewWindow')}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -280,6 +282,8 @@ export default function SettingsNavigator({
   selectedSubpage,
   onSelectSubpage,
 }: SettingsNavigatorProps) {
+  const { t } = useLanguage()
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -291,6 +295,7 @@ export default function SettingsNavigator({
               isSelected={selectedSubpage === item.id}
               isFirst={index === 0}
               onSelect={() => onSelectSubpage(item.id)}
+              t={t}
             />
           ))}
         </div>
