@@ -30,6 +30,7 @@ import {
   SettingsMenuSelectRow,
   SettingsInput,
 } from '@/components/settings'
+import { useTranslation } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -84,6 +85,7 @@ interface ProviderConfig {
 }
 
 export default function ApiSettingsPage() {
+  const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -188,7 +190,7 @@ export default function ApiSettingsPage() {
   if (isLoading) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="API Configuration" actions={<HeaderMenu route={routes.view.settings('api')} />} />
+        <PanelHeader title={t('apiSettings.title')} actions={<HeaderMenu route={routes.view.settings('api')} />} />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-muted-foreground" />
         </div>
@@ -198,17 +200,17 @@ export default function ApiSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="API Configuration" actions={<HeaderMenu route={routes.view.settings('api')} />} />
+      <PanelHeader title={t('apiSettings.title')} actions={<HeaderMenu route={routes.view.settings('api')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-6">
               {/* Provider Selection */}
-              <SettingsSection title="Provider">
+              <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label="API Provider"
-                    description="Select your AI provider"
+                    label={t('apiSettings.provider')}
+                    description={t('apiSettings.providerDescription')}
                     value={currentProvider}
                     onValueChange={handleProviderChange}
                     options={PROVIDERS.map(p => ({
@@ -221,17 +223,17 @@ export default function ApiSettingsPage() {
               </SettingsSection>
 
               {/* API Configuration */}
-              <SettingsSection title="Configuration">
+              <SettingsSection title={t('apiSettings.baseUrl')}>
                 <SettingsCard>
                   {/* Base URL */}
                   <SettingsRow
-                    label="Base URL"
-                    description="API endpoint URL"
+                    label={t('apiSettings.baseUrl')}
+                    description={t('apiSettings.baseUrlDescription')}
                   >
                     <Input
                       value={baseURL}
                       onChange={(e) => setBaseURL(e.target.value)}
-                      placeholder="https://api.example.com"
+                      placeholder={t('apiSettings.baseUrlPlaceholder')}
                       className="font-mono text-sm max-w-md"
                     />
                   </SettingsRow>
@@ -239,21 +241,21 @@ export default function ApiSettingsPage() {
                   {/* API Format - only show for custom provider */}
                   {currentProvider === 'custom' && (
                     <SettingsMenuSelectRow
-                      label="API Format"
-                      description="API compatibility format"
+                      label={t('apiSettings.apiFormat')}
+                      description={t('apiSettings.apiFormatDescription')}
                       value={apiFormat}
                       onValueChange={(v) => setApiFormat(v as ApiFormat)}
                       options={[
-                        { value: 'anthropic', label: 'Anthropic', description: 'Anthropic Messages API format' },
-                        { value: 'openai', label: 'OpenAI', description: 'OpenAI Chat Completions format' },
+                        { value: 'anthropic', label: t('apiSettings.apiFormatAnthropic'), description: 'Anthropic Messages API format' },
+                        { value: 'openai', label: t('apiSettings.apiFormatOpenAI'), description: 'OpenAI Chat Completions format' },
                       ]}
                     />
                   )}
 
                   {/* API Key */}
                   <SettingsRow
-                    label="API Key"
-                    description={hasExistingKey ? 'Key is configured' : 'Enter your API key'}
+                    label={t('apiSettings.apiKeyLabel')}
+                    description={hasExistingKey ? t('appSettings.apiKeyConfigured') : t('apiSettings.apiKeyDescription')}
                   >
                     <div className="flex items-center gap-2 max-w-md">
                       <div className="relative flex-1">
@@ -261,7 +263,7 @@ export default function ApiSettingsPage() {
                           type={showApiKey ? 'text' : 'password'}
                           value={apiKey}
                           onChange={(e) => setApiKey(e.target.value)}
-                          placeholder={hasExistingKey ? '••••••••••••••••' : 'Enter API key...'}
+                          placeholder={hasExistingKey ? '••••••••••••••••' : t('apiSettings.apiKeyPlaceholder')}
                           className="pr-10 font-mono text-sm"
                         />
                         <button
@@ -288,45 +290,23 @@ export default function ApiSettingsPage() {
                   {isSaving ? (
                     <>
                       <Spinner className="mr-1.5" />
-                      Saving...
+                      {t('apiSettings.saving')}
                     </>
                   ) : saveSuccess ? (
                     <>
                       <Check className="size-4 mr-1.5" />
-                      Saved!
+                      {t('apiSettings.saved')}
                     </>
                   ) : (
                     <>
                       <Check className="size-4 mr-1.5" />
-                      Save Changes
+                      {t('apiSettings.saveChanges')}
                     </>
                   )}
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Changes will take effect on next session
-                </p>
               </div>
 
-              {/* Help Section */}
-              <SettingsSection title="Help" description="Provider-specific notes">
-                <SettingsCard>
-                  <div className="p-4 text-sm text-muted-foreground space-y-3">
-                    <div>
-                      <strong className="text-foreground">Anthropic:</strong> Use your API key from{' '}
-                      <a href="https://console.anthropic.com" className="text-foreground hover:underline" onClick={(e) => { e.preventDefault(); window.electronAPI?.openUrl('https://console.anthropic.com') }}>
-                        console.anthropic.com
-                      </a>
-                    </div>
-                    <div>
-                      <strong className="text-foreground">GLM (智谱):</strong> Uses Anthropic-compatible endpoint. Claude model names are automatically mapped to GLM models (e.g., Sonnet → GLM-4.7)
-                    </div>
-                    <div>
-                      <strong className="text-foreground">Custom:</strong> For other providers that support Anthropic or OpenAI API format
-                    </div>
-                  </div>
-                </SettingsCard>
-              </SettingsSection>
-            </div>
+                          </div>
           </div>
         </ScrollArea>
       </div>
