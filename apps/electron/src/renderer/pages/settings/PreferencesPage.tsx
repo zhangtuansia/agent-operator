@@ -18,7 +18,35 @@ import {
   SettingsCard,
   SettingsInput,
   SettingsTextarea,
+  SettingsSelect,
 } from '@/components/settings'
+
+// Common timezone options - returns localized options
+const getTimezoneOptions = (autoLabel: string) => [
+  { value: 'auto', label: autoLabel },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai (中国标准时间)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (日本标准时间)' },
+  { value: 'Asia/Hong_Kong', label: 'Asia/Hong_Kong (香港时间)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (新加坡时间)' },
+  { value: 'Asia/Seoul', label: 'Asia/Seoul (韩国标准时间)' },
+  { value: 'America/New_York', label: 'America/New_York (美国东部)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (美国西部)' },
+  { value: 'America/Chicago', label: 'America/Chicago (美国中部)' },
+  { value: 'Europe/London', label: 'Europe/London (英国时间)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris (中欧时间)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (德国时间)' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney (澳大利亚东部)' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland (新西兰时间)' },
+]
+
+// Get user's system timezone
+const getSystemTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return 'Asia/Shanghai'
+  }
+}
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { useLanguage } from '@/context/LanguageContext'
@@ -39,7 +67,7 @@ interface PreferencesFormState {
 
 const emptyFormState: PreferencesFormState = {
   name: '',
-  timezone: '',
+  timezone: 'auto', // Default to auto (system timezone)
   language: '',
   city: '',
   country: '',
@@ -68,7 +96,10 @@ function serializePreferences(state: PreferencesFormState): string {
   const prefs: Record<string, unknown> = {}
 
   if (state.name) prefs.name = state.name
-  if (state.timezone) prefs.timezone = state.timezone
+  // Convert 'auto' to actual system timezone
+  if (state.timezone) {
+    prefs.timezone = state.timezone === 'auto' ? getSystemTimezone() : state.timezone
+  }
   if (state.language) prefs.language = state.language
 
   if (state.city || state.country) {
@@ -215,11 +246,12 @@ export default function PreferencesPage() {
                 placeholder={t('preferences.yourNamePlaceholder')}
                 inCard
               />
-              <SettingsInput
+              <SettingsSelect
                 label={t('preferences.timezone')}
-                description={t('preferences.timezoneDescription')}
-                value={formState.timezone}
-                onChange={(v) => updateField('timezone', v)}
+                description={`${t('preferences.timezoneDescription')} ${formState.timezone === 'auto' ? `(${getSystemTimezone()})` : ''}`}
+                value={formState.timezone || 'auto'}
+                onValueChange={(v) => updateField('timezone', v)}
+                options={getTimezoneOptions(t('preferences.timezoneAuto'))}
                 placeholder={t('preferences.timezonePlaceholder')}
                 inCard
               />

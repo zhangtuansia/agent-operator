@@ -20,6 +20,7 @@ import {
   Info_Table,
   Info_Markdown,
 } from '@/components/info'
+import { useLanguage } from '@/context/LanguageContext'
 import type { LoadedSkill } from '../../shared/types'
 
 interface SkillInfoPageProps {
@@ -31,6 +32,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useLanguage()
 
   // Load skill data
   useEffect(() => {
@@ -173,7 +175,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
                 trigger={<EditButton />}
                 {...getEditConfig('skill-metadata', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('common.editFile'),
                   onClick: handleEdit,
                 }}
               />
@@ -243,7 +245,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
                 trigger={<EditButton />}
                 {...getEditConfig('skill-instructions', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('common.editFile'),
                   onClick: handleEdit,
                 }}
               />

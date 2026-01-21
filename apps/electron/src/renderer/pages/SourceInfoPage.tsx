@@ -27,6 +27,7 @@ import {
 } from '@/components/info'
 import type { LoadedSource, McpToolWithPermission } from '../../shared/types'
 import type { PermissionsConfigFile } from '@agent-operator/shared/agent/modes'
+import { useLanguage } from '@/context/LanguageContext'
 
 interface SourceInfoPageProps {
   sourceSlug: string

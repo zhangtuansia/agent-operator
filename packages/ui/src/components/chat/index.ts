@@ -6,7 +6,7 @@
 export * from './turn-utils'
 
 // Components
-export { TurnCard, ResponseCard, type TurnCardProps, type ResponseCardProps, type ActivityItem, type ResponseContent, type TodoItem } from './TurnCard'
+export { TurnCard, ResponseCard, type TurnCardProps, type ResponseCardProps, type TurnCardTranslations, type ResponseCardTranslations, type ActivityItem, type ResponseContent, type TodoItem } from './TurnCard'
 export { TurnCardActionsMenu, type TurnCardActionsMenuProps } from './TurnCardActionsMenu'
 export { SessionViewer, type SessionViewerProps, type SessionViewerMode } from './SessionViewer'
 export { UserMessageBubble, type UserMessageBubbleProps } from './UserMessageBubble'

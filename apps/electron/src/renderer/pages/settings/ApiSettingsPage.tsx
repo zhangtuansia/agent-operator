@@ -246,8 +246,8 @@ export default function ApiSettingsPage() {
                       value={apiFormat}
                       onValueChange={(v) => setApiFormat(v as ApiFormat)}
                       options={[
-                        { value: 'anthropic', label: t('apiSettings.apiFormatAnthropic'), description: 'Anthropic Messages API format' },
-                        { value: 'openai', label: t('apiSettings.apiFormatOpenAI'), description: 'OpenAI Chat Completions format' },
+                        { value: 'anthropic', label: t('apiSettings.apiFormatAnthropic'), description: t('apiSettings.apiFormatAnthropicDesc') },
+                        { value: 'openai', label: t('apiSettings.apiFormatOpenAI'), description: t('apiSettings.apiFormatOpenAIDesc') },
                       ]}
                     />
                   )}

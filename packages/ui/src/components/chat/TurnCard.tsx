@@ -138,6 +138,14 @@ export interface ResponseContent {
   isPlan?: boolean
 }
 
+/** Translations for TurnCard UI strings */
+export interface TurnCardTranslations {
+  copy?: string
+  copied?: string
+  viewAsMarkdown?: string
+  typeFeedbackOr?: string
+}
+
 export interface TurnCardProps {
   /** Session ID for state persistence (optional in shared context) */
   sessionId?: string
@@ -187,6 +195,8 @@ export interface TurnCardProps {
   onAcceptPlanWithCompact?: () => void
   /** Whether this is the last response in the session (shows Accept Plan button only for last response) */
   isLastResponse?: boolean
+  /** Translations for UI strings (optional, defaults to English) */
+  translations?: TurnCardTranslations
 }
 
 // ============================================================================
@@ -838,6 +848,14 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
 // Streaming Response Preview Component
 // ============================================================================
 
+/** Translations for ResponseCard UI strings */
+export interface ResponseCardTranslations {
+  copy?: string
+  copied?: string
+  viewAsMarkdown?: string
+  typeFeedbackOr?: string
+}
+
 export interface ResponseCardProps {
   /** The content to display (markdown) */
   text: string
@@ -861,6 +879,8 @@ export interface ResponseCardProps {
   isLastResponse?: boolean
   /** Whether to show the Accept Plan button (default: true) */
   showAcceptPlan?: boolean
+  /** Translations for UI strings (optional, defaults to English) */
+  translations?: ResponseCardTranslations
 }
 
 /**
@@ -891,7 +911,15 @@ export function ResponseCard({
   onAcceptWithCompact,
   isLastResponse = true,
   showAcceptPlan = true,
+  translations,
 }: ResponseCardProps) {
+  // Default translations (English fallbacks)
+  const t = {
+    copy: translations?.copy ?? 'Copy',
+    copied: translations?.copied ?? 'Copied!',
+    viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
+    typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
+  }
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
   const lastUpdateRef = useRef(Date.now())
@@ -1040,12 +1068,12 @@ export function ResponseCard({
                 {copied ? (
                   <>
                     <Check className={SIZE_CONFIG.iconSize} />
-                    <span>Copied!</span>
+                    <span>{t.copied}</span>
                   </>
                 ) : (
                   <>
                     <Copy className={SIZE_CONFIG.iconSize} />
-                    <span>Copy</span>
+                    <span>{t.copy}</span>
                   </>
                 )}
               </button>
@@ -1059,7 +1087,7 @@ export function ResponseCard({
                   )}
                 >
                   <ExternalLink className={SIZE_CONFIG.iconSize} />
-                  <span>View as Markdown</span>
+                  <span>{t.viewAsMarkdown}</span>
                 </button>
               )}
             </div>
@@ -1075,7 +1103,7 @@ export function ResponseCard({
                 )}
               >
                 <span className="text-xs text-muted-foreground">
-                  Type your feedback in chat or
+                  {t.typeFeedbackOr}
                 </span>
                 <AcceptPlanDropdown
                   onAccept={onAccept}
@@ -1250,7 +1278,15 @@ export const TurnCard = React.memo(function TurnCard({
   onAcceptPlan,
   onAcceptPlanWithCompact,
   isLastResponse,
+  translations,
 }: TurnCardProps) {
+  // Default translations (English fallbacks)
+  const t = {
+    copy: translations?.copy ?? 'Copy',
+    copied: translations?.copied ?? 'Copied!',
+    viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
+    typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
+  }
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
   // replacing the old ad-hoc boolean combinations.

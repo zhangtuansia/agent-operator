@@ -71,6 +71,7 @@ export const zh: TranslationKeys = {
     modeLight: '浅色',
     modeDark: '深色',
     colorTheme: '颜色主题',
+    colorThemeDefault: '默认',
     font: '字体',
 
     // Language
@@ -124,7 +125,9 @@ export const zh: TranslationKeys = {
     apiFormat: 'API 格式',
     apiFormatDescription: 'API 协议格式',
     apiFormatAnthropic: 'Anthropic 兼容',
+    apiFormatAnthropicDesc: 'Anthropic Messages API 格式',
     apiFormatOpenAI: 'OpenAI 兼容',
+    apiFormatOpenAIDesc: 'OpenAI Chat Completions 格式',
     apiKeyLabel: 'API 密钥',
     apiKeyDescription: '用于身份验证的 API 密钥',
     apiKeyPlaceholder: 'sk-ant-...',
@@ -229,6 +232,7 @@ export const zh: TranslationKeys = {
     timezone: '时区',
     timezoneDescription: '用于解析"明天"或"下周"等相对日期。',
     timezonePlaceholder: '例如：Asia/Shanghai',
+    timezoneAuto: '自动（跟随系统）',
     preferredLanguage: '语言',
     preferredLanguageDescription: 'Cowork 回复时使用的首选语言。',
     preferredLanguagePlaceholder: '例如：中文',
@@ -294,21 +298,40 @@ export const zh: TranslationKeys = {
     thisMonth: '本月',
     older: '更早',
     filterChats: '筛选聊天',
+    searchConversations: '搜索对话...',
+    clearSearch: '清除搜索',
+    closeSearch: '关闭搜索',
   },
 
   // Session Menu
   sessionMenu: {
     rename: '重命名',
+    regenerateTitle: '重新生成标题',
     flag: '标记',
     unflag: '取消标记',
     markAsUnread: '标记为未读',
+    status: '状态',
     share: '分享',
+    shared: '已分享',
+    openInBrowser: '在浏览器中打开',
+    copyLink: '复制链接',
     copyShareLink: '复制分享链接',
     updateShare: '更新分享',
     stopSharing: '停止分享',
     openInNewWindow: '在新窗口中打开',
+    viewInFinder: '在访达中查看',
+    copyPath: '复制路径',
     delete: '删除',
     deleteConfirm: '确定要删除此聊天吗？',
+    linkCopied: '链接已复制到剪贴板',
+    shareUpdated: '分享已更新',
+    sharingStopped: '已停止分享',
+    pathCopied: '路径已复制到剪贴板',
+    titleRefreshed: '标题已刷新',
+    failedToShare: '分享失败',
+    failedToUpdateShare: '更新分享失败',
+    failedToStopSharing: '停止分享失败',
+    failedToRefreshTitle: '刷新标题失败',
   },
 
   // Sources
@@ -361,6 +384,19 @@ export const zh: TranslationKeys = {
     closeSidebar: '关闭侧边栏',
   },
 
+  // App Menu
+  appMenu: {
+    newChat: '新建聊天',
+    settings: '设置...',
+    keyboardShortcuts: '键盘快捷键',
+    storedUserPreferences: '已存储的用户偏好',
+    resetApp: '重置应用...',
+    goBack: '返回',
+    goForward: '前进',
+    hideSidebar: '隐藏侧边栏',
+    showSidebar: '显示侧边栏',
+  },
+
   // Onboarding
   onboarding: {
     welcome: '欢迎使用 Cowork',
@@ -407,6 +443,24 @@ export const zh: TranslationKeys = {
     permissionDenied: '权限被拒绝',
     notFound: '未找到',
     timeout: '请求超时',
+  },
+
+  // Empty States
+  emptyStates: {
+    noConversationsYet: '暂无对话',
+    noConversationsFound: '未找到对话',
+    noFlaggedConversations: '暂无标记的对话',
+    selectConversation: '选择一个对话开始',
+    noSourcesConfigured: '未配置数据源',
+    noSkillsConfigured: '未配置技能',
+    noToolsAvailable: '没有可用的工具',
+    noPermissionsConfigured: '未配置权限',
+    noResultsFound: '未找到结果',
+    noResults: '无结果',
+    noStatusFound: '未找到状态',
+    sourceNotFound: '未找到数据源',
+    skillNotFound: '未找到技能',
+    startFreshWithEmptyWorkspace: '从空白工作区开始。',
   },
 
   // Actions
@@ -470,5 +524,13 @@ export const zh: TranslationKeys = {
     noFoldersFound: '未找到文件夹',
     chooseFolder: '选择文件夹...',
     reset: '重置',
+  },
+
+  // Turn Card
+  turnCard: {
+    copy: '复制',
+    copied: '已复制！',
+    viewAsMarkdown: '查看 Markdown',
+    typeFeedbackOr: '在聊天中输入反馈或',
   },
 } as const;

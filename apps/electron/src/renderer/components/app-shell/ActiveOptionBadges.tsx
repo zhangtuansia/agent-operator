@@ -1,10 +1,11 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, X } from 'lucide-react'
-import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@agent-operator/shared/agent/modes'
+import { SlashCommandMenu, type SlashCommandId, type CommandGroup, type SlashCommand } from '@/components/ui/slash-command-menu'
+import { ChevronDown, X, Brain } from 'lucide-react'
+import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@agent-operator/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
+import { useLanguage } from '@/hooks/useLanguage'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -113,6 +114,64 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
+  const { t } = useLanguage()
+
+  // Map permission modes to translation keys
+  const getModeDisplayName = (mode: PermissionMode): string => {
+    const modeTranslationMap: Record<PermissionMode, string> = {
+      'safe': t('permissionModes.safe'),
+      'ask': t('permissionModes.ask'),
+      'allow-all': t('permissionModes.allowAll'),
+    }
+    return modeTranslationMap[mode]
+  }
+
+  const getModeDescription = (mode: PermissionMode): string => {
+    const modeDescriptionMap: Record<PermissionMode, string> = {
+      'safe': t('permissionModes.safeDescription'),
+      'ask': t('permissionModes.askDescription'),
+      'allow-all': t('permissionModes.allowAllDescription'),
+    }
+    return modeDescriptionMap[mode]
+  }
+
+  // Create translated command groups
+  const MENU_ICON_SIZE = 'h-3.5 w-3.5'
+  const translatedCommandGroups = React.useMemo((): CommandGroup[] => {
+    const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
+      const config = PERMISSION_MODE_CONFIG[mode]
+      return {
+        id: mode as SlashCommandId,
+        label: getModeDisplayName(mode),
+        description: getModeDescription(mode),
+        icon: (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={MENU_ICON_SIZE}
+          >
+            <path d={config.svgPath} />
+          </svg>
+        ),
+      }
+    })
+
+    const ultrathinkCommand: SlashCommand = {
+      id: 'ultrathink',
+      label: 'Ultrathink',
+      description: t('thinkingLevels.highDescription'),
+      icon: <Brain className={MENU_ICON_SIZE} />,
+    }
+
+    return [
+      { id: 'modes', commands: permissionModeCommands },
+      { id: 'features', commands: [ultrathinkCommand] },
+    ]
+  }, [t])
 
   // Sync optimistic state when prop changes (confirmation from backend)
   React.useEffect(() => {
@@ -173,7 +232,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
           <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.displayName}</span>
+          <span>{getModeDisplayName(optimisticMode)}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
       </PopoverTrigger>
@@ -189,7 +248,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
         }}
       >
         <SlashCommandMenu
-          commandGroups={DEFAULT_SLASH_COMMAND_GROUPS}
+          commandGroups={translatedCommandGroups}
           activeCommands={activeCommands}
           onSelect={handleSelect}
           showFilter

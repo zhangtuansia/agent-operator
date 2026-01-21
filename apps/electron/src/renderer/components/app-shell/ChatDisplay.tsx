@@ -35,6 +35,7 @@ import {
 } from "@agent-operator/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
+import { useLanguage } from "@/hooks/useLanguage"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@agent-operator/shared/agent/modes"
 import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels"
@@ -368,6 +369,9 @@ export function ChatDisplay({
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
 
+  // i18n for translations
+  const { t } = useLanguage()
+
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
     zoneId: 'chat',
@@ -697,6 +701,12 @@ export function ChatDisplay({
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
+                        translations={{
+                          copy: t('turnCard.copy'),
+                          copied: t('turnCard.copied'),
+                          viewAsMarkdown: t('turnCard.viewAsMarkdown'),
+                          typeFeedbackOr: t('turnCard.typeFeedbackOr'),
+                        }}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
@@ -853,7 +863,7 @@ export function ChatDisplay({
               onInsertMessage={onInputChange}
             />
             <InputContainer
-              placeholder={`Message ${session.workspaceName || 'Chat'}...`}
+              placeholder={t('input.placeholder')}
               disabled={isInputDisabled}
               isProcessing={session.isProcessing}
               onSubmit={handleSubmit}

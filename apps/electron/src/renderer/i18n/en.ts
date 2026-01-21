@@ -69,6 +69,7 @@ export const en = {
     modeLight: 'Light',
     modeDark: 'Dark',
     colorTheme: 'Color theme',
+    colorThemeDefault: 'Default',
     font: 'Font',
 
     // Language
@@ -122,7 +123,9 @@ export const en = {
     apiFormat: 'API Format',
     apiFormatDescription: 'API protocol format',
     apiFormatAnthropic: 'Anthropic Compatible',
+    apiFormatAnthropicDesc: 'Anthropic Messages API format',
     apiFormatOpenAI: 'OpenAI Compatible',
+    apiFormatOpenAIDesc: 'OpenAI Chat Completions format',
     apiKeyLabel: 'API Key',
     apiKeyDescription: 'Your API key for authentication',
     apiKeyPlaceholder: 'sk-ant-...',
@@ -227,6 +230,7 @@ export const en = {
     timezone: 'Timezone',
     timezoneDescription: 'Used for relative dates like \'tomorrow\' or \'next week\'.',
     timezonePlaceholder: 'e.g., America/New_York',
+    timezoneAuto: 'Auto (System Default)',
     preferredLanguage: 'Language',
     preferredLanguageDescription: 'Preferred language for Cowork\'s responses.',
     preferredLanguagePlaceholder: 'e.g., English',
@@ -292,21 +296,40 @@ export const en = {
     thisMonth: 'This Month',
     older: 'Older',
     filterChats: 'Filter Chats',
+    searchConversations: 'Search conversations...',
+    clearSearch: 'Clear search',
+    closeSearch: 'Close search',
   },
 
   // Session Menu
   sessionMenu: {
     rename: 'Rename',
+    regenerateTitle: 'Regenerate Title',
     flag: 'Flag',
     unflag: 'Unflag',
-    markAsUnread: 'Mark as unread',
+    markAsUnread: 'Mark as Unread',
+    status: 'Status',
     share: 'Share',
+    shared: 'Shared',
+    openInBrowser: 'Open in Browser',
+    copyLink: 'Copy Link',
     copyShareLink: 'Copy share link',
-    updateShare: 'Update share',
-    stopSharing: 'Stop sharing',
+    updateShare: 'Update Share',
+    stopSharing: 'Stop Sharing',
     openInNewWindow: 'Open in New Window',
+    viewInFinder: 'View in Finder',
+    copyPath: 'Copy Path',
     delete: 'Delete',
     deleteConfirm: 'Are you sure you want to delete this chat?',
+    linkCopied: 'Link copied to clipboard',
+    shareUpdated: 'Share updated',
+    sharingStopped: 'Sharing stopped',
+    pathCopied: 'Path copied to clipboard',
+    titleRefreshed: 'Title refreshed',
+    failedToShare: 'Failed to share',
+    failedToUpdateShare: 'Failed to update share',
+    failedToStopSharing: 'Failed to stop sharing',
+    failedToRefreshTitle: 'Failed to refresh title',
   },
 
   // Sources
@@ -359,6 +382,19 @@ export const en = {
     closeSidebar: 'Close sidebar',
   },
 
+  // App Menu
+  appMenu: {
+    newChat: 'New Chat',
+    settings: 'Settings...',
+    keyboardShortcuts: 'Keyboard Shortcuts',
+    storedUserPreferences: 'Stored User Preferences',
+    resetApp: 'Reset App...',
+    goBack: 'Go back',
+    goForward: 'Go forward',
+    hideSidebar: 'Hide sidebar',
+    showSidebar: 'Show sidebar',
+  },
+
   // Onboarding
   onboarding: {
     welcome: 'Welcome to Cowork',
@@ -405,6 +441,24 @@ export const en = {
     permissionDenied: 'Permission denied',
     notFound: 'Not found',
     timeout: 'Request timed out',
+  },
+
+  // Empty States
+  emptyStates: {
+    noConversationsYet: 'No conversations yet',
+    noConversationsFound: 'No conversations found',
+    noFlaggedConversations: 'No flagged conversations',
+    selectConversation: 'Select a conversation to get started',
+    noSourcesConfigured: 'No sources configured',
+    noSkillsConfigured: 'No skills configured',
+    noToolsAvailable: 'No tools available',
+    noPermissionsConfigured: 'No permissions configured',
+    noResultsFound: 'No results found',
+    noResults: 'No results.',
+    noStatusFound: 'No status found',
+    sourceNotFound: 'Source not found',
+    skillNotFound: 'Skill not found',
+    startFreshWithEmptyWorkspace: 'Start fresh with an empty workspace.',
   },
 
   // Actions
@@ -468,6 +522,14 @@ export const en = {
     noFoldersFound: 'No folders found',
     chooseFolder: 'Choose Folder...',
     reset: 'Reset',
+  },
+
+  // Turn Card
+  turnCard: {
+    copy: 'Copy',
+    copied: 'Copied!',
+    viewAsMarkdown: 'View as Markdown',
+    typeFeedbackOr: 'Type your feedback in chat or',
   },
 } as const;
 

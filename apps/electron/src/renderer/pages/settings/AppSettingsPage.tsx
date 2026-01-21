@@ -590,7 +590,7 @@ export default function AppSettingsPage() {
                     value={colorTheme}
                     onValueChange={setColorTheme}
                     options={[
-                      { value: 'default', label: 'Default' },
+                      { value: 'default', label: t('appSettings.colorThemeDefault') },
                       ...presetThemes
                         .filter(theme => theme.id !== 'default')
                         .map(theme => ({

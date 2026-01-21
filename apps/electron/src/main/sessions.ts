@@ -526,7 +526,13 @@ export class SessionManager {
     // In development: use process.cwd()
     const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
 
-    const cliPath = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    // Try local node_modules first, then monorepo root (for workspace hoisting)
+    let cliPath = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    if (!existsSync(cliPath) && !app.isPackaged) {
+      // In monorepo development, dependencies may be hoisted to root
+      const monorepoRoot = join(basePath, '..', '..')
+      cliPath = join(monorepoRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    }
     if (!existsSync(cliPath)) {
       const error = `Claude Code SDK not found at ${cliPath}. The app package may be corrupted.`
       sessionLog.error(error)
@@ -537,7 +543,9 @@ export class SessionManager {
 
     // Set path to fetch interceptor for SDK subprocess
     // This interceptor captures API errors and adds metadata to MCP tool schemas
-    const interceptorPath = join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts')
+    // In monorepo, packages folder is at root level
+    const monorepoRoot = app.isPackaged ? basePath : join(basePath, '..', '..')
+    const interceptorPath = join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts')
     if (!existsSync(interceptorPath)) {
       const error = `Network interceptor not found at ${interceptorPath}. The app package may be corrupted.`
       sessionLog.error(error)
