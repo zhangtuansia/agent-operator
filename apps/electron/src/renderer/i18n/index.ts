@@ -60,3 +60,6 @@ export function detectSystemLanguage(): Language {
 
 export { en, zh };
 export type { TranslationKeys };
+
+// Re-export useTranslation hook from LanguageContext for convenience
+export { useTranslation } from '../context/LanguageContext';
