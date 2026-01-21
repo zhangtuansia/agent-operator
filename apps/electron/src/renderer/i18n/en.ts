@@ -772,6 +772,17 @@ export const en = {
     ask: 'Ask',
   },
 
+  // Updates
+  updates: {
+    updateReady: 'Update v{version} ready',
+    restartToApply: 'Restart to apply the update.',
+    restart: 'Restart',
+    appWillRestart: 'The app will restart automatically.',
+    downloadingUpdate: 'Downloading update...',
+    updateAvailable: 'Update available',
+    newVersionAvailable: 'A new version is available.',
+  },
+
   // Permissions table
   permissionsTable: {
     access: 'Access',

@@ -11,7 +11,7 @@ import semver from 'semver';
 import { debug } from '../utils/debug';
 import type { VersionManifest } from './manifest';
 
-const ELECTRON_VERSIONS_URL = 'https://agents.craft.do/electron';
+const ELECTRON_VERSIONS_URL = 'https://download.aicowork.chat/electron';
 
 /** Default timeout for network requests (10 seconds) */
 const FETCH_TIMEOUT_MS = 10000;

@@ -1,10 +1,7 @@
 /**
  * Update Checker Hook
  *
- * NOTE: Auto-update is currently disabled for Cowork.
- * This hook returns a stub implementation that does nothing.
- *
- * Original functionality:
+ * Provides update checking functionality:
  * - Listens for update availability broadcasts from main process
  * - Tracks download progress
  * - Provides methods to check for updates and install
@@ -12,8 +9,12 @@
  * - Persistent dismissal across app restarts (per version)
  */
 
-import { useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import type { UpdateInfo } from '../../shared/types'
+import { useLanguage } from '@/context/LanguageContext'
+
+const UPDATE_TOAST_ID = 'update-available'
 
 interface UseUpdateCheckerResult {
   /** Current update info */
@@ -33,32 +34,10 @@ interface UseUpdateCheckerResult {
 }
 
 /**
- * Auto-update is disabled for Cowork.
- * Returns stub implementation that does nothing.
+ * Hook for managing app updates
  */
 export function useUpdateChecker(): UseUpdateCheckerResult {
-  // Stub implementations - auto-update disabled
-  const checkForUpdates = useCallback(async () => {
-    console.log('[useUpdateChecker] Auto-update is disabled')
-  }, [])
-
-  const installUpdate = useCallback(async () => {
-    console.log('[useUpdateChecker] Auto-update is disabled')
-  }, [])
-
-  return {
-    updateInfo: null,
-    updateAvailable: false,
-    isDownloading: false,
-    isReadyToInstall: false,
-    downloadProgress: 0,
-    checkForUpdates,
-    installUpdate,
-  }
-}
-
-/* Original implementation (disabled):
-export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
+  const { t } = useLanguage()
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   // Track if we've shown the toast for this version to avoid duplicates
   const shownToastVersionRef = useRef<string | null>(null)
@@ -71,12 +50,12 @@ export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
     }
     shownToastVersionRef.current = version
 
-    toast.info(`Update v${version} ready`, {
+    toast.info(t('updates.updateReady').replace('{version}', version), {
       id: UPDATE_TOAST_ID,
-      description: 'Restart to apply the update.',
+      description: t('updates.restartToApply'),
       duration: 10000, // 10 seconds, then auto-dismiss
       action: {
-        label: 'Restart',
+        label: t('updates.restart'),
         onClick: onInstall,
       },
       onDismiss: () => {
@@ -84,25 +63,25 @@ export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
         window.electronAPI.dismissUpdate(version)
       },
     })
-  }, [])
+  }, [t])
 
   // Install the update
   const installUpdate = useCallback(async () => {
     try {
       // Dismiss the update toast first
       toast.dismiss(UPDATE_TOAST_ID)
-      toast.info('Installing update...', {
-        description: 'The app will restart automatically.',
+      toast.info(t('toasts.installingUpdate'), {
+        description: t('updates.appWillRestart'),
         duration: 3000,
       })
       await window.electronAPI.installUpdate()
     } catch (error) {
       console.error('[useUpdateChecker] Install failed:', error)
-      toast.error('Failed to install update', {
+      toast.error(t('toasts.failedToInstallUpdate'), {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     }
-  }, [])
+  }, [t])
 
   // Load initial state and check if update ready
   useEffect(() => {
@@ -151,8 +130,8 @@ export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
       setUpdateInfo(info)
 
       if (!info.available) {
-        toast.success('You\'re up to date', {
-          description: `Version ${info.currentVersion} is the latest.`,
+        toast.success(t('toasts.youreUpToDate'), {
+          description: t('toasts.runningLatestVersion'),
           duration: 3000,
         })
       } else if (info.downloadState === 'ready' && info.latestVersion) {
@@ -162,11 +141,11 @@ export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
       }
     } catch (error) {
       console.error('[useUpdateChecker] Check failed:', error)
-      toast.error('Failed to check for updates', {
+      toast.error(t('toasts.failedToCheckForUpdates'), {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     }
-  }, [showUpdateToast, installUpdate])
+  }, [t, showUpdateToast, installUpdate])
 
   return {
     updateInfo,
@@ -178,4 +157,3 @@ export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
     installUpdate,
   }
 }
-*/

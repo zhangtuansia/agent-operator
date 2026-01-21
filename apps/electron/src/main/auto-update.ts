@@ -11,7 +11,7 @@
  */
 
 // Auto-update disabled flag
-const AUTO_UPDATE_DISABLED = true;
+const AUTO_UPDATE_DISABLED = false;
 
 import { app } from 'electron'
 import { createWriteStream, createReadStream, existsSync, mkdirSync, unlinkSync } from 'fs'

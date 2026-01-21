@@ -774,6 +774,17 @@ export const zh: TranslationKeys = {
     ask: '询问',
   },
 
+  // Updates
+  updates: {
+    updateReady: '更新 v{version} 已就绪',
+    restartToApply: '重启以应用更新。',
+    restart: '重启',
+    appWillRestart: '应用将自动重启。',
+    downloadingUpdate: '正在下载更新...',
+    updateAvailable: '有可用更新',
+    newVersionAvailable: '有新版本可用。',
+  },
+
   // Permissions table
   permissionsTable: {
     access: '访问',
