@@ -1,4 +1,4 @@
-interface OperatorAgentsLogoProps {
+interface CraftAgentsLogoProps {
   className?: string
 }
 
@@ -6,7 +6,7 @@ interface OperatorAgentsLogoProps {
  * Agent Operator pixel art logo - uses accent color from theme
  * Apply text-accent class to get the brand purple color
  */
-export function OperatorAgentsLogo({ className }: OperatorAgentsLogoProps) {
+export function CraftAgentsLogo({ className }: CraftAgentsLogoProps) {
   return (
     <svg
       viewBox="0 0 408 66"

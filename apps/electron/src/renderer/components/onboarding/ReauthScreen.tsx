@@ -2,7 +2,7 @@ import { useState } from "react"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@agent-operator/ui"
-import { OperatorAgentsSymbol } from "@/components/icons/OperatorAgentsSymbol"
+import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
 
 interface ReauthScreenProps {

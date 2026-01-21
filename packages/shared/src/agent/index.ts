@@ -1,4 +1,4 @@
-export * from './agent-operator.ts';
+export * from './operator-agent.ts';
 export * from './errors.ts';
 export * from './options.ts';
 

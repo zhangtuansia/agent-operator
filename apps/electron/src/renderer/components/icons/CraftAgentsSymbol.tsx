@@ -1,4 +1,4 @@
-interface OperatorAgentsSymbolProps {
+interface CraftAgentsSymbolProps {
   className?: string
 }
 
@@ -6,7 +6,7 @@ interface OperatorAgentsSymbolProps {
  * Agent Operator "E" symbol - the small pixel art icon
  * Uses accent color from theme (currentColor from className)
  */
-export function OperatorAgentsSymbol({ className }: OperatorAgentsSymbolProps) {
+export function CraftAgentsSymbol({ className }: CraftAgentsSymbolProps) {
   return (
     <svg
       viewBox="452 368 115 129"

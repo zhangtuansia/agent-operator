@@ -1,4 +1,4 @@
-import { OperatorAgentsSymbol } from "@/components/icons/OperatorAgentsSymbol"
+import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout, ContinueButton } from "./primitives"
 
 interface WelcomeStepProps {
@@ -22,7 +22,7 @@ export function WelcomeStep({
     <StepFormLayout
       iconElement={
         <div className="flex size-16 items-center justify-center">
-          <OperatorAgentsSymbol className="size-10 text-accent" />
+          <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
       title={isExistingUser ? 'Update Settings' : 'Welcome to Agent Operator'}
