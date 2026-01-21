@@ -303,6 +303,20 @@ export const zh: TranslationKeys = {
     closeSearch: '关闭搜索',
   },
 
+  // Chat Info (Right Sidebar)
+  chatInfo: {
+    title: '聊天信息',
+    noSessionSelected: '未选择会话',
+    loadingSession: '加载会话中...',
+    name: '名称',
+    untitled: '未命名',
+    notes: '备注',
+    addNotes: '添加备注...',
+    loading: '加载中...',
+    files: '文件',
+    filesEmptyState: '此聊天中附加或创建的文件将显示在这里。',
+  },
+
   // Session Menu
   sessionMenu: {
     rename: '重命名',
@@ -332,6 +346,19 @@ export const zh: TranslationKeys = {
     failedToUpdateShare: '更新分享失败',
     failedToStopSharing: '停止分享失败',
     failedToRefreshTitle: '刷新标题失败',
+  },
+
+  // Sidebar Menu
+  sidebarMenu: {
+    configureStatuses: '配置状态',
+  },
+
+  // Edit Popover
+  editPopover: {
+    connectExample: '连接到我的 Craft 空间',
+    connectPlaceholder: '您想连接什么？',
+    skillExample: '按照我们的代码规范审查 PR',
+    skillPlaceholder: '您希望我学会做什么？',
   },
 
   // Sources

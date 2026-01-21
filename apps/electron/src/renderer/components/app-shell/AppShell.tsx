@@ -1353,6 +1353,8 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig('add-source', activeWorkspace.rootPath)}
+                      example={t('editPopover.connectExample')}
+                      overridePlaceholder={t('editPopover.connectPlaceholder')}
                     />
                   )}
                   {/* Add Skill button (only for skills mode) */}
@@ -1366,6 +1368,8 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+                      example={t('editPopover.skillExample')}
+                      overridePlaceholder={t('editPopover.skillPlaceholder')}
                     />
                   )}
                 </>
@@ -1620,6 +1624,8 @@ function AppShellContent({
             side="bottom"
             align="start"
             {...getEditConfig('add-source', activeWorkspace.rootPath)}
+            example={t('editPopover.connectExample')}
+            overridePlaceholder={t('editPopover.connectPlaceholder')}
           />
           {/* Add Skill EditPopover */}
           <EditPopover
@@ -1636,6 +1642,8 @@ function AppShellContent({
             side="bottom"
             align="start"
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+            example={t('editPopover.skillExample')}
+            overridePlaceholder={t('editPopover.skillPlaceholder')}
           />
         </>
       )}

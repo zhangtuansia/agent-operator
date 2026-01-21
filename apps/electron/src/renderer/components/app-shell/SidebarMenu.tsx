@@ -22,6 +22,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
+import { useLanguage } from '@/context/LanguageContext'
 
 export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'newChat'
 
@@ -51,13 +52,14 @@ export function SidebarMenu({
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem } = useMenuComponents()
+  const { t } = useLanguage()
 
   // New Chat: only shows "Open in New Window"
   if (type === 'newChat') {
     return (
       <MenuItem onClick={() => window.electronAPI.openUrl('agentoperator://action/new-chat?window=focused')}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t('common.openInNewWindow')}</span>
       </MenuItem>
     )
   }
@@ -67,7 +69,7 @@ export function SidebarMenu({
     return (
       <MenuItem onClick={onConfigureStatuses}>
         <Settings2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Configure Statuses</span>
+        <span className="flex-1">{t('sidebarMenu.configureStatuses')}</span>
       </MenuItem>
     )
   }
@@ -77,7 +79,7 @@ export function SidebarMenu({
     return (
       <MenuItem onClick={onAddSource}>
         <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">Add Source</span>
+        <span className="flex-1">{t('sources.addSource')}</span>
       </MenuItem>
     )
   }
@@ -87,7 +89,7 @@ export function SidebarMenu({
     return (
       <MenuItem onClick={onAddSkill}>
         <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">Add Skill</span>
+        <span className="flex-1">{t('skills.addSkill')}</span>
       </MenuItem>
     )
   }

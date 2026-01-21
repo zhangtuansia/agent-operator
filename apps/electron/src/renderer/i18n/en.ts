@@ -301,6 +301,20 @@ export const en = {
     closeSearch: 'Close search',
   },
 
+  // Chat Info (Right Sidebar)
+  chatInfo: {
+    title: 'Chat Info',
+    noSessionSelected: 'No session selected',
+    loadingSession: 'Loading session...',
+    name: 'Name',
+    untitled: 'Untitled',
+    notes: 'Notes',
+    addNotes: 'Add notes...',
+    loading: 'Loading...',
+    files: 'Files',
+    filesEmptyState: 'Files attached or created by this chat will appear here.',
+  },
+
   // Session Menu
   sessionMenu: {
     rename: 'Rename',
@@ -330,6 +344,19 @@ export const en = {
     failedToUpdateShare: 'Failed to update share',
     failedToStopSharing: 'Failed to stop sharing',
     failedToRefreshTitle: 'Failed to refresh title',
+  },
+
+  // Sidebar Menu
+  sidebarMenu: {
+    configureStatuses: 'Configure Statuses',
+  },
+
+  // Edit Popover
+  editPopover: {
+    connectExample: 'Connect to my Craft space',
+    connectPlaceholder: 'What would you like to connect?',
+    skillExample: 'Review PRs following our code standards',
+    skillPlaceholder: 'What should I learn to do?',
   },
 
   // Sources

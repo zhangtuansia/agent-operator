@@ -17,6 +17,7 @@ import { Textarea } from '../ui/textarea'
 import { HorizontalResizeHandle } from '../ui/horizontal-resize-handle'
 import { SessionFilesSection } from './SessionFilesSection'
 import * as storage from '@/lib/local-storage'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface SessionMetadataPanelProps {
   sessionId?: string
@@ -72,6 +73,7 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
 export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadataPanelProps) {
   const { onRenameSession } = useAppShellContext()
   const containerRef = useRef<HTMLDivElement>(null)
+  const { t } = useLanguage()
 
   // State for editable fields
   const [name, setName] = useState('')
@@ -161,9 +163,9 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   if (!sessionId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Chat Info" actions={closeButton} />
+        <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
-          <p className="text-sm text-center">No session selected</p>
+          <p className="text-sm text-center">{t('chatInfo.noSessionSelected')}</p>
         </div>
       </div>
     )
@@ -172,9 +174,9 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   if (!session) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Chat Info" actions={closeButton} />
+        <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
-          <p className="text-sm text-center">Loading session...</p>
+          <p className="text-sm text-center">{t('chatInfo.loadingSession')}</p>
         </div>
       </div>
     )
@@ -182,7 +184,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
-      <PanelHeader title="Chat Info" actions={closeButton} />
+      <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
 
       {/* Metadata section (Name + Notes) - fixed height based on state */}
       <div
@@ -192,13 +194,13 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
         {/* Name */}
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
-            Name
+            {t('chatInfo.name')}
           </label>
           <div className="rounded-lg bg-foreground-2 has-[:focus]:bg-background shadow-minimal transition-colors">
             <Input
               value={name}
               onChange={handleNameChange}
-              placeholder="Untitled"
+              placeholder={t('chatInfo.untitled')}
               className="h-9 py-2 text-sm border-0 shadow-none bg-transparent focus-visible:ring-0"
             />
           </div>
@@ -207,13 +209,13 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
         {/* Notes */}
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
-            Notes
+            {t('chatInfo.notes')}
           </label>
           <div className="rounded-lg bg-foreground-2 has-[:focus]:bg-background shadow-minimal transition-colors">
             <Textarea
               value={notes}
               onChange={handleNotesChange}
-              placeholder={notesLoaded ? 'Add notes...' : 'Loading...'}
+              placeholder={notesLoaded ? t('chatInfo.addNotes') : t('chatInfo.loading')}
               disabled={!notesLoaded}
               spellCheck={false}
               className="text-sm min-h-[80px] py-2 resize-y border-0 shadow-none bg-transparent focus-visible:ring-0 placeholder:select-none"
