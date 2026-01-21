@@ -698,7 +698,7 @@ export function ChatDisplay({
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
                         onAcceptPlan={() => {
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                          window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
                           }))
                         }}
@@ -711,7 +711,7 @@ export function ChatDisplay({
                           // Dispatch event to compact conversation first, then execute plan
                           // FreeFormInput handles this by sending /compact, waiting for completion,
                           // then sending a message with the plan path for Claude to read and execute
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
+                          window.dispatchEvent(new CustomEvent('cowork:approve-plan-with-compact', {
                             detail: { sessionId: session?.id, planPath }
                           }))
                         }}

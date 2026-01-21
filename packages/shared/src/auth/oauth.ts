@@ -22,7 +22,7 @@ export interface OAuthCallbacks {
 
 const CALLBACK_PORT = 8914;
 const CALLBACK_PATH = '/oauth/callback';
-const CLIENT_NAME = 'Agent Operator';
+const CLIENT_NAME = 'Cowork';
 
 /**
  * Generate a styled OAuth callback page with terminal emulator aesthetic
@@ -132,7 +132,7 @@ function generateOAuthPage(options: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agent Operator - ${title}</title>
+  <title>Cowork - ${title}</title>
   <style>
     :root {
       /* Tokyo Night Palette */

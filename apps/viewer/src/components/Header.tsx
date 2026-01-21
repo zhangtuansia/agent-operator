@@ -5,7 +5,7 @@
 import { Sun, Moon, X } from 'lucide-react'
 
 /**
- * OperatorAgentLogo - The Agent Operator "C" logo
+ * OperatorAgentLogo - The Cowork "C" logo
  */
 function OperatorAgentLogo({ className }: { className?: string }) {
   return (
@@ -40,7 +40,7 @@ export function Header({ hasSession, sessionTitle, isDark, onToggleTheme, onClea
       <a
         href="https://agents.craft.do"
         className="hover:opacity-80 transition-opacity"
-        title="Agent Operator"
+        title="Cowork"
       >
         <OperatorAgentLogo className="w-6 h-6 text-[#9570BE]" />
       </a>

@@ -175,7 +175,7 @@ export default function ApiSettingsPage() {
       setTimeout(() => setSaveSuccess(false), 2000)
 
       // Emit event to notify FreeFormInput to reload provider
-      window.dispatchEvent(new CustomEvent('craft:provider-changed', {
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
         detail: { provider: currentProvider }
       }))
     } catch (error) {

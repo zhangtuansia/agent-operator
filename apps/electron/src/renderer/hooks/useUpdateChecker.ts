@@ -1,7 +1,7 @@
 /**
  * Update Checker Hook
  *
- * NOTE: Auto-update is currently disabled for Agent Operator.
+ * NOTE: Auto-update is currently disabled for Cowork.
  * This hook returns a stub implementation that does nothing.
  *
  * Original functionality:
@@ -33,7 +33,7 @@ interface UseUpdateCheckerResult {
 }
 
 /**
- * Auto-update is disabled for Agent Operator.
+ * Auto-update is disabled for Cowork.
  * Returns stub implementation that does nothing.
  */
 export function useUpdateChecker(): UseUpdateCheckerResult {

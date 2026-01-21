@@ -13,7 +13,7 @@ interface ReauthScreenProps {
 /**
  * ReauthScreen - Simple re-login screen for expired sessions
  *
- * Shown when the user has existing workspaces/config but the Craft token
+ * Shown when the user has existing workspaces/config but the auth token
  * is missing or expired. Much simpler than full onboarding - just re-authenticate.
  */
 export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
@@ -47,9 +47,9 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
           title="Session Expired"
           description={
             <>
-              Your Craft session has expired or is no longer valid.
+              Your session has expired or is no longer valid.
               <br />
-              Please log in again to continue using Agent Operator.
+              Please log in again to continue using Cowork.
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
                 Your conversations and settings are preserved.
@@ -72,7 +72,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 ) : (
                   <>
                     <RefreshCw className="mr-2 size-4" />
-                    Log In with Craft
+                    Log In Again
                   </>
                 )}
               </Button>

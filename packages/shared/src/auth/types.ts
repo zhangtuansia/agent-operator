@@ -11,7 +11,7 @@ import type { AuthType, Workspace } from '../config/types.ts';
  * Unified authentication state
  */
 export interface AuthState {
-  /** Craft platform authentication (for accessing Craft API and MCP) */
+  /** Platform authentication (for accessing API and MCP) */
   craft: {
     hasToken: boolean;
     token: string | null;
@@ -40,8 +40,8 @@ export interface AuthState {
  * What setup steps are needed
  */
 export interface SetupNeeds {
-  /** No Craft token AND no workspace → show full onboarding (new user) */
-  needsCraftAuth: boolean;
+  /** No auth token AND no workspace → show full onboarding (new user) */
+  needsAuth: boolean;
   /** Has workspace but token expired/missing → show simple re-login screen */
   needsReauth: boolean;
   /** No billing type configured → show billing picker */

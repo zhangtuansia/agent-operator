@@ -493,7 +493,7 @@ export default function App() {
       // Note: markCompactionComplete is called on the backend (sessions.ts) to ensure
       // it happens even if CMD+R occurs during compaction
       if (event.type === 'info' && event.statusType === 'compaction_complete') {
-        window.dispatchEvent(new CustomEvent('craft:compaction-complete', {
+        window.dispatchEvent(new CustomEvent('cowork:compaction-complete', {
           detail: { sessionId }
         }))
       }
@@ -1047,7 +1047,7 @@ export default function App() {
       setWindowWorkspaceId(null)
       // Reset setupNeeds to force fresh onboarding start
       setSetupNeeds({
-        needsCraftAuth: true,
+        needsAuth: true,
         needsReauth: false,
         needsBillingConfig: true,
         needsCredentials: true,

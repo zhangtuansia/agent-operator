@@ -1,6 +1,6 @@
 # @agent-operator/core
 
-Shared TypeScript types and utilities for Agent Operator applications.
+Shared TypeScript types and utilities for Cowork applications.
 
 ## Installation
 

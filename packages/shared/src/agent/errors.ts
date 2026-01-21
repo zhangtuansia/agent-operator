@@ -132,7 +132,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   mcp_unreachable: {
     title: 'MCP Server Unreachable',
-    message: 'Cannot connect to the Craft MCP server. Check your network connection.',
+    message: 'Cannot connect to the MCP server. Check your network connection.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],

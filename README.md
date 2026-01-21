@@ -1,17 +1,17 @@
-# Agent Operator
+# Cowork
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-Agent Operator is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
+Cowork is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
 
 It leans on Claude Code through the Claude Agent SDK - follow what we found great, and improves areas where we've desired improvements.
 
 It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 
-Agent Operator is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Agent Operator with Agent Operator only - no code editors - so really, any customisation is just a prompt away.
+Cowork is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Cowork with Cowork only - no code editors - so really, any customisation is just a prompt away.
 
-We built Agent Operator because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
+We built Cowork because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
@@ -136,7 +136,7 @@ bun run electron:start
 # Type checking
 bun run typecheck:all
 
-# Debug logging (writes to ~/Library/Logs/Agent Operator/)
+# Debug logging (writes to ~/Library/Logs/Cowork/)
 # Logs are automatically enabled in development
 ```
 
@@ -213,7 +213,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "Agent Operator" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Craft" and "Cowork" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 

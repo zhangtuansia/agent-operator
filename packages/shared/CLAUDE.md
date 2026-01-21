@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`@agent-operator/shared` is the core business logic package for Agent Operator. It contains:
+`@agent-operator/shared` is the core business logic package for Cowork. It contains:
 - Agent implementation (OperatorAgent, session-scoped tools, permission modes)
 - Authentication (OAuth, credentials, auth state)
 - Configuration (storage, preferences, themes, watcher)

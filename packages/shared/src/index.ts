@@ -1,7 +1,7 @@
 /**
  * @agent-operator/shared
  *
- * Shared business logic for Agent Operator.
+ * Shared business logic for Cowork.
  * Used by the Electron app.
  *
  * Import specific modules via subpath exports:

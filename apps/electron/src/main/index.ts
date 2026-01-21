@@ -41,8 +41,8 @@ let sessionManager: SessionManager | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: OPERATOR_APP_NAME env var (e.g., "Agent Operator [1]")
-app.setName(process.env.OPERATOR_APP_NAME || 'Agent Operator')
+// Supports multi-instance dev: OPERATOR_APP_NAME env var (e.g., "Cowork [1]")
+app.setName(process.env.OPERATOR_APP_NAME || 'Cowork')
 
 // Register as default protocol client for agentoperator:// URLs
 // This must be done before app.whenReady() on some platforms

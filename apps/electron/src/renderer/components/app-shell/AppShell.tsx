@@ -528,7 +528,7 @@ function AppShellContent({
 
       // Dispatch custom event for FreeFormInput to handle
       const filesArray = Array.from(files)
-      window.dispatchEvent(new CustomEvent('craft:paste-files', {
+      window.dispatchEvent(new CustomEvent('cowork:paste-files', {
         detail: { files: filesArray }
       }))
     }

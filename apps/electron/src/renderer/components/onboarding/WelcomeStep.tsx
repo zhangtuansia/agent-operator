@@ -11,7 +11,7 @@ interface WelcomeStepProps {
  * WelcomeStep - Initial welcome screen for onboarding
  *
  * Shows different messaging for new vs existing users:
- * - New users: Welcome to Agent Operator
+ * - New users: Welcome to Cowork
  * - Existing users: Update your billing settings
  */
 export function WelcomeStep({
@@ -25,11 +25,11 @@ export function WelcomeStep({
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
-      title={isExistingUser ? 'Update Settings' : 'Welcome to Agent Operator'}
+      title={isExistingUser ? 'Update Settings' : 'Welcome to Cowork'}
       description={
         isExistingUser
           ? 'Update billing or change your setup.'
-          : 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!'
+          : 'Your AI-powered workspace. Connect anything. Organize your sessions. Everything you need to collaborate effectively!'
       }
       actions={
         <ContinueButton onClick={onContinue} className="w-full">

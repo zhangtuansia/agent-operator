@@ -1,12 +1,12 @@
-interface CraftAgentsSymbolProps {
+interface CoworkSymbolProps {
   className?: string
 }
 
 /**
- * Cowork "E" symbol - the small pixel art icon
+ * Cowork symbol icon - the small pixel art icon
  * Uses accent color from theme (currentColor from className)
  */
-export function CraftAgentsSymbol({ className }: CraftAgentsSymbolProps) {
+export function CoworkSymbol({ className }: CoworkSymbolProps) {
   return (
     <svg
       viewBox="452 368 115 129"
@@ -22,3 +22,6 @@ export function CraftAgentsSymbol({ className }: CraftAgentsSymbolProps) {
     </svg>
   )
 }
+
+// Legacy export for backward compatibility
+export { CoworkSymbol as CraftAgentsSymbol }

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with the `@agent-operato
 
 ## Overview
 
-The core package provides shared TypeScript types and utilities used by the Electron app and shared packages. It serves as the type definition layer for the Agent Operator monorepo.
+The core package provides shared TypeScript types and utilities used by the Electron app and shared packages. It serves as the type definition layer for the Cowork monorepo.
 
 **Current State:** This package currently only exports types and a debug utility stub. The actual implementation of storage, credentials, agent logic, auth, and MCP handling still lives in the root `src/` directory and is accessed via relative imports by the apps.
 

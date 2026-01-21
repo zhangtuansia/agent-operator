@@ -47,7 +47,7 @@ export interface SessionViewerProps {
 }
 
 /**
- * OperatorAgentLogo - The Agent Operator "C" logo for branding
+ * OperatorAgentLogo - The Cowork "C" logo for branding
  */
 function OperatorAgentLogo({ className }: { className?: string }) {
   return (

@@ -9,7 +9,7 @@ export const iconComponents: ComponentEntry[] = [
     id: 'agent-operators-logo',
     name: 'CraftAgentsLogo',
     category: 'Icons',
-    description: 'Full Agent Operator branding logo with text',
+    description: 'Full Cowork branding logo with text',
     component: CraftAgentsLogo,
     props: [
       {
@@ -29,7 +29,7 @@ export const iconComponents: ComponentEntry[] = [
     id: 'agent-operators-symbol',
     name: 'CraftAgentsSymbol',
     category: 'Icons',
-    description: 'Agent Operator "E" pixel art symbol icon (brand color: #9570BE)',
+    description: 'Cowork "E" pixel art symbol icon (brand color: #9570BE)',
     component: CraftAgentsSymbol,
     props: [
       {

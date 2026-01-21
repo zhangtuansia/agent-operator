@@ -1,7 +1,7 @@
 /**
  * Auto-update module for Electron app
  *
- * NOTE: Auto-update is currently DISABLED for Agent Operator.
+ * NOTE: Auto-update is currently DISABLED for Cowork.
  * All functions return early without performing any update operations.
  *
  * Original functionality:
@@ -124,7 +124,7 @@ interface CheckOptions {
  * @param options.autoDownload - If true, auto-start download (default: true)
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
-  // Auto-update disabled for Agent Operator
+  // Auto-update disabled for Cowork
   if (AUTO_UPDATE_DISABLED) {
     mainLog.info('[auto-update] Auto-update is disabled')
     return updateInfo

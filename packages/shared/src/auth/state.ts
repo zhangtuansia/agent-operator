@@ -2,7 +2,7 @@
  * Unified Auth State Management
  *
  * Provides a single source of truth for all authentication state:
- * - Craft OAuth (for accessing Craft API and MCP servers)
+ * - OAuth (for accessing API and MCP servers)
  * - Billing configuration (api_key or oauth_token)
  * - Workspace/MCP configuration
  */
@@ -17,7 +17,7 @@ import { debug } from '../utils/debug.ts';
 // ============================================
 
 export interface AuthState {
-  /** Craft platform authentication (for accessing Craft API and MCP) */
+  /** Platform authentication (for accessing API and MCP) */
   craft: {
     hasToken: boolean;
     token: string | null;
@@ -43,8 +43,8 @@ export interface AuthState {
 }
 
 export interface SetupNeeds {
-  /** No Craft token AND no workspace → show full onboarding (new user) */
-  needsCraftAuth: boolean;
+  /** No auth token AND no workspace → show full onboarding (new user) */
+  needsAuth: boolean;
   /** Has workspace but token expired/missing → show simple re-login screen */
   needsReauth: boolean;
   /** No billing type configured → show billing picker */
@@ -165,8 +165,8 @@ export async function getAuthState(): Promise<AuthState> {
  * Derive what setup steps are needed based on current auth state
  */
 export function getSetupNeeds(state: AuthState): SetupNeeds {
-  // Craft OAuth is only required for new users (no workspace) who need to select a space during onboarding
-  const needsCraftAuth = !state.craft.hasToken && !state.workspace.hasWorkspace;
+  // OAuth is only required for new users (no workspace) who need to select a space during onboarding
+  const needsAuth = !state.craft.hasToken && !state.workspace.hasWorkspace;
 
   // Reauth is not needed for api_key or oauth_token billing
   const needsReauth = false;
@@ -178,10 +178,10 @@ export function getSetupNeeds(state: AuthState): SetupNeeds {
   const needsCredentials = state.billing.type !== null && !state.billing.hasCredentials;
 
   return {
-    needsCraftAuth,
+    needsAuth,
     needsReauth,
     needsBillingConfig,
     needsCredentials,
-    isFullyConfigured: !needsCraftAuth && !needsReauth && !needsBillingConfig && !needsCredentials,
+    isFullyConfigured: !needsAuth && !needsReauth && !needsBillingConfig && !needsCredentials,
   };
 }

@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability in Agent Operator, please report it responsibly.
+We take security seriously. If you discover a security vulnerability in Cowork, please report it responsibly.
 
 ### How to Report
 
@@ -25,9 +25,9 @@ Include the following information:
 ### Scope
 
 This policy applies to:
-- The Agent Operator desktop application
+- The Cowork desktop application
 - The `@agent-operator/*` npm packages
-- Official Agent Operator repositories
+- Official Cowork repositories
 
 ### Out of Scope
 
@@ -46,7 +46,7 @@ We only provide security updates for the latest version. Please keep your instal
 
 ## Security Best Practices
 
-When using Agent Operator:
+When using Cowork:
 
 1. **Keep credentials secure**: Never commit `.env` files or credentials
 2. **Use environment variables**: Store secrets in environment variables

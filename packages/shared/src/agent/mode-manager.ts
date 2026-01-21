@@ -1492,7 +1492,7 @@ export function getPermissionModesDocumentation(): string {
 
   return `## Permission Modes
 
-Agent Operator has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
+Cowork has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
 
 | Mode | Color | Description |
 |------|-------|-------------|

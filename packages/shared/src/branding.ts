@@ -1,9 +1,9 @@
 /**
- * Centralized branding assets for Agent Operator
+ * Centralized branding assets for Cowork
  * Used by OAuth callback pages
  */
 
-export const OPERATOR_LOGO = [
+export const COWORK_LOGO = [
   '  ████████ █████████    ██████   ██████████ ██████████',
   '██████████ ██████████ ██████████ █████████  ██████████',
   '██████     ██████████ ██████████ ████████   ██████████',
@@ -12,7 +12,11 @@ export const OPERATOR_LOGO = [
 ] as const;
 
 /** Logo as a single string for HTML templates */
-export const OPERATOR_LOGO_HTML = OPERATOR_LOGO.map((line) => line.trimEnd()).join('\n');
+export const COWORK_LOGO_HTML = COWORK_LOGO.map((line) => line.trimEnd()).join('\n');
 
-/** Session viewer base URL - TODO: Update when deploying own viewer */
+/** Session viewer base URL */
 export const VIEWER_URL = '';
+
+// Legacy exports for backward compatibility
+export const OPERATOR_LOGO = COWORK_LOGO;
+export const OPERATOR_LOGO_HTML = COWORK_LOGO_HTML;

@@ -1,7 +1,7 @@
 /**
  * @agent-operator/core
  *
- * Core types and utilities for Agent Operator.
+ * Core types and utilities for Cowork.
  *
  * NOTE: This package currently only exports types and utilities.
  * Storage, credentials, agent, auth, mcp, and prompts are still

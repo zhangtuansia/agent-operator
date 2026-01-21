@@ -277,8 +277,8 @@ export function FreeFormInput({
     const handleProviderChange = () => {
       loadProvider()
     }
-    window.addEventListener('craft:provider-changed', handleProviderChange)
-    return () => window.removeEventListener('craft:provider-changed', handleProviderChange)
+    window.addEventListener('cowork:provider-changed', handleProviderChange)
+    return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)
   }, [loadProvider])
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
@@ -308,7 +308,7 @@ export function FreeFormInput({
   // Track last caret position for focus restoration (e.g., after permission mode popover closes)
   const lastCaretPositionRef = React.useRef<number | null>(null)
 
-  // Listen for craft:insert-text events (generic mechanism for inserting text into input)
+  // Listen for cowork:insert-text events (generic mechanism for inserting text into input)
   // Used by components that want to pre-fill the input with text
   React.useEffect(() => {
     const handleInsertText = (e: CustomEvent<{ text: string }>) => {
@@ -323,11 +323,11 @@ export function FreeFormInput({
       }, 0)
     }
 
-    window.addEventListener('craft:insert-text', handleInsertText as EventListener)
-    return () => window.removeEventListener('craft:insert-text', handleInsertText as EventListener)
+    window.addEventListener('cowork:insert-text', handleInsertText as EventListener)
+    return () => window.removeEventListener('cowork:insert-text', handleInsertText as EventListener)
   }, [syncToParent, richInputRef])
 
-  // Listen for craft:approve-plan events (used by ResponseCard's Accept Plan button)
+  // Listen for cowork:approve-plan events (used by ResponseCard's Accept Plan button)
   // This disables safe mode AND submits the message in one action
   // Only process events for this session (sessionId must match)
   React.useEffect(() => {
@@ -350,11 +350,11 @@ export function FreeFormInput({
       onSubmit(text, undefined)
     }
 
-    window.addEventListener('craft:approve-plan', handleApprovePlan as EventListener)
-    return () => window.removeEventListener('craft:approve-plan', handleApprovePlan as EventListener)
+    window.addEventListener('cowork:approve-plan', handleApprovePlan as EventListener)
+    return () => window.removeEventListener('cowork:approve-plan', handleApprovePlan as EventListener)
   }, [sessionId, permissionMode, onPermissionModeChange, onSubmit])
 
-  // Listen for craft:approve-plan-with-compact events (Accept & Compact option)
+  // Listen for cowork:approve-plan-with-compact events (Accept & Compact option)
   // This compacts the conversation first, then executes the plan.
   // The pending state is persisted to survive page reloads (CMD+R).
   React.useEffect(() => {
@@ -392,7 +392,7 @@ export function FreeFormInput({
         }
 
         // Remove the listener (one-time use)
-        window.removeEventListener('craft:compaction-complete', handleCompactionComplete as unknown as EventListener)
+        window.removeEventListener('cowork:compaction-complete', handleCompactionComplete as unknown as EventListener)
 
         // Send the execution message with explicit plan path
         // After compaction, Claude doesn't automatically remember the plan file
@@ -410,11 +410,11 @@ export function FreeFormInput({
         }
       }
 
-      window.addEventListener('craft:compaction-complete', handleCompactionComplete as unknown as EventListener)
+      window.addEventListener('cowork:compaction-complete', handleCompactionComplete as unknown as EventListener)
     }
 
-    window.addEventListener('craft:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
-    return () => window.removeEventListener('craft:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
+    window.addEventListener('cowork:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
+    return () => window.removeEventListener('cowork:approve-plan-with-compact', handleApprovePlanWithCompact as unknown as EventListener)
   }, [sessionId, permissionMode, onPermissionModeChange, onSubmit])
 
   // Reload recovery: Check for pending plan execution on mount.
@@ -455,13 +455,13 @@ export function FreeFormInput({
       executePendingPlan()
     }
 
-    window.addEventListener('craft:compaction-complete', handleCompactionComplete as unknown as EventListener)
+    window.addEventListener('cowork:compaction-complete', handleCompactionComplete as unknown as EventListener)
     return () => {
-      window.removeEventListener('craft:compaction-complete', handleCompactionComplete as unknown as EventListener)
+      window.removeEventListener('cowork:compaction-complete', handleCompactionComplete as unknown as EventListener)
     }
   }, [sessionId, onSubmit])
 
-  // Listen for craft:focus-input events (restore focus after popover/dropdown closes)
+  // Listen for cowork:focus-input events (restore focus after popover/dropdown closes)
   React.useEffect(() => {
     const handleFocusInput = () => {
       richInputRef.current?.focus()
@@ -475,11 +475,11 @@ export function FreeFormInput({
       }
     }
 
-    window.addEventListener('craft:focus-input', handleFocusInput)
-    return () => window.removeEventListener('craft:focus-input', handleFocusInput)
+    window.addEventListener('cowork:focus-input', handleFocusInput)
+    return () => window.removeEventListener('cowork:focus-input', handleFocusInput)
   }, [richInputRef])
 
-  // Listen for craft:paste-files events (for global paste when input not focused)
+  // Listen for cowork:paste-files events (for global paste when input not focused)
   React.useEffect(() => {
     const handlePasteFiles = async (e: CustomEvent<{ files: File[] }>) => {
       if (disabled) return
@@ -512,8 +512,8 @@ export function FreeFormInput({
       richInputRef.current?.focus()
     }
 
-    window.addEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
-    return () => window.removeEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
+    window.addEventListener('cowork:paste-files', handlePasteFiles as unknown as EventListener)
+    return () => window.removeEventListener('cowork:paste-files', handlePasteFiles as unknown as EventListener)
   }, [disabled, richInputRef])
 
   // Build active commands list for slash command menu
@@ -1044,7 +1044,7 @@ export function FreeFormInput({
           onLongTextPaste={handleLongTextPaste}
           onFocus={() => { setIsFocused(true); onFocusChange?.(true) }}
           onBlur={() => {
-            // Save caret position before losing focus (for restoration via craft:focus-input)
+            // Save caret position before losing focus (for restoration via cowork:focus-input)
             lastCaretPositionRef.current = richInputRef.current?.selectionStart ?? null
             setIsFocused(false)
             onFocusChange?.(false)

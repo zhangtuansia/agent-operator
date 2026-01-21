@@ -1,6 +1,6 @@
-# Contributing to Agent Operator
+# Contributing to Cowork
 
-Thank you for your interest in contributing to Agent Operator! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Cowork! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 

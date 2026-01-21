@@ -1,11 +1,11 @@
 {
   "name": "@agent-operator/electron",
-  "version": "0.1.0",
-  "description": "Electron desktop app for Agent Operator",
+  "version": "0.0.1",
+  "description": "Electron desktop app for Cowork",
   "main": "dist/main.cjs",
   "private": true,
   "author": {
-    "name": "Agent Operator"
+    "name": "Cowork"
   },
   "homepage": "https://github.com/zhangtuansia/agent-operator",
   "license": "MIT",

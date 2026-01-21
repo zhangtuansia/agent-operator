@@ -1,7 +1,7 @@
 /**
- * Agent Operator Session Viewer
+ * Cowork Session Viewer
  *
- * A minimal web app for viewing Agent Operator session transcripts.
+ * A minimal web app for viewing Cowork session transcripts.
  * Users can upload session JSON files or view shared sessions via URL.
  *
  * Routes:

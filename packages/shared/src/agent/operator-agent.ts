@@ -790,7 +790,7 @@ export class OperatorAgent {
         // Session-scoped tools (SubmitPlan, source_test, etc.)
         session: getSessionScopedTools(sessionId, this.workspaceRootPath),
         // Add user-defined source servers (MCP and API, filtered by local MCP setting)
-        // Note: Craft MCP server is now added via sources system
+        // Note: MCP server is now added via sources system
         ...sourceMcpResult.servers,
         ...this.sourceApiServers,
       };

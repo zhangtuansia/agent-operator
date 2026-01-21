@@ -188,7 +188,6 @@ export function extractDomainFromSource(source: {
       github: 'github.com',
       notion: 'notion.so',
       slack: 'slack.com',
-      craft: 'craft.do',
       exa: 'exa.ai',
       google: 'google.com',
     };
@@ -308,99 +307,6 @@ export function initializeSourceGuides(): void {
 // ============================================================
 // Bundled Source Guides
 // ============================================================
-
-const CRAFT_DO_GUIDE = `---
-domains:
-  - craft.do
-  - mcp.craft.do
-providers:
-  - craft
----
-
-# Craft
-
-## Craft Environment
-
-Everything in Craft is scoped to a **Space**. Users may have multiple spaces, but you can only act within the current space. Spaces can be shared, but are typically used by one person.
-
-Within a space, documents can be organized into folders. There are also smart folders:
-
-| Smart Folder | Purpose |
-|--------------|---------|
-| All Docs | All documents in the space |
-| Starred | Starred documents |
-| Unsorted | Documents not in any folder |
-| Tags | Documents filtered by tag |
-| Calendar | All daily notes |
-| Tasks | Task inbox, today, upcoming, all |
-
-When users ask about tasks in general (not in a specific document), refer them to the Tasks section.
-
-## Documents
-
-Documents are the core of Craft. Each document has a unique ID.
-
-**Daily Notes** are special documents attached to calendar dates. Their titles follow the pattern \`2025.01.31\` but users see them in their regional date format.
-
-## Document Structure
-
-Documents are **not linear** - they are hierarchical structures made of blocks. Each block:
-- Has a unique shortened ID (integer)
-- Can contain nested child blocks (subblocks)
-- When a block has children, it's called a "Page" or "Subpage"
-- Users can open subpages to see nested content
-
-The **root block** defines the document title and is a text block by default.
-
-### Block Types
-
-| Type | Description |
-|------|-------------|
-| text | Text content with styling (title, heading, body, quote, code, etc.) |
-| url | Link/bookmark |
-| image | Image content |
-| video | Video content |
-| file | File attachment |
-| collection | Database-like structure (technically "objectList") |
-| collection item | Database row (technically "object") |
-| table | Table content |
-| drawing | Drawing/sketch |
-| line | Divider line |
-
-### Text Blocks
-
-Text blocks are versatile and can serve as:
-- **Headings**: Different text styles act like markdown #, ##, ###, ####
-- **Pages**: Visual indicator of nested content
-- **Tasks**: Checkbox with optional schedule and due dates
-- **List items**: Numbered, bullet, or toggle lists
-- **Rich text**: Content styled with CommonMark markdown
-
-### Block Properties
-
-Each block can have:
-- Child block IDs (for nested content)
-- Attached reminders
-- Comment threads
-
-<!-- SETUP: This section is ONLY for the setup agent -->
-
-## Setup Hints
-
-### Recommended Questions
-- What types of documents do you primarily work with?
-- Do you use daily notes?
-- Are there specific folders or documents you frequently access?
-
-### Caching Recommendations
-- Fetch and store folder structure (IDs + names)
-- If user mentions specific docs, store their IDs
-- Note any frequently used smart folders
-
-### Configuration Notes
-- Craft MCP uses OAuth authentication
-- Rate limits: Check MCP server response headers
-`;
 
 const LINEAR_APP_GUIDE = `---
 domains:
@@ -527,7 +433,7 @@ The MCP URL \`https://api.githubcopilot.com/mcp/\` is **CORRECT**. Do NOT use We
 
 #### Authentication - OAuth Will Fail (Expected)
 
-GitHub's MCP server requires OAuth with a **pre-registered client app**. Agent Operator is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
+GitHub's MCP server requires OAuth with a **pre-registered client app**. Cowork is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
 
 **The ONLY solution is a Personal Access Token (PAT):**
 
@@ -1915,7 +1821,6 @@ Use \`source_microsoft_oauth_trigger\` to start the Microsoft OAuth flow.
  * Map of bundled source guide files
  */
 export const BUNDLED_SOURCE_GUIDES: Record<string, string> = {
-  'craft.do.md': CRAFT_DO_GUIDE,
   'linear.app.md': LINEAR_APP_GUIDE,
   'github.com.md': GITHUB_COM_GUIDE,
   'gmail.com.md': GMAIL_GUIDE,

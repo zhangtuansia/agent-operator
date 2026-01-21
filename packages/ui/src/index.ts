@@ -1,5 +1,5 @@
 /**
- * @agent-operator/ui - Shared React UI components for Agent Operator
+ * @agent-operator/ui - Shared React UI components for Cowork
  *
  * This package provides platform-agnostic UI components that work in both:
  * - Electron desktop app (full interactive mode)

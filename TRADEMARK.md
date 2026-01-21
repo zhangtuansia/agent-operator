@@ -1,21 +1,21 @@
 # Trademark Policy
 
-This trademark policy governs the use of the "Craft" and "Agent Operator" names, logos, and branding in connection with the Agent Operator open source project.
+This trademark policy governs the use of the "Craft" and "Cowork" names, logos, and branding in connection with the Cowork open source project.
 
 ## Trademarks
 
 The following are trademarks of Craft Docs Ltd.:
 
 - **Craft** (word mark)
-- **Agent Operator** (word mark)
+- **Cowork** (word mark)
 - The Craft logo and icon
-- The Agent Operator logo and icon
+- The Cowork logo and icon
 
 ## What You Can Do
 
 ### Use the Code Freely
 
-The Agent Operator source code is licensed under the Apache License 2.0. You are free to:
+The Cowork source code is licensed under the Apache License 2.0. You are free to:
 
 - Use, modify, and distribute the code
 - Create derivative works
@@ -25,14 +25,14 @@ The Agent Operator source code is licensed under the Apache License 2.0. You are
 
 You may make accurate, factual statements about your relationship to the project:
 
-- "Based on Agent Operator"
-- "Built with Agent Operator technology"
-- "Compatible with Agent Operator"
-- "Fork of Agent Operator"
+- "Based on Cowork"
+- "Built with Cowork technology"
+- "Compatible with Cowork"
+- "Fork of Cowork"
 
 ### Contribute to the Project
 
-Contributors to the official Agent Operator repository may use the trademarks when discussing their contributions.
+Contributors to the official Cowork repository may use the trademarks when discussing their contributions.
 
 ## What You Cannot Do
 
@@ -49,7 +49,7 @@ If you create a fork or derivative work, you **must**:
 
 You may not:
 
-- Use "Craft" or "Agent Operator" as your product name
+- Use "Craft" or "Cowork" as your product name
 - Use the Craft logo as your application icon
 - Suggest that your fork is the official version
 - Imply that Craft Docs Ltd. or Craft endorses your product
@@ -59,8 +59,8 @@ You may not:
 You may not use the trademarks in any way that:
 
 - Suggests your product is created by or affiliated with Craft Docs Ltd.
-- Could cause confusion between your product and the official Agent Operator
-- Disparages Craft Docs Ltd. or the Agent Operator project
+- Could cause confusion between your product and the official Cowork
+- Disparages Craft Docs Ltd. or the Cowork project
 
 ## Branding Locations
 
@@ -76,15 +76,15 @@ For those creating forks, the following files contain branding that should be up
 
 ### Acceptable
 
-- "MyAgent - based on Agent Operator"
-- "This project is a fork of Agent Operator"
-- "Compatible with the Agent Operator ecosystem"
+- "MyAgent - based on Cowork"
+- "This project is a fork of Cowork"
+- "Compatible with the Cowork ecosystem"
 
 ### Not Acceptable
 
-- "Agent Operator Pro"
-- "Agent Operator for Linux"
-- "Better Agent Operator"
+- "Cowork Pro"
+- "Cowork for Linux"
+- "Better Cowork"
 - Using the Craft logo for your fork
 
 ## Questions

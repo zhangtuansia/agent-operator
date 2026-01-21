@@ -155,7 +155,7 @@ export function initializeDocs(): void {
 
 const SOURCES_MD = `# Sources Configuration Guide
 
-This guide explains how to configure sources (MCP servers, APIs, local filesystems) in Agent Operator.
+This guide explains how to configure sources (MCP servers, APIs, local filesystems) in Cowork.
 
 ## Source Setup Process
 
@@ -175,7 +175,6 @@ When a user wants to add a new source, follow this conversational setup process 
 ├── google-sheets.md   # Google Sheets
 ├── slack.com.md       # Slack - use native API, not MCP
 ├── linear.app.md      # Linear
-├── craft.do.md        # Craft
 ├── outlook.com.md     # Outlook
 ├── microsoft-calendar.md
 ├── teams.microsoft.com.md
@@ -309,7 +308,7 @@ What data/functionality this provides. Include:
 ## Examples
 
 Concrete examples tailored to the user's workflow:
-- "To find issues in the Craft iOS project: ..."
+- "To find issues in the Mobile App project: ..."
 - "To search for recent commits by the mobile team: ..."
 \`\`\`
 
@@ -331,18 +330,18 @@ Agent: I'd be happy to help set up Linear! A few questions:
 2. Are there specific teams or projects you want to focus on?
 3. Should I set it up for read-only exploration or full access?
 
-User: Issue tracking for my iOS team, project called "Craft iOS"
+User: Issue tracking for my iOS team, project called "Mobile App"
 
 Agent: [Uses WebSearch to research Linear MCP capabilities]
 Agent: [Creates config.json with OAuth authentication]
-Agent: [Writes guide.md mentioning "Craft iOS" project and iOS team context]
+Agent: [Writes guide.md mentioning "Mobile App" project and iOS team context]
 Agent: [Sets up permissions.json for read-only listing in Explore mode]
 Agent: [Runs source_test to validate]
 Agent: [Triggers source_oauth_trigger for authentication]
 
-Agent: Linear is now set up! I've configured it to focus on the "Craft iOS" project.
+Agent: Linear is now set up! I've configured it to focus on the "Mobile App" project.
 You can use it to:
-- Search and view issues in Craft iOS
+- Search and view issues in Mobile App
 - Track sprint progress for the iOS team
 - Create and update issues
 
@@ -815,7 +814,7 @@ Use \`source_test\` with the source slug:
 
 const SKILLS_MD = `# Skills Configuration Guide
 
-This guide explains how to create and configure skills in Agent Operator.
+This guide explains how to create and configure skills in Cowork.
 
 ## What Are Skills?
 
@@ -829,13 +828,13 @@ Skills are specialized instructions that extend Claude's capabilities for specif
 
 ## Same Format as Claude Code SDK
 
-Agent Operator uses **the identical SKILL.md format** as the Claude Code SDK. This means:
+Cowork uses **the identical SKILL.md format** as the Claude Code SDK. This means:
 
-1. **Format compatibility**: Any skill written for Claude Code works in Agent Operator
+1. **Format compatibility**: Any skill written for Claude Code works in Cowork
 2. **Same frontmatter fields**: \`name\`, \`description\`, \`globs\`, \`alwaysAllow\`
 3. **Same content structure**: Markdown body with instructions for Claude
 
-**What Agent Operator adds:**
+**What Cowork adds:**
 - **Visual icons**: Display custom icons in the UI for each skill
 - **Workspace organization**: Skills are scoped to workspaces
 - **UI management**: Browse, edit, and validate skills through the interface
@@ -1300,11 +1299,11 @@ Rules are additive - they can only allow more operations, not restrict further.
 
 const THEMES_MD = `# Theme Configuration Guide
 
-This guide explains how to customize the visual theme of Agent Operator.
+This guide explains how to customize the visual theme of Cowork.
 
 ## Overview
 
-Agent Operator uses a 6-color theme system with cascading configuration:
+Cowork uses a 6-color theme system with cascading configuration:
 - **App-level theme**: \`~/.agent-operator/theme.json\` - Global defaults
 - **Workspace-level theme**: \`~/.agent-operator/workspaces/{id}/theme.json\` - Per-workspace overrides
 

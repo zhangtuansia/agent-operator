@@ -1,12 +1,12 @@
-interface CraftAgentsLogoProps {
+interface CoworkLogoProps {
   className?: string
 }
 
 /**
  * Cowork pixel art logo - uses accent color from theme
- * Apply text-accent class to get the brand purple color
+ * Apply text-accent class to get the brand color
  */
-export function CraftAgentsLogo({ className }: CraftAgentsLogoProps) {
+export function CoworkLogo({ className }: CoworkLogoProps) {
   return (
     <svg
       viewBox="0 0 408 66"
@@ -22,3 +22,6 @@ export function CraftAgentsLogo({ className }: CraftAgentsLogoProps) {
     </svg>
   )
 }
+
+// Legacy export for backward compatibility
+export { CoworkLogo as CraftAgentsLogo }

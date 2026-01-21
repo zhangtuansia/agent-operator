@@ -1,5 +1,5 @@
 /**
- * Centralized path configuration for Agent Operator.
+ * Centralized path configuration for Cowork.
  *
  * Supports multi-instance development via AGENT_OPERATOR_CONFIG_DIR environment variable.
  * When running from a numbered folder, multiple instances can run simultaneously

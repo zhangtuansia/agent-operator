@@ -48,12 +48,12 @@ interface ParsedHint {
  * - {skill} - Custom skill
  */
 const HINT_TEMPLATES = [
-  'Summarize your {source:Gmail} inbox, draft replies, and save notes to {source:Craft}',
+  'Summarize your {source:Gmail} inbox, draft replies, and save notes to {source:Notion}',
   'Turn a {file:screenshot} into a working website in your {folder}',
   'Pull issues from {source:Linear}, research in {source:Slack}, ship the fix',
   'Transcribe a {file:voice memo} and turn it into {source:Notion} tasks',
   'Analyze a {file:spreadsheet} and post insights to {source:Slack}',
-  'Review {source:GitHub} PRs, then summarize changes in {source:Craft}',
+  'Review {source:GitHub} PRs, then summarize changes in {source:Notion}',
   'Parse an {file:invoice PDF} and log it to {source:Google Sheets}',
   'Research with {source:Exa}, write it up, save to your {source:Obsidian} vault',
   'Refactor code in your {folder}, then push to {source:GitHub}',
