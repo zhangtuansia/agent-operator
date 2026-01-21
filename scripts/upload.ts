@@ -165,8 +165,8 @@ async function main() {
       artifacts.push({ file: winArm64Exe, platform: 'win32-arm64', ext: 'exe' });
     }
 
-    // Linux AppImages
-    const linuxX64AppImage = join(releaseDir, 'Agent-Operator-x64.AppImage');
+    // Linux AppImages (electron-builder uses x86_64 naming)
+    const linuxX64AppImage = join(releaseDir, 'Agent-Operator-x86_64.AppImage');
     if (existsSync(linuxX64AppImage)) {
       artifacts.push({ file: linuxX64AppImage, platform: 'linux-x64', ext: 'AppImage' });
     }
