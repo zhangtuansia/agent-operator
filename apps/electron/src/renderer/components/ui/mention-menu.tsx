@@ -102,6 +102,7 @@ function filterSections(sections: MentionSection[], filter: string): MentionSect
 
   // Return as flat list in a single virtual section (headers hidden when filtering)
   if (matchingItems.length === 0) return []
+  // Note: 'Results' label is passed through from filterSections caller
   return [{ id: 'results', label: 'Results', items: matchingItems }]
 }
 
@@ -319,6 +320,11 @@ export interface UseInlineMentionOptions {
   skills: LoadedSkill[]
   sources: LoadedSource[]
   onSelect: (item: MentionItem) => void
+  /** Section labels for i18n */
+  sectionLabels?: {
+    skills: string
+    sources: string
+  }
 }
 
 export interface UseInlineMentionReturn {
@@ -336,6 +342,7 @@ export function useInlineMention({
   skills,
   sources,
   onSelect,
+  sectionLabels,
 }: UseInlineMentionOptions): UseInlineMentionReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
@@ -352,7 +359,7 @@ export function useInlineMention({
     if (skills.length > 0) {
       result.push({
         id: 'skills',
-        label: 'Skills',
+        label: sectionLabels?.skills || 'Skills',
         items: skills.map(skill => ({
           id: skill.slug,
           type: 'skill' as const,
@@ -367,7 +374,7 @@ export function useInlineMention({
     if (sources.length > 0) {
       result.push({
         id: 'sources',
-        label: 'Sources',
+        label: sectionLabels?.sources || 'Sources',
         items: sources
           .filter(source => source.config.slug && source.config.name)
           .map(source => ({
@@ -381,7 +388,7 @@ export function useInlineMention({
     }
 
     return result
-  }, [skills, sources])
+  }, [skills, sources, sectionLabels])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
