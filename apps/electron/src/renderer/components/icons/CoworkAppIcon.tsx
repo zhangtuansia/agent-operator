@@ -1,4 +1,4 @@
-import coworkLogo from "@/assets/craft_logo_c.svg"
+import coworkLogo from "@/assets/app-icon.png"
 
 interface CoworkAppIconProps {
   className?: string
