@@ -1,7 +1,8 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Link, Settings, ChevronDown, ChevronUp } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
+import { useLanguage } from "@/context/LanguageContext"
 
 export type BillingMethod =
   | 'api_key'
@@ -13,7 +14,7 @@ export type BillingMethod =
 
 interface BillingOption {
   id: BillingMethod
-  name: string
+  nameKey: string
   icon: React.ReactNode
   recommended?: boolean
 }
@@ -21,13 +22,13 @@ interface BillingOption {
 const PRIMARY_OPTIONS: BillingOption[] = [
   {
     id: 'claude_oauth',
-    name: 'Claude Pro / Max',
+    nameKey: 'billingMethods.claudeProMax',
     icon: <CreditCard className="size-4" />,
     recommended: true,
   },
   {
     id: 'api_key',
-    name: 'Anthropic API Key',
+    nameKey: 'billingMethods.anthropicApiKey',
     icon: <Key className="size-4" />,
   },
 ]
@@ -35,22 +36,22 @@ const PRIMARY_OPTIONS: BillingOption[] = [
 const MORE_OPTIONS: BillingOption[] = [
   {
     id: 'minimax',
-    name: 'MiniMax',
+    nameKey: 'billingMethods.minimax',
     icon: <Link className="size-4" />,
   },
   {
     id: 'glm',
-    name: '智谱 GLM',
+    nameKey: 'billingMethods.glm',
     icon: <Link className="size-4" />,
   },
   {
     id: 'deepseek',
-    name: 'DeepSeek',
+    nameKey: 'billingMethods.deepseek',
     icon: <Link className="size-4" />,
   },
   {
     id: 'custom',
-    name: 'Custom Endpoint',
+    nameKey: 'billingMethods.customEndpoint',
     icon: <Settings className="size-4" />,
   },
 ]
@@ -66,10 +67,12 @@ function OptionButton({
   option,
   isSelected,
   onSelect,
+  t,
 }: {
   option: BillingOption
   isSelected: boolean
   onSelect: () => void
+  t: (key: string) => string
 }) {
   return (
     <button
@@ -94,10 +97,10 @@ function OptionButton({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{option.name}</span>
+          <span className="font-medium text-sm">{t(option.nameKey)}</span>
           {option.recommended && (
             <span className="bg-foreground/5 px-2 py-0.5 text-[11px] font-medium text-foreground/70">
-              Recommended
+              {t('billingMethods.recommended')}
             </span>
           )}
         </div>
@@ -134,6 +137,7 @@ export function BillingMethodStep({
   onContinue,
   onBack
 }: BillingMethodStepProps) {
+  const { t } = useLanguage()
   const [showMore, setShowMore] = useState(false)
 
   // Auto-expand if a "more" option is selected
@@ -142,8 +146,8 @@ export function BillingMethodStep({
 
   return (
     <StepFormLayout
-      title="Choose Billing Method"
-      description="Select how you'd like to power your AI agents."
+      title={t('billingMethods.chooseBillingMethod')}
+      description={t('billingMethods.selectHowToPower')}
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -159,6 +163,7 @@ export function BillingMethodStep({
             option={option}
             isSelected={option.id === selectedMethod}
             onSelect={() => onSelect(option.id)}
+            t={t}
           />
         ))}
       </div>
@@ -171,7 +176,7 @@ export function BillingMethodStep({
           "text-sm text-muted-foreground hover:text-foreground transition-colors"
         )}
       >
-        <span>More options</span>
+        <span>{t('billingMethods.moreOptions')}</span>
         {shouldShowMore ? (
           <ChevronUp className="size-4" />
         ) : (
@@ -188,6 +193,7 @@ export function BillingMethodStep({
               option={option}
               isSelected={option.id === selectedMethod}
               onSelect={() => onSelect(option.id)}
+              t={t}
             />
           ))}
         </div>

@@ -638,6 +638,12 @@ export const en = {
 
   // Workspace creation
   workspace: {
+    addWorkspace: 'Add Workspace',
+    whereIdeasMeet: 'Where your ideas meet the tools to make them happen.',
+    createNew: 'Create new',
+    startFresh: 'Start fresh with an empty workspace.',
+    openFolder: 'Open folder',
+    chooseExistingAsWorkspace: 'Choose an existing folder as workspace.',
     createWorkspace: 'Create workspace',
     enterNameAndLocation: 'Enter a name and choose where to store your workspace.',
     workspaceName: 'Workspace name',
@@ -747,6 +753,9 @@ export const en = {
 
   // Billing method options
   billingMethods: {
+    chooseBillingMethod: 'Choose Billing Method',
+    selectHowToPower: "Select how you'd like to power your AI agents.",
+    moreOptions: 'More options',
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API Key',
     minimax: 'MiniMax',
@@ -774,6 +783,14 @@ export const en = {
     noPermissionsConfigured: 'No permissions configured',
     rule: 'rule',
     rules: 'rules',
+  },
+
+  // Tools table
+  toolsTable: {
+    access: 'Access',
+    tool: 'Tool',
+    description: 'Description',
+    noToolsAvailable: 'No tools available',
   },
 } as const;
 

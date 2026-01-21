@@ -12,6 +12,7 @@ import { Maximize2 } from 'lucide-react'
 import { Markdown } from '@/components/markdown'
 import { DocumentFormattedMarkdownOverlay } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface Info_MarkdownProps {
   /** Markdown content */
@@ -32,6 +33,7 @@ export function Info_Markdown({
   className,
   fullscreen = false,
 }: Info_MarkdownProps) {
+  const { t } = useLanguage()
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Detect if content starts with H1-H3 heading
@@ -61,7 +63,7 @@ export function Info_Markdown({
               'text-muted-foreground/50 hover:text-foreground',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
             )}
-            title="View Fullscreen"
+            title={t('permissionsTable.viewFullscreen')}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>

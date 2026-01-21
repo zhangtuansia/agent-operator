@@ -640,6 +640,12 @@ export const zh: TranslationKeys = {
 
   // Workspace creation
   workspace: {
+    addWorkspace: '添加工作区',
+    whereIdeasMeet: '让您的创意遇见实现它们的工具。',
+    createNew: '新建',
+    startFresh: '从空白工作区开始。',
+    openFolder: '打开文件夹',
+    chooseExistingAsWorkspace: '选择现有文件夹作为工作区。',
     createWorkspace: '创建工作区',
     enterNameAndLocation: '输入名称并选择工作区存储位置。',
     workspaceName: '工作区名称',
@@ -749,6 +755,9 @@ export const zh: TranslationKeys = {
 
   // Billing method options
   billingMethods: {
+    chooseBillingMethod: '选择计费方式',
+    selectHowToPower: '选择如何为您的 AI 智能体提供动力。',
+    moreOptions: '更多选项',
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API 密钥',
     minimax: 'MiniMax',
@@ -776,5 +785,13 @@ export const zh: TranslationKeys = {
     noPermissionsConfigured: '未配置权限',
     rule: '条规则',
     rules: '条规则',
+  },
+
+  // Tools table
+  toolsTable: {
+    access: '访问',
+    tool: '工具',
+    description: '描述',
+    noToolsAvailable: '没有可用的工具',
   },
 } as const;
