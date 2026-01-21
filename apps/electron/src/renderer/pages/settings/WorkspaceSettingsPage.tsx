@@ -24,6 +24,7 @@ import { RenameDialog } from '@/components/ui/rename-dialog'
 import type { PermissionMode, ThinkingLevel, WorkspaceSettings } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@agent-operator/shared/agent/mode-types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@agent-operator/shared/agent/thinking-levels'
+import { getModelsForProvider, getDefaultModelForProvider } from '@config/models'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -67,6 +68,9 @@ export default function WorkspaceSettingsPage() {
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 
+  // Provider state (for showing correct model options)
+  const [currentProvider, setCurrentProvider] = useState<string | undefined>(undefined)
+
   // Load workspace settings when active workspace changes
   useEffect(() => {
     const loadWorkspaceSettings = async () => {
@@ -77,11 +81,16 @@ export default function WorkspaceSettingsPage() {
 
       setIsLoadingWorkspace(true)
       try {
+        // Load billing method to get current provider
+        const billingInfo = await window.electronAPI.getBillingMethod()
+        setCurrentProvider(billingInfo.provider)
+
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
-          setWsModel(settings.model || 'claude-sonnet-4-5-20250929')
+          // Use provider-specific default model if no model is set
+          setWsModel(settings.model || getDefaultModelForProvider(billingInfo.provider))
           setWsThinkingLevel(settings.thinkingLevel || DEFAULT_THINKING_LEVEL)
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
@@ -393,11 +402,11 @@ export default function WorkspaceSettingsPage() {
                   description="AI model for new chats"
                   value={wsModel}
                   onValueChange={handleModelChange}
-                  options={[
-                    { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
-                    { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
-                    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
-                  ]}
+                  options={getModelsForProvider(currentProvider).map((model) => ({
+                    value: model.id,
+                    label: model.name,
+                    description: model.description,
+                  }))}
                 />
                 <SettingsMenuSelectRow
                   label="Thinking level"

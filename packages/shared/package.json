@@ -21,6 +21,7 @@
     "./auth/types": "./src/auth/types.ts",
     "./config": "./src/config/index.ts",
     "./config/types": "./src/config/types.ts",
+    "./config/models": "./src/config/models.ts",
     "./credentials": "./src/credentials/index.ts",
     "./headless": "./src/headless/index.ts",
     "./mcp": "./src/mcp/index.ts",

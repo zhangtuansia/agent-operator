@@ -47,7 +47,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { MODELS, getModelShortName } from '@config/models'
+import { getModelShortName, getModelsForProvider } from '@config/models'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
@@ -255,6 +255,31 @@ export function FreeFormInput({
   const [sourceFilter, setSourceFilter] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
+
+  // Provider state for showing correct model options
+  const [currentProvider, setCurrentProvider] = React.useState<string | undefined>(undefined)
+
+  // Load provider info on mount and when provider changes
+  const loadProvider = React.useCallback(async () => {
+    if (!window.electronAPI) return
+    try {
+      const billingInfo = await window.electronAPI.getBillingMethod()
+      setCurrentProvider(billingInfo.provider)
+    } catch {
+      // Ignore errors, use default models
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadProvider()
+
+    // Listen for provider changes from API settings
+    const handleProviderChange = () => {
+      loadProvider()
+    }
+    window.addEventListener('craft:provider-changed', handleProviderChange)
+    return () => window.removeEventListener('craft:provider-changed', handleProviderChange)
+  }, [loadProvider])
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -1249,14 +1274,9 @@ export function FreeFormInput({
               <TooltipContent side="top">Model</TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
-              {/* Model options */}
-              {MODELS.map((model) => {
+              {/* Model options - dynamically loaded based on provider */}
+              {getModelsForProvider(currentProvider).map((model) => {
                 const isSelected = currentModel === model.id
-                const descriptions: Record<string, string> = {
-                  'claude-opus-4-5-20251101': 'Most capable for complex work',
-                  'claude-sonnet-4-5-20250929': 'Best for everyday tasks',
-                  'claude-haiku-4-5-20251001': 'Fastest for quick answers',
-                }
                 return (
                   <StyledDropdownMenuItem
                     key={model.id}
@@ -1265,7 +1285,7 @@ export function FreeFormInput({
                   >
                     <div className="text-left">
                       <div className="font-medium text-sm">{model.name}</div>
-                      <div className="text-xs text-muted-foreground">{descriptions[model.id] || model.description}</div>
+                      <div className="text-xs text-muted-foreground">{model.description}</div>
                     </div>
                     {isSelected && (
                       <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />

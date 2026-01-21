@@ -42,7 +42,7 @@ export const PROVIDER_DEFAULTS: Record<string, {
   },
   glm: {
     name: '智谱 GLM',
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+    baseURL: 'https://open.bigmodel.cn/api/anthropic',
     docsUrl: 'open.bigmodel.cn',
     apiFormat: 'anthropic',
     placeholder: 'your-api-key',

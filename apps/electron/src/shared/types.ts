@@ -534,6 +534,10 @@ export const IPC_CHANNELS = {
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
 
+  // Settings - Provider Config
+  SETTINGS_GET_STORED_CONFIG: 'settings:getStoredConfig',
+  SETTINGS_UPDATE_PROVIDER_CONFIG: 'settings:updateProviderConfig',
+
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
   SETTINGS_SET_MODEL: 'settings:setModel',
@@ -737,6 +741,20 @@ export interface ElectronAPI {
   getBillingMethod(): Promise<BillingMethodInfo>
   updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
 
+  // Settings - Provider Config (for third-party APIs)
+  getStoredConfig(): Promise<{
+    providerConfig?: {
+      provider: string
+      baseURL: string
+      apiFormat: 'anthropic' | 'openai'
+    }
+  } | null>
+  updateProviderConfig(config: {
+    provider: string
+    baseURL: string
+    apiFormat: 'anthropic' | 'openai'
+  }): Promise<void>
+
   // Settings - Model (global default)
   getModel(): Promise<string | null>
   setModel(model: string): Promise<void>
@@ -852,6 +870,8 @@ export interface ClaudeOAuthResult {
 export interface BillingMethodInfo {
   authType: AuthType
   hasCredential: boolean
+  /** Provider ID if using third-party API (e.g., 'glm', 'minimax', 'deepseek') */
+  provider?: string
 }
 
 /**
@@ -931,7 +951,7 @@ export type ChatFilter =
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences'
+export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'permissions' | 'shortcuts' | 'preferences'
 
 /**
  * Chats navigation state - shows SessionList in navigator
@@ -1088,7 +1108,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'workspace', 'shortcuts', 'preferences'].includes(subpage)) {
+    if (['app', 'workspace', 'api', 'permissions', 'shortcuts', 'preferences'].includes(subpage)) {
       return { navigator: 'settings', subpage }
     }
   }

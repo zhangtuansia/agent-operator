@@ -10,7 +10,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@agent-operator/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@agent-operator/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace } from '@agent-operator/shared/config'
 import { getSessionAttachmentsPath } from '@agent-operator/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@agent-operator/shared/sources'
 import { isValidThinkingLevel } from '@agent-operator/shared/agent/thinking-levels'
@@ -830,6 +830,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD, async (): Promise<BillingMethodInfo> => {
     const authType = getAuthType()
     const manager = getCredentialManager()
+    const providerConfig = getProviderConfig()
 
     let hasCredential = false
     if (authType === 'api_key') {
@@ -838,7 +839,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       hasCredential = !!(await manager.getClaudeOAuth())
     }
 
-    return { authType, hasCredential }
+    // Only return provider for api_key auth type
+    // Claude OAuth should always use Claude models (no third-party provider)
+    const provider = authType === 'api_key' ? providerConfig?.provider : undefined
+
+    return { authType, hasCredential, provider }
   })
 
   // Update billing method and credential
@@ -890,6 +895,35 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (authError) {
       ipcLog.error('Failed to reinitialize auth:', authError)
       // Don't fail the whole operation if auth reinit fails
+    }
+  })
+
+  // ============================================================
+  // Settings - Provider Config
+  // ============================================================
+
+  // Get stored config (includes providerConfig)
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_STORED_CONFIG, async () => {
+    const config = loadStoredConfig()
+    return config ? { providerConfig: config.providerConfig } : null
+  })
+
+  // Update provider config
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_PROVIDER_CONFIG, async (_event, providerConfig: {
+    provider: string
+    baseURL: string
+    apiFormat: 'anthropic' | 'openai'
+  }) => {
+    const { setProviderConfig } = await import('@agent-operator/shared/config')
+    setProviderConfig(providerConfig)
+    ipcLog.info(`Provider config updated: ${providerConfig.provider} - ${providerConfig.baseURL}`)
+
+    // Reinitialize SessionManager auth to pick up new provider config
+    try {
+      await sessionManager.reinitializeAuth()
+      ipcLog.info('Reinitialized auth after provider config update')
+    } catch (authError) {
+      ipcLog.error('Failed to reinitialize auth:', authError)
     }
   })
 

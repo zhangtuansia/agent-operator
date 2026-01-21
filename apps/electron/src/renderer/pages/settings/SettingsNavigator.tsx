@@ -97,6 +97,23 @@ const ShieldIcon = ({ className }: { className?: string }) => (
     />
   </svg>
 )
+
+/** API/Cloud icon for API settings */
+const ApiIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M6.5 20C4.01472 20 2 17.9853 2 15.5C2 13.4039 3.45377 11.6382 5.40517 11.1381C5.14124 10.4965 5 9.79779 5 9.07143C5 6.27098 7.23858 4 10 4C12.0503 4 13.8124 5.2341 14.584 7.00941C15.0796 6.68759 15.6683 6.5 16.3 6.5C18.1225 6.5 19.6 7.97746 19.6 9.8C19.6 10.0703 19.5671 10.3331 19.5052 10.584C21.0017 11.1994 22 12.6815 22 14.4C22 16.6644 20.1644 18.5 17.9 18.5H17V20H6.5ZM8 14L12 10L16 14H13V18H11V14H8Z"
+      fill="currentColor"
+    />
+  </svg>
+)
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -133,6 +150,12 @@ const settingsItems: SettingsItem[] = [
     label: 'Workspace',
     icon: WorkspaceIcon,
     description: 'Model, mode cycling, advanced',
+  },
+  {
+    id: 'api',
+    label: 'API',
+    icon: ApiIcon,
+    description: 'Provider, endpoint, API key',
   },
   {
     id: 'permissions',

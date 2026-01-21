@@ -12,6 +12,7 @@ export {
   SettingsNavigator,
   AppSettingsPage,
   WorkspaceSettingsPage,
+  ApiSettingsPage,
   PermissionsSettingsPage,
   ShortcutsPage,
   PreferencesPage,

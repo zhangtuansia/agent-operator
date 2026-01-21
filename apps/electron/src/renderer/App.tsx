@@ -25,7 +25,7 @@ import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
-import { DEFAULT_MODEL } from '@config/models'
+import { DEFAULT_MODEL, getDefaultModelForProvider } from '@config/models'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -366,10 +366,16 @@ export default function App() {
         }
       }
     })
-    // Load stored model preference
-    window.electronAPI.getModel().then((storedModel) => {
+    // Load stored model preference and provider info
+    Promise.all([
+      window.electronAPI.getModel(),
+      window.electronAPI.getBillingMethod()
+    ]).then(([storedModel, billingInfo]) => {
       if (storedModel) {
         setCurrentModel(storedModel)
+      } else {
+        // If no stored model, use provider-specific default
+        setCurrentModel(getDefaultModelForProvider(billingInfo.provider))
       }
     })
     // Load persisted input drafts into ref (no re-render needed)

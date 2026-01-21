@@ -24,7 +24,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
 } from '@/contexts/NavigationContext'
-import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
+import { AppSettingsPage, WorkspaceSettingsPage, ApiSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 
 export interface MainContentPanelProps {
@@ -55,6 +55,12 @@ export function MainContentPanel({
         return wrapWithStoplight(
           <Panel variant="grow" className={className}>
             <WorkspaceSettingsPage />
+          </Panel>
+        )
+      case 'api':
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <ApiSettingsPage />
           </Panel>
         )
       case 'permissions':
