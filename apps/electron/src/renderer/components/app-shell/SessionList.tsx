@@ -656,36 +656,36 @@ export function SessionList({
   const handleFlagWithToast = useCallback((sessionId: string) => {
     if (!onFlag) return
     onFlag(sessionId)
-    toast('Conversation flagged', {
-      description: 'Added to your flagged items',
+    toast(t('toasts.conversationFlagged'), {
+      description: t('toasts.addedToFlagged'),
       action: onUnflag ? {
-        label: 'Undo',
+        label: t('toasts.undo'),
         onClick: () => onUnflag(sessionId),
       } : undefined,
     })
-  }, [onFlag, onUnflag])
+  }, [onFlag, onUnflag, t])
 
   const handleUnflagWithToast = useCallback((sessionId: string) => {
     if (!onUnflag) return
     onUnflag(sessionId)
-    toast('Flag removed', {
-      description: 'Removed from flagged items',
+    toast(t('toasts.flagRemoved'), {
+      description: t('toasts.removedFromFlagged'),
       action: onFlag ? {
-        label: 'Undo',
+        label: t('toasts.undo'),
         onClick: () => onFlag(sessionId),
       } : undefined,
     })
-  }, [onFlag, onUnflag])
+  }, [onFlag, onUnflag, t])
 
   const handleDeleteWithToast = useCallback(async (sessionId: string): Promise<boolean> => {
     // Confirmation dialog is shown by handleDeleteSession in App.tsx
     // We await so toast only shows after successful deletion (if user confirmed)
     const deleted = await onDelete(sessionId)
     if (deleted) {
-      toast('Conversation deleted')
+      toast(t('toasts.conversationDeleted'))
     }
     return deleted
-  }, [onDelete])
+  }, [onDelete, t])
 
   // Roving tabindex for keyboard navigation
   const {

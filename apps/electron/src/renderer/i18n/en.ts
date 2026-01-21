@@ -576,6 +576,185 @@ export const en = {
     new: 'New',
     plan: 'Plan',
   },
+
+  // Toast messages
+  toasts: {
+    conversationDeleted: 'Conversation deleted',
+    conversationFlagged: 'Conversation flagged',
+    addedToFlagged: 'Added to your flagged items',
+    flagRemoved: 'Flag removed',
+    removedFromFlagged: 'Removed from flagged items',
+    undo: 'Undo',
+    deletedSource: 'Deleted source',
+    deletedSkill: 'Deleted skill',
+    failedToDeleteSource: 'Failed to delete source',
+    failedToDeleteSkill: 'Failed to delete skill',
+    patternCopied: 'Pattern copied to clipboard',
+    failedToCopyPattern: 'Failed to copy pattern',
+    createdWorkspace: 'Created workspace',
+    terminalOverlayNotAvailable: 'Terminal overlay not available',
+    failedToLoadTaskOutput: 'Failed to load task output',
+    noDetailsProvided: 'No details provided',
+  },
+
+  // Keyboard shortcuts dialog
+  keyboardShortcuts: {
+    title: 'Keyboard Shortcuts',
+    global: 'Global',
+    navigation: 'Navigation',
+    sessionList: 'Session List',
+    agentTree: 'Agent Tree',
+    chat: 'Chat',
+    focusSidebar: 'Focus sidebar',
+    focusSessionList: 'Focus session list',
+    focusChatInput: 'Focus chat input',
+    newChat: 'New chat',
+    newWindow: 'New window',
+    toggleSidebar: 'Toggle sidebar',
+    openSettings: 'Open settings',
+    showThisDialog: 'Show this dialog',
+    moveToNextZone: 'Move to next zone',
+    moveToPreviousZone: 'Move to previous zone',
+    moveBetweenZones: 'Move between zones (in lists)',
+    navigateItems: 'Navigate items in list',
+    goToFirstItem: 'Go to first item',
+    goToLastItem: 'Go to last item',
+    closeDialogBlur: 'Close dialog / blur input',
+    deleteSession: 'Delete session',
+    renameSession: 'Rename session',
+    openContextMenu: 'Open context menu',
+    collapseFolder: 'Collapse folder',
+    expandFolder: 'Expand folder',
+    sendMessage: 'Send message',
+    newLine: 'New line',
+  },
+
+  // Workspace creation
+  workspace: {
+    createWorkspace: 'Create workspace',
+    enterNameAndLocation: 'Enter a name and choose where to store your workspace.',
+    workspaceName: 'Workspace name',
+    workspaceNamePlaceholder: 'My Workspace',
+    defaultLocation: 'Default location',
+    underAgentOperatorFolder: 'under .agent-operator folder',
+    chooseLocation: 'Choose a location',
+    pickAPlace: 'Pick a place to put your new workspace.',
+    browse: 'Browse',
+    creating: 'Creating...',
+    create: 'Create',
+    chooseExistingFolder: 'Choose existing folder',
+    chooseAnyFolder: 'Choose any folder to use as workspace.',
+    noFolderSelected: 'No folder selected',
+    opening: 'Opening...',
+    open: 'Open',
+    workspaceAlreadyExists: 'A workspace with this name already exists',
+  },
+
+  // Edit popover menu items
+  editPopoverMenu: {
+    permissionSettings: 'Permission Settings',
+    defaultPermissions: 'Default Permissions',
+    skillInstructions: 'Skill Instructions',
+    skillMetadata: 'Skill Metadata',
+    sourceDocumentation: 'Source Documentation',
+    sourceConfiguration: 'Source Configuration',
+    sourcePermissions: 'Source Permissions',
+    toolPermissions: 'Tool Permissions',
+    preferencesNotes: 'Preferences Notes',
+    addSource: 'Add Source',
+    addSkill: 'Add Skill',
+    statusConfiguration: 'Status Configuration',
+    addBlockedStatusExample: 'Add a "Blocked" status',
+    confirmClearlyWhenDone: 'Confirm clearly when done.',
+  },
+
+  // Slash command menu
+  slashCommandMenu: {
+    ultrathink: 'Ultrathink',
+    ultrathinkDescription: 'Extended reasoning for complex problems',
+    modes: 'Modes',
+    features: 'Features',
+    recentFolders: 'Recent Folders',
+  },
+
+  // Mention menu
+  mentionMenu: {
+    results: 'Results',
+    skills: 'Skills',
+    sources: 'Sources',
+  },
+
+  // Source status indicators
+  sourceStatus: {
+    connected: 'Connected',
+    connectedDescription: 'Source is connected and working',
+    needsAuth: 'Needs Authentication',
+    needsAuthDescription: 'Source requires authentication to connect',
+    connectionFailed: 'Connection Failed',
+    connectionFailedDescription: 'Failed to connect to source',
+    notTested: 'Not Tested',
+    notTestedDescription: 'Connection has not been tested',
+    disabled: 'Disabled',
+    disabledDescription: 'Local MCP servers are disabled in Settings',
+  },
+
+  // Reset dialog
+  resetDialog: {
+    title: 'Reset App',
+    thisWillDelete: 'This will permanently delete:',
+    allWorkspaces: 'All workspaces and their settings',
+    allCredentials: 'All credentials and API keys',
+    allPreferences: 'All preferences and session data',
+    backUpFirst: 'Back up any important data first!',
+    cannotBeUndone: 'This action cannot be undone.',
+    toConfirmSolve: 'To confirm, solve:',
+    enterAnswer: 'Enter answer',
+  },
+
+  // Reauth dialog
+  reauthDialog: {
+    sessionExpired: 'Session Expired',
+    sessionExpiredDescription: 'Your session has expired or is no longer valid.',
+    pleaseLogInAgain: 'Please log in again to continue using Cowork.',
+    conversationsPreserved: 'Your conversations and settings are preserved.',
+    loginFailed: 'Login failed',
+    loggingIn: 'Logging in...',
+    logInAgain: 'Log In Again',
+    resetAndStartFresh: 'Reset app and start fresh...',
+  },
+
+  // Chat display
+  chatDisplay: {
+    messagePreview: 'Message Preview',
+    responsePreview: 'Response Preview',
+    turnDetails: 'Turn Details',
+    openInNewWindow: 'Open in new window',
+  },
+
+  // Task action menu
+  taskActionMenu: {
+    viewOutput: 'View Output',
+    stopTask: 'Stop Task',
+    clickForTaskActions: 'Click for task actions',
+  },
+
+  // Billing method options
+  billingMethods: {
+    claudeProMax: 'Claude Pro / Max',
+    anthropicApiKey: 'Anthropic API Key',
+    minimax: 'MiniMax',
+    glm: '智谱 GLM',
+    deepseek: 'DeepSeek',
+    customEndpoint: 'Custom Endpoint',
+    recommended: 'Recommended',
+  },
+
+  // Status badge
+  statusBadge: {
+    allowed: 'Allowed',
+    blocked: 'Blocked',
+    ask: 'Ask',
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

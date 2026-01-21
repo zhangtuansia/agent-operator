@@ -578,4 +578,183 @@ export const zh: TranslationKeys = {
     new: '新',
     plan: '计划',
   },
+
+  // Toast messages
+  toasts: {
+    conversationDeleted: '对话已删除',
+    conversationFlagged: '对话已标记',
+    addedToFlagged: '已添加到标记项目',
+    flagRemoved: '已取消标记',
+    removedFromFlagged: '已从标记项目中移除',
+    undo: '撤销',
+    deletedSource: '已删除数据源',
+    deletedSkill: '已删除技能',
+    failedToDeleteSource: '删除数据源失败',
+    failedToDeleteSkill: '删除技能失败',
+    patternCopied: '模式已复制到剪贴板',
+    failedToCopyPattern: '复制模式失败',
+    createdWorkspace: '已创建工作区',
+    terminalOverlayNotAvailable: '终端覆盖层不可用',
+    failedToLoadTaskOutput: '加载任务输出失败',
+    noDetailsProvided: '未提供详细信息',
+  },
+
+  // Keyboard shortcuts dialog
+  keyboardShortcuts: {
+    title: '键盘快捷键',
+    global: '全局',
+    navigation: '导航',
+    sessionList: '会话列表',
+    agentTree: '智能体树',
+    chat: '聊天',
+    focusSidebar: '聚焦侧边栏',
+    focusSessionList: '聚焦会话列表',
+    focusChatInput: '聚焦聊天输入框',
+    newChat: '新建聊天',
+    newWindow: '新窗口',
+    toggleSidebar: '切换侧边栏',
+    openSettings: '打开设置',
+    showThisDialog: '显示此对话框',
+    moveToNextZone: '移动到下一个区域',
+    moveToPreviousZone: '移动到上一个区域',
+    moveBetweenZones: '在区域之间移动（在列表中）',
+    navigateItems: '在列表中导航项目',
+    goToFirstItem: '跳转到第一项',
+    goToLastItem: '跳转到最后一项',
+    closeDialogBlur: '关闭对话框 / 取消输入焦点',
+    deleteSession: '删除会话',
+    renameSession: '重命名会话',
+    openContextMenu: '打开上下文菜单',
+    collapseFolder: '折叠文件夹',
+    expandFolder: '展开文件夹',
+    sendMessage: '发送消息',
+    newLine: '换行',
+  },
+
+  // Workspace creation
+  workspace: {
+    createWorkspace: '创建工作区',
+    enterNameAndLocation: '输入名称并选择工作区存储位置。',
+    workspaceName: '工作区名称',
+    workspaceNamePlaceholder: '我的工作区',
+    defaultLocation: '默认位置',
+    underAgentOperatorFolder: '在 .agent-operator 文件夹下',
+    chooseLocation: '选择位置',
+    pickAPlace: '选择一个位置来存放您的新工作区。',
+    browse: '浏览',
+    creating: '创建中...',
+    create: '创建',
+    chooseExistingFolder: '选择现有文件夹',
+    chooseAnyFolder: '选择任意文件夹作为工作区。',
+    noFolderSelected: '未选择文件夹',
+    opening: '打开中...',
+    open: '打开',
+    workspaceAlreadyExists: '同名工作区已存在',
+  },
+
+  // Edit popover menu items
+  editPopoverMenu: {
+    permissionSettings: '权限设置',
+    defaultPermissions: '默认权限',
+    skillInstructions: '技能说明',
+    skillMetadata: '技能元数据',
+    sourceDocumentation: '数据源文档',
+    sourceConfiguration: '数据源配置',
+    sourcePermissions: '数据源权限',
+    toolPermissions: '工具权限',
+    preferencesNotes: '偏好备注',
+    addSource: '添加数据源',
+    addSkill: '添加技能',
+    statusConfiguration: '状态配置',
+    addBlockedStatusExample: '添加"已阻止"状态',
+    confirmClearlyWhenDone: '完成后请明确确认。',
+  },
+
+  // Slash command menu
+  slashCommandMenu: {
+    ultrathink: '深度思考',
+    ultrathinkDescription: '针对复杂问题的扩展推理',
+    modes: '模式',
+    features: '功能',
+    recentFolders: '最近文件夹',
+  },
+
+  // Mention menu
+  mentionMenu: {
+    results: '结果',
+    skills: '技能',
+    sources: '数据源',
+  },
+
+  // Source status indicators
+  sourceStatus: {
+    connected: '已连接',
+    connectedDescription: '数据源已连接并正常工作',
+    needsAuth: '需要身份验证',
+    needsAuthDescription: '数据源需要身份验证才能连接',
+    connectionFailed: '连接失败',
+    connectionFailedDescription: '无法连接到数据源',
+    notTested: '未测试',
+    notTestedDescription: '连接尚未测试',
+    disabled: '已禁用',
+    disabledDescription: '本地 MCP 服务器在设置中已禁用',
+  },
+
+  // Reset dialog
+  resetDialog: {
+    title: '重置应用',
+    thisWillDelete: '这将永久删除：',
+    allWorkspaces: '所有工作区及其设置',
+    allCredentials: '所有凭据和 API 密钥',
+    allPreferences: '所有偏好设置和会话数据',
+    backUpFirst: '请先备份重要数据！',
+    cannotBeUndone: '此操作无法撤销。',
+    toConfirmSolve: '请计算以确认：',
+    enterAnswer: '输入答案',
+  },
+
+  // Reauth dialog
+  reauthDialog: {
+    sessionExpired: '会话已过期',
+    sessionExpiredDescription: '您的会话已过期或不再有效。',
+    pleaseLogInAgain: '请重新登录以继续使用 Cowork。',
+    conversationsPreserved: '您的对话和设置已保留。',
+    loginFailed: '登录失败',
+    loggingIn: '登录中...',
+    logInAgain: '重新登录',
+    resetAndStartFresh: '重置应用并重新开始...',
+  },
+
+  // Chat display
+  chatDisplay: {
+    messagePreview: '消息预览',
+    responsePreview: '回复预览',
+    turnDetails: '轮次详情',
+    openInNewWindow: '在新窗口中打开',
+  },
+
+  // Task action menu
+  taskActionMenu: {
+    viewOutput: '查看输出',
+    stopTask: '停止任务',
+    clickForTaskActions: '点击查看任务操作',
+  },
+
+  // Billing method options
+  billingMethods: {
+    claudeProMax: 'Claude Pro / Max',
+    anthropicApiKey: 'Anthropic API 密钥',
+    minimax: 'MiniMax',
+    glm: '智谱 GLM',
+    deepseek: 'DeepSeek',
+    customEndpoint: '自定义端点',
+    recommended: '推荐',
+  },
+
+  // Status badge
+  statusBadge: {
+    allowed: '允许',
+    blocked: '阻止',
+    ask: '询问',
+  },
 } as const;
