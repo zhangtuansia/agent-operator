@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@agent-operator/ui"
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
+import { useLanguage } from "@/context/LanguageContext"
 
 interface ReauthScreenProps {
   onLogin: () => Promise<void>
@@ -19,6 +20,7 @@ interface ReauthScreenProps {
 export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useLanguage()
 
   const handleLogin = async () => {
     setIsLoading(true)
@@ -26,7 +28,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
     try {
       await onLogin()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('reauthDialog.loginFailed'))
       setIsLoading(false)
     }
   }
@@ -44,15 +46,15 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
               <AlertCircle className="size-8 text-info" />
             </div>
           }
-          title="Session Expired"
+          title={t('reauthDialog.sessionExpired')}
           description={
             <>
-              Your session has expired or is no longer valid.
+              {t('reauthDialog.sessionExpiredDescription')}
               <br />
-              Please log in again to continue using Cowork.
+              {t('reauthDialog.pleaseLogInAgain')}
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
-                Your conversations and settings are preserved.
+                {t('reauthDialog.conversationsPreserved')}
               </span>
             </>
           }
@@ -67,12 +69,12 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 {isLoading ? (
                   <>
                     <Spinner className="mr-2" />
-                    Logging in...
+                    {t('reauthDialog.loggingIn')}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="mr-2 size-4" />
-                    Log In Again
+                    {t('reauthDialog.logInAgain')}
                   </>
                 )}
               </Button>
@@ -83,7 +85,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 className="w-full max-w-[320px] bg-foreground-2 shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="sm"
               >
-                Reset app and start fresh...
+                {t('reauthDialog.resetAndStartFresh')}
               </Button>
             </div>
           }

@@ -4,6 +4,7 @@ import { Brain, Check } from 'lucide-react'
 import { Icon_Folder } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@agent-operator/shared/agent/modes'
+import { useLanguage } from '@/context/LanguageContext'
 
 // ============================================================================
 // Types
@@ -524,6 +525,12 @@ export interface UseInlineSlashCommandOptions {
   activeCommands?: SlashCommandId[]
   recentFolders?: string[]
   homeDir?: string
+  /** Section labels for i18n */
+  sectionLabels?: {
+    modes: string
+    features: string
+    recentFolders: string
+  }
 }
 
 export interface UseInlineSlashCommandReturn {
@@ -545,6 +552,7 @@ export function useInlineSlashCommand({
   activeCommands = [],
   recentFolders = [],
   homeDir,
+  sectionLabels,
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
@@ -560,14 +568,14 @@ export function useInlineSlashCommand({
     // Modes section
     result.push({
       id: 'modes',
-      label: 'Modes',
+      label: sectionLabels?.modes || 'Modes',
       items: permissionModeCommands,
     })
 
     // Features section
     result.push({
       id: 'features',
-      label: 'Features',
+      label: sectionLabels?.features || 'Features',
       items: [ultrathinkCommand],
     })
 
@@ -582,7 +590,7 @@ export function useInlineSlashCommand({
 
       result.push({
         id: 'folders',
-        label: 'Recent Folders',
+        label: sectionLabels?.recentFolders || 'Recent Folders',
         items: sortedFolders.map(path => ({
           id: path,
           type: 'folder' as const,
@@ -594,7 +602,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir])
+  }, [recentFolders, homeDir, sectionLabels])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
