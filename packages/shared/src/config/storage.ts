@@ -116,7 +116,7 @@ export function ensureConfigDir(bundledResourcesDir?: string): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
-  // Initialize bundled docs (creates ~/.craft-agent/docs/ with sources.md, agents.md, permissions.md)
+  // Initialize bundled docs (creates ~/.agent-operator/docs/ with sources.md, agents.md, permissions.md)
   initializeDocs();
 
   // Initialize config defaults
@@ -787,7 +787,7 @@ const APP_THEMES_DIR = join(CONFIG_DIR, 'themes');
 
 /**
  * Get the app-level themes directory.
- * Preset themes are stored at ~/.craft-agent/themes/
+ * Preset themes are stored at ~/.agent-operator/themes/
  */
 export function getAppThemesDir(): string {
   return APP_THEMES_DIR;

@@ -1,7 +1,7 @@
 /**
  * Secure Storage Backend
  *
- * Stores credentials in an encrypted file at ~/.craft-agent/credentials.enc
+ * Stores credentials in an encrypted file at ~/.agent-operator/credentials.enc
  * Uses AES-256-GCM for authenticated encryption.
  *
  * Encryption key is derived from machine-specific data (hostname, username, homedir)
@@ -36,7 +36,7 @@ import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
 
 // File location
-const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
+const CREDENTIALS_DIR = join(homedir(), '.agent-operator');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
 
 // File format constants
@@ -243,7 +243,7 @@ export class SecureStorageBackend implements CredentialBackend {
       .update(hostname())
       .update(userInfo().username)
       .update(homedir())
-      .update('craft-agent-v1') // App-specific constant
+      .update('agent-operator-v1') // App-specific constant
       .digest();
 
     // Derive key using PBKDF2

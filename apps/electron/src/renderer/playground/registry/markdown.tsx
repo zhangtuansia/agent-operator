@@ -125,7 +125,7 @@ def get_user_by_id(user_id: int) -> Optional[User]:
     return users.get(user_id)`
 
 const jsonCode = `{
-  "name": "craft-agent",
+  "name": "agent-operator",
   "version": "1.0.0",
   "dependencies": {
     "react": "^18.2.0",

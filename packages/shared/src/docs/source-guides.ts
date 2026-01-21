@@ -5,7 +5,7 @@
  * 1. Service Knowledge - Persistent understanding injected at runtime
  * 2. Setup Hints - One-time guidance for setup agent
  *
- * Guides are stored at ~/.craft-agent/docs/source-guides/ and copied on first run.
+ * Guides are stored at ~/.agent-operator/docs/source-guides/ and copied on first run.
  */
 
 import { join } from 'path';
@@ -15,7 +15,7 @@ import { isDebugEnabled } from '../utils/debug.ts';
 import { getAppVersion } from '../version/app-version.ts';
 
 // Compute path directly to avoid circular dependency with ./index.ts
-const CONFIG_DIR = join(homedir(), '.craft-agent');
+const CONFIG_DIR = join(homedir(), '.agent-operator');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 const SOURCE_GUIDES_DIR = join(DOCS_DIR, 'source-guides');
 
@@ -527,7 +527,7 @@ The MCP URL \`https://api.githubcopilot.com/mcp/\` is **CORRECT**. Do NOT use We
 
 #### Authentication - OAuth Will Fail (Expected)
 
-GitHub's MCP server requires OAuth with a **pre-registered client app**. Craft Agent is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
+GitHub's MCP server requires OAuth with a **pre-registered client app**. Agent Operator is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
 
 **The ONLY solution is a Personal Access Token (PAT):**
 

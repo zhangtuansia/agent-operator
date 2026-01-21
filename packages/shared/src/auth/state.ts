@@ -130,7 +130,7 @@ export async function getAuthState(): Promise<AuthState> {
   const config = loadStoredConfig();
   const manager = getCredentialManager();
 
-  const craftToken = await manager.getCraftOAuth();
+  const craftToken = await manager.getOperatorOAuth();
   const apiKey = await manager.getApiKey();
   const claudeOAuth = await getValidClaudeOAuthToken();
   const activeWorkspace = getActiveWorkspace();

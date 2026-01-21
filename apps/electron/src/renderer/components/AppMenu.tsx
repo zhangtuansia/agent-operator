@@ -7,7 +7,7 @@ import {
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight } from "lucide-react"
-import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
+import { OperatorAgentsSymbol } from "./icons/OperatorAgentsSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { PanelLeftRounded } from "./icons/PanelLeftRounded"
 import { TopBarButton } from "./ui/TopBarButton"
@@ -29,7 +29,7 @@ interface AppMenuProps {
 /**
  * AppMenu - Main application dropdown menu and top bar navigation
  *
- * Contains the Craft logo dropdown, back/forward navigation, and sidebar toggle.
+ * Contains the App logo dropdown, back/forward navigation, and sidebar toggle.
  * All buttons use the consistent TopBarButton component.
  */
 export function AppMenu({
@@ -50,8 +50,8 @@ export function AppMenu({
       {/* Craft Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Craft menu">
-            <CraftAgentsSymbol className="h-4 text-accent" />
+          <TopBarButton aria-label="App menu">
+            <OperatorAgentsSymbol className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="start" minWidth="min-w-48">

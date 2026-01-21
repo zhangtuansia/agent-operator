@@ -30,9 +30,9 @@ if (isDebugMode) {
   setPerfEnabled(true)
 }
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., agentoperator://auth-complete)
+// Supports multi-instance dev: OPERATOR_DEEPLINK_SCHEME env var (agentoperator1, agentoperator2, etc.)
+const DEEPLINK_SCHEME = process.env.OPERATOR_DEEPLINK_SCHEME || 'agentoperator'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -41,10 +41,10 @@ let sessionManager: SessionManager | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+// Supports multi-instance dev: OPERATOR_APP_NAME env var (e.g., "Agent Operator [1]")
+app.setName(process.env.OPERATOR_APP_NAME || 'Agent Operator')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for agentoperator:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path
@@ -174,8 +174,8 @@ app.whenReady().then(async () => {
     }
 
     // Multi-instance dev: show instance number badge on dock icon
-    // CRAFT_INSTANCE_NUMBER is set by detect-instance.sh for numbered folders
-    const instanceNum = process.env.CRAFT_INSTANCE_NUMBER
+    // OPERATOR_INSTANCE_NUMBER is set by detect-instance.sh for numbered folders
+    const instanceNum = process.env.OPERATOR_INSTANCE_NUMBER
     if (instanceNum) {
       const num = parseInt(instanceNum, 10)
       if (!isNaN(num) && num > 0) {

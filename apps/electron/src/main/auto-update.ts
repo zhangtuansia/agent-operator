@@ -1,11 +1,17 @@
 /**
  * Auto-update module for Electron app
  *
- * Handles checking for updates, downloading, and triggering installation.
- * Uses the custom manifest system at https://agents.craft.do/electron/
+ * NOTE: Auto-update is currently DISABLED for Agent Operator.
+ * All functions return early without performing any update operations.
  *
- * Supports macOS, Windows, and Linux (AppImage only).
+ * Original functionality:
+ * - Handles checking for updates, downloading, and triggering installation.
+ * - Uses the custom manifest system
+ * - Supports macOS, Windows, and Linux (AppImage only).
  */
+
+// Auto-update disabled flag
+const AUTO_UPDATE_DISABLED = true;
 
 import { app } from 'electron'
 import { createWriteStream, createReadStream, existsSync, mkdirSync, unlinkSync } from 'fs'
@@ -118,6 +124,12 @@ interface CheckOptions {
  * @param options.autoDownload - If true, auto-start download (default: true)
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
+  // Auto-update disabled for Agent Operator
+  if (AUTO_UPDATE_DISABLED) {
+    mainLog.info('[auto-update] Auto-update is disabled')
+    return updateInfo
+  }
+
   // Return existing promise if check already in progress (deduplication)
   if (checkPromise) {
     mainLog.info('[auto-update] Check already in progress, returning existing promise')
@@ -280,7 +292,7 @@ async function doDownloadUpdate(): Promise<void> {
 
   try {
     // Create temp directory for download
-    const tempDir = join(app.getPath('temp'), 'craft-agent-updates')
+    const tempDir = join(app.getPath('temp'), 'agent-operator-updates')
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true })
     }

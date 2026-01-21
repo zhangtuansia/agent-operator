@@ -231,13 +231,13 @@ export class CredentialManager {
   }
 
   /** Get Craft OAuth token */
-  async getCraftOAuth(): Promise<string | null> {
+  async getOperatorOAuth(): Promise<string | null> {
     const cred = await this.get({ type: 'craft_oauth' });
     return cred?.value || null;
   }
 
   /** Set Craft OAuth token */
-  async setCraftOAuth(token: string): Promise<void> {
+  async setOperatorOAuth(token: string): Promise<void> {
     await this.set({ type: 'craft_oauth' }, { value: token });
   }
 

@@ -3,7 +3,7 @@ import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
-// Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
+// Plan types are used by UI components; not needed in agent-operator.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
@@ -63,7 +63,7 @@ export {
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
 } from './mode-manager.ts';
-// Documentation is served via local files at ~/.craft-agent/docs/
+// Documentation is served via local files at ~/.agent-operator/docs/
 
 // Import and re-export AgentEvent from core (single source of truth)
 import type { AgentEvent } from '@agent-operator/core/types';
@@ -98,7 +98,7 @@ export interface RecoveryMessage {
   content: string;
 }
 
-export interface CraftAgentConfig {
+export interface OperatorAgentConfig {
   workspace: Workspace;
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
@@ -314,8 +314,8 @@ export type SdkMcpServerConfig =
   | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
   | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
 
-export class CraftAgent {
-  private config: CraftAgentConfig;
+export class OperatorAgent {
+  private config: OperatorAgentConfig;
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
@@ -421,7 +421,7 @@ export class CraftAgent {
   // This enables auto-enabling sources when the agent tries to use their tools.
   public onSourceActivationRequest: ((sourceSlug: string) => Promise<boolean>) | null = null;
 
-  constructor(config: CraftAgentConfig) {
+  constructor(config: OperatorAgentConfig) {
     // Resolve model: prioritize session model > config model > global config > DEFAULT_MODEL
     const resolvedModel = config.session?.model ?? config.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL;
     this.config = { ...config, model: resolvedModel };
@@ -455,11 +455,11 @@ export class CraftAgent {
     // Register session-scoped tool callbacks
     registerSessionScopedToolCallbacks(sessionId, {
       onPlanSubmitted: (planPath) => {
-        this.onDebug?.(`[CraftAgent] onPlanSubmitted received: ${planPath}`);
+        this.onDebug?.(`[OperatorAgent] onPlanSubmitted received: ${planPath}`);
         this.onPlanSubmitted?.(planPath);
       },
       onAuthRequest: (request) => {
-        this.onDebug?.(`[CraftAgent] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
+        this.onDebug?.(`[OperatorAgent] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
         this.onAuthRequest?.(request);
       },
     });
@@ -481,23 +481,23 @@ export class CraftAgent {
 
     this.configWatcher = createConfigWatcher(this.workspaceRootPath, {
       onSourceChange: (slug, source) => {
-        debug('[CraftAgent] Source changed:', slug, source ? 'updated' : 'deleted');
+        debug('[OperatorAgent] Source changed:', slug, source ? 'updated' : 'deleted');
         this.onSourceChange?.(slug, source);
       },
       onSourcesListChange: (sources) => {
-        debug('[CraftAgent] Sources list changed:', sources.length);
+        debug('[OperatorAgent] Sources list changed:', sources.length);
         this.onSourcesListChange?.(sources);
       },
       onValidationError: (file, result) => {
-        debug('[CraftAgent] Config validation error:', file, result.errors);
+        debug('[OperatorAgent] Config validation error:', file, result.errors);
         this.onConfigValidationError?.(file, result.errors);
       },
       onError: (file, error) => {
-        debug('[CraftAgent] Config file error:', file, error.message);
+        debug('[OperatorAgent] Config file error:', file, error.message);
       },
     });
 
-    debug('[CraftAgent] Config watcher started');
+    debug('[OperatorAgent] Config watcher started');
   }
 
   /**
@@ -507,7 +507,7 @@ export class CraftAgent {
     if (this.configWatcher) {
       this.configWatcher.stop();
       this.configWatcher = null;
-      debug('[CraftAgent] Config watcher stopped');
+      debug('[OperatorAgent] Config watcher stopped');
     }
   }
 
@@ -521,7 +521,7 @@ export class CraftAgent {
       delete this.sourceMcpServers[slug];
       delete this.sourceApiServers[slug];
       this.activeSourceServerNames.delete(slug);
-      debug('[CraftAgent] Removed source:', slug);
+      debug('[OperatorAgent] Removed source:', slug);
       return;
     }
 
@@ -531,11 +531,11 @@ export class CraftAgent {
       delete this.sourceMcpServers[slug];
       delete this.sourceApiServers[slug];
       this.activeSourceServerNames.delete(slug);
-      debug('[CraftAgent] Disabled source:', slug);
+      debug('[OperatorAgent] Disabled source:', slug);
     } else {
       // Enabled - add to active servers (will be rebuilt on next query)
       this.activeSourceServerNames.add(slug);
-      debug('[CraftAgent] Enabled source:', slug);
+      debug('[OperatorAgent] Enabled source:', slug);
       // Note: Actual MCP/API server configs are rebuilt in getOptions()
       // This just marks the source as active for the next run
     }
@@ -547,7 +547,7 @@ export class CraftAgent {
    */
   setThinkingLevel(level: ThinkingLevel): void {
     this.thinkingLevel = level;
-    this.onDebug?.(`[CraftAgent] Thinking level: ${level}`);
+    this.onDebug?.(`[OperatorAgent] Thinking level: ${level}`);
   }
 
   /**
@@ -564,7 +564,7 @@ export class CraftAgent {
    */
   setUltrathinkOverride(enabled: boolean): void {
     this.ultrathinkOverride = enabled;
-    this.onDebug?.(`[CraftAgent] Ultrathink override: ${enabled ? 'ENABLED' : 'disabled'}`);
+    this.onDebug?.(`[OperatorAgent] Ultrathink override: ${enabled ? 'ENABLED' : 'disabled'}`);
   }
 
   /**
@@ -1416,14 +1416,14 @@ export class CraftAgent {
           SubagentStart: [{
             hooks: [async (input, _hookToolUseID) => {
               const typedInput = input as { agent_id?: string; agent_type?: string };
-              console.log(`[CraftAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
+              console.log(`[OperatorAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
               return { continue: true };
             }],
           }],
           SubagentStop: [{
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string };
-              console.log(`[CraftAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
+              console.log(`[OperatorAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
               return { continue: true };
             }],
           }],
@@ -1463,11 +1463,11 @@ export class CraftAgent {
 
       // Log resume attempt for debugging session failures
       if (wasResuming) {
-        console.error(`[CraftAgent] Attempting to resume SDK session: ${this.sessionId}`);
-        debug(`[CraftAgent] Attempting to resume SDK session: ${this.sessionId}`);
+        console.error(`[OperatorAgent] Attempting to resume SDK session: ${this.sessionId}`);
+        debug(`[OperatorAgent] Attempting to resume SDK session: ${this.sessionId}`);
       } else {
-        console.error(`[CraftAgent] Starting fresh SDK session (no resume)`);
-        debug(`[CraftAgent] Starting fresh SDK session (no resume)`);
+        console.error(`[OperatorAgent] Starting fresh SDK session (no resume)`);
+        debug(`[OperatorAgent] Starting fresh SDK session (no resume)`);
       }
 
       // Create AbortController for this query - allows force-stopping via forceAbort()
@@ -1720,7 +1720,7 @@ export class CraftAgent {
         }
       } catch (sdkError) {
         // Debug: log inner catch trigger (stderr to avoid SDK JSON pollution)
-        console.error(`[CraftAgent] INNER CATCH triggered: ${sdkError instanceof Error ? sdkError.message : String(sdkError)}`);
+        console.error(`[OperatorAgent] INNER CATCH triggered: ${sdkError instanceof Error ? sdkError.message : String(sdkError)}`);
 
         // Handle user interruption
         if (sdkError instanceof AbortError) {
@@ -1844,8 +1844,8 @@ export class CraftAgent {
 
           if (isSessionExpired && wasResuming && !_isRetry) {
             debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
-            console.error('[CraftAgent] SDK session expired server-side, clearing and retrying fresh');
-            debug('[CraftAgent] SDK session expired server-side, clearing and retrying fresh');
+            console.error('[OperatorAgent] SDK session expired server-side, clearing and retrying fresh');
+            debug('[OperatorAgent] SDK session expired server-side, clearing and retrying fresh');
             this.sessionId = null;
             // Clear pinned state so retry captures fresh values
             this.pinnedPreferencesPrompt = null;
@@ -1945,8 +1945,8 @@ export class CraftAgent {
 
     } catch (error) {
       // Debug: log outer catch trigger (stderr to avoid SDK JSON pollution)
-      console.error(`[CraftAgent] OUTER CATCH triggered: ${error instanceof Error ? error.message : String(error)}`);
-      console.error(`[CraftAgent] Error stack: ${error instanceof Error ? error.stack : 'no stack'}`);
+      console.error(`[OperatorAgent] OUTER CATCH triggered: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[OperatorAgent] Error stack: ${error instanceof Error ? error.stack : 'no stack'}`);
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -2556,7 +2556,7 @@ Please continue the conversation naturally from where we left off.
                 parentToChildren.get(parentId)?.push(block.id);
                 childToParent.set(block.id, parentId);
                 parentToolUseId = parentId;
-                console.log(`[CraftAgent] CHILD REGISTERED (assistant/single-parent): ${block.name} (${block.id}) under parent ${parentId}`);
+                console.log(`[OperatorAgent] CHILD REGISTERED (assistant/single-parent): ${block.name} (${block.id}) under parent ${parentId}`);
               } else if (activeParentTools.size > 1) {
                 // Multiple active parents - use SDK's parent_tool_use_id (authoritative source)
                 // Messages from subagent context include parent_tool_use_id pointing to the Task
@@ -2565,14 +2565,14 @@ Please continue the conversation naturally from where we left off.
                   parentToChildren.get(sdkParentId)?.push(block.id);
                   childToParent.set(block.id, sdkParentId);
                   parentToolUseId = sdkParentId;
-                  console.log(`[CraftAgent] CHILD REGISTERED (assistant/sdk-parent): ${block.name} (${block.id}) → Task (${sdkParentId})`);
+                  console.log(`[OperatorAgent] CHILD REGISTERED (assistant/sdk-parent): ${block.name} (${block.id}) → Task (${sdkParentId})`);
                 } else {
                   // Fallback: FIFO if SDK doesn't provide parent
                   const parentId = Array.from(activeParentTools)[0]!;
                   parentToChildren.get(parentId)?.push(block.id);
                   childToParent.set(block.id, parentId);
                   parentToolUseId = parentId;
-                  console.log(`[CraftAgent] CHILD REGISTERED (assistant/fifo-fallback): ${block.name} (${block.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
+                  console.log(`[OperatorAgent] CHILD REGISTERED (assistant/fifo-fallback): ${block.name} (${block.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
                 }
               }
               // else: no active parents - tool is top-level, no parent needed
@@ -2669,27 +2669,27 @@ Please continue the conversation naturally from where we left off.
             const sdkParentId = message.parent_tool_use_id;
 
             // Debug: log what SDK provides for parent tracking
-            console.log(`[CraftAgent] TOOL START: ${toolBlock.name} (${toolBlock.id}), sdk_parent=${sdkParentId}, activeParents=[${Array.from(activeParentTools).join(',')}]`);
+            console.log(`[OperatorAgent] TOOL START: ${toolBlock.name} (${toolBlock.id}), sdk_parent=${sdkParentId}, activeParents=[${Array.from(activeParentTools).join(',')}]`);
 
             let parentToolUseId: string | undefined;
             if (isParentTool) {
               // This is a parent tool (Task, TaskOutput) - it can spawn children
               activeParentTools.add(toolBlock.id);
               parentToChildren.set(toolBlock.id, []);
-              console.log(`[CraftAgent] PARENT REGISTERED (stream): ${toolBlock.name} (${toolBlock.id})`);
+              console.log(`[OperatorAgent] PARENT REGISTERED (stream): ${toolBlock.name} (${toolBlock.id})`);
             } else if (sdkParentId && activeParentTools.has(sdkParentId)) {
               // SDK provides correct parent for subagent tools - use it
               parentToolUseId = sdkParentId;
               parentToChildren.get(sdkParentId)?.push(toolBlock.id);
               childToParent.set(toolBlock.id, sdkParentId);
-              console.log(`[CraftAgent] CHILD REGISTERED (stream/sdk): ${toolBlock.name} (${toolBlock.id}) under parent ${sdkParentId}`);
+              console.log(`[OperatorAgent] CHILD REGISTERED (stream/sdk): ${toolBlock.name} (${toolBlock.id}) under parent ${sdkParentId}`);
             } else if (activeParentTools.size === 1) {
               // Single active parent - unambiguous, assign directly
               const parentId = Array.from(activeParentTools)[0]!;
               parentToChildren.get(parentId)?.push(toolBlock.id);
               childToParent.set(toolBlock.id, parentId);
               parentToolUseId = parentId;
-              console.log(`[CraftAgent] CHILD REGISTERED (stream/single-parent): ${toolBlock.name} (${toolBlock.id}) under parent ${parentId}`);
+              console.log(`[OperatorAgent] CHILD REGISTERED (stream/single-parent): ${toolBlock.name} (${toolBlock.id}) under parent ${parentId}`);
             } else if (activeParentTools.size > 1) {
               // Multiple active parents - use SDK's parent_tool_use_id (authoritative source)
               // sdkParentId is already extracted above from message.parent_tool_use_id
@@ -2697,14 +2697,14 @@ Please continue the conversation naturally from where we left off.
                 parentToChildren.get(sdkParentId)?.push(toolBlock.id);
                 childToParent.set(toolBlock.id, sdkParentId);
                 parentToolUseId = sdkParentId;
-                console.log(`[CraftAgent] CHILD REGISTERED (stream/sdk-parent): ${toolBlock.name} (${toolBlock.id}) → Task (${sdkParentId})`);
+                console.log(`[OperatorAgent] CHILD REGISTERED (stream/sdk-parent): ${toolBlock.name} (${toolBlock.id}) → Task (${sdkParentId})`);
               } else {
                 // Fallback: FIFO if SDK doesn't provide parent
                 const parentId = Array.from(activeParentTools)[0]!;
                 parentToChildren.get(parentId)?.push(toolBlock.id);
                 childToParent.set(toolBlock.id, parentId);
                 parentToolUseId = parentId;
-                console.log(`[CraftAgent] CHILD REGISTERED (stream/fifo-fallback): ${toolBlock.name} (${toolBlock.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
+                console.log(`[OperatorAgent] CHILD REGISTERED (stream/fifo-fallback): ${toolBlock.name} (${toolBlock.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
               }
             }
             // else: no active parents - tool is top-level, no parent needed
@@ -2759,10 +2759,10 @@ Please continue the conversation naturally from where we left off.
             // This result is for a CHILD of that parent, not the parent itself
             // Match to the first unmatched child in FIFO order
             const children = parentToChildren.get(toolUseId);
-            console.log(`[CraftAgent] RESULT MATCHING: parent=${toolUseId}, children.length=${children?.length || 0}`);
+            console.log(`[OperatorAgent] RESULT MATCHING: parent=${toolUseId}, children.length=${children?.length || 0}`);
             if (children && children.length > 0) {
               const firstChild = children.shift()!; // Remove first child (FIFO)
-              console.log(`[CraftAgent] MATCHED TO CHILD: ${firstChild}`);
+              console.log(`[OperatorAgent] MATCHED TO CHILD: ${firstChild}`);
               this.onDebug?.(`Matched child result: parent=${toolUseId}, child=${firstChild}`);
               toolUseId = firstChild;
               toolUse = pendingToolUses.get(toolUseId);
@@ -2777,14 +2777,14 @@ Please continue the conversation naturally from where we left off.
 
               if (pendingChildId) {
                 // Match to a pending late-started child
-                console.log(`[CraftAgent] MATCHED TO LATE CHILD: ${pendingChildId} (parent=${toolUseId})`);
+                console.log(`[OperatorAgent] MATCHED TO LATE CHILD: ${pendingChildId} (parent=${toolUseId})`);
                 this.onDebug?.(`Matched late child result: parent=${toolUseId}, child=${pendingChildId}`);
                 toolUseId = pendingChildId;
                 toolUse = pendingToolUses.get(toolUseId);
                 childToParent.delete(pendingChildId);
               } else {
                 // Truly no more children - this is the parent's own result
-                console.log(`[CraftAgent] NO CHILDREN LEFT - treating as parent's own result: ${toolUseId}`);
+                console.log(`[OperatorAgent] NO CHILDREN LEFT - treating as parent's own result: ${toolUseId}`);
                 this.onDebug?.(`Parent tool completing: ${toolUseId} (no more children)`);
                 toolUse = pendingToolUses.get(toolUseId);
                 // Clean up parent tracking
@@ -2802,7 +2802,7 @@ Please continue the conversation naturally from where we left off.
 
             if (pendingChildId) {
               // This is a child result for a completed parent - match to the pending child
-              console.log(`[CraftAgent] MATCHED TO ORPHANED CHILD: ${pendingChildId} (parent=${toolUseId})`);
+              console.log(`[OperatorAgent] MATCHED TO ORPHANED CHILD: ${pendingChildId} (parent=${toolUseId})`);
               this.onDebug?.(`Matched orphaned child result: parent=${toolUseId}, child=${pendingChildId}`);
               toolUseId = pendingChildId;
               toolUse = pendingToolUses.get(toolUseId);
@@ -2932,7 +2932,7 @@ Please continue the conversation naturally from where we left off.
         };
 
         // Debug: log tool_progress structure
-        console.log(`[CraftAgent] tool_progress: tool=${progress.tool_name} (${progress.tool_use_id}), parent=${progress.parent_tool_use_id}, elapsed=${progress.elapsed_time_seconds}`);
+        console.log(`[OperatorAgent] tool_progress: tool=${progress.tool_name} (${progress.tool_use_id}), parent=${progress.parent_tool_use_id}, elapsed=${progress.elapsed_time_seconds}`);
 
         // Forward elapsed time to UI for live progress updates
         // Use parent_tool_use_id if this is a child tool, so progress updates the parent Task
@@ -2963,7 +2963,7 @@ Please continue the conversation naturally from where we left off.
             parentToolUseId = progress.parent_tool_use_id;
             parentToChildren.get(progress.parent_tool_use_id)?.push(progress.tool_use_id);
             childToParent.set(progress.tool_use_id, progress.parent_tool_use_id);
-            console.log(`[CraftAgent] CHILD REGISTERED (tool_progress/sdk): ${progress.tool_name} (${progress.tool_use_id}) → ${progress.parent_tool_use_id}`);
+            console.log(`[OperatorAgent] CHILD REGISTERED (tool_progress/sdk): ${progress.tool_name} (${progress.tool_use_id}) → ${progress.parent_tool_use_id}`);
           }
 
           // Emit tool_start for this child tool
@@ -2981,7 +2981,7 @@ Please continue the conversation naturally from where we left off.
 
       case 'result': {
         // Debug: log result message details (stderr to avoid SDK JSON pollution)
-        console.error(`[CraftAgent] result message: subtype=${message.subtype}, errors=${'errors' in message ? JSON.stringify((message as any).errors) : 'none'}`);
+        console.error(`[OperatorAgent] result message: subtype=${message.subtype}, errors=${'errors' in message ? JSON.stringify((message as any).errors) : 'none'}`);
 
         // Get contextWindow from modelUsage (this is correct - it's the model's context window size)
         const modelUsageEntries = Object.values(message.modelUsage || {});

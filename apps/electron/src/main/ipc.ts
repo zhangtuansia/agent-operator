@@ -146,7 +146,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Check if a workspace slug already exists (for validation before creation)
   ipcMain.handle(IPC_CHANNELS.CHECK_WORKSPACE_SLUG, async (_event, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(homedir(), '.agent-operator', 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -177,7 +177,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Open a session in a new window
   ipcMain.handle(IPC_CHANNELS.OPEN_SESSION_IN_NEW_WINDOW, async (_event, workspaceId: string, sessionId: string) => {
     // Build deep link for session navigation
-    const deepLink = `craftagents://allChats/chat/${sessionId}`
+    const deepLink = `agentoperator://allChats/chat/${sessionId}`
     windowManager.createWindow({
       workspaceId,
       focused: true,
@@ -700,16 +700,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getDismissedUpdateVersion()
   })
 
-  // Shell operations - open URL in external browser (or handle craftagents:// internally)
+  // Shell operations - open URL in external browser (or handle agentoperator:// internally)
   ipcMain.handle(IPC_CHANNELS.OPEN_URL, async (_event, url: string) => {
     ipcLog.info('[OPEN_URL] Received request:', url)
     try {
       // Validate URL format
       const parsed = new URL(url)
 
-      // Handle craftagents:// URLs internally via deep link handler
+      // Handle agentoperator:// URLs internally via deep link handler
       // This ensures ?window= params work correctly for "Open in New Window"
-      if (parsed.protocol === 'craftagents:') {
+      if (parsed.protocol === 'agentoperator:') {
         ipcLog.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('./deep-link')
         const result = await handleDeepLink(url, windowManager)
@@ -810,7 +810,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = join(homedir(), '.agent-operator', 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })
@@ -1339,7 +1339,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Get default permissions from ~/.agent-operator/permissions/default.json
   // Returns raw JSON for UI display (patterns with comments), plus the file path
   ipcMain.handle(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET, async () => {
     const { existsSync, readFileSync } = await import('fs')
@@ -1383,8 +1383,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Create unified MCP client for both stdio and HTTP transports
-      const { CraftMcpClient } = await import('@agent-operator/shared/mcp')
-      let client: InstanceType<typeof CraftMcpClient>
+      const { OperatorMcpClient } = await import('@agent-operator/shared/mcp')
+      let client: InstanceType<typeof OperatorMcpClient>
 
       if (source.config.mcp.transport === 'stdio') {
         // Stdio transport - spawn local MCP server process
@@ -1392,7 +1392,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           return { success: false, error: 'Stdio MCP source is missing required "command" field' }
         }
         ipcLog.info(`Fetching MCP tools via stdio: ${source.config.mcp.command}`)
-        client = new CraftMcpClient({
+        client = new OperatorMcpClient({
           transport: 'stdio',
           command: source.config.mcp.command,
           args: source.config.mcp.args,
@@ -1415,7 +1415,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
 
         ipcLog.info(`Fetching MCP tools from ${source.config.mcp.url}`)
-        client = new CraftMcpClient({
+        client = new OperatorMcpClient({
           transport: 'http',
           url: source.config.mcp.url,
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,

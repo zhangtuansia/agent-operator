@@ -1,4 +1,4 @@
-# Craft Agents 项目架构文档
+# Agent Operator 项目架构文档
 
 ## 目录
 
@@ -17,7 +17,7 @@
 
 ## 一、项目概述
 
-**Craft Agents** 是一个开源的 Electron 桌面应用，旨在成为 Claude Code 的替代品，提供更美观的 UI 和更好的 Agent 工作流程体验。
+**Agent Operator** 是一个开源的 Electron 桌面应用，旨在成为 Claude Code 的替代品，提供更美观的 UI 和更好的 Agent 工作流程体验。
 
 | 属性 | 值 |
 |------|------|
@@ -29,11 +29,11 @@
 
 ### 核心理念
 
-Craft Agents **不是**调用 Claude Code CLI，而是直接使用 **Claude Agent SDK**（`@anthropic-ai/claude-agent-sdk`）来实现类似 Claude Code 的功能，同时提供更好的用户界面和更灵活的权限控制。
+Agent Operator **不是**调用 Claude Code CLI，而是直接使用 **Claude Agent SDK**（`@anthropic-ai/claude-agent-sdk`）来实现类似 Claude Code 的功能，同时提供更好的用户界面和更灵活的权限控制。
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Craft Agents                         │
+│                    Agent Operator                         │
 │  ┌─────────────┐    ┌───────────────────────────────┐  │
 │  │  Electron   │    │  @anthropic-ai/claude-agent-sdk │  │
 │  │  UI (React) │ ←→ │   (与 Claude Code 相同的 SDK)   │  │
@@ -50,7 +50,7 @@ Craft Agents **不是**调用 Claude Code CLI，而是直接使用 **Claude Agen
 ### 2.1 目录结构
 
 ```
-craft-agents-oss/
+agent-operators-oss/
 ├── apps/                          # 应用层
 │   ├── electron/                  # 主桌面应用
 │   │   ├── src/
@@ -71,7 +71,7 @@ craft-agents-oss/
 │   │
 │   ├── shared/                    # 业务逻辑库（核心）
 │   │   ├── src/
-│   │   │   ├── agent/             # CraftAgent 实现、权限模式
+│   │   │   ├── agent/             # OperatorAgent 实现、权限模式
 │   │   │   ├── auth/              # OAuth、身份认证
 │   │   │   ├── config/            # 存储、主题、偏好设置
 │   │   │   ├── credentials/       # 加密凭证存储
@@ -110,8 +110,8 @@ craft-agents-oss/
                           ↓
 ┌─────────────────────────────────────────────────────────┐
 │  Business Logic 层                                      │
-│  - @craft-agent/shared 包含所有核心业务逻辑              │
-│  - CraftAgent、权限、会话、数据源                        │
+│  - @agent-operator/shared 包含所有核心业务逻辑              │
+│  - OperatorAgent、权限、会话、数据源                        │
 │  - 文件: packages/shared/src/                           │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -162,7 +162,7 @@ craft-agents-oss/
 | 主题系统 | App 和 Workspace 级联主题，支持 6 色自定义 |
 | 自定义技能 | Skills 扩展 Agent 能力 |
 | 后台任务 | 长时间任务后台运行和进度跟踪 |
-| 深链接 | `craftagents://` 协议支持外部调用 |
+| 深链接 | `agentoperator://` 协议支持外部调用 |
 | 加密存储 | AES-256-GCM 加密所有凭证 |
 | 自动总结 | 超过 60KB 的工具响应自动用 Haiku 总结 |
 | 扩展思考 | 支持 Extended Thinking（off/think/max）|
@@ -219,12 +219,12 @@ bun run lint:electron
 
 ## 五、与 Claude 的交互机制
 
-### 5.1 核心类：CraftAgent
+### 5.1 核心类：OperatorAgent
 
-位于 `packages/shared/src/agent/craft-agent.ts`，是整个交互的核心：
+位于 `packages/shared/src/agent/agent-operator.ts`，是整个交互的核心：
 
 ```typescript
-export class CraftAgent {
+export class OperatorAgent {
   // 主入口：chat() 方法是一个异步生成器
   async *chat(
     userMessage: string,
@@ -271,7 +271,7 @@ export class CraftAgent {
 
 ### 5.2 与 Claude Code 的关键差异
 
-| 特性 | Claude Code CLI | Craft Agents |
+| 特性 | Claude Code CLI | Agent Operator |
 |------|-----------------|--------------|
 | 界面 | 终端 CLI | Electron GUI |
 | 权限系统 | SDK 内置 | 自定义三级权限 |
@@ -370,7 +370,7 @@ const options: Options = {
 └──────────────────────────────────────┘
        ↓
 ┌──────────────────────────────────────┐
-│  CraftAgent.chat()                   │
+│  OperatorAgent.chat()                   │
 │  1. 构建 SDK Options                 │
 │  2. 调用 SDK query()                 │
 │  3. 迭代事件流                        │
@@ -651,9 +651,9 @@ PostToolUse: [{
 
 三个层级（从特定到通用）：
 
-1. **源级权限**：`~/.craft-agent/workspaces/{id}/sources/{slug}/permissions.json`
-2. **工作区级权限**：`~/.craft-agent/workspaces/{id}/permissions.json`
-3. **应用级权限**：`~/.craft-agent/permissions/default.json`
+1. **源级权限**：`~/.agent-operator/workspaces/{id}/sources/{slug}/permissions.json`
+2. **工作区级权限**：`~/.agent-operator/workspaces/{id}/permissions.json`
+3. **应用级权限**：`~/.agent-operator/permissions/default.json`
 
 **示例配置**：
 ```json
@@ -679,7 +679,7 @@ PostToolUse: [{
 ### 8.1 存储结构
 
 ```
-~/.craft-agent/
+~/.agent-operator/
 ├── config.json              # 主配置（工作区、认证类型）
 ├── credentials.enc          # AES-256-GCM 加密凭证
 ├── preferences.json         # 用户偏好设置
@@ -729,7 +729,7 @@ interface StoredMessage {
 ### 8.3 凭证安全
 
 - **加密算法**：AES-256-GCM (authenticated encryption)
-- **存储位置**：`~/.craft-agent/credentials.enc`
+- **存储位置**：`~/.agent-operator/credentials.enc`
 - **访问方式**：CredentialManager 提供统一 API
 - **子进程隔离**：自动过滤敏感环境变量
 
@@ -834,7 +834,7 @@ this.sendEvent({
 | 主进程入口 | `apps/electron/src/main/index.ts` |
 | IPC 处理 | `apps/electron/src/main/ipc.ts` |
 | 会话管理 | `apps/electron/src/main/sessions.ts` |
-| CraftAgent | `packages/shared/src/agent/craft-agent.ts` |
+| OperatorAgent | `packages/shared/src/agent/agent-operator.ts` |
 | 权限模式 | `packages/shared/src/agent/mode-manager.ts` |
 | 会话工具 | `packages/shared/src/agent/session-scoped-tools.ts` |
 | 渲染器入口 | `apps/electron/src/renderer/main.tsx` |

@@ -246,7 +246,7 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
                     sourceSlug={config.slug}
                     sourceName={config.name}
                     onOpenInNewWindow={() => {
-                      window.electronAPI.openUrl(`craftagents://sources/source/${config.slug}?window=focused`)
+                      window.electronAPI.openUrl(`agentoperator://sources/source/${config.slug}?window=focused`)
                     }}
                     onShowInFinder={() => {
                       window.electronAPI.showInFolder(source.folderPath)
@@ -267,7 +267,7 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
               sourceSlug={config.slug}
               sourceName={config.name}
               onOpenInNewWindow={() => {
-                window.electronAPI.openUrl(`craftagents://sources/source/${config.slug}?window=focused`)
+                window.electronAPI.openUrl(`agentoperator://sources/source/${config.slug}?window=focused`)
               }}
               onShowInFinder={() => {
                 window.electronAPI.showInFolder(source.folderPath)

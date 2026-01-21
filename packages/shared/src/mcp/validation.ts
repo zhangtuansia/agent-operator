@@ -8,7 +8,7 @@
 import { query, type McpServerStatus } from '@anthropic-ai/claude-agent-sdk';
 import { spawn, type ChildProcess } from 'child_process';
 import { getDefaultOptions } from '../agent/options.ts';
-import { CraftMcpClient } from './client.js';
+import { OperatorMcpClient } from './client.js';
 import { debug } from '../utils/debug.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
 import { parseError, type AgentError } from '../agent/errors.ts';
@@ -204,7 +204,7 @@ export async function validateMcpConnection(
       if (status.status === 'connected') {
         // Connection successful - now validate tool schemas
         // Use direct MCP client to fetch tools (SDK already validated connection)
-        const mcpClient = new CraftMcpClient({
+        const mcpClient = new OperatorMcpClient({
           transport: 'http',
           url: mcpUrl,
           headers: config.mcpAccessToken
@@ -451,7 +451,7 @@ export async function validateStdioMcpConnection(
 
       // Create MCP client
       client = new Client(
-        { name: 'craft-agent-validator', version: '1.0.0' },
+        { name: 'agent-operator-validator', version: '1.0.0' },
         { capabilities: {} }
       );
 

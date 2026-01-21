@@ -3,7 +3,7 @@
 set -e
 
 VERSIONS_URL="https://agents.craft.do/electron"
-DOWNLOAD_DIR="$HOME/.craft-agent/downloads"
+DOWNLOAD_DIR="$HOME/.agent-operator/downloads"
 
 # Colors for output
 RED='\033[0;31m'
@@ -118,7 +118,7 @@ esac
 # Set platform-specific variables
 if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
-    APP_NAME="Craft Agent.app"
+    APP_NAME="Agent Operator.app"
     INSTALL_DIR="/Applications"
     ext="dmg"
 else
@@ -212,23 +212,23 @@ if [ "$OS_TYPE" = "darwin" ]; then
     dmg_path="$installer_path"
 
     # Quit the app if it's running (use bundle ID for reliability)
-    APP_BUNDLE_ID="com.lukilabs.craft-agent"
-    if pgrep -x "Craft Agent" >/dev/null 2>&1; then
-        info "Quitting Craft Agent..."
+    APP_BUNDLE_ID="com.lukilabs.agent-operator"
+    if pgrep -x "Agent Operator" >/dev/null 2>&1; then
+        info "Quitting Agent Operator..."
         osascript -e "tell application id \"$APP_BUNDLE_ID\" to quit" 2>/dev/null || true
         # Wait for app to quit (max 5 seconds) - POSIX compatible loop
         i=0
         while [ $i -lt 10 ]; do
-            if ! pgrep -x "Craft Agent" >/dev/null 2>&1; then
+            if ! pgrep -x "Agent Operator" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.5
             i=$((i + 1))
         done
         # Force kill if still running
-        if pgrep -x "Craft Agent" >/dev/null 2>&1; then
+        if pgrep -x "Agent Operator" >/dev/null 2>&1; then
             warn "App didn't quit gracefully. Force quitting (unsaved data may be lost)..."
-            pkill -9 -x "Craft Agent" 2>/dev/null || true
+            pkill -9 -x "Agent Operator" 2>/dev/null || true
             # Wait longer for macOS to release file handles
             sleep 3
         fi
@@ -275,10 +275,10 @@ if [ "$OS_TYPE" = "darwin" ]; then
     echo ""
     success "Installation complete!"
     echo ""
-    printf "%b\n" "  Craft Agent has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
+    printf "%b\n" "  Agent Operator has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
     echo ""
     printf "%b\n" "  You can launch it from ${BOLD}Applications${NC} or by running:"
-    printf "%b\n" "    ${BOLD}open -a 'Craft Agent'${NC}"
+    printf "%b\n" "    ${BOLD}open -a 'Agent Operator'${NC}"
     echo ""
 
 else
@@ -286,13 +286,13 @@ else
     appimage_path="$installer_path"
 
     # New paths
-    APP_DIR="$HOME/.craft-agent/app"
-    WRAPPER_PATH="$INSTALL_DIR/craft-agents"
+    APP_DIR="$HOME/.agent-operator/app"
+    WRAPPER_PATH="$INSTALL_DIR/agent-operators"
     APPIMAGE_INSTALL_PATH="$APP_DIR/Craft-Agent-x64.AppImage"
 
     # Kill the app if it's running
     if pgrep -f "Craft-Agent.*AppImage" >/dev/null 2>&1; then
-        info "Stopping Craft Agent..."
+        info "Stopping Agent Operator..."
         pkill -f "Craft-Agent.*AppImage" 2>/dev/null || true
         sleep 2
     fi
@@ -313,15 +313,15 @@ else
     info "Creating launcher at $WRAPPER_PATH..."
     cat > "$WRAPPER_PATH" << 'WRAPPER_EOF'
 #!/bin/bash
-# Craft Agent launcher - handles Linux-specific AppImage issues
+# Agent Operator launcher - handles Linux-specific AppImage issues
 
-APPIMAGE_PATH="$HOME/.craft-agent/app/Craft-Agent-x64.AppImage"
-ELECTRON_CACHE="$HOME/.config/@craft-agent"
-ELECTRON_CACHE_ALT="$HOME/.cache/@craft-agent"
+APPIMAGE_PATH="$HOME/.agent-operator/app/Craft-Agent-x64.AppImage"
+ELECTRON_CACHE="$HOME/.config/@agent-operator"
+ELECTRON_CACHE_ALT="$HOME/.cache/@agent-operator"
 
 # Verify AppImage exists
 if [ ! -f "$APPIMAGE_PATH" ]; then
-    echo "Error: Craft Agent not found at $APPIMAGE_PATH"
+    echo "Error: Agent Operator not found at $APPIMAGE_PATH"
     echo "Reinstall: curl -fsSL https://agents.craft.do/install-app.sh | bash"
     exit 1
 fi
@@ -360,7 +360,7 @@ WRAPPER_EOF
     printf "%b\n" "  AppImage: ${BOLD}$APPIMAGE_INSTALL_PATH${NC}"
     printf "%b\n" "  Launcher: ${BOLD}$WRAPPER_PATH${NC}"
     echo ""
-    printf "%b\n" "  Run with: ${BOLD}craft-agents${NC}"
+    printf "%b\n" "  Run with: ${BOLD}agent-operators${NC}"
     echo ""
     printf "%b\n" "  Add to PATH if needed:"
     printf "%b\n" "    ${BOLD}echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc${NC}"

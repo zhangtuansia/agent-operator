@@ -1,7 +1,10 @@
 /**
  * Update Checker Hook
  *
- * Manages auto-update state for the Electron app.
+ * NOTE: Auto-update is currently disabled for Agent Operator.
+ * This hook returns a stub implementation that does nothing.
+ *
+ * Original functionality:
  * - Listens for update availability broadcasts from main process
  * - Tracks download progress
  * - Provides methods to check for updates and install
@@ -9,8 +12,7 @@
  * - Persistent dismissal across app restarts (per version)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { toast } from 'sonner'
+import { useCallback } from 'react'
 import type { UpdateInfo } from '../../shared/types'
 
 interface UseUpdateCheckerResult {
@@ -30,10 +32,33 @@ interface UseUpdateCheckerResult {
   installUpdate: () => Promise<void>
 }
 
-// Toast ID for update notification (allows dismiss/update)
-const UPDATE_TOAST_ID = 'update-available'
-
+/**
+ * Auto-update is disabled for Agent Operator.
+ * Returns stub implementation that does nothing.
+ */
 export function useUpdateChecker(): UseUpdateCheckerResult {
+  // Stub implementations - auto-update disabled
+  const checkForUpdates = useCallback(async () => {
+    console.log('[useUpdateChecker] Auto-update is disabled')
+  }, [])
+
+  const installUpdate = useCallback(async () => {
+    console.log('[useUpdateChecker] Auto-update is disabled')
+  }, [])
+
+  return {
+    updateInfo: null,
+    updateAvailable: false,
+    isDownloading: false,
+    isReadyToInstall: false,
+    downloadProgress: 0,
+    checkForUpdates,
+    installUpdate,
+  }
+}
+
+/* Original implementation (disabled):
+export function useUpdateCheckerOriginal(): UseUpdateCheckerResult {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   // Track if we've shown the toast for this version to avoid duplicates
   const shownToastVersionRef = useRef<string | null>(null)
@@ -153,3 +178,4 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     installUpdate,
   }
 }
+*/

@@ -15,4 +15,4 @@ import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.agent-operator/ for production
-export const CONFIG_DIR = process.env.AGENT_OPERATOR_CONFIG_DIR || process.env.CRAFT_CONFIG_DIR || join(homedir(), '.agent-operator');
+export const CONFIG_DIR = process.env.AGENT_OPERATOR_CONFIG_DIR || process.env.OPERATOR_CONFIG_DIR || join(homedir(), '.agent-operator');

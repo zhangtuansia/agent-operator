@@ -115,7 +115,7 @@ export interface SessionHeader {
   id: string;
   /** SDK session ID (captured after first message) */
   sdkSessionId?: string;
-  /** Workspace root path (stored as portable path, e.g., ~/.craft-agent/...) */
+  /** Workspace root path (stored as portable path, e.g., ~/.agent-operator/...) */
   workspaceRootPath: string;
   /** Optional user-defined name */
   name?: string;

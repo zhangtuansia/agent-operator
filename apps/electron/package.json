@@ -5,10 +5,9 @@
   "main": "dist/main.cjs",
   "private": true,
   "author": {
-    "name": "Craft Docs Ltd.",
-    "email": "support@craft.do"
+    "name": "Agent Operator"
   },
-  "homepage": "https://agents.craft.do",
+  "homepage": "https://github.com/zhangtuansia/agent-operator",
   "license": "MIT",
   "type": "module",
   "engines": {

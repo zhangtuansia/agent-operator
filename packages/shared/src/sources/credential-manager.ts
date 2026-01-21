@@ -24,7 +24,7 @@ import {
 } from './types.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
-import { CraftOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import { OperatorOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
 import {
   startGoogleOAuth,
   refreshGoogleToken,
@@ -357,7 +357,7 @@ export class SourceCredentialManager {
     }
 
     try {
-      const oauth = new CraftOAuth(
+      const oauth = new OperatorOAuth(
         { mcpBaseUrl: getMcpBaseUrl(source.config.mcp.url) },
         callbacks
       );
@@ -725,7 +725,7 @@ export class SourceCredentialManager {
         return null;
       }
 
-      const oauth = new CraftOAuth(
+      const oauth = new OperatorOAuth(
         { mcpBaseUrl: getMcpBaseUrl(source.config.mcp.url) },
         {
           onStatus: () => {},

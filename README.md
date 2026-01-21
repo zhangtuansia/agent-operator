@@ -1,17 +1,17 @@
-# Craft Agents
+# Agent Operator
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-Craft Agents is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
+Agent Operator is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
 
 It leans on Claude Code through the Claude Agent SDK - follow what we found great, and improves areas where we've desired improvements.
 
 It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 
-Craft Agents is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Craft Agents with Craft Agents only - no code editors - so really, any customisation is just a prompt away.
+Agent Operator is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Agent Operator with Agent Operator only - no code editors - so really, any customisation is just a prompt away.
 
-We built Craft Agents because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
+We built Agent Operator because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
@@ -32,8 +32,8 @@ irm https://agents.craft.do/install-app.ps1 | iex
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/craft-agents-oss.git
-cd craft-agents-oss
+git clone https://github.com/lukilabs/agent-operators-oss.git
+cd agent-operators-oss
 bun install
 bun run electron:start
 ```
@@ -104,7 +104,7 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 ## Architecture
 
 ```
-craft-agent/
+agent-operator/
 ├── apps/
 │   └── electron/              # Desktop GUI (primary)
 │       └── src/
@@ -115,7 +115,7 @@ craft-agent/
     ├── core/                  # Shared types
     └── shared/                # Business logic
         └── src/
-            ├── agent/         # CraftAgent, permissions
+            ├── agent/         # OperatorAgent, permissions
             ├── auth/          # OAuth, tokens
             ├── config/        # Storage, preferences, themes
             ├── credentials/   # AES-256-GCM encrypted storage
@@ -136,7 +136,7 @@ bun run electron:start
 # Type checking
 bun run typecheck:all
 
-# Debug logging (writes to ~/Library/Logs/Craft Agents/)
+# Debug logging (writes to ~/Library/Logs/Agent Operator/)
 # Logs are automatically enabled in development
 ```
 
@@ -156,10 +156,10 @@ See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) to
 
 ## Configuration
 
-Configuration is stored at `~/.craft-agent/`:
+Configuration is stored at `~/.agent-operator/`:
 
 ```
-~/.craft-agent/
+~/.agent-operator/
 ├── config.json              # Main config (workspaces, auth type)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences
@@ -182,14 +182,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `agentoperator://` URLs:
 
 ```
-craftagents://allChats                    # All chats view
-craftagents://allChats/chat/session123    # Specific chat
-craftagents://settings                    # Settings
-craftagents://sources/source/github       # Source info
-craftagents://action/new-chat             # Create new chat
+agentoperator://allChats                    # All chats view
+agentoperator://allChats/chat/session123    # Specific chat
+agentoperator://settings                    # Settings
+agentoperator://sources/source/github       # Source info
+agentoperator://action/new-chat             # Create new chat
 ```
 
 ## Tech Stack
@@ -213,7 +213,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "Craft Agents" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Craft" and "Agent Operator" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 

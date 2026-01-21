@@ -160,7 +160,7 @@ class ModeManager {
 
     debug(`[Mode] Set permission mode to ${mode} for session ${sessionId}`);
 
-    // Notify callbacks (for CraftAgent internal sync)
+    // Notify callbacks (for OperatorAgent internal sync)
     const callbacks = this.callbacks.get(sessionId);
     if (callbacks?.onStateChange) {
       callbacks.onStateChange(newState);
@@ -1492,7 +1492,7 @@ export function getPermissionModesDocumentation(): string {
 
   return `## Permission Modes
 
-Craft Agent has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
+Agent Operator has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
 
 | Mode | Color | Description |
 |------|-------|-------------|
@@ -1621,5 +1621,5 @@ You can customize Explore mode via \`permissions.json\` files - extend what's al
 | Workspace | \`{workspaceRoot}/permissions.json\` | All sources in workspace |
 | Per-source | \`{workspaceRoot}/sources/{slug}/permissions.json\` | That source only (auto-scoped) |
 
-**Before editing**: Read \`~/.craft-agent/docs/permissions.md\` for the full schema and examples.`;
+**Before editing**: Read \`~/.agent-operator/docs/permissions.md\` for the full schema and examples.`;
 }

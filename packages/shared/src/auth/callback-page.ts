@@ -4,7 +4,7 @@
  * in both the callback server and the playground preview.
  */
 
-import { CRAFT_LOGO_HTML } from '../branding.ts';
+import { OPERATOR_LOGO_HTML } from '../branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 
@@ -43,7 +43,7 @@ export function generateCallbackPage(options: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Craft - ${title}</title>
+  <title>Agent Operator - ${title}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -153,7 +153,7 @@ export function generateCallbackPage(options: {
 </head>
 <body>
   <div class="content">
-    <pre class="logo">${CRAFT_LOGO_HTML}</pre>
+    <pre class="logo">${OPERATOR_LOGO_HTML}</pre>
     <div class="card">
       <div class="status">${statusMessage}</div>
     </div>

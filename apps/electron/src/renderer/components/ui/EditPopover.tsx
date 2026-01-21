@@ -102,7 +102,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       label: 'Default Permissions',
       filePath: location, // location is the full path for default permissions
       context:
-        'The user is editing app-level default permissions (~/.craft-agent/permissions/default.json). ' +
+        'The user is editing app-level default permissions (~/.agent-operator/permissions/default.json). ' +
         'This file configures Explore mode rules that apply to ALL workspaces. ' +
         'It can contain: allowedBashPatterns, allowedMcpPatterns, allowedApiEndpoints, blockedTools, and allowedWritePaths. ' +
         'Each pattern can be a string or an object with pattern and comment fields. ' +
@@ -207,7 +207,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       label: 'Preferences Notes',
       filePath: location, // location is the full path for preferences
       context:
-        'The user is editing the notes field in their preferences (~/.craft-agent/preferences.json). ' +
+        'The user is editing the notes field in their preferences (~/.agent-operator/preferences.json). ' +
         'This is a JSON file. Only modify the "notes" field unless explicitly asked otherwise. ' +
         'The notes field is free-form text that provides context about the user to the AI. ' +
         'After editing, call config_validate with target "preferences" to verify the changes. ' +
@@ -226,7 +226,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Sources can be MCP servers (HTTP/SSE or stdio), REST APIs, or local filesystems. ' +
         'Ask clarifying questions if needed: What service? MCP or API? Auth type? ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.craft-agent/docs/sources.md. ' +
+        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
         'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to my Craft space',
@@ -242,7 +242,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Skills are specialized instructions with a SKILL.md file containing YAML frontmatter (name, description) and markdown instructions. ' +
         'Ask clarifying questions if needed: What should the skill do? When should it trigger? ' +
         'Create the skill folder and SKILL.md in the workspace skills directory. ' +
-        'Follow the patterns in ~/.craft-agent/docs/skills.md. ' +
+        'Follow the patterns in ~/.agent-operator/docs/skills.md. ' +
         'After creating the skill, call skill_validate with the skill slug to verify the SKILL.md file.',
     },
     example: 'Review PRs following our code standards',
@@ -465,7 +465,7 @@ export function EditPopover({
     // The &badges= passes badge metadata for hiding the XML context in UI
     // The &workdir= sets the working directory (user_default, none, or absolute path)
     const workdirParam = workingDirectory ? `&workdir=${encodeURIComponent(workingDirectory)}` : ''
-    const url = `craftagents://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
+    const url = `agentoperator://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
 
     try {
       await window.electronAPI.openUrl(url)

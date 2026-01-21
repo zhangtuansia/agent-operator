@@ -1,7 +1,7 @@
 /**
- * Craft Agent Session Viewer
+ * Agent Operator Session Viewer
  *
- * A minimal web app for viewing Craft Agent session transcripts.
+ * A minimal web app for viewing Agent Operator session transcripts.
  * Users can upload session JSON files or view shared sessions via URL.
  *
  * Routes:

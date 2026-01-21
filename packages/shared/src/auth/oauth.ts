@@ -2,7 +2,7 @@ import { createServer, type Server } from 'http';
 import { URL } from 'url';
 import open from 'open';
 import { randomBytes, createHash } from 'crypto';
-import { CRAFT_LOGO_HTML } from '../branding.ts';
+import { OPERATOR_LOGO_HTML } from '../branding.ts';
 
 export interface OAuthConfig {
   mcpBaseUrl: string; // e.g., http://localhost:3000/v1/links/abc123
@@ -22,7 +22,7 @@ export interface OAuthCallbacks {
 
 const CALLBACK_PORT = 8914;
 const CALLBACK_PATH = '/oauth/callback';
-const CLIENT_NAME = 'Craft Agent';
+const CLIENT_NAME = 'Agent Operator';
 
 /**
  * Generate a styled OAuth callback page with terminal emulator aesthetic
@@ -132,7 +132,7 @@ function generateOAuthPage(options: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Craft - ${title}</title>
+  <title>Agent Operator - ${title}</title>
   <style>
     :root {
       /* Tokyo Night Palette */
@@ -436,7 +436,7 @@ function generateOAuthPage(options: {
         <div class="control maximize"></div>
       </div>
       <div class="title-text">
-        user@craft-auth-cli ~
+        user@operator-auth-cli ~
       </div>
       <div style="width: 48px;"></div>
     </div>
@@ -447,7 +447,7 @@ function generateOAuthPage(options: {
       </div>
 
       <div class="logo-container">
-<pre class="logo">${CRAFT_LOGO_HTML}</pre>
+<pre class="logo">${OPERATOR_LOGO_HTML}</pre>
       </div>
 
       <div class="terminal-output">
@@ -482,7 +482,7 @@ function generateState(): string {
   return randomBytes(16).toString('hex');
 }
 
-export class CraftOAuth {
+export class OperatorOAuth {
   private config: OAuthConfig;
   private server: Server | null = null;
   private callbacks: OAuthCallbacks;
@@ -673,7 +673,7 @@ export class CraftOAuth {
       }
     } else {
       // Use a default client ID for public clients
-      clientId = 'craft-agent';
+      clientId = 'agent-operator';
       this.callbacks.onStatus(`Using default client ID: ${clientId}`);
     }
 

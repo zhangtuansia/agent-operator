@@ -9,7 +9,7 @@ import { getAuthState, getSetupNeeds } from '@agent-operator/shared/auth'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig, type ProviderConfig } from '@agent-operator/shared/config'
 import { getDefaultWorkspacesDir } from '@agent-operator/shared/workspaces'
-import { CraftOAuth, getMcpBaseUrl } from '@agent-operator/shared/auth'
+import { OperatorOAuth, getMcpBaseUrl } from '@agent-operator/shared/auth'
 import { validateMcpConnection } from '@agent-operator/shared/mcp'
 import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@agent-operator/shared/auth'
 import { getCredentialManager as getCredentialManagerFn } from '@agent-operator/shared/credentials'
@@ -51,9 +51,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     try {
       const baseUrl = getMcpBaseUrl(mcpUrl)
       mainLog.info('[Onboarding:Main] MCP OAuth baseUrl:', baseUrl)
-      mainLog.info('[Onboarding:Main] Creating CraftOAuth instance...')
+      mainLog.info('[Onboarding:Main] Creating OperatorOAuth instance...')
 
-      const oauth = new CraftOAuth(
+      const oauth = new OperatorOAuth(
         { mcpBaseUrl: baseUrl },
         {
           onStatus: (msg) => mainLog.info('[Onboarding:Main] MCP OAuth status:', msg),

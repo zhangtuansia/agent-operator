@@ -26,7 +26,7 @@ export type CredentialType =
   | 'workspace_bearer'
   | 'mcp_oauth'
   | 'api_key'
-  // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
+  // Source credentials (stored at ~/.agent-operator/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@agent-operator/ui"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { OperatorAgentsSymbol } from "@/components/icons/OperatorAgentsSymbol"
 import { StepFormLayout } from "./primitives"
 
 interface ReauthScreenProps {
@@ -49,7 +49,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
             <>
               Your Craft session has expired or is no longer valid.
               <br />
-              Please log in again to continue using Craft Agents.
+              Please log in again to continue using Agent Operator.
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
                 Your conversations and settings are preserved.
