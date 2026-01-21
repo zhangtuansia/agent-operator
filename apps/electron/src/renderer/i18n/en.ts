@@ -565,6 +565,15 @@ export const en = {
     noStatusFound: 'No status found',
   },
 
+  // Default status labels (for built-in statuses)
+  statusLabels: {
+    backlog: 'Backlog',
+    todo: 'Todo',
+    'needs-review': 'Needs Review',
+    done: 'Done',
+    cancelled: 'Cancelled',
+  },
+
   // Rename Dialog
   renameDialog: {
     renameConversation: 'Rename conversation',

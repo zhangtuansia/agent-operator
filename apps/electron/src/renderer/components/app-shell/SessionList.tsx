@@ -44,6 +44,7 @@ import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/shared/agent/modes"
 import { useLanguage } from "@/context/LanguageContext"
+import { getDateFnsLocale } from "@/i18n"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
@@ -170,6 +171,8 @@ interface SessionItemProps {
   todoStates: TodoState[]
   /** Translation function */
   t: (key: string) => string
+  /** Current language for date formatting */
+  language: 'en' | 'zh'
 }
 
 /**
@@ -196,6 +199,7 @@ function SessionItem({
   searchQuery,
   todoStates,
   t,
+  language,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -386,7 +390,7 @@ function SessionItem({
               )}
               <span className="truncate">
                 {item.lastMessageAt && (
-                  <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+                  <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true, locale: getDateFnsLocale(language) })}</>
                 )}
               </span>
             </div>
@@ -539,7 +543,7 @@ export function SessionList({
   const [session] = useSession()
   const { navigate } = useNavigation()
   const navState = useNavigationState()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
@@ -863,6 +867,7 @@ export function SessionList({
                     searchQuery={searchQuery}
                     todoStates={todoStates}
                     t={t}
+                    language={language}
                   />
                 )
               })}

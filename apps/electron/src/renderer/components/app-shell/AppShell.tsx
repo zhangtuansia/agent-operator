@@ -72,6 +72,16 @@ import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
+
+// Built-in status IDs that have translations
+const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+
+// Helper to get translated status label
+function getTranslatedStatusLabel(stateId: string, label: string, t: (key: string) => string): string {
+  return (BUILT_IN_STATUS_IDS as readonly string[]).includes(stateId)
+    ? t(`statusLabels.${stateId}`)
+    : label
+}
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
@@ -1123,7 +1133,7 @@ function AppShellContent({
                         // Dynamic status items from todoStates
                         ...todoStates.map(state => ({
                           id: `nav:state:${state.id}`,
-                          title: state.label,
+                          title: getTranslatedStatusLabel(state.id, state.label, t),
                           label: String(todoStateCounts[state.id] || 0),
                           icon: state.icon,
                           iconColor: state.color,
@@ -1307,7 +1317,7 @@ function AppShellContent({
                               >
                                 {state.icon}
                               </span>
-                              <span className="flex-1">{state.label}</span>
+                              <span className="flex-1">{getTranslatedStatusLabel(state.id, state.label, t)}</span>
                               <span className="w-3.5 ml-4">{listFilter.has(state.id) && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
                             </StyledDropdownMenuItem>
                           )

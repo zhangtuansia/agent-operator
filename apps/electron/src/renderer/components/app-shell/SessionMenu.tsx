@@ -38,6 +38,9 @@ import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-sta
 import type { TodoState } from '@/config/todo-states'
 import { useLanguage } from '@/context/LanguageContext'
 
+// Built-in status IDs that have translations
+const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+
 export interface SessionMenuProps {
   /** Session ID */
   sessionId: string
@@ -154,7 +157,11 @@ export function SessionMenu({
                 >
                   {state.icon}
                 </span>
-                <span className="flex-1">{state.label}</span>
+                <span className="flex-1">
+                  {(BUILT_IN_STATUS_IDS as readonly string[]).includes(state.id)
+                    ? t(`statusLabels.${state.id}`)
+                    : state.label}
+                </span>
               </MenuItem>
             )
           })}

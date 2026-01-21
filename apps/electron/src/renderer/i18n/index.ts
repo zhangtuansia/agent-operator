@@ -6,8 +6,16 @@
 
 import { en, type TranslationKeys } from './en';
 import { zh } from './zh';
+import { enUS, zhCN, type Locale } from 'date-fns/locale';
 
 export type Language = 'en' | 'zh';
+
+/**
+ * Get date-fns locale for a language
+ */
+export function getDateFnsLocale(language: Language): Locale {
+  return language === 'zh' ? zhCN : enUS;
+}
 
 export const LANGUAGES: { value: Language; label: string; nativeLabel: string }[] = [
   { value: 'en', label: 'English', nativeLabel: 'English' },

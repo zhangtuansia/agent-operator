@@ -567,6 +567,15 @@ export const zh: TranslationKeys = {
     noStatusFound: '未找到状态',
   },
 
+  // Default status labels (for built-in statuses)
+  statusLabels: {
+    backlog: '待办',
+    todo: '进行中',
+    'needs-review': '待审核',
+    done: '已完成',
+    cancelled: '已取消',
+  },
+
   // Rename Dialog
   renameDialog: {
     renameConversation: '重命名对话',

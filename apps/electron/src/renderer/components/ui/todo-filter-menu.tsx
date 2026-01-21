@@ -20,14 +20,21 @@ const MENU_CONTAINER_STYLE = 'min-w-[180px] overflow-hidden rounded-[8px] bg-bac
 const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-1.5 text-[13px]'
 
+// Built-in status IDs that have translations
+const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+
 // ============================================================================
 // StateItemContent - Shared item rendering
 // ============================================================================
 
-function StateItemContent({ state }: { state: TodoState }) {
+function StateItemContent({ state, t }: { state: TodoState; t: (key: string) => string }) {
   // Only apply color styling if the icon is colorable (uses currentColor)
   // Emojis and images should render at full opacity with their own colors
   const applyColor = state.iconColorable
+
+  // Use translated label for built-in statuses, otherwise use config label
+  const isBuiltIn = (BUILT_IN_STATUS_IDS as readonly string[]).includes(state.id)
+  const displayLabel = isBuiltIn ? t(`statusLabels.${state.id}`) : state.label
 
   return (
     <>
@@ -40,7 +47,7 @@ function StateItemContent({ state }: { state: TodoState }) {
       >
         {state.icon}
       </span>
-      <div className="flex-1 min-w-0">{state.label}</div>
+      <div className="flex-1 min-w-0">{displayLabel}</div>
     </>
   )
 }
@@ -108,7 +115,7 @@ export function TodoStateMenu({
                 isActive ? 'bg-foreground/7' : 'data-[selected=true]:bg-foreground/3'
               )}
             >
-              <StateItemContent state={state} />
+              <StateItemContent state={state} t={t} />
             </CommandPrimitive.Item>
           )
         })}
