@@ -5,7 +5,7 @@ import { SlashCommandMenu, type SlashCommandId, type CommandGroup, type SlashCom
 import { ChevronDown, X, Brain } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@agent-operator/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
-import { useLanguage } from '@/hooks/useLanguage'
+import { useLanguage } from '@/context/LanguageContext'
 
 // ============================================================================
 // Permission Mode Icon Component

@@ -35,7 +35,7 @@ import {
 } from "@agent-operator/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import { useLanguage } from "@/hooks/useLanguage"
+import { useLanguage } from "@/context/LanguageContext"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@agent-operator/shared/agent/modes"
 import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels"
