@@ -25,7 +25,6 @@ import {
   getElectronManifest,
   isNewerVersion,
   getPlatformKey,
-  getAppVersion,
 } from '@agent-operator/shared/version'
 import {
   getDismissedUpdateVersion,
@@ -41,7 +40,7 @@ import type { WindowManager } from './window-manager'
 // Module state
 let updateInfo: UpdateInfo = {
   available: false,
-  currentVersion: getAppVersion(),
+  currentVersion: app.getVersion(),
   latestVersion: null,
   downloadUrl: null,
   downloadState: 'idle',
@@ -151,7 +150,7 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
 async function doCheckForUpdates(autoDownload: boolean): Promise<UpdateInfo> {
   mainLog.info('[auto-update] Checking for updates...')
 
-  const currentVersion = getAppVersion()
+  const currentVersion = app.getVersion()
   updateInfo = { ...updateInfo, currentVersion }
 
   try {
