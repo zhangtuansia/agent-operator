@@ -349,37 +349,37 @@ function SessionItem({
                   <StyledDropdownMenuContent align="start">
                     <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(item.sharedUrl!)}>
                       <Globe />
-                      Open in Browser
+                      {t('sessionMenu.openInBrowser')}
                     </StyledDropdownMenuItem>
                     <StyledDropdownMenuItem onClick={async () => {
                       await navigator.clipboard.writeText(item.sharedUrl!)
-                      toast.success('Link copied to clipboard')
+                      toast.success(t('sessionMenu.linkCopied'))
                     }}>
                       <Copy />
-                      Copy Link
+                      {t('sessionMenu.copyLink')}
                     </StyledDropdownMenuItem>
                     <StyledDropdownMenuItem onClick={async () => {
                       const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
                       if (result?.success) {
-                        toast.success('Share updated')
+                        toast.success(t('sessionMenu.shareUpdated'))
                       } else {
-                        toast.error('Failed to update share', { description: result?.error })
+                        toast.error(t('sessionMenu.failedToUpdateShare'), { description: result?.error })
                       }
                     }}>
                       <RefreshCw />
-                      Update Share
+                      {t('sessionMenu.updateShare')}
                     </StyledDropdownMenuItem>
                     <StyledDropdownMenuSeparator />
                     <StyledDropdownMenuItem onClick={async () => {
                       const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
                       if (result?.success) {
-                        toast.success('Sharing stopped')
+                        toast.success(t('sessionMenu.sharingStopped'))
                       } else {
-                        toast.error('Failed to stop sharing', { description: result?.error })
+                        toast.error(t('sessionMenu.failedToStopSharing'), { description: result?.error })
                       }
                     }} variant="destructive">
                       <Link2Off />
-                      Stop Sharing
+                      {t('sessionMenu.stopSharing')}
                     </StyledDropdownMenuItem>
                   </StyledDropdownMenuContent>
                 </DropdownMenu>

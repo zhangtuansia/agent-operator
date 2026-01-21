@@ -597,6 +597,13 @@ export const zh: TranslationKeys = {
     terminalOverlayNotAvailable: '终端覆盖层不可用',
     failedToLoadTaskOutput: '加载任务输出失败',
     noDetailsProvided: '未提供详细信息',
+    invalidLink: '无效链接',
+    contentMovedOrDeleted: '内容可能已被移动或删除。',
+    installingUpdate: '正在安装更新...',
+    failedToInstallUpdate: '安装更新失败',
+    youreUpToDate: '已是最新版本',
+    runningLatestVersion: '正在运行最新版本',
+    failedToCheckForUpdates: '检查更新失败',
   },
 
   // Keyboard shortcuts dialog
@@ -756,5 +763,18 @@ export const zh: TranslationKeys = {
     allowed: '允许',
     blocked: '阻止',
     ask: '询问',
+  },
+
+  // Permissions table
+  permissionsTable: {
+    access: '访问',
+    type: '类型',
+    pattern: '模式',
+    comment: '备注',
+    viewFullscreen: '全屏查看',
+    searchPatterns: '搜索模式...',
+    noPermissionsConfigured: '未配置权限',
+    rule: '条规则',
+    rules: '条规则',
   },
 } as const;

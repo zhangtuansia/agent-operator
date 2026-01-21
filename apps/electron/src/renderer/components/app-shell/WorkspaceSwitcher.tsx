@@ -110,7 +110,7 @@ export function WorkspaceSwitcher({
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
-    toast.success(`Created workspace "${workspace.name}"`)
+    toast.success(`${t('toasts.createdWorkspace')} "${workspace.name}"`)
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }

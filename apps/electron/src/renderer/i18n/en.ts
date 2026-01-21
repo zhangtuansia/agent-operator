@@ -595,6 +595,13 @@ export const en = {
     terminalOverlayNotAvailable: 'Terminal overlay not available',
     failedToLoadTaskOutput: 'Failed to load task output',
     noDetailsProvided: 'No details provided',
+    invalidLink: 'Invalid link',
+    contentMovedOrDeleted: 'The content may have been moved or deleted.',
+    installingUpdate: 'Installing update...',
+    failedToInstallUpdate: 'Failed to install update',
+    youreUpToDate: "You're up to date",
+    runningLatestVersion: 'Running the latest version',
+    failedToCheckForUpdates: 'Failed to check for updates',
   },
 
   // Keyboard shortcuts dialog
@@ -754,6 +761,19 @@ export const en = {
     allowed: 'Allowed',
     blocked: 'Blocked',
     ask: 'Ask',
+  },
+
+  // Permissions table
+  permissionsTable: {
+    access: 'Access',
+    type: 'Type',
+    pattern: 'Pattern',
+    comment: 'Comment',
+    viewFullscreen: 'View Fullscreen',
+    searchPatterns: 'Search patterns...',
+    noPermissionsConfigured: 'No permissions configured',
+    rule: 'rule',
+    rules: 'rules',
   },
 } as const;
 

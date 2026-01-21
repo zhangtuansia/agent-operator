@@ -168,6 +168,7 @@ function getPermissionsDescription(source: LoadedSource): string {
 }
 
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
+  const { t } = useLanguage()
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -360,11 +361,11 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     if (!source) return
     try {
       await window.electronAPI.deleteSource(workspaceId, sourceSlug)
-      toast.success(`Deleted source: ${source.config.name}`)
+      toast.success(`${t('toasts.deletedSource')}: ${source.config.name}`)
       navigate(routes.view.sources())
       onDelete?.()
     } catch (err) {
-      toast.error('Failed to delete source', {
+      toast.error(t('toasts.failedToDeleteSource'), {
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     }

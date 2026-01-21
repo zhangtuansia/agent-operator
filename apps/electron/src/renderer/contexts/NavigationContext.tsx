@@ -61,6 +61,7 @@ import {
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import { useLanguage } from '@/context/LanguageContext'
 
 // Re-export routes for convenience
 export { routes }
@@ -112,6 +113,7 @@ export function NavigationProvider({
   onInputChange,
   isReady = true,
 }: NavigationProviderProps) {
+  const { t } = useLanguage()
   const [, setSession] = useSession()
 
   // Read session metadata directly from atom (reactive to session changes)
@@ -694,8 +696,8 @@ export function NavigationProvider({
         const navState = parseRouteToNavigationState(route)
         if (!navState && !route.startsWith('action/')) {
           // Invalid route that isn't an action - show error toast
-          toast.error('Invalid link', {
-            description: 'The content may have been moved or deleted.',
+          toast.error(t('toasts.invalidLink'), {
+            description: t('toasts.contentMovedOrDeleted'),
           })
           return
         }

@@ -340,7 +340,7 @@ export function FreeFormInput({
       }
       const text = e.detail?.text
       if (!text) {
-        toast.error('No details provided')
+        toast.error(t('toasts.noDetailsProvided'))
         return
       }
       // Switch to allow-all (Auto) mode if in Explore mode (allow execution without prompts)

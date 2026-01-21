@@ -105,10 +105,10 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
     try {
       await window.electronAPI.deleteSkill(workspaceId, skillSlug)
-      toast.success(`Deleted skill: ${skill.metadata.name}`)
+      toast.success(`${t('toasts.deletedSkill')}: ${skill.metadata.name}`)
       navigate(routes.view.skills())
     } catch (err) {
-      toast.error('Failed to delete skill', {
+      toast.error(t('toasts.failedToDeleteSkill'), {
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     }
