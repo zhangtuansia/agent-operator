@@ -60,6 +60,7 @@ mac:
         - x64
   hardenedRuntime: false
   gatekeeperAssess: false
+  identity: null
   # Exclude ripgrep binaries for other platforms
   files:
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
