@@ -1236,8 +1236,10 @@ export default function App() {
   // Onboarding state
   // ModalProvider + WindowCloseHandler ensures X button works on Windows
   // (without this, the close IPC message has no listener and window stays open)
+  // LanguageProvider needed for translated onboarding screens
   if (appState === 'onboarding') {
     return (
+      <LanguageProvider initialLanguage={initialLanguage}>
       <ModalProvider>
         <WindowCloseHandler />
         <OnboardingWizard
@@ -1257,6 +1259,7 @@ export default function App() {
           onCancelOAuth={onboarding.handleCancelOAuth}
         />
       </ModalProvider>
+      </LanguageProvider>
     )
   }
 
