@@ -558,6 +558,24 @@ export const en = {
     viewAsMarkdown: 'View as Markdown',
     typeFeedbackOr: 'Type your feedback in chat or',
   },
+
+  // Todo State Menu
+  todoStateMenu: {
+    filterStatuses: 'Filter statuses...',
+    noStatusFound: 'No status found',
+  },
+
+  // Rename Dialog
+  renameDialog: {
+    renameConversation: 'Rename conversation',
+    enterName: 'Enter a name...',
+  },
+
+  // Session badges
+  sessionBadges: {
+    new: 'New',
+    plan: 'Plan',
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

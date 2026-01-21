@@ -560,4 +560,22 @@ export const zh: TranslationKeys = {
     viewAsMarkdown: '查看 Markdown',
     typeFeedbackOr: '在聊天中输入反馈或',
   },
+
+  // Todo State Menu
+  todoStateMenu: {
+    filterStatuses: '筛选状态...',
+    noStatusFound: '未找到状态',
+  },
+
+  // Rename Dialog
+  renameDialog: {
+    renameConversation: '重命名对话',
+    enterName: '输入名称...',
+  },
+
+  // Session badges
+  sessionBadges: {
+    new: '新',
+    plan: '计划',
+  },
 } as const;

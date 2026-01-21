@@ -18,10 +18,12 @@ function sanitizePreview(content: string): string {
 
 /**
  * Get display title for a session.
- * Priority: custom name > first user message > preview (from metadata) > "New chat"
+ * Priority: custom name > first user message > preview (from metadata) > fallback
  * Works with both Session (full) and SessionMeta (lightweight)
+ * @param session - The session or session metadata
+ * @param fallback - Fallback text when no title is available (default: 'New chat')
  */
-export function getSessionTitle(session: SessionLike | SessionMeta): string {
+export function getSessionTitle(session: SessionLike | SessionMeta, fallback: string = 'New chat'): string {
   if (session.name) {
     return session.name
   }
@@ -47,7 +49,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     }
   }
 
-  return 'New chat'
+  return fallback
 }
 
 /**

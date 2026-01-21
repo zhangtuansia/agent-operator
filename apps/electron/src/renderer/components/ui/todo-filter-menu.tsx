@@ -7,6 +7,7 @@ import {
   getStateIcon,
   getStateColor,
 } from '@/config/todo-states'
+import { useLanguage } from '@/context/LanguageContext'
 
 // Re-export types for backwards compatibility
 export { type TodoStateId, type TodoState, getStateIcon, getStateColor }
@@ -63,6 +64,7 @@ export function TodoStateMenu({
 }: TodoStateMenuProps) {
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const { t } = useLanguage()
 
   // Focus input when menu opens
   React.useEffect(() => {
@@ -85,13 +87,13 @@ export function TodoStateMenu({
           ref={inputRef}
           value={filter}
           onValueChange={setFilter}
-          placeholder="Filter statuses..."
+          placeholder={t('todoStateMenu.filterStatuses')}
           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
         />
       </div>
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
         <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-          No status found
+          {t('todoStateMenu.noStatusFound')}
         </CommandPrimitive.Empty>
         {states.map((state) => {
           const isActive = activeState === state.id

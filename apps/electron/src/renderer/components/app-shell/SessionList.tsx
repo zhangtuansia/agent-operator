@@ -168,6 +168,8 @@ interface SessionItemProps {
   searchQuery?: string
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
+  /** Translation function */
+  t: (key: string) => string
 }
 
 /**
@@ -193,6 +195,7 @@ function SessionItem({
   permissionMode,
   searchQuery,
   todoStates,
+  t,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -297,7 +300,7 @@ function SessionItem({
                 "font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]",
                 item.isAsyncOperationOngoing && "animate-shimmer-text"
               )}>
-                {searchQuery ? highlightMatch(getSessionTitle(item), searchQuery) : getSessionTitle(item)}
+                {searchQuery ? highlightMatch(getSessionTitle(item, t('chat.newChat')), searchQuery) : getSessionTitle(item, t('chat.newChat'))}
               </div>
             </div>
             {/* Subtitle - with optional flag at start, single line with truncation */}
@@ -307,7 +310,7 @@ function SessionItem({
               )}
               {!item.isProcessing && hasUnreadMessages(item) && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent text-white">
-                  New
+                  {t('sessionBadges.new')}
                 </span>
               )}
               {item.isFlagged && (
@@ -315,7 +318,7 @@ function SessionItem({
               )}
               {item.lastMessageRole === 'plan' && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
-                  Plan
+                  {t('sessionBadges.plan')}
                 </span>
               )}
               {permissionMode && (
@@ -328,7 +331,9 @@ function SessionItem({
                     permissionMode === 'allow-all' && "bg-accent/10 text-accent"
                   )}
                 >
-                  {PERMISSION_MODE_CONFIG[permissionMode].shortName}
+                  {permissionMode === 'safe' ? t('permissionModes.safe') :
+                   permissionMode === 'ask' ? t('permissionModes.ask') :
+                   t('permissionModes.allowAll')}
                 </span>
               )}
               {item.sharedUrl && (
@@ -406,14 +411,14 @@ function SessionItem({
                 <DropdownMenuProvider>
                   <SessionMenu
                     sessionId={item.id}
-                    sessionName={getSessionTitle(item)}
+                    sessionName={getSessionTitle(item, t('chat.newChat'))}
                     isFlagged={item.isFlagged ?? false}
                     sharedUrl={item.sharedUrl}
                     hasMessages={hasMessages(item)}
                     hasUnreadMessages={hasUnreadMessages(item)}
                     currentTodoState={currentTodoState}
                     todoStates={todoStates}
-                    onRename={() => onRenameClick(item.id, getSessionTitle(item))}
+                    onRename={() => onRenameClick(item.id, getSessionTitle(item, t('chat.newChat')))}
                     onFlag={() => onFlag?.(item.id)}
                     onUnflag={() => onUnflag?.(item.id)}
                     onMarkUnread={() => onMarkUnread(item.id)}
@@ -433,14 +438,14 @@ function SessionItem({
           <ContextMenuProvider>
             <SessionMenu
               sessionId={item.id}
-              sessionName={getSessionTitle(item)}
+              sessionName={getSessionTitle(item, t('chat.newChat'))}
               isFlagged={item.isFlagged ?? false}
               sharedUrl={item.sharedUrl}
               hasMessages={hasMessages(item)}
               hasUnreadMessages={hasUnreadMessages(item)}
               currentTodoState={currentTodoState}
               todoStates={todoStates}
-              onRename={() => onRenameClick(item.id, getSessionTitle(item))}
+              onRename={() => onRenameClick(item.id, getSessionTitle(item, t('chat.newChat')))}
               onFlag={() => onFlag?.(item.id)}
               onUnflag={() => onUnflag?.(item.id)}
               onMarkUnread={() => onMarkUnread(item.id)}
@@ -562,14 +567,15 @@ export function SessionList({
   )
 
   // Filter items by search query
+  const newChatFallback = t('chat.newChat')
   const searchFilteredItems = useMemo(() => {
     if (!searchQuery.trim()) return sortedItems
     const query = searchQuery.toLowerCase()
     return sortedItems.filter(item => {
-      const title = getSessionTitle(item).toLowerCase()
+      const title = getSessionTitle(item, newChatFallback).toLowerCase()
       return title.includes(query)
     })
-  }, [sortedItems, searchQuery])
+  }, [sortedItems, searchQuery, newChatFallback])
 
   // Reset display limit when search query changes
   useEffect(() => {
@@ -856,6 +862,7 @@ export function SessionList({
                     permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                     searchQuery={searchQuery}
                     todoStates={todoStates}
+                    t={t}
                   />
                 )
               })}
@@ -874,11 +881,11 @@ export function SessionList({
       <RenameDialog
         open={renameDialogOpen}
         onOpenChange={setRenameDialogOpen}
-        title="Rename conversation"
+        title={t('renameDialog.renameConversation')}
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
-        placeholder="Enter a name..."
+        placeholder={t('renameDialog.enterName')}
       />
     </>
   )
