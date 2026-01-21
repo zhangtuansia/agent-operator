@@ -71,6 +71,7 @@ export interface FontConfig {
  * }
  */
 export const FONTS: FontConfig[] = [
+  // Sans-serif fonts
   {
     id: 'inter',
     name: 'Inter',
@@ -78,6 +79,14 @@ export const FONTS: FontConfig[] = [
     googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap',
     fontFeatures: '"cv01", "cv02", "cv03", "cv04", "case"',
     opticalSizing: true,
+  },
+  {
+    id: 'geist',
+    name: 'Geist',
+    fontFamily: '"Geist", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    localFiles: [
+      { src: 'Geist-VariableFont_wght.ttf', format: 'truetype', weight: '100 900', style: 'normal' },
+    ],
   },
   {
     id: 'anthropic-sans',
@@ -96,6 +105,68 @@ export const FONTS: FontConfig[] = [
       { src: 'AnthropicSerif-Romans-Variable-25x258.ttf', format: 'truetype', weight: '100 900', style: 'normal' },
       { src: 'AnthropicSerif-Italics-Variable-25x258.ttf', format: 'truetype', weight: '100 900', style: 'italic' },
     ],
+  },
+  // Monospace fonts
+  {
+    id: 'geist-mono',
+    name: 'Geist Mono',
+    fontFamily: '"Geist Mono", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'GeistMono-VariableFont_wght.ttf', format: 'truetype', weight: '100 900', style: 'normal' },
+    ],
+  },
+  {
+    id: 'jetbrains-mono',
+    name: 'JetBrains Mono',
+    fontFamily: '"JetBrains Mono", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'JetBrainsMono-VariableFont_wght.ttf', format: 'truetype', weight: '100 900', style: 'normal' },
+    ],
+  },
+  {
+    id: 'fira-code',
+    name: 'Fira Code',
+    fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'FiraCode-VariableFont_wght.ttf', format: 'truetype', weight: '300 700', style: 'normal' },
+    ],
+    fontFeatures: '"liga", "calt"', // Enable ligatures
+  },
+  {
+    id: 'monaspace-neon',
+    name: 'Monaspace Neon',
+    fontFamily: '"Monaspace Neon", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'MonaspaceNeonVarVF[wght,wdth,slnt].ttf', format: 'truetype', weight: '200 800', style: 'normal' },
+    ],
+    fontFeatures: '"liga", "calt", "ss01"',
+  },
+  {
+    id: 'monaspace-argon',
+    name: 'Monaspace Argon',
+    fontFamily: '"Monaspace Argon", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'MonaspaceArgonVarVF[wght,wdth,slnt].ttf', format: 'truetype', weight: '200 800', style: 'normal' },
+    ],
+    fontFeatures: '"liga", "calt", "ss01"',
+  },
+  {
+    id: 'monaspace-krypton',
+    name: 'Monaspace Krypton',
+    fontFamily: '"Monaspace Krypton", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'MonaspaceKryptonVarVF[wght,wdth,slnt].ttf', format: 'truetype', weight: '200 800', style: 'normal' },
+    ],
+    fontFeatures: '"liga", "calt", "ss01"',
+  },
+  {
+    id: 'monaspace-xenon',
+    name: 'Monaspace Xenon',
+    fontFamily: '"Monaspace Xenon", "SF Mono", Menlo, Monaco, monospace',
+    localFiles: [
+      { src: 'MonaspaceXenonVarVF[wght,wdth,slnt].ttf', format: 'truetype', weight: '200 800', style: 'normal' },
+    ],
+    fontFeatures: '"liga", "calt", "ss01"',
   },
 ]
 
