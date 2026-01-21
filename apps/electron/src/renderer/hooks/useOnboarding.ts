@@ -233,6 +233,7 @@ export function useOnboarding({
         setState(s => ({
           ...s,
           credentialStatus: 'success',
+          completionStatus: 'complete',
           step: 'complete',
         }))
       } else {
