@@ -48,7 +48,7 @@ Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script]
 
 Arguments:
   arm64|x64    Target architecture (default: arm64)
-  --upload     Upload DMG to S3 after building
+  --upload     Upload DMG to R2 after building
   --latest     Also update electron/latest (requires --upload)
   --script     Also upload install-app.sh (requires --upload)
 
@@ -57,7 +57,10 @@ Environment variables (from .env or environment):
   APPLE_ID                  - Apple ID for notarization
   APPLE_TEAM_ID             - Apple Team ID
   APPLE_APP_SPECIFIC_PASSWORD - App-specific password
-  S3_VERSIONS_BUCKET_*      - S3 credentials (for --upload)
+  R2_ACCOUNT_ID             - Cloudflare account ID (for --upload)
+  R2_ACCESS_KEY_ID          - R2 access key (for --upload)
+  R2_SECRET_ACCESS_KEY      - R2 secret key (for --upload)
+  R2_BUCKET_NAME            - R2 bucket name (for --upload)
 EOF
     exit 0
 }
@@ -177,8 +180,8 @@ fi
 npx electron-builder $BUILDER_ARGS
 
 # 8. Verify the DMG was built
-# electron-builder.yml uses artifactName to output: Craft-Agent-${arch}.dmg
-DMG_NAME="Craft-Agent-${ARCH}.dmg"
+# electron-builder.yml uses artifactName to output: Agent-Operator-${arch}.dmg
+DMG_NAME="Agent-Operator-${ARCH}.dmg"
 DMG_PATH="$ELECTRON_DIR/release/$DMG_NAME"
 
 if [ ! -f "$DMG_PATH" ]; then
@@ -200,18 +203,19 @@ echo "Creating manifest.json (version: $ELECTRON_VERSION)..."
 mkdir -p "$ROOT_DIR/.build/upload"
 echo "{\"version\": \"$ELECTRON_VERSION\"}" > "$ROOT_DIR/.build/upload/manifest.json"
 
-# 10. Upload to S3 (if --upload flag is set)
+# 10. Upload to R2 (if --upload flag is set)
 if [ "$UPLOAD" = true ]; then
     echo ""
-    echo "=== Uploading to S3 ==="
+    echo "=== Uploading to R2 ==="
 
-    # Check for S3 credentials
-    if [ -z "$S3_VERSIONS_BUCKET_ENDPOINT" ] || [ -z "$S3_VERSIONS_BUCKET_ACCESS_KEY_ID" ] || [ -z "$S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY" ]; then
+    # Check for R2 credentials
+    if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET_NAME" ]; then
         cat << EOF
-ERROR: Missing S3 credentials. Set these environment variables:
-  S3_VERSIONS_BUCKET_ENDPOINT
-  S3_VERSIONS_BUCKET_ACCESS_KEY_ID
-  S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY
+ERROR: Missing R2 credentials. Set these environment variables:
+  R2_ACCOUNT_ID
+  R2_ACCESS_KEY_ID
+  R2_SECRET_ACCESS_KEY
+  R2_BUCKET_NAME
 
 You can add them to .env or export them directly.
 EOF
