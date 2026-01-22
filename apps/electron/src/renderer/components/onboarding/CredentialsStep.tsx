@@ -100,22 +100,23 @@ function getOAuthIconVariant(status: CredentialStatus): StepIconVariant {
   }
 }
 
-const OAUTH_STATUS_CONTENT: Record<CredentialStatus, { title: string; description: string }> = {
+// OAuth status content keys for i18n
+const OAUTH_STATUS_KEYS: Record<CredentialStatus, { titleKey: string; descriptionKey: string }> = {
   idle: {
-    title: 'Connect Claude Account',
-    description: 'Use your Claude subscription to power multi-agent workflows.',
+    titleKey: 'auth.connectClaudeAccount',
+    descriptionKey: 'auth.connectClaudeDesc',
   },
   validating: {
-    title: 'Connecting...',
-    description: 'Waiting for authentication to complete...',
+    titleKey: 'auth.connecting',
+    descriptionKey: 'auth.waitingForAuth',
   },
   success: {
-    title: 'Connected!',
-    description: 'Your Claude account is connected.',
+    titleKey: 'common.connected',
+    descriptionKey: 'auth.accountConnected',
   },
   error: {
-    title: 'Connection failed',
-    description: '', // Will use errorMessage prop
+    titleKey: 'auth.connectionFailed',
+    descriptionKey: '', // Will use errorMessage prop
   },
 }
 
@@ -183,7 +184,7 @@ export function CredentialsStep({
 
   // OAuth flow
   if (isOAuth) {
-    const content = OAUTH_STATUS_CONTENT[status]
+    const contentKeys = OAUTH_STATUS_KEYS[status]
 
     // Check if we have existing token from keychain
     const hasExistingToken = !!existingClaudeToken
@@ -196,13 +197,13 @@ export function CredentialsStep({
           description={t('auth.enterAuthCodeDesc')}
           actions={
             <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t('common.cancel')}</BackButton>
               <ContinueButton
                 type="submit"
                 form="auth-code-form"
                 disabled={!authCode.trim()}
                 loading={status === 'validating'}
-                loadingText="Connecting..."
+                loadingText={t('auth.connecting')}
               />
             </>
           }
@@ -257,14 +258,14 @@ export function CredentialsStep({
         )}
 
         {status === 'validating' && (
-          <BackButton onClick={onBack} className="w-full">Cancel</BackButton>
+          <BackButton onClick={onBack} className="w-full">{t('common.cancel')}</BackButton>
         )}
 
         {status === 'error' && (
           <>
             <BackButton onClick={onBack} />
             <ContinueButton onClick={hasExistingToken ? onUseExistingClaudeToken : onStartOAuth}>
-              Try Again
+              {t('auth.tryAgain')}
             </ContinueButton>
           </>
         )}
@@ -272,16 +273,16 @@ export function CredentialsStep({
     )
 
     // Dynamic description based on state
-    let description = content.description
+    let description = t(contentKeys.descriptionKey)
     if (status === 'idle') {
       if (hasExistingToken && existingClaudeToken) {
         // Show preview of detected token (first 20 chars)
         const tokenPreview = existingClaudeToken.length > 20
           ? `${existingClaudeToken.slice(0, 20)}...`
           : existingClaudeToken
-        description = `Found existing token: ${tokenPreview}`
+        description = t('auth.foundExistingToken').replace('{token}', tokenPreview)
       } else {
-        description = 'Click below to sign in with your Claude Pro or Max subscription.'
+        description = t('auth.clickToSignIn')
       }
     }
 
@@ -289,8 +290,8 @@ export function CredentialsStep({
       <StepFormLayout
         icon={getOAuthIcon(status)}
         iconVariant={getOAuthIconVariant(status)}
-        title={content.title}
-        description={status === 'error' ? (errorMessage || 'Something went wrong. Please try again.') : description}
+        title={t(contentKeys.titleKey)}
+        description={status === 'error' ? (errorMessage || t('auth.somethingWentWrong')) : description}
         actions={actions}
       >
         {/* Show secondary option if we have an existing token */}
@@ -318,7 +319,7 @@ export function CredentialsStep({
         description={
           providerConfig.docsUrl ? (
             <>
-              Get your API key from{' '}
+              {t('auth.getApiKeyFrom')}{' '}
               <a
                 href={`https://${providerConfig.docsUrl}`}
                 target="_blank"
@@ -329,7 +330,7 @@ export function CredentialsStep({
               </a>
             </>
           ) : (
-            'Enter your API endpoint and key'
+            t('auth.enterApiEndpoint')
           )
         }
         actions={
@@ -340,7 +341,7 @@ export function CredentialsStep({
               form="provider-form"
               disabled={!value.trim() || !baseURL.trim()}
               loading={status === 'validating'}
-              loadingText="Validating..."
+              loadingText={t('auth.validating')}
             />
           </>
         }
@@ -349,7 +350,7 @@ export function CredentialsStep({
           <div className="space-y-4">
             {/* API Key */}
             <div className="space-y-2">
-              <Label htmlFor="provider-key">API Key</Label>
+              <Label htmlFor="provider-key">{t('auth.apiKey')}</Label>
               <div className={cn(
                 "relative rounded-md shadow-minimal transition-colors",
                 "bg-foreground-2 focus-within:bg-background"
@@ -384,7 +385,7 @@ export function CredentialsStep({
 
             {/* Base URL */}
             <div className="space-y-2">
-              <Label htmlFor="provider-url">API Base URL</Label>
+              <Label htmlFor="provider-url">{t('auth.apiBaseUrl')}</Label>
               <div className={cn(
                 "relative rounded-md shadow-minimal transition-colors",
                 "bg-foreground-2 focus-within:bg-background"
@@ -404,7 +405,7 @@ export function CredentialsStep({
             {/* API Format (only for custom) */}
             {isCustom && (
               <div className="space-y-2">
-                <Label>API Format</Label>
+                <Label>{t('auth.apiFormat')}</Label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -415,7 +416,7 @@ export function CredentialsStep({
                       className="size-4"
                       disabled={status === 'validating'}
                     />
-                    <span className="text-sm">Anthropic Compatible</span>
+                    <span className="text-sm">{t('auth.anthropicCompatible')}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -426,7 +427,7 @@ export function CredentialsStep({
                       className="size-4"
                       disabled={status === 'validating'}
                     />
-                    <span className="text-sm">OpenAI Compatible</span>
+                    <span className="text-sm">{t('auth.openaiCompatible')}</span>
                   </label>
                 </div>
               </div>
@@ -466,7 +467,7 @@ export function CredentialsStep({
             form="api-key-form"
             disabled={!value.trim()}
             loading={status === 'validating'}
-            loadingText="Validating..."
+            loadingText={t('auth.validating')}
           />
         </>
       }

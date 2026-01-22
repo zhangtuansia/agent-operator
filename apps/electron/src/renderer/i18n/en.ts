@@ -458,6 +458,18 @@ export const en = {
     anthropicConsole: 'console.anthropic.com',
     anthropicApiKey: 'Anthropic API Key',
     connect: 'Connect',
+    connecting: 'Connecting...',
+    validating: 'Validating...',
+    tryAgain: 'Try Again',
+    somethingWentWrong: 'Something went wrong. Please try again.',
+    foundExistingToken: 'Found existing token: {token}',
+    clickToSignIn: 'Click below to sign in with your Claude Pro or Max subscription.',
+    apiKey: 'API Key',
+    apiBaseUrl: 'API Base URL',
+    apiFormat: 'API Format',
+    anthropicCompatible: 'Anthropic Compatible',
+    openaiCompatible: 'OpenAI Compatible',
+    enterApiEndpoint: 'Enter your API endpoint and key',
   },
 
   // Errors

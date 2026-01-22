@@ -460,6 +460,18 @@ export const zh: TranslationKeys = {
     anthropicConsole: 'console.anthropic.com',
     anthropicApiKey: 'Anthropic API 密钥',
     connect: '连接',
+    connecting: '连接中...',
+    validating: '验证中...',
+    tryAgain: '重试',
+    somethingWentWrong: '出了点问题，请重试。',
+    foundExistingToken: '发现现有令牌：{token}',
+    clickToSignIn: '点击下方使用您的 Claude Pro 或 Max 订阅登录。',
+    apiKey: 'API 密钥',
+    apiBaseUrl: 'API 基础 URL',
+    apiFormat: 'API 格式',
+    anthropicCompatible: 'Anthropic 兼容',
+    openaiCompatible: 'OpenAI 兼容',
+    enterApiEndpoint: '输入您的 API 端点和密钥',
   },
 
   // Errors
