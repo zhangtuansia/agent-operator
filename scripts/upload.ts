@@ -120,8 +120,8 @@ async function uploadJson(remotePath: string, data: object): Promise<void> {
   console.log(`  ✓ Uploaded ${remotePath}`);
 }
 
-// Build platform manifest entry
-interface PlatformEntry {
+// Build platform manifest entry (must match shared/version/manifest.ts)
+interface BinaryInfo {
   url: string;
   size: number;
   sha256: string;
@@ -129,9 +129,9 @@ interface PlatformEntry {
 
 interface VersionManifest {
   version: string;
-  releaseDate: string;
-  releaseNotes?: string;
-  platforms: Record<string, PlatformEntry>;
+  build_time: string;
+  build_timestamp: number;
+  binaries: Record<string, BinaryInfo>;
 }
 
 // Main upload logic
@@ -180,10 +180,12 @@ async function main() {
     console.log(`Found ${artifacts.length} artifact(s) to upload\n`);
 
     // Build manifest
+    const now = new Date();
     const manifest: VersionManifest = {
       version,
-      releaseDate: new Date().toISOString().split('T')[0],
-      platforms: {},
+      build_time: now.toISOString(),
+      build_timestamp: now.getTime(),
+      binaries: {},
     };
 
     // Upload each artifact
@@ -192,7 +194,7 @@ async function main() {
       await uploadFile(artifact.file, remotePath);
 
       // Add to manifest
-      manifest.platforms[artifact.platform] = {
+      manifest.binaries[artifact.platform] = {
         url: `https://download.aicowork.chat/${remotePath}`,
         size: getFileSize(artifact.file),
         sha256: calculateSha256(artifact.file),
@@ -211,7 +213,7 @@ async function main() {
 
     console.log('\n=== Electron upload complete ===');
     console.log(`Version: ${version}`);
-    console.log(`Platforms: ${Object.keys(manifest.platforms).join(', ')}`);
+    console.log(`Platforms: ${Object.keys(manifest.binaries).join(', ')}`);
     if (updateLatest) {
       console.log('Latest pointer: updated');
     }
