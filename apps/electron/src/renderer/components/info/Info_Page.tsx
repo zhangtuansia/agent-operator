@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
 import { CHAT_LAYOUT } from '@/config/layout'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface Info_PageProps {
   children: React.ReactNode
@@ -50,6 +51,8 @@ function Info_PageRoot({
   empty,
   className,
 }: Info_PageProps) {
+  const { t } = useLanguage()
+
   // Extract header from children for consistent structure
   let header: React.ReactNode = null
   const otherChildren: React.ReactNode[] = []
@@ -81,7 +84,7 @@ function Info_PageRoot({
         {header}
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
-          <p className="text-sm font-medium">Error loading content</p>
+          <p className="text-sm font-medium">{t('infoPage.errorLoading')}</p>
           <p className="text-xs text-center max-w-md">{error}</p>
         </div>
       </div>

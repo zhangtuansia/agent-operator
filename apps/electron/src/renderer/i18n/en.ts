@@ -1122,6 +1122,30 @@ export const en = {
     newLine: 'New line',
     stopAgent: 'Stop agent (when processing)',
   },
+
+  // File viewer
+  fileViewer: {
+    failedToLoad: 'Failed to load file',
+    noFileSelected: 'No file selected',
+    clickToView: 'Click a file path in the chat to view it here',
+    loadingContent: 'Loading content...',
+    errorLoading: 'Error loading file',
+  },
+
+  // Info page
+  infoPage: {
+    errorLoading: 'Error loading content',
+  },
+
+  // Table of contents
+  tableOfContents: {
+    noHeadings: 'No headings',
+  },
+
+  // Interrupt overlay
+  interrupt: {
+    pressEscAgain: 'Press {key} again to interrupt',
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

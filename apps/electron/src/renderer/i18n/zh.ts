@@ -1124,4 +1124,28 @@ export const zh: TranslationKeys = {
     newLine: '换行',
     stopAgent: '停止 Agent（处理中时）',
   },
+
+  // File viewer
+  fileViewer: {
+    failedToLoad: '加载文件失败',
+    noFileSelected: '未选择文件',
+    clickToView: '点击聊天中的文件路径在此查看',
+    loadingContent: '正在加载内容...',
+    errorLoading: '加载文件出错',
+  },
+
+  // Info page
+  infoPage: {
+    errorLoading: '加载内容出错',
+  },
+
+  // Table of contents
+  tableOfContents: {
+    noHeadings: '无标题',
+  },
+
+  // Interrupt overlay
+  interrupt: {
+    pressEscAgain: '再次按 {key} 中断',
+  },
 } as const;
