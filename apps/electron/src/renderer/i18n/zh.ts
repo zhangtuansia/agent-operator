@@ -222,6 +222,7 @@ export const zh: TranslationKeys = {
   // Preferences
   preferences: {
     title: '偏好设置',
+    revert: '还原',
 
     // Basic Info
     basicInfo: '基本信息',
@@ -813,5 +814,40 @@ export const zh: TranslationKeys = {
     tool: '工具',
     description: '描述',
     noToolsAvailable: '没有可用的工具',
+  },
+
+  // Skill info page
+  skillInfo: {
+    metadata: '元数据',
+    slug: '标识符',
+    name: '名称',
+    description: '描述',
+    location: '位置',
+    permissionModes: '权限模式',
+    permissionModesDescription: '"始终允许的工具"与权限模式的交互方式：',
+    explore: '探索',
+    askToEdit: '询问编辑',
+    auto: '自动',
+    blockedDescription: '已阻止 — 写入工具始终被阻止',
+    autoApprovedDescription: '自动批准 — 允许的工具无需询问',
+    noEffectDescription: '无影响 — 所有工具已自动批准',
+    instructions: '说明',
+    noInstructions: '*未提供说明。*',
+    failedToLoad: '加载技能失败',
+  },
+
+  // Source info page
+  sourceInfo: {
+    metadata: '元数据',
+    slug: '标识符',
+    name: '名称',
+    description: '描述',
+    location: '位置',
+    type: '类型',
+    url: 'URL',
+    toolsAvailable: '可用工具',
+    documentation: '文档',
+    noDocumentation: '*未提供文档。*',
+    failedToLoad: '加载数据源失败',
   },
 } as const;

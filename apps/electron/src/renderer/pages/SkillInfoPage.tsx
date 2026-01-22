@@ -51,11 +51,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
         if (found) {
           setSkill(found)
         } else {
-          setError('Skill not found')
+          setError(t('emptyStates.skillNotFound'))
         }
       } catch (err) {
         if (!isMounted) return
-        setError(err instanceof Error ? err.message : 'Failed to load skill')
+        setError(err instanceof Error ? err.message : t('skillInfo.failedToLoad'))
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -142,7 +142,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     <Info_Page
       loading={loading}
       error={error ?? undefined}
-      empty={!skill && !loading && !error ? 'Skill not found' : undefined}
+      empty={!skill && !loading && !error ? t('emptyStates.skillNotFound') : undefined}
     >
       <Info_Page.Header
         title={skillName}
@@ -168,7 +168,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Metadata */}
           <Info_Section
-            title="Metadata"
+            title={t('skillInfo.metadata')}
             actions={
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
               <EditPopover
@@ -182,12 +182,12 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             }
           >
             <Info_Table>
-              <Info_Table.Row label="Slug" value={skill.slug} />
-              <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
-              <Info_Table.Row label="Description">
+              <Info_Table.Row label={t('skillInfo.slug')} value={skill.slug} />
+              <Info_Table.Row label={t('skillInfo.name')}>{skill.metadata.name}</Info_Table.Row>
+              <Info_Table.Row label={t('skillInfo.description')}>
                 {skill.metadata.description}
               </Info_Table.Row>
-              <Info_Table.Row label="Location">
+              <Info_Table.Row label={t('skillInfo.location')}>
                 <button
                   onClick={handleLocationClick}
                   className="hover:underline cursor-pointer text-left"
@@ -200,33 +200,33 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Permission Modes */}
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
-            <Info_Section title="Permission Modes">
+            <Info_Section title={t('skillInfo.permissionModes')}>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground mb-3">
-                  How "Always Allowed Tools" interacts with permission modes:
+                  {t('skillInfo.permissionModesDescription')}
                 </p>
                 <div className="rounded-[8px] border border-border/50 overflow-hidden">
                   <table className="w-full text-sm">
                     <tbody>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">Explore</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">{t('skillInfo.explore')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <X className="h-3.5 w-3.5 text-destructive shrink-0" />
-                          <span className="text-foreground/80">Blocked — write tools blocked regardless</span>
+                          <span className="text-foreground/80">{t('skillInfo.blockedDescription')}</span>
                         </td>
                       </tr>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Ask to Edit</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('skillInfo.askToEdit')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-success shrink-0" />
-                          <span className="text-foreground/80">Auto-approved — no prompts for allowed tools</span>
+                          <span className="text-foreground/80">{t('skillInfo.autoApprovedDescription')}</span>
                         </td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Auto</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('skillInfo.auto')}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Minus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-foreground/80">No effect — all tools already auto-approved</span>
+                          <span className="text-foreground/80">{t('skillInfo.noEffectDescription')}</span>
                         </td>
                       </tr>
                     </tbody>
@@ -238,7 +238,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Instructions */}
           <Info_Section
-            title="Instructions"
+            title={t('skillInfo.instructions')}
             actions={
               // EditPopover for AI-assisted editing with "Edit File" as secondary action
               <EditPopover
@@ -252,7 +252,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             }
           >
             <Info_Markdown maxHeight={540} fullscreen>
-              {skill.content || '*No instructions provided.*'}
+              {skill.content || t('skillInfo.noInstructions')}
             </Info_Markdown>
           </Info_Section>
 

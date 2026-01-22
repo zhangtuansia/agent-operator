@@ -220,6 +220,7 @@ export const en = {
   // Preferences
   preferences: {
     title: 'Preferences',
+    revert: 'Revert',
 
     // Basic Info
     basicInfo: 'Basic Info',
@@ -811,6 +812,41 @@ export const en = {
     tool: 'Tool',
     description: 'Description',
     noToolsAvailable: 'No tools available',
+  },
+
+  // Skill info page
+  skillInfo: {
+    metadata: 'Metadata',
+    slug: 'Slug',
+    name: 'Name',
+    description: 'Description',
+    location: 'Location',
+    permissionModes: 'Permission Modes',
+    permissionModesDescription: 'How "Always Allowed Tools" interacts with permission modes:',
+    explore: 'Explore',
+    askToEdit: 'Ask to Edit',
+    auto: 'Auto',
+    blockedDescription: 'Blocked — write tools blocked regardless',
+    autoApprovedDescription: 'Auto-approved — no prompts for allowed tools',
+    noEffectDescription: 'No effect — all tools already auto-approved',
+    instructions: 'Instructions',
+    noInstructions: '*No instructions provided.*',
+    failedToLoad: 'Failed to load skill',
+  },
+
+  // Source info page
+  sourceInfo: {
+    metadata: 'Metadata',
+    slug: 'Slug',
+    name: 'Name',
+    description: 'Description',
+    location: 'Location',
+    type: 'Type',
+    url: 'URL',
+    toolsAvailable: 'Tools Available',
+    documentation: 'Documentation',
+    noDocumentation: '*No documentation provided.*',
+    failedToLoad: 'Failed to load source',
   },
 } as const;
 
