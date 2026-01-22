@@ -191,40 +191,6 @@ export const zh: TranslationKeys = {
     localMcpServersDescription: '启用 stdio 子进程服务器',
   },
 
-  // Shortcuts
-  shortcuts: {
-    title: '快捷键',
-    global: '全局',
-    navigation: '导航',
-    sessionList: '会话列表',
-    chat: '聊天',
-
-    // Global shortcuts
-    focusSidebar: '聚焦侧边栏',
-    focusSessionList: '聚焦会话列表',
-    focusChatInput: '聚焦聊天输入框',
-    newChat: '新建聊天',
-    toggleSidebar: '切换侧边栏',
-    openSettings: '打开设置',
-
-    // Navigation shortcuts
-    moveToNextZone: '移动到下一个区域',
-    cyclePermissionMode: '循环切换权限模式',
-    moveBetweenZones: '在区域之间移动（在列表中）',
-    navigateItems: '在列表中导航项目',
-    goToFirstItem: '跳转到第一项',
-    goToLastItem: '跳转到最后一项',
-    closeDialog: '关闭对话框 / 取消输入焦点',
-
-    // Session List shortcuts
-    focusInput: '聚焦聊天输入框',
-    deleteSession: '删除会话',
-
-    // Chat shortcuts
-    sendMessage: '发送消息',
-    newLine: '换行',
-  },
-
   // Preferences
   preferences: {
     title: '偏好设置',
@@ -358,14 +324,6 @@ export const zh: TranslationKeys = {
   // Sidebar Menu
   sidebarMenu: {
     configureStatuses: '配置状态',
-  },
-
-  // Edit Popover
-  editPopover: {
-    connectExample: '连接到我的 Craft 空间',
-    connectPlaceholder: '您想连接什么？',
-    skillExample: '按照我们的代码规范审查 PR',
-    skillPlaceholder: '您希望我学会做什么？',
   },
 
   // Sources
@@ -764,14 +722,6 @@ export const zh: TranslationKeys = {
     loggingIn: '登录中...',
     logInAgain: '重新登录',
     resetAndStartFresh: '重置应用并重新开始...',
-  },
-
-  // Chat display
-  chatDisplay: {
-    messagePreview: '消息预览',
-    responsePreview: '回复预览',
-    turnDetails: '轮次详情',
-    openInNewWindow: '在新窗口中打开',
   },
 
   // Task action menu

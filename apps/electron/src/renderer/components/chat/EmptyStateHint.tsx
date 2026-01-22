@@ -210,3 +210,33 @@ export function EmptyStateHint({ hintIndex, className }: EmptyStateHintProps) {
 export function getHintCount(): number {
   return HINT_COUNT
 }
+
+/**
+ * English hint templates for playground variant generation
+ * These are used for displaying variant descriptions in the playground
+ */
+const HINT_TEMPLATES_EN = [
+  'Summarize your {source:Gmail} inbox, draft replies, and save notes to {source:Notion}',
+  'Turn a {file:screenshot} into a working website in your {folder}',
+  'Pull issues from {source:Linear}, research in {source:Slack}, ship the fix',
+  'Transcribe a {file:voice memo} and turn it into {source:Notion} tasks',
+  'Analyze a {file:spreadsheet} and post insights to {source:Slack}',
+  'Review {source:GitHub} PRs, then summarize changes in {source:Notion}',
+  'Parse an {file:invoice PDF} and log it to {source:Google Sheets}',
+  'Research with {source:Exa}, write it up, save to your {source:Obsidian} vault',
+  'Refactor code in your {folder}, then push to {source:GitHub}',
+  'Sync {source:Calendar} events with {source:Linear} project deadlines',
+  'Turn meeting {file:notes} into {source:Jira} tickets automatically',
+  'Query your {source:database} and visualize results in a new {file:document}',
+  'Fetch {source:Figma} designs and generate React components in your {folder}',
+  'Combine {source:Slack} threads into a weekly digest for {source:Notion}',
+  'Run a {skill} to analyze your codebase and fix issues in your {folder}',
+] as const
+
+/**
+ * Get the hint template at a given index (for playground variant generation)
+ * Uses English hints as reference for displaying variant descriptions
+ */
+export function getHintTemplate(index: number): string {
+  return HINT_TEMPLATES_EN[index % HINT_TEMPLATES_EN.length]
+}

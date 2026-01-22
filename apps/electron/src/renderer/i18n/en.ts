@@ -189,40 +189,6 @@ export const en = {
     localMcpServersDescription: 'Enable stdio subprocess servers',
   },
 
-  // Shortcuts
-  shortcuts: {
-    title: 'Shortcuts',
-    global: 'Global',
-    navigation: 'Navigation',
-    sessionList: 'Session List',
-    chat: 'Chat',
-
-    // Global shortcuts
-    focusSidebar: 'Focus sidebar',
-    focusSessionList: 'Focus session list',
-    focusChatInput: 'Focus chat input',
-    newChat: 'New chat',
-    toggleSidebar: 'Toggle sidebar',
-    openSettings: 'Open settings',
-
-    // Navigation shortcuts
-    moveToNextZone: 'Move to next zone',
-    cyclePermissionMode: 'Cycle permission mode',
-    moveBetweenZones: 'Move between zones (in lists)',
-    navigateItems: 'Navigate items in list',
-    goToFirstItem: 'Go to first item',
-    goToLastItem: 'Go to last item',
-    closeDialog: 'Close dialog / blur input',
-
-    // Session List shortcuts
-    focusInput: 'Focus chat input',
-    deleteSession: 'Delete session',
-
-    // Chat shortcuts
-    sendMessage: 'Send message',
-    newLine: 'New line',
-  },
-
   // Preferences
   preferences: {
     title: 'Preferences',
@@ -356,14 +322,6 @@ export const en = {
   // Sidebar Menu
   sidebarMenu: {
     configureStatuses: 'Configure Statuses',
-  },
-
-  // Edit Popover
-  editPopover: {
-    connectExample: 'Connect to my Craft space',
-    connectPlaceholder: 'What would you like to connect?',
-    skillExample: 'Review PRs following our code standards',
-    skillPlaceholder: 'What should I learn to do?',
   },
 
   // Sources
@@ -770,6 +728,9 @@ export const en = {
     responsePreview: 'Response Preview',
     turnDetails: 'Turn Details',
     openInNewWindow: 'Open in new window',
+    error: 'Error',
+    hideTechnicalDetails: 'Hide technical details',
+    showTechnicalDetails: 'Show technical details',
   },
 
   // Task action menu
@@ -920,17 +881,6 @@ export const en = {
     googleSignIn: 'Google Sign-In',
     slackSignIn: 'Slack Sign-In',
     microsoftSignIn: 'Microsoft Sign-In',
-  },
-
-  // Chat Display
-  chatDisplay: {
-    messagePreview: 'Message Preview',
-    responsePreview: 'Response Preview',
-    turnDetails: 'Turn Details',
-    openInNewWindow: 'Open in new window',
-    error: 'Error',
-    hideTechnicalDetails: 'Hide technical details',
-    showTechnicalDetails: 'Show technical details',
   },
 
   // Processing indicators

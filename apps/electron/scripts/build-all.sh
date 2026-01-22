@@ -68,7 +68,12 @@ download_bun() {
     unzip -q -o "$temp_dir/${bun_download}.zip" -d "$temp_dir"
 
     # Copy binary with correct name
-    cp "$temp_dir/${bun_download}/bun" "$ELECTRON_DIR/vendor/bun/${bun_binary}"
+    # For Windows, the binary inside the archive is bun.exe
+    if [ "$platform" = "win32" ]; then
+        cp "$temp_dir/${bun_download}/bun.exe" "$ELECTRON_DIR/vendor/bun/${bun_binary}"
+    else
+        cp "$temp_dir/${bun_download}/bun" "$ELECTRON_DIR/vendor/bun/${bun_binary}"
+    fi
     chmod +x "$ELECTRON_DIR/vendor/bun/${bun_binary}"
 
     log_info "Bun downloaded: vendor/bun/${bun_binary}"
