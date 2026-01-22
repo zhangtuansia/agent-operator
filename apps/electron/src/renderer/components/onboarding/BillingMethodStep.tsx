@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Link, Settings, ChevronDown, ChevronUp } from "lucide-react"
+import { Check, Settings, ChevronDown, ChevronUp } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import { useLanguage } from "@/context/LanguageContext"
+import { ProviderLogo } from "@/components/icons/ProviderLogo"
 
 export type BillingMethod =
   | 'api_key'
@@ -15,7 +16,8 @@ export type BillingMethod =
 interface BillingOption {
   id: BillingMethod
   nameKey: string
-  icon: React.ReactNode
+  useLogo?: boolean // Use ProviderLogo instead of icon
+  icon?: React.ReactNode // Fallback icon if no logo
   recommended?: boolean
 }
 
@@ -23,13 +25,13 @@ const PRIMARY_OPTIONS: BillingOption[] = [
   {
     id: 'claude_oauth',
     nameKey: 'billingMethods.claudeProMax',
-    icon: <CreditCard className="size-4" />,
+    useLogo: true,
     recommended: true,
   },
   {
     id: 'api_key',
     nameKey: 'billingMethods.anthropicApiKey',
-    icon: <Key className="size-4" />,
+    useLogo: true,
   },
 ]
 
@@ -37,17 +39,17 @@ const MORE_OPTIONS: BillingOption[] = [
   {
     id: 'minimax',
     nameKey: 'billingMethods.minimax',
-    icon: <Link className="size-4" />,
+    useLogo: true,
   },
   {
     id: 'glm',
     nameKey: 'billingMethods.glm',
-    icon: <Link className="size-4" />,
+    useLogo: true,
   },
   {
     id: 'deepseek',
     nameKey: 'billingMethods.deepseek',
-    icon: <Link className="size-4" />,
+    useLogo: true,
   },
   {
     id: 'custom',
@@ -84,14 +86,18 @@ function OptionButton({
         isSelected ? "bg-background" : "bg-foreground-2"
       )}
     >
-      {/* Icon */}
+      {/* Icon / Logo */}
       <div
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-lg",
           isSelected ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
         )}
       >
-        {option.icon}
+        {option.useLogo ? (
+          <ProviderLogo provider={option.id} size={24} />
+        ) : (
+          option.icon
+        )}
       </div>
 
       {/* Content */}
