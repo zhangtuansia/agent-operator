@@ -39,8 +39,8 @@ interface SourceInfoPageProps {
 /**
  * Format timestamp to relative time
  */
-function formatRelativeTime(timestamp?: number): string {
-  if (!timestamp) return 'Never'
+function formatRelativeTime(timestamp: number | undefined, t: (key: string) => string): string {
+  if (!timestamp) return t('time.never')
 
   const now = Date.now()
   const diff = now - timestamp
@@ -48,10 +48,10 @@ function formatRelativeTime(timestamp?: number): string {
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`
-  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`
-  return `${days} day${days !== 1 ? 's' : ''} ago`
+  if (minutes < 1) return t('time.justNow')
+  if (minutes < 60) return t(minutes === 1 ? 'time.minuteAgo' : 'time.minutesAgo').replace('{n}', String(minutes))
+  if (hours < 24) return t(hours === 1 ? 'time.hourAgo' : 'time.hoursAgo').replace('{n}', String(hours))
+  return t(days === 1 ? 'time.dayAgo' : 'time.daysAgo').replace('{n}', String(days))
 }
 
 /**
@@ -134,37 +134,37 @@ function buildToolsData(tools: McpToolWithPermission[]): ToolRow[] {
 /**
  * Get contextual description for Connection section based on source type
  */
-function getConnectionDescription(source: LoadedSource): string {
+function getConnectionDescription(source: LoadedSource, t: (key: string) => string): string {
   const { type, mcp } = source.config
 
   if (type === 'mcp') {
     if (mcp?.transport === 'stdio') {
-      return 'Local command that spawns this MCP server.'
+      return t('sourceInfo.connectionDescStdio')
     }
-    return 'Server URL and connection status.'
+    return t('sourceInfo.connectionDescMcp')
   }
   if (type === 'api') {
-    return 'Base URL for API requests.'
+    return t('sourceInfo.connectionDescApi')
   }
   if (type === 'local') {
-    return 'Filesystem path for this source.'
+    return t('sourceInfo.connectionDescLocal')
   }
-  return 'Connection details.'
+  return t('sourceInfo.connectionDescDefault')
 }
 
 /**
  * Get contextual description for Permissions section based on source type
  */
-function getPermissionsDescription(source: LoadedSource): string {
+function getPermissionsDescription(source: LoadedSource, t: (key: string) => string): string {
   const { type } = source.config
 
   if (type === 'mcp') {
-    return 'Tool patterns allowed in Explore mode.'
+    return t('sourceInfo.permissionsDescMcp')
   }
   if (type === 'api') {
-    return 'API endpoints allowed in Explore mode.'
+    return t('sourceInfo.permissionsDescApi')
   }
-  return 'Access rules for Explore mode.'
+  return t('sourceInfo.permissionsDescDefault')
 }
 
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
@@ -200,11 +200,11 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             setPermissionsConfig(config)
           }
         } else {
-          setError('Source not found')
+          setError(t('emptyStates.sourceNotFound'))
         }
       } catch (err) {
         if (!isMounted) return
-        setError(err instanceof Error ? err.message : 'Failed to load source')
+        setError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -237,11 +237,11 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         if (result.success && result.tools) {
           setMcpTools(result.tools)
         } else {
-          setMcpToolsError(result.error || 'Failed to load tools')
+          setMcpToolsError(result.error || t('sourceInfo.failedToLoad'))
         }
       } catch (err) {
         if (!isMounted) return
-        setMcpToolsError(err instanceof Error ? err.message : 'Failed to load tools')
+        setMcpToolsError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
       } finally {
         if (isMounted) setMcpToolsLoading(false)
       }
@@ -383,7 +383,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     <Info_Page
       loading={loading}
       error={error ?? undefined}
-      empty={!source && !loading && !error ? 'Source not found' : undefined}
+      empty={!source && !loading && !error ? t('emptyStates.sourceNotFound') : undefined}
     >
       <Info_Page.Header
         title={sourceName}
@@ -410,25 +410,24 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           {/* Disabled Warning */}
           {source.config.mcp?.transport === 'stdio' && !localMcpEnabled && (
             <Info_Alert variant="warning" icon={<AlertCircle className="h-4 w-4" />}>
-              <Info_Alert.Title>Source Disabled</Info_Alert.Title>
+              <Info_Alert.Title>{t('sourceInfo.sourceDisabled')}</Info_Alert.Title>
               <Info_Alert.Description>
-                Local MCP servers are disabled in Settings &gt; Advanced.
-                Enable them to use this source.
+                {t('sourceInfo.sourceDisabledDescription')}
               </Info_Alert.Description>
             </Info_Alert>
           )}
 
           {/* Connection */}
           <Info_Section
-            title="Connection"
-            description={getConnectionDescription(source)}
+            title={t('sourceInfo.connection')}
+            description={getConnectionDescription(source, t)}
             actions={
               // EditPopover for AI-assisted config.json editing with "Edit File" as secondary action
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('source-config', source.folderPath)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('common.editFile'),
                   onClick: handleEditConfig,
                 }}
               />
@@ -444,9 +443,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 </div>
               )}
             >
-              <Info_Table.Row label="Type" value={source.config.type.toUpperCase()} />
+              <Info_Table.Row label={t('sourceInfo.type')} value={source.config.type.toUpperCase()} />
               {sourceUrl && (
-                <Info_Table.Row label="URL">
+                <Info_Table.Row label={t('sourceInfo.url')}>
                   <button
                     onClick={handleOpenUrl}
                     className="truncate hover:underline text-foreground focus:outline-none focus-visible:underline text-left block w-full"
@@ -455,43 +454,43 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                   </button>
                 </Info_Table.Row>
               )}
-              <Info_Table.Row label="Last Tested" value={formatRelativeTime(source.config.lastTestedAt)} />
+              <Info_Table.Row label={t('sourceInfo.lastTested')} value={formatRelativeTime(source.config.lastTestedAt, t)} />
             </Info_Table>
           </Info_Section>
 
           {/* Permissions - for API and local sources */}
           {source.config.type !== 'mcp' && permissionsConfig && apiPermissionsData.length > 0 && (
             <Info_Section
-              title="Permissions"
-              description={getPermissionsDescription(source)}
+              title={t('sourceInfo.permissions')}
+              description={getPermissionsDescription(source, t)}
               actions={
                 // EditPopover for AI-assisted permissions.json editing
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-permissions', source.folderPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('common.editFile'),
                     onClick: handleEditPermissions,
                   }}
                 />
               }
             >
-              <PermissionsDataTable data={apiPermissionsData} fullscreen fullscreenTitle="Permissions" />
+              <PermissionsDataTable data={apiPermissionsData} fullscreen fullscreenTitle={t('sourceInfo.permissions')} />
             </Info_Section>
           )}
 
           {/* Tools - for MCP sources */}
           {source.config.type === 'mcp' && (
             <Info_Section
-              title="Tools"
-              description="Operations exposed by this server."
+              title={t('sourceInfo.tools')}
+              description={t('sourceInfo.toolsDescription')}
               actions={
                 // EditPopover for AI-assisted tool permissions editing
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-tool-permissions', source.folderPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('common.editFile'),
                     onClick: handleEditPermissions,
                   }}
                 />
@@ -508,36 +507,36 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           {/* Permissions - for MCP sources */}
           {source.config.type === 'mcp' && permissionsConfig && mcpPermissionsData.length > 0 && (
             <Info_Section
-              title="Permissions"
-              description={getPermissionsDescription(source)}
+              title={t('sourceInfo.permissions')}
+              description={getPermissionsDescription(source, t)}
               actions={
                 // EditPopover for AI-assisted permissions.json editing
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-permissions', source.folderPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('common.editFile'),
                     onClick: handleEditPermissions,
                   }}
                 />
               }
             >
-              <PermissionsDataTable data={mcpPermissionsData} hideTypeColumn fullscreen fullscreenTitle="Permissions" />
+              <PermissionsDataTable data={mcpPermissionsData} hideTypeColumn fullscreen fullscreenTitle={t('sourceInfo.permissions')} />
             </Info_Section>
           )}
 
           {/* Documentation */}
           {source.guide?.raw && (
             <Info_Section
-              title="Documentation"
-              description="Context and guidelines for the agent."
+              title={t('sourceInfo.documentation')}
+              description={t('sourceInfo.documentationDescription')}
               actions={
                 // EditPopover for AI-assisted guide.md editing with "Edit File" as secondary action
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-guide', source.folderPath)}
                   secondaryAction={{
-                    label: 'Edit File',
+                    label: t('common.editFile'),
                     onClick: handleEditGuide,
                   }}
                 />
