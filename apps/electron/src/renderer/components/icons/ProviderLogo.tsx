@@ -16,6 +16,7 @@ import openaiLogo from '@/assets/apilogo/openai.svg'
 import geminiLogo from '@/assets/apilogo/gemini.svg'
 import doubaoLogo from '@/assets/apilogo/doubao.svg'
 import kimiLogo from '@/assets/apilogo/kimi.svg'
+import glmLogo from '@/assets/apilogo/glm.svg'
 
 // Map provider IDs to imported logos
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -28,7 +29,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   gemini: geminiLogo,
   doubao: doubaoLogo,
   kimi: kimiLogo,
-  // glm (智谱) - no logo file, will use fallback
+  glm: glmLogo,
   // custom - will use fallback
 }
 
