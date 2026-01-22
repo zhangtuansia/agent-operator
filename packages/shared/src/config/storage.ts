@@ -44,9 +44,11 @@ export interface PendingUpdate {
  * Provider configuration for third-party AI APIs
  */
 export interface ProviderConfig {
-  provider: string;  // Provider ID: 'minimax' | 'glm' | 'deepseek' | 'custom'
-  baseURL: string;   // API base URL
+  provider: string;  // Provider ID: 'minimax' | 'glm' | 'deepseek' | 'bedrock' | 'custom'
+  baseURL: string;   // API base URL (not used for Bedrock)
   apiFormat: 'anthropic' | 'openai';  // API format to use
+  // AWS Bedrock specific settings
+  awsRegion?: string;  // AWS region for Bedrock (e.g., 'us-east-1')
 }
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)

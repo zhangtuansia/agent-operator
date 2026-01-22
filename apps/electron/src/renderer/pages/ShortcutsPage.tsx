@@ -10,14 +10,15 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
+import { useLanguage } from '@/context/LanguageContext'
 
 interface ShortcutItem {
   keys: string[]
-  description: string
+  descriptionKey: string
 }
 
 interface ShortcutSection {
-  title: string
+  titleKey: string
   shortcuts: ShortcutItem[]
 }
 
@@ -28,52 +29,52 @@ const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 const sections: ShortcutSection[] = [
   {
-    title: 'Global',
+    titleKey: 'shortcuts.global',
     shortcuts: [
-      { keys: [cmdKey, '1'], description: 'Focus sidebar' },
-      { keys: [cmdKey, '2'], description: 'Focus session list' },
-      { keys: [cmdKey, '3'], description: 'Focus chat input' },
-      { keys: [cmdKey, 'N'], description: 'New chat' },
-      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
-      { keys: [cmdKey, ','], description: 'Open settings' },
-      { keys: [cmdKey, '/'], description: 'Show keyboard shortcuts' },
+      { keys: [cmdKey, '1'], descriptionKey: 'shortcuts.focusSidebar' },
+      { keys: [cmdKey, '2'], descriptionKey: 'shortcuts.focusSessionList' },
+      { keys: [cmdKey, '3'], descriptionKey: 'shortcuts.focusChatInput' },
+      { keys: [cmdKey, 'N'], descriptionKey: 'shortcuts.newChat' },
+      { keys: [cmdKey, 'B'], descriptionKey: 'shortcuts.toggleSidebar' },
+      { keys: [cmdKey, ','], descriptionKey: 'shortcuts.openSettings' },
+      { keys: [cmdKey, '/'], descriptionKey: 'shortcuts.showShortcuts' },
     ],
   },
   {
-    title: 'Navigation',
+    titleKey: 'shortcuts.navigation',
     shortcuts: [
-      { keys: ['Tab'], description: 'Move to next zone' },
-      { keys: ['Shift', 'Tab'], description: 'Move to previous zone' },
-      { keys: ['←', '→'], description: 'Move between zones (in lists)' },
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
+      { keys: ['Tab'], descriptionKey: 'shortcuts.moveToNextZone' },
+      { keys: ['Shift', 'Tab'], descriptionKey: 'shortcuts.moveToPrevZone' },
+      { keys: ['←', '→'], descriptionKey: 'shortcuts.moveBetweenZones' },
+      { keys: ['↑', '↓'], descriptionKey: 'shortcuts.navigateItems' },
+      { keys: ['Home'], descriptionKey: 'shortcuts.goToFirst' },
+      { keys: ['End'], descriptionKey: 'shortcuts.goToLast' },
+      { keys: ['Esc'], descriptionKey: 'shortcuts.closeDialog' },
     ],
   },
   {
-    title: 'Session List',
+    titleKey: 'shortcuts.sessionList',
     shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Delete'], description: 'Delete session' },
-      { keys: ['R'], description: 'Rename session' },
-      { keys: ['Right-click'], description: 'Open context menu' },
+      { keys: ['Enter'], descriptionKey: 'shortcuts.focusChatInputEnter' },
+      { keys: ['Delete'], descriptionKey: 'shortcuts.deleteSession' },
+      { keys: ['R'], descriptionKey: 'shortcuts.renameSession' },
+      { keys: ['Right-click'], descriptionKey: 'shortcuts.openContextMenu' },
     ],
   },
   {
-    title: 'Agent Tree',
+    titleKey: 'shortcuts.agentTree',
     shortcuts: [
-      { keys: ['←'], description: 'Collapse folder' },
-      { keys: ['→'], description: 'Expand folder' },
+      { keys: ['←'], descriptionKey: 'shortcuts.collapseFolder' },
+      { keys: ['→'], descriptionKey: 'shortcuts.expandFolder' },
     ],
   },
   {
-    title: 'Chat',
+    titleKey: 'shortcuts.chat',
     shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: [cmdKey, 'Enter'], description: 'Send message' },
-      { keys: ['Esc'], description: 'Stop agent (when processing)' },
+      { keys: ['Enter'], descriptionKey: 'shortcuts.sendMessage' },
+      { keys: ['Shift', 'Enter'], descriptionKey: 'shortcuts.newLine' },
+      { keys: [cmdKey, 'Enter'], descriptionKey: 'shortcuts.sendMessage' },
+      { keys: ['Esc'], descriptionKey: 'shortcuts.stopAgent' },
     ],
   },
 ]
@@ -87,17 +88,19 @@ function Kbd({ children, className }: { children: React.ReactNode; className?: s
 }
 
 export default function ShortcutsPage() {
+  const { t } = useLanguage()
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" actions={<HeaderMenu route={routes.view.settings('shortcuts')} />} />
+      <PanelHeader title={t('shortcuts.title')} actions={<HeaderMenu route={routes.view.settings('shortcuts')} />} />
       <Separator />
       <ScrollArea className="flex-1">
         <div className="px-5 py-4">
           <div className="space-y-6">
             {sections.map((section) => (
-              <div key={section.title}>
+              <div key={section.titleKey}>
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
-                  {section.title}
+                  {t(section.titleKey)}
                 </h3>
                 <div className="space-y-0.5">
                   {section.shortcuts.map((shortcut, index) => (
@@ -105,7 +108,7 @@ export default function ShortcutsPage() {
                       key={index}
                       className="group flex items-center justify-between py-1.5"
                     >
-                      <span className="text-sm">{shortcut.description}</span>
+                      <span className="text-sm">{t(shortcut.descriptionKey)}</span>
                       <div className="flex-1 mx-3 h-px bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] opacity-0 group-hover:opacity-15" />
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (

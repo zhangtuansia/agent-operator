@@ -36,6 +36,7 @@ import {
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import { useLanguage } from "@/context/LanguageContext"
+import { useTranslation } from "@/i18n"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@agent-operator/shared/agent/modes"
 import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels"
@@ -1031,6 +1032,7 @@ interface MessageBubbleProps {
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
 function ErrorMessage({ message }: { message: Message }) {
+  const { t } = useLanguage()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
 
@@ -1046,7 +1048,7 @@ function ErrorMessage({ message }: { message: Message }) {
         } as React.CSSProperties}
       >
         <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
-          {message.errorTitle || 'Error'}
+          {message.errorTitle || t('chatDisplay.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
 
@@ -1058,7 +1060,7 @@ function ErrorMessage({ message }: { message: Message }) {
               className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
             >
               {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <span>{detailsOpen ? 'Hide' : 'Show'} technical details</span>
+              <span>{detailsOpen ? t('chatDisplay.hideTechnicalDetails') : t('chatDisplay.showTechnicalDetails')}</span>
             </button>
 
             <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">
@@ -1173,7 +1175,7 @@ function MessageBubble({
         <div className="flex items-center gap-3 my-12 px-3">
           <div className="flex-1 h-px bg-border" />
           <span className="text-sm text-muted-foreground/70 select-none">
-            Conversation Compacted
+            {t('misc.conversationCompacted')}
           </span>
           <div className="flex-1 h-px bg-border" />
         </div>

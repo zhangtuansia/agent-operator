@@ -43,6 +43,13 @@ export const DEEPSEEK_MODELS: ModelDefinition[] = [
   { id: 'deepseek-coder', name: 'DeepSeek Coder', shortName: 'Coder', description: 'Optimized for coding' },
 ];
 
+// AWS Bedrock models (Claude via Bedrock)
+export const BEDROCK_MODELS: ModelDefinition[] = [
+  { id: 'us.anthropic.claude-opus-4-5-20251101-v1:0', name: 'Opus 4.5 (Bedrock)', shortName: 'Opus', description: 'Most capable' },
+  { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', name: 'Sonnet 4.5 (Bedrock)', shortName: 'Sonnet', description: 'Balanced' },
+  { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient' },
+];
+
 // Provider to models mapping
 export const PROVIDER_MODELS: Record<string, ModelDefinition[]> = {
   anthropic: CLAUDE_MODELS,
@@ -51,6 +58,7 @@ export const PROVIDER_MODELS: Record<string, ModelDefinition[]> = {
   glm: GLM_MODELS,
   minimax: MINIMAX_MODELS,
   deepseek: DEEPSEEK_MODELS,
+  bedrock: BEDROCK_MODELS,  // AWS Bedrock
   custom: CLAUDE_MODELS,  // Custom provider defaults to Claude models
 };
 
@@ -62,6 +70,7 @@ export const DEFAULT_PROVIDER_MODEL: Record<string, string> = {
   glm: 'glm-4.7',
   minimax: 'abab6.5s-chat',
   deepseek: 'deepseek-chat',
+  bedrock: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
   custom: 'claude-sonnet-4-5-20250929',
 };
 
@@ -114,6 +123,7 @@ const ALL_MODELS: ModelDefinition[] = [
   ...GLM_MODELS,
   ...MINIMAX_MODELS,
   ...DEEPSEEK_MODELS,
+  ...BEDROCK_MODELS,
 ];
 
 /** Get display name for a model ID (full name with version) */

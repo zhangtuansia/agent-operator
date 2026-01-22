@@ -14,6 +14,7 @@
 
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 
 // ============================================================================
 // Types
@@ -46,24 +47,10 @@ interface ParsedHint {
  * - {file:label} - File attachment with custom label
  * - {folder} - Working directory
  * - {skill} - Custom skill
+ *
+ * Note: Actual templates are loaded from i18n translations (en.ts/zh.ts hints array)
  */
-const HINT_TEMPLATES = [
-  'Summarize your {source:Gmail} inbox, draft replies, and save notes to {source:Notion}',
-  'Turn a {file:screenshot} into a working website in your {folder}',
-  'Pull issues from {source:Linear}, research in {source:Slack}, ship the fix',
-  'Transcribe a {file:voice memo} and turn it into {source:Notion} tasks',
-  'Analyze a {file:spreadsheet} and post insights to {source:Slack}',
-  'Review {source:GitHub} PRs, then summarize changes in {source:Notion}',
-  'Parse an {file:invoice PDF} and log it to {source:Google Sheets}',
-  'Research with {source:Exa}, write it up, save to your {source:Obsidian} vault',
-  'Refactor code in your {folder}, then push to {source:GitHub}',
-  'Sync {source:Calendar} events with {source:Linear} project deadlines',
-  'Turn meeting {file:notes} into {source:Jira} tickets automatically',
-  'Query your {source:database} and visualize results in a new {file:document}',
-  'Fetch {source:Figma} designs and generate React components in your {folder}',
-  'Combine {source:Slack} threads into a weekly digest for {source:Notion}',
-  'Run a {skill} to analyze your codebase and fix issues in your {folder}',
-]
+const HINT_COUNT = 15 // Number of hint templates available
 
 // ============================================================================
 // Parsing
@@ -125,10 +112,10 @@ function parseHintTemplate(template: string, id: string): ParsedHint {
 }
 
 /**
- * Parse all hint templates
+ * Parse all hint templates from the provided array
  */
-function parseAllHints(): ParsedHint[] {
-  return HINT_TEMPLATES.map((template, index) => parseHintTemplate(template, `hint-${index}`))
+function parseAllHints(templates: readonly string[]): ParsedHint[] {
+  return templates.map((template, index) => parseHintTemplate(template, `hint-${index}`))
 }
 
 // ============================================================================
@@ -170,8 +157,13 @@ export interface EmptyStateHintProps {
  * example workflows with inline entity badges.
  */
 export function EmptyStateHint({ hintIndex, className }: EmptyStateHintProps) {
-  // Parse all hints once
-  const allHints = React.useMemo(() => parseAllHints(), [])
+  const { translations } = useLanguage()
+
+  // Parse all hints from translations
+  const allHints = React.useMemo(
+    () => parseAllHints(translations.hints),
+    [translations.hints]
+  )
 
   // Select a hint - either specified index or random on mount
   const [selectedIndex] = React.useState(() => {
@@ -216,12 +208,5 @@ export function EmptyStateHint({ hintIndex, className }: EmptyStateHintProps) {
  * Get the total number of available hints (for playground variant generation)
  */
 export function getHintCount(): number {
-  return HINT_TEMPLATES.length
-}
-
-/**
- * Get hint template by index (for debugging/testing)
- */
-export function getHintTemplate(index: number): string {
-  return HINT_TEMPLATES[index % HINT_TEMPLATES.length]
+  return HINT_COUNT
 }

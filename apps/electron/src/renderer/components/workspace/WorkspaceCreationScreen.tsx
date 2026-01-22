@@ -5,6 +5,7 @@ import { Dithering } from "@paper-design/shaders-react"
 import { FullscreenOverlayBase } from "@agent-operator/ui"
 import { cn } from "@/lib/utils"
 import { overlayTransitionIn } from "@/lib/animations"
+import { useTranslation } from "@/i18n"
 import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
 import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
@@ -33,6 +34,7 @@ export function WorkspaceCreationScreen({
   onClose,
   className
 }: WorkspaceCreationScreenProps) {
+  const { t } = useTranslation()
   const [step, setStep] = useState<CreationStep>('choice')
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
@@ -163,7 +165,7 @@ export function WorkspaceCreationScreen({
               "mr-[-8px] mt-2",
               isCreating && "opacity-50 cursor-not-allowed"
             )}
-            aria-label="Close"
+            aria-label={t('aria.close')}
           >
             <X className="h-4 w-4" />
           </motion.button>

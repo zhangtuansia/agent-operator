@@ -47,6 +47,14 @@ const PROVIDERS = [
     description: 'Official Anthropic API',
   },
   {
+    id: 'bedrock',
+    name: 'AWS Bedrock',
+    baseURL: '',
+    apiFormat: 'anthropic' as const,
+    description: 'AWS Bedrock (configured via environment variables)',
+    readonly: true,
+  },
+  {
     id: 'glm',
     name: '智谱 GLM',
     baseURL: 'https://open.bigmodel.cn/api/anthropic',
@@ -222,89 +230,110 @@ export default function ApiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
-              {/* API Configuration */}
-              <SettingsSection title={t('apiSettings.baseUrl')}>
-                <SettingsCard>
-                  {/* Base URL */}
-                  <SettingsRow
-                    label={t('apiSettings.baseUrl')}
-                    description={t('apiSettings.baseUrlDescription')}
-                  >
-                    <Input
-                      value={baseURL}
-                      onChange={(e) => setBaseURL(e.target.value)}
-                      placeholder={t('apiSettings.baseUrlPlaceholder')}
-                      className="font-mono text-sm max-w-md"
-                    />
-                  </SettingsRow>
-
-                  {/* API Format - only show for custom provider */}
-                  {currentProvider === 'custom' && (
-                    <SettingsMenuSelectRow
-                      label={t('apiSettings.apiFormat')}
-                      description={t('apiSettings.apiFormatDescription')}
-                      value={apiFormat}
-                      onValueChange={(v) => setApiFormat(v as ApiFormat)}
-                      options={[
-                        { value: 'anthropic', label: t('apiSettings.apiFormatAnthropic'), description: t('apiSettings.apiFormatAnthropicDesc') },
-                        { value: 'openai', label: t('apiSettings.apiFormatOpenAI'), description: t('apiSettings.apiFormatOpenAIDesc') },
-                      ]}
-                    />
-                  )}
-
-                  {/* API Key */}
-                  <SettingsRow
-                    label={t('apiSettings.apiKeyLabel')}
-                    description={hasExistingKey ? t('appSettings.apiKeyConfigured') : t('apiSettings.apiKeyDescription')}
-                  >
-                    <div className="flex items-center gap-2 max-w-md">
-                      <div className="relative flex-1">
-                        <Input
-                          type={showApiKey ? 'text' : 'password'}
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder={hasExistingKey ? '••••••••••••••••' : t('apiSettings.apiKeyPlaceholder')}
-                          className="pr-10 font-mono text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          tabIndex={-1}
-                        >
-                          {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                        </button>
+              {/* Bedrock Mode Info */}
+              {currentProvider === 'bedrock' && (
+                <SettingsSection title={t('apiSettings.providerBedrock')}>
+                  <SettingsCard>
+                    <SettingsRow
+                      label={t('apiSettings.bedrockConfiguration')}
+                      description={t('apiSettings.bedrockConfigDescription')}
+                    >
+                      <div className="text-sm text-muted-foreground font-mono space-y-1">
+                        <div>CLAUDE_CODE_USE_BEDROCK=1</div>
+                        <div>AWS_REGION=us-west-2</div>
                       </div>
-                    </div>
-                  </SettingsRow>
-                </SettingsCard>
-              </SettingsSection>
+                    </SettingsRow>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
 
-              {/* Save Button */}
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="min-w-[120px]"
-                >
-                  {isSaving ? (
-                    <>
-                      <Spinner className="mr-1.5" />
-                      {t('apiSettings.saving')}
-                    </>
-                  ) : saveSuccess ? (
-                    <>
-                      <Check className="size-4 mr-1.5" />
-                      {t('apiSettings.saved')}
-                    </>
-                  ) : (
-                    <>
-                      <Check className="size-4 mr-1.5" />
-                      {t('apiSettings.saveChanges')}
-                    </>
-                  )}
-                </Button>
-              </div>
+              {/* API Configuration - hide for Bedrock */}
+              {currentProvider !== 'bedrock' && (
+                <>
+                  <SettingsSection title={t('apiSettings.baseUrl')}>
+                    <SettingsCard>
+                      {/* Base URL */}
+                      <SettingsRow
+                        label={t('apiSettings.baseUrl')}
+                        description={t('apiSettings.baseUrlDescription')}
+                      >
+                        <Input
+                          value={baseURL}
+                          onChange={(e) => setBaseURL(e.target.value)}
+                          placeholder={t('apiSettings.baseUrlPlaceholder')}
+                          className="font-mono text-sm max-w-md"
+                        />
+                      </SettingsRow>
+
+                      {/* API Format - only show for custom provider */}
+                      {currentProvider === 'custom' && (
+                        <SettingsMenuSelectRow
+                          label={t('apiSettings.apiFormat')}
+                          description={t('apiSettings.apiFormatDescription')}
+                          value={apiFormat}
+                          onValueChange={(v) => setApiFormat(v as ApiFormat)}
+                          options={[
+                            { value: 'anthropic', label: t('apiSettings.apiFormatAnthropic'), description: t('apiSettings.apiFormatAnthropicDesc') },
+                            { value: 'openai', label: t('apiSettings.apiFormatOpenAI'), description: t('apiSettings.apiFormatOpenAIDesc') },
+                          ]}
+                        />
+                      )}
+
+                      {/* API Key */}
+                      <SettingsRow
+                        label={t('apiSettings.apiKeyLabel')}
+                        description={hasExistingKey ? t('appSettings.apiKeyConfigured') : t('apiSettings.apiKeyDescription')}
+                      >
+                        <div className="flex items-center gap-2 max-w-md">
+                          <div className="relative flex-1">
+                            <Input
+                              type={showApiKey ? 'text' : 'password'}
+                              value={apiKey}
+                              onChange={(e) => setApiKey(e.target.value)}
+                              placeholder={hasExistingKey ? '••••••••••••••••' : t('apiSettings.apiKeyPlaceholder')}
+                              className="pr-10 font-mono text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowApiKey(!showApiKey)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              tabIndex={-1}
+                            >
+                              {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </SettingsRow>
+                    </SettingsCard>
+                  </SettingsSection>
+
+                  {/* Save Button */}
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="min-w-[120px]"
+                    >
+                      {isSaving ? (
+                        <>
+                          <Spinner className="mr-1.5" />
+                          {t('apiSettings.saving')}
+                        </>
+                      ) : saveSuccess ? (
+                        <>
+                          <Check className="size-4 mr-1.5" />
+                          {t('apiSettings.saved')}
+                        </>
+                      ) : (
+                        <>
+                          <Check className="size-4 mr-1.5" />
+                          {t('apiSettings.saveChanges')}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
 
                           </div>
           </div>

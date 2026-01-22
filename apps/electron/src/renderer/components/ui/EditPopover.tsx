@@ -12,6 +12,7 @@ import { ArrowUp } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 import type { ContentBadge } from '../../../shared/types'
 
 /**
@@ -285,6 +286,47 @@ export function getEditConfig(key: EditContextKey, location: string): EditConfig
 }
 
 /**
+ * Mapping from EditContextKey to translation keys for labels and examples.
+ * Used by useTranslatedEditConfig to provide localized strings.
+ */
+const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; exampleKey: string; placeholderKey?: string }> = {
+  'workspace-permissions': { labelKey: 'editPopover.permissionSettings', exampleKey: 'editPopover.examplePermissionAllow' },
+  'default-permissions': { labelKey: 'editPopover.defaultPermissions', exampleKey: 'editPopover.exampleDefaultPermission' },
+  'skill-instructions': { labelKey: 'editPopover.skillInstructions', exampleKey: 'editPopover.exampleSkillInstruction' },
+  'skill-metadata': { labelKey: 'editPopover.skillMetadata', exampleKey: 'editPopover.exampleSkillMetadata' },
+  'source-guide': { labelKey: 'editPopover.sourceDocumentation', exampleKey: 'editPopover.exampleSourceDoc' },
+  'source-config': { labelKey: 'editPopover.sourceConfiguration', exampleKey: 'editPopover.exampleSourceConfig' },
+  'source-permissions': { labelKey: 'editPopover.sourcePermissions', exampleKey: 'editPopover.exampleSourcePermission' },
+  'source-tool-permissions': { labelKey: 'editPopover.toolPermissions', exampleKey: 'editPopover.exampleToolPermission' },
+  'preferences-notes': { labelKey: 'editPopover.preferencesNotes', exampleKey: 'editPopover.examplePreference' },
+  'add-source': { labelKey: 'editPopover.addSource', exampleKey: 'editPopover.exampleAddSource', placeholderKey: 'editPopover.placeholderAddSource' },
+  'add-skill': { labelKey: 'editPopover.addSkill', exampleKey: 'editPopover.exampleAddSkill', placeholderKey: 'editPopover.placeholderAddSkill' },
+  'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
+}
+
+/**
+ * Hook to get translated edit config. Returns the base config with translated
+ * example and overridePlaceholder for UI display, while keeping context in English for the AI.
+ *
+ * @param key - The edit context key
+ * @param location - Base path (e.g., workspace root path)
+ *
+ * @example
+ * const { context, example, overridePlaceholder } = useTranslatedEditConfig('workspace-permissions', workspace.rootPath)
+ */
+export function useTranslatedEditConfig(key: EditContextKey, location: string): EditConfig {
+  const { t } = useLanguage()
+  const baseConfig = getEditConfig(key, location)
+  const translationKeys = EDIT_CONFIG_TRANSLATIONS[key]
+
+  return {
+    context: baseConfig.context, // Keep context in English for AI
+    example: t(translationKeys.exampleKey),
+    overridePlaceholder: translationKeys.placeholderKey ? t(translationKeys.placeholderKey) : baseConfig.overridePlaceholder,
+  }
+}
+
+/**
  * Optional secondary action button displayed on the left side of the popover footer.
  * Styled as plain text with underline on hover - typically used for "Edit File" actions.
  */
@@ -410,11 +452,13 @@ export function EditPopover({
   onOpenChange: controlledOnOpenChange,
   modal = false,
 }: EditPopoverProps) {
+  const { t } = useLanguage()
+
   // Build placeholder: use override if provided, otherwise default to "change" wording
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
-  const basePlaceholder = overridePlaceholder ?? "Describe what you'd like to change..."
+  const basePlaceholder = overridePlaceholder ?? t('editPopover.describePlaceholder')
   const placeholder = example
-    ? `${basePlaceholder.replace(/\.{3}$/, '')}, e.g., "${example}"`
+    ? `${basePlaceholder.replace(/\.{3}$/, '')}${t('editPopover.examplePrefix')}"${example}"`
     : basePlaceholder
   // Support both controlled and uncontrolled modes:
   // - Uncontrolled (default): internal state manages open/close

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { Message, CredentialResponse } from '../../../shared/types'
 import type { AuthRequestType, AuthStatus } from '@agent-operator/core/types'
 
@@ -162,6 +163,7 @@ interface AuthRequestCardProps {
  * - failed: Show error state
  */
 export function AuthRequestCard({ message, onRespondToCredential, sessionId, isInteractive = true }: AuthRequestCardProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -237,24 +239,24 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
 
   // Get field labels
   const credentialLabel = authLabels?.credential ||
-    (authCredentialMode === 'bearer' ? 'Bearer Token' : 'API Key')
-  const usernameLabel = authLabels?.username || 'Username'
-  const passwordLabel = authLabels?.password || 'Password'
+    (authCredentialMode === 'bearer' ? t('authCard.bearerToken') : t('authCard.apiKey'))
+  const usernameLabel = authLabels?.username || t('authCard.username')
+  const passwordLabel = authLabels?.password || t('authCard.password')
 
   // Get auth type label
   const getAuthTypeLabel = (type: AuthRequestType | undefined) => {
     switch (type) {
       case 'oauth':
-        return 'OAuth'
+        return t('authCard.oauth')
       case 'oauth-google':
-        return 'Google Sign-In'
+        return t('authCard.googleSignIn')
       case 'oauth-slack':
-        return 'Slack Sign-In'
+        return t('authCard.slackSignIn')
       case 'oauth-microsoft':
-        return 'Microsoft Sign-In'
+        return t('authCard.microsoftSignIn')
       case 'credential':
       default:
-        return 'Authentication'
+        return t('authCard.authentication')
     }
   }
 
@@ -280,11 +282,11 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
   if (!isInteractive && authStatus !== 'pending') {
     const StatusIcon = authStatus === 'completed' ? CheckCircle2 : XCircle
     const title =
-      authStatus === 'completed' ? `${authSourceName} Connected` :
-      authStatus === 'cancelled' ? `${authSourceName} Cancelled` :
-      `${authSourceName} Failed`
+      authStatus === 'completed' ? `${authSourceName} ${t('authCard.connected')}` :
+      authStatus === 'cancelled' ? `${authSourceName} ${t('authCard.cancelled')}` :
+      `${authSourceName} ${t('authCard.failed')}`
     const subtitle =
-      authStatus === 'completed' && authEmail ? `Signed in as ${authEmail}` :
+      authStatus === 'completed' && authEmail ? t('authCard.signedInAs', { email: authEmail }) :
       authStatus === 'failed' && authError ? authError :
       undefined
 
@@ -314,9 +316,9 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       return (
         <AuthCardHeader
           icon={CheckCircle2}
-          title={`${authSourceName} Connected`}
-          subtitle={authEmail ? `Signed in as ${authEmail}` : undefined}
-          subtitleSecondary={authWorkspace ? `Workspace: ${authWorkspace}` : undefined}
+          title={`${authSourceName} ${t('authCard.connected')}`}
+          subtitle={authEmail ? t('authCard.signedInAs', { email: authEmail }) : undefined}
+          subtitleSecondary={authWorkspace ? t('authCard.workspace', { workspace: authWorkspace }) : undefined}
         />
       )
     }
@@ -326,7 +328,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       return (
         <AuthCardHeader
           icon={XCircle}
-          title={`${authSourceName} Cancelled`}
+          title={`${authSourceName} ${t('authCard.cancelled')}`}
         />
       )
     }
@@ -336,7 +338,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       return (
         <AuthCardHeader
           icon={XCircle}
-          title={`${authSourceName} Failed`}
+          title={`${authSourceName} ${t('authCard.failed')}`}
           subtitle={authError || undefined}
         />
       )
@@ -349,10 +351,10 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
           <Spinner className="text-[10px] shrink-0 mt-1" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium leading-5">
-              {`${authSourceName} Authenticating...`}
+              {`${authSourceName} ${t('authCard.authenticating')}`}
             </div>
             <div className="text-xs mt-0.5 opacity-50">
-              Complete authentication in your browser
+              {t('authCard.completeInBrowser')}
             </div>
           </div>
         </div>
@@ -372,7 +374,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     // Credential input form - just the header part
     return (
       <AuthCardHeader
-        title={`${authSourceName} Authentication`}
+        title={`${authSourceName} ${t('authCard.authentication')}`}
         description={authDescription || undefined}
       />
     )
@@ -400,7 +402,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                   onChange={(e) => setUsername(e.target.value)}
                   onKeyDown={handleKeyDown}
                   className="pl-9"
-                  placeholder={`Enter ${usernameLabel.toLowerCase()}`}
+                  placeholder={t('authCard.enterField', { field: usernameLabel.toLowerCase() })}
                   autoFocus
                   disabled={isSubmitting}
                 />
@@ -420,7 +422,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={handleKeyDown}
                   className="pl-9 pr-9"
-                  placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                  placeholder={t('authCard.enterField', { field: passwordLabel.toLowerCase() })}
                   disabled={isSubmitting}
                 />
                 <button
@@ -454,7 +456,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="pl-9 pr-9"
-                placeholder={`Enter ${credentialLabel.toLowerCase()}`}
+                placeholder={t('authCard.enterField', { field: credentialLabel.toLowerCase() })}
                 autoFocus
                 disabled={isSubmitting}
               />
@@ -486,15 +488,17 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
 
     // OAuth pending - sign in button
     if (isOAuth) {
+      // Extract provider name from auth type label (remove " Sign-In" suffix if present)
+      const providerName = authTypeLabel.replace(/ Sign-In$/, '').replace(/登录$/, '')
       return (
         <AuthCardActions
           primary={{
-            label: `Sign in with ${authTypeLabel.replace(' Sign-In', '')}`,
+            label: t('authCard.signInWith', { provider: providerName }),
             onClick: handleOAuthClick,
             dataTutorial: 'oauth-sign-in-button',
           }}
           secondary={{
-            label: 'Cancel',
+            label: t('authCard.cancel'),
             onClick: handleCancel,
           }}
         />
@@ -505,17 +509,17 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     return (
       <AuthCardActions
         primary={{
-          label: isSubmitting ? 'Saving...' : 'Save',
+          label: isSubmitting ? t('authCard.saving') : t('authCard.save'),
           onClick: handleSubmit,
           disabled: !isValid || isSubmitting,
           loading: isSubmitting,
         }}
         secondary={{
-          label: 'Cancel',
+          label: t('authCard.cancel'),
           onClick: handleCancel,
           disabled: isSubmitting,
         }}
-        hint="Credentials are encrypted at rest"
+        hint={t('authCard.credentialsEncrypted')}
       />
     )
   }

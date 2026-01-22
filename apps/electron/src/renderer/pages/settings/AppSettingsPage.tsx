@@ -77,13 +77,14 @@ interface ApiKeyDialogProps {
 }
 
 function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasExistingKey, error }: ApiKeyDialogProps) {
+  const { t } = useLanguage()
   const [showValue, setShowValue] = useState(false)
 
   return (
     <div className="space-y-4">
       {/* Description */}
       <p className="text-sm text-muted-foreground">
-        Pay-as-you-go with your own API key.{' '}
+        {t('appSettings.payAsYouGo')}{' '}
         <a
           href="https://console.anthropic.com"
           target="_blank"
@@ -94,7 +95,7 @@ function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasE
             window.electronAPI?.openUrl('https://console.anthropic.com')
           }}
         >
-          Get one from Anthropic
+          {t('appSettings.getApiKeyFrom')}
           <ExternalLink className="size-3" />
         </a>
       </p>
@@ -133,12 +134,12 @@ function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasE
           {isSaving ? (
             <>
               <Spinner className="mr-1.5" />
-              Validating...
+              {t('misc.validatingKey')}
             </>
           ) : (
             <>
               <Check className="size-3 mr-1.5" />
-              {hasExistingKey ? 'Update Key' : 'Save'}
+              {hasExistingKey ? t('misc.updateKey') : t('common.save')}
             </>
           )}
         </Button>
@@ -147,7 +148,7 @@ function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasE
           onClick={onCancel}
           disabled={isSaving}
         >
-          Cancel
+          {t('common.cancel')}
         </Button>
       </div>
     </div>
@@ -174,6 +175,7 @@ type ClaudeOAuthDialogProps = ClaudeOAuthDialogBaseProps & (
 )
 
 function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
+  const { t } = useLanguage()
   const { existingToken, isLoading, onUseExisting, onStartOAuth, onCancel, status, errorMessage } = props
 
   if (status === 'success') {
@@ -211,7 +213,7 @@ function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
               type="text"
               value={authCode}
               onChange={(e) => onAuthCodeChange(e.target.value)}
-              placeholder="Paste your authorization code here"
+              placeholder={t('misc.pasteAuthCode')}
               className="border-0 bg-transparent shadow-none font-mono text-sm"
               disabled={status === 'loading'}
               autoFocus

@@ -837,11 +837,21 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       hasCredential = !!(await manager.getApiKey())
     } else if (authType === 'oauth_token') {
       hasCredential = !!(await manager.getClaudeOAuth())
+    } else if (authType === 'bedrock') {
+      // Bedrock uses AWS credentials from ~/.aws/credentials, always considered configured
+      hasCredential = true
     }
 
-    // Only return provider for api_key auth type
-    // Claude OAuth should always use Claude models (no third-party provider)
-    const provider = authType === 'api_key' ? providerConfig?.provider : undefined
+    // Return provider based on auth type
+    // - api_key: return configured provider (anthropic, glm, minimax, etc.)
+    // - bedrock: return 'bedrock'
+    // - oauth_token: no provider (uses Claude models directly)
+    let provider: string | undefined
+    if (authType === 'api_key') {
+      provider = providerConfig?.provider
+    } else if (authType === 'bedrock') {
+      provider = 'bedrock'
+    }
 
     return { authType, hasCredential, provider }
   })

@@ -3,14 +3,49 @@
  *
  * Provides a single source of truth for all authentication state:
  * - OAuth (for accessing API and MCP servers)
- * - Billing configuration (api_key or oauth_token)
+ * - Billing configuration (api_key, oauth_token, or bedrock)
  * - Workspace/MCP configuration
  */
 
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, getActiveWorkspace, saveConfig, generateWorkspaceId, type AuthType, type Workspace } from '../config/storage.ts';
+import { getDefaultWorkspacesDir } from '../workspaces/storage.ts';
 import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
+
+/**
+ * Check if AWS Bedrock mode is enabled via environment variable.
+ * This is set by users who configure Claude Code to use AWS Bedrock.
+ */
+export function isBedrockMode(): boolean {
+  return process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+}
+
+/**
+ * Auto-create minimal config for Bedrock users who have environment variables set
+ * but no config.json file yet. This allows them to skip onboarding entirely.
+ */
+function ensureBedrockConfig(): void {
+  if (!isBedrockMode()) return;
+
+  const existingConfig = loadStoredConfig();
+  if (existingConfig?.authType === 'bedrock') return; // Already configured
+
+  debug('[auth] Bedrock mode detected, auto-creating config');
+
+  const workspaceId = generateWorkspaceId();
+  saveConfig({
+    authType: 'bedrock',
+    workspaces: [{
+      id: workspaceId,
+      name: 'Default',
+      rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+      createdAt: Date.now(),
+    }],
+    activeWorkspaceId: workspaceId,
+    activeSessionId: null,
+  });
+}
 
 // ============================================
 // Types
@@ -127,6 +162,9 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
  * Get complete authentication state from all sources (config file + credential store)
  */
 export async function getAuthState(): Promise<AuthState> {
+  // Auto-create config for Bedrock users if needed
+  ensureBedrockConfig();
+
   const config = loadStoredConfig();
   const manager = getCredentialManager();
 
@@ -141,6 +179,9 @@ export async function getAuthState(): Promise<AuthState> {
     hasCredentials = !!apiKey;
   } else if (config?.authType === 'oauth_token') {
     hasCredentials = !!claudeOAuth;
+  } else if (config?.authType === 'bedrock') {
+    // Bedrock uses AWS credentials from ~/.aws/credentials, not our credential store
+    hasCredentials = true;
   }
 
   return {

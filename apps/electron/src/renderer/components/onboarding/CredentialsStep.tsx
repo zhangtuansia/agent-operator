@@ -315,7 +315,7 @@ export function CredentialsStep({
 
     return (
       <StepFormLayout
-        title={providerConfig.name}
+        title={isCustom ? t('misc.customEndpoint') : providerConfig.name}
         description={
           providerConfig.docsUrl ? (
             <>

@@ -248,7 +248,7 @@ function SessionItem({
                 role="button"
                 aria-haspopup="menu"
                 aria-expanded={todoMenuOpen}
-                aria-label="Change todo state"
+                aria-label={t('aria.changeTodoState')}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -811,7 +811,7 @@ export function SessionList({
           className="flex flex-col pb-14 min-w-0"
           data-focus-zone="session-list"
           role="listbox"
-          aria-label="Sessions"
+          aria-label={t('aria.sessions')}
         >
           {/* No results message when searching */}
           {searchActive && searchQuery && flatItems.length === 0 && (

@@ -25,6 +25,7 @@ import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { LanguageProvider } from '@/context/LanguageContext'
 import type { Language } from '@/i18n'
+import { useTranslation } from '@/i18n'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
 import { DEFAULT_MODEL, getDefaultModelForProvider } from '@config/models'
@@ -153,6 +154,7 @@ export default function App() {
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
   const store = useStore()
+  const { t } = useTranslation()
 
   // Helper to update a session by ID with partial fields
   // Uses per-session atom directly instead of updating an array
@@ -640,7 +642,7 @@ export default function App() {
       const isEmpty = !meta || (!meta.lastFinalMessageId && !meta.name)
 
       if (!isEmpty) {
-        const confirmed = await window.electronAPI.showDeleteSessionConfirmation(meta?.name || 'Untitled')
+        const confirmed = await window.electronAPI.showDeleteSessionConfirmation(meta?.name || t('misc.untitled'))
         if (!confirmed) return false
       }
     }
@@ -773,7 +775,7 @@ export default function App() {
         const commandText = commandMatch[0].trimEnd() // "/compact" without trailing space
         badges.unshift({
           type: 'command',
-          label: 'Compact',
+          label: t('misc.compact'),
           rawText: commandText,
           start: 0,
           end: commandText.length,

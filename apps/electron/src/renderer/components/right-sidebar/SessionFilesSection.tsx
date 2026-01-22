@@ -129,6 +129,7 @@ function FileTreeItem({
   onFileDoubleClick,
   isNested,
 }: FileTreeItemProps) {
+  const { t } = useLanguage()
   const isDirectory = file.type === 'directory'
   const isExpanded = expandedPaths.has(file.path)
   const hasChildren = isDirectory && file.children && file.children.length > 0
@@ -167,7 +168,7 @@ function FileTreeItem({
         // Same padding for all items - nested indentation handled by container
         "px-2"
       )}
-      title={`${file.path}\n${file.type === 'file' ? formatFileSize(file.size) : 'Directory'}\n\nClick to ${hasChildren ? 'expand' : 'reveal'}, double-click to open`}
+      title={`${file.path}\n${file.type === 'file' ? formatFileSize(file.size) : t('misc.directory')}\n\n${hasChildren ? t('misc.clickToExpand') : t('misc.clickToReveal')}, ${t('misc.doubleClickToOpen')}`}
     >
       {/* Icon container with hover-revealed chevron for expandable items */}
       <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">

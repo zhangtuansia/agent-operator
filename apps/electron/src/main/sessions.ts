@@ -40,7 +40,7 @@ import {
 } from '@agent-operator/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@agent-operator/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@agent-operator/shared/config'
-import { getAuthState } from '@agent-operator/shared/auth'
+import { getAuthState, isBedrockMode } from '@agent-operator/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@agent-operator/shared/agent'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { OperatorMcpClient } from '@agent-operator/shared/mcp'
@@ -491,10 +491,21 @@ export class SessionManager {
 
       sessionLog.info('Reinitializing auth with billing type:', billing.type)
 
-      // Clear all auth-related env vars first
+      // Clear all auth-related env vars first (but preserve Bedrock-related vars)
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
+
+      // Check for AWS Bedrock mode first
+      if (billing.type === 'bedrock' || isBedrockMode()) {
+        // Bedrock uses AWS credentials from ~/.aws/credentials and env vars like:
+        // - CLAUDE_CODE_USE_BEDROCK=1
+        // - AWS_REGION, CLAUDE_CODE_AWS_PROFILE
+        // - ANTHROPIC_MODEL, ANTHROPIC_DEFAULT_*_MODEL
+        // These are already set by the user in their shell, just let them pass through
+        sessionLog.info('Using AWS Bedrock authentication (credentials from AWS CLI)')
+        return
+      }
 
       if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
         // Use Claude Max subscription via OAuth token

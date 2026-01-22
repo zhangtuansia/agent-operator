@@ -11,6 +11,7 @@ import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface Info_DataTableProps<TData, TValue> {
   /** TanStack Table column definitions */
@@ -74,19 +75,20 @@ export function Info_DataTable<TData, TValue>({
   floatingAction,
   className,
 }: Info_DataTableProps<TData, TValue>) {
+  const { t } = useLanguage()
   const [searchValue, setSearchValue] = React.useState('')
 
   // Parse searchable prop
   const searchConfig = React.useMemo(() => {
     if (!searchable) return null
     if (searchable === true) {
-      return { placeholder: 'Search...', column: undefined }
+      return { placeholder: t('misc.search'), column: undefined }
     }
     return {
-      placeholder: searchable.placeholder ?? 'Search...',
+      placeholder: searchable.placeholder ?? t('misc.search'),
       column: searchable.column,
     }
-  }, [searchable])
+  }, [searchable, t])
 
   // Loading state
   if (loading) {
