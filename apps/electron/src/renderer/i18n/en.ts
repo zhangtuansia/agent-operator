@@ -110,6 +110,11 @@ export const en = {
     updateTo: 'Update to',
     restartToUpdate: 'Restart to Update',
     installUpdate: 'Install update',
+    downloading: 'Downloading...',
+    downloadProgress: 'Downloading {progress}%',
+    downloadUpdate: 'Download Update',
+    downloadFailed: 'Download failed',
+    retryDownload: 'Retry Download',
   },
 
   // API Settings

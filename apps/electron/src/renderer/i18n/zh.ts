@@ -112,6 +112,11 @@ export const zh: TranslationKeys = {
     updateTo: '更新到',
     restartToUpdate: '重启以更新',
     installUpdate: '安装更新',
+    downloading: '下载中...',
+    downloadProgress: '下载中 {progress}%',
+    downloadUpdate: '下载更新',
+    downloadFailed: '下载失败',
+    retryDownload: '重新下载',
   },
 
   // API Settings

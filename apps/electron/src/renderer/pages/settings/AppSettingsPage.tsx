@@ -735,44 +735,65 @@ export default function AppSettingsPage() {
                     <span className="text-muted-foreground">
                       {updateChecker.updateInfo?.currentVersion ?? t('common.loading')}
                     </span>
-                    {updateChecker.updateAvailable && updateChecker.updateInfo?.latestVersion && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={updateChecker.installUpdate}
-                      >
-                        {t('appSettings.updateTo')} {updateChecker.updateInfo.latestVersion}
-                      </Button>
+                    {/* Show download progress next to version when downloading */}
+                    {updateChecker.isDownloading && (
+                      <span className="text-xs text-primary">
+                        {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
+                      </span>
+                    )}
+                    {/* Show new version badge when ready */}
+                    {updateChecker.isReadyToInstall && updateChecker.updateInfo?.latestVersion && (
+                      <span className="text-xs text-green-600 dark:text-green-400">
+                        → {updateChecker.updateInfo.latestVersion}
+                      </span>
                     )}
                   </div>
                 </SettingsRow>
                 <SettingsRow label={t('appSettings.checkForUpdates')}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCheckForUpdates}
-                    disabled={isCheckingForUpdates}
-                  >
-                    {isCheckingForUpdates ? (
-                      <>
-                        <Spinner className="mr-1.5" />
-                        {t('appSettings.checking')}
-                      </>
-                    ) : (
-                      t('appSettings.checkNow')
-                    )}
-                  </Button>
-                </SettingsRow>
-                {updateChecker.isReadyToInstall && (
-                  <SettingsRow label={t('appSettings.installUpdate')}>
+                  {/* Ready to install */}
+                  {updateChecker.isReadyToInstall ? (
                     <Button
                       size="sm"
                       onClick={updateChecker.installUpdate}
                     >
                       {t('appSettings.restartToUpdate')}
                     </Button>
-                  </SettingsRow>
-                )}
+                  ) : /* Downloading */ updateChecker.isDownloading ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled
+                    >
+                      <Spinner className="mr-1.5" />
+                      {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
+                    </Button>
+                  ) : /* Download error */ updateChecker.updateInfo?.downloadState === 'error' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCheckForUpdates}
+                    >
+                      {t('appSettings.retryDownload')}
+                    </Button>
+                  ) : /* Checking */ isCheckingForUpdates ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled
+                    >
+                      <Spinner className="mr-1.5" />
+                      {t('appSettings.checking')}
+                    </Button>
+                  ) : /* Default: Check Now */ (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCheckForUpdates}
+                    >
+                      {t('appSettings.checkNow')}
+                    </Button>
+                  )}
+                </SettingsRow>
               </SettingsCard>
             </SettingsSection>
           </div>
