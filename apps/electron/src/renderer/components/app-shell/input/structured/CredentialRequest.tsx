@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 import type { CredentialRequest as CredentialRequestType, CredentialResponse } from '../../../../../shared/types'
 
 interface CredentialRequestProps {
@@ -23,6 +24,7 @@ interface CredentialRequestProps {
  * - query: API Key for query parameter auth
  */
 export function CredentialRequest({ request, onResponse, unstyled = false }: CredentialRequestProps) {
+  const { t } = useLanguage()
   const [value, setValue] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -66,9 +68,9 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
 
   // Get field labels
   const credentialLabel = request.labels?.credential ||
-    (request.mode === 'bearer' ? 'Bearer Token' : 'API Key')
-  const usernameLabel = request.labels?.username || 'Username'
-  const passwordLabel = request.labels?.password || 'Password'
+    (request.mode === 'bearer' ? t('credentialRequest.bearerToken') : t('credentialRequest.apiKey'))
+  const usernameLabel = request.labels?.username || t('credentialRequest.username')
+  const passwordLabel = request.labels?.password || t('credentialRequest.password')
 
   return (
     <div className={cn(
@@ -85,7 +87,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
-                Authentication Required
+                {t('credentialRequest.title')}
               </span>
               <span className="text-xs text-muted-foreground">
                 ({request.sourceName})
@@ -115,7 +117,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-9"
-                    placeholder={`Enter ${usernameLabel.toLowerCase()}`}
+                    placeholder={t('credentialRequest.enterPlaceholder', { field: usernameLabel.toLowerCase() })}
                     autoFocus
                   />
                 </div>
@@ -134,7 +136,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-9 pr-9"
-                    placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                    placeholder={t('credentialRequest.enterPlaceholder', { field: passwordLabel.toLowerCase() })}
                   />
                   <button
                     type="button"
@@ -167,7 +169,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                   onChange={(e) => setValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   className="pl-9 pr-9"
-                  placeholder={`Enter ${credentialLabel.toLowerCase()}`}
+                  placeholder={t('credentialRequest.enterPlaceholder', { field: credentialLabel.toLowerCase() })}
                   autoFocus
                 />
                 <button
@@ -201,7 +203,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           disabled={!isValid}
         >
           <Check className="h-3.5 w-3.5" />
-          Save
+          {t('credentialRequest.save')}
         </Button>
         <Button
           size="sm"
@@ -210,13 +212,13 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           onClick={handleCancel}
         >
           <X className="h-3.5 w-3.5" />
-          Cancel
+          {t('credentialRequest.cancel')}
         </Button>
 
         <div className="flex-1" />
 
         <span className="text-[10px] text-muted-foreground">
-          Credentials are encrypted at rest
+          {t('credentialRequest.encryptedHint')}
         </span>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { Shield, Check, X, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 import type { PermissionRequest as PermissionRequestType } from '../../../../../shared/types'
 import type { PermissionResponse } from './types'
 
@@ -22,6 +23,7 @@ interface PermissionRequestProps {
  * - Action buttons: Allow, Always Allow, Deny
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
+  const { t } = useLanguage()
 
   const handleAllow = () => {
     onResponse({ type: 'permission', allowed: true, alwaysAllow: false })
@@ -55,7 +57,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
-                Permission Required
+                {t('permissionRequest.title')}
               </span>
               <span className="text-xs text-muted-foreground">({request.toolName})</span>
             </div>
@@ -81,7 +83,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           data-tutorial="permission-allow-button"
         >
           <Check className="h-3.5 w-3.5" />
-          Allow
+          {t('permissionRequest.allow')}
         </Button>
         <Button
           size="sm"
@@ -90,7 +92,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleAlwaysAllow}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Always Allow
+          {t('permissionRequest.alwaysAllow')}
         </Button>
         <Button
           size="sm"
@@ -99,7 +101,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleDeny}
         >
           <X className="h-3.5 w-3.5" />
-          Deny
+          {t('permissionRequest.deny')}
         </Button>
 
         {/* Spacer */}
@@ -107,7 +109,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
 
         {/* Tip text */}
         <span className="text-[10px] text-muted-foreground">
-          "Always Allow" remembers this command for the session
+          {t('permissionRequest.alwaysAllowHint')}
         </span>
       </div>
     </div>

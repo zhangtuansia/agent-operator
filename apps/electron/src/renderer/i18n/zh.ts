@@ -1098,4 +1098,26 @@ export const zh: TranslationKeys = {
   interrupt: {
     pressEscAgain: '再次按 {key} 中断',
   },
+
+  // Permission request
+  permissionRequest: {
+    title: '需要权限',
+    allow: '允许',
+    alwaysAllow: '始终允许',
+    deny: '拒绝',
+    alwaysAllowHint: '"始终允许"会记住此命令直到会话结束',
+  },
+
+  // Credential request
+  credentialRequest: {
+    title: '需要认证',
+    bearerToken: 'Bearer Token',
+    apiKey: 'API Key',
+    username: '用户名',
+    password: '密码',
+    save: '保存',
+    cancel: '取消',
+    enterPlaceholder: '输入{field}',
+    encryptedHint: '凭证已加密存储',
+  },
 } as const;

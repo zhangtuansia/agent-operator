@@ -6,6 +6,53 @@ import { mainLog } from './logger'
 // Store reference for rebuilding menu
 let cachedWindowManager: WindowManager | null = null
 
+// Hidden developer mode - activated by clicking version info 5 times
+let developerModeEnabled = false
+let versionClickCount = 0
+let lastVersionClickTime = 0
+const VERSION_CLICK_THRESHOLD = 5
+const VERSION_CLICK_TIMEOUT = 3000 // 3 seconds to complete the clicks
+
+/**
+ * Check if developer mode is enabled
+ */
+export function isDeveloperMode(): boolean {
+  return developerModeEnabled || !app.isPackaged
+}
+
+/**
+ * Handle version click for hidden developer mode activation
+ */
+function handleVersionClick(): void {
+  const now = Date.now()
+
+  // Reset count if too much time has passed
+  if (now - lastVersionClickTime > VERSION_CLICK_TIMEOUT) {
+    versionClickCount = 0
+  }
+
+  lastVersionClickTime = now
+  versionClickCount++
+
+  if (versionClickCount >= VERSION_CLICK_THRESHOLD && !developerModeEnabled) {
+    developerModeEnabled = true
+    mainLog.info('[menu] Developer mode enabled!')
+
+    // Show notification
+    const { dialog } = require('electron')
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Developer Mode',
+      message: 'Developer mode enabled!',
+      detail: 'You can now use Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux) to open DevTools.',
+      buttons: ['OK']
+    })
+
+    // Rebuild menu to show dev options
+    rebuildMenu()
+  }
+}
+
 /**
  * Creates and sets the application menu for macOS.
  * Includes only relevant items for the Cowork app.
@@ -117,8 +164,8 @@ export async function rebuildMenu(): Promise<void> {
         { role: 'zoomIn' as const },
         { role: 'zoomOut' as const },
         { role: 'resetZoom' as const },
-        // Dev tools only in development
-        ...(!app.isPackaged ? [
+        // Dev tools in development OR when developer mode is enabled
+        ...(isDeveloperMode() ? [
           { type: 'separator' as const },
           { role: 'reload' as const },
           { role: 'forceReload' as const },
@@ -141,8 +188,8 @@ export async function rebuildMenu(): Promise<void> {
       ]
     },
 
-    // Debug menu (development only)
-    ...(!app.isPackaged ? [{
+    // Debug menu (development or developer mode)
+    ...(isDeveloperMode() ? [{
       label: 'Debug',
       submenu: [
         {
@@ -200,6 +247,11 @@ export async function rebuildMenu(): Promise<void> {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+/',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
+        },
+        { type: 'separator' as const },
+        {
+          label: `Version ${app.getVersion()}`,
+          click: handleVersionClick
         }
       ]
     }

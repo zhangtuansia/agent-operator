@@ -1096,6 +1096,28 @@ export const en = {
   interrupt: {
     pressEscAgain: 'Press {key} again to interrupt',
   },
+
+  // Permission request
+  permissionRequest: {
+    title: 'Permission Required',
+    allow: 'Allow',
+    alwaysAllow: 'Always Allow',
+    deny: 'Deny',
+    alwaysAllowHint: '"Always Allow" remembers this command for the session',
+  },
+
+  // Credential request
+  credentialRequest: {
+    title: 'Authentication Required',
+    bearerToken: 'Bearer Token',
+    apiKey: 'API Key',
+    username: 'Username',
+    password: 'Password',
+    save: 'Save',
+    cancel: 'Cancel',
+    enterPlaceholder: 'Enter {field}',
+    encryptedHint: 'Credentials are encrypted at rest',
+  },
 } as const;
 
 export type TranslationKeys = typeof en;
