@@ -400,6 +400,14 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
     }
   },
+
+  // System Permissions (macOS)
+  checkFullDiskAccess: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_CHECK_FULL_DISK_ACCESS) as Promise<boolean>,
+  openFullDiskAccessSettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS),
+  promptFullDiskAccess: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_PROMPT_FULL_DISK_ACCESS) as Promise<boolean>,
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -146,3 +146,96 @@ export function getModelShortName(modelId: string): string {
 export function isOpusModel(modelId: string): boolean {
   return modelId.includes('opus');
 }
+
+// ============================================
+// BEDROCK AUTO-DETECTION
+// ============================================
+
+/**
+ * Check if we're in Bedrock mode (via environment variable)
+ * Note: This is duplicated from auth/state.ts to avoid circular imports.
+ * The model resolution logic needs this check but can't import from auth.
+ */
+function checkBedrockMode(): boolean {
+  return process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+}
+
+/**
+ * Check if a model ID is an AWS Bedrock ARN (Application Inference Profile or Model ARN)
+ * Examples:
+ * - arn:aws:bedrock:us-west-2:123456789:application-inference-profile/abc123
+ * - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-v2
+ */
+export function isBedrockArn(modelId: string): boolean {
+  return modelId.startsWith('arn:aws:bedrock:');
+}
+
+/**
+ * Get the effective model for Bedrock mode.
+ * Priority:
+ * 1. ANTHROPIC_MODEL env var (supports ARN format for Application Inference Profiles)
+ * 2. App-configured model (if it's a valid Bedrock model ID)
+ * 3. Default Bedrock model
+ *
+ * This allows users to configure custom Inference Profile ARNs while still
+ * allowing the app to work with standard Bedrock model IDs.
+ */
+export function getBedrockModel(appConfiguredModel?: string): string {
+  // First priority: ANTHROPIC_MODEL env var (supports ARN and standard formats)
+  const envModel = process.env.ANTHROPIC_MODEL;
+  if (envModel) {
+    return envModel;
+  }
+
+  // Second priority: app-configured model if it's a Bedrock model
+  if (appConfiguredModel) {
+    // Check if it's already a Bedrock model ID or ARN
+    if (isBedrockArn(appConfiguredModel) || appConfiguredModel.includes('anthropic.claude')) {
+      return appConfiguredModel;
+    }
+    // Try to map standard Claude model to Bedrock equivalent
+    const bedrockModel = mapToBedrockModel(appConfiguredModel);
+    if (bedrockModel) {
+      return bedrockModel;
+    }
+  }
+
+  // Fallback: default Bedrock model
+  return DEFAULT_PROVIDER_MODEL.bedrock || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+}
+
+/**
+ * Map a standard Claude model ID to its Bedrock equivalent.
+ * Returns undefined if no mapping exists.
+ */
+function mapToBedrockModel(modelId: string): string | undefined {
+  const mapping: Record<string, string> = {
+    'claude-opus-4-5-20251101': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+    'claude-sonnet-4-5-20250929': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  };
+  return mapping[modelId];
+}
+
+/**
+ * Get display name for a Bedrock ARN or model ID.
+ * For ARNs, extract a meaningful name from the ARN structure.
+ */
+export function getBedrockModelDisplayName(modelId: string): string {
+  if (isBedrockArn(modelId)) {
+    // Extract the last part of the ARN for display
+    // arn:aws:bedrock:us-west-2:123456789:application-inference-profile/abc123 -> "Inference Profile"
+    // arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-v2 -> "claude-v2"
+    const parts = modelId.split('/');
+    const lastPart = parts[parts.length - 1] || modelId;
+
+    if (modelId.includes('application-inference-profile')) {
+      return `Inference Profile (${lastPart.substring(0, 8)}...)`;
+    }
+    if (modelId.includes('foundation-model')) {
+      return lastPart.replace('anthropic.', '');
+    }
+    return lastPart;
+  }
+  return getModelDisplayName(modelId);
+}

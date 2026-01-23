@@ -627,6 +627,11 @@ export const IPC_CHANNELS = {
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
   WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
+
+  // System Permissions (macOS)
+  PERMISSIONS_CHECK_FULL_DISK_ACCESS: 'permissions:checkFullDiskAccess',
+  PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS: 'permissions:openFullDiskAccessSettings',
+  PERMISSIONS_PROMPT_FULL_DISK_ACCESS: 'permissions:promptFullDiskAccess',
 } as const
 
 // Re-import types for ElectronAPI
@@ -864,6 +869,11 @@ export interface ElectronAPI {
   // Theme preferences sync across windows (mode, colorTheme, font)
   broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
   onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
+
+  // System Permissions (macOS)
+  checkFullDiskAccess(): Promise<boolean>
+  openFullDiskAccessSettings(): Promise<void>
+  promptFullDiskAccess(): Promise<boolean>
 }
 
 /**

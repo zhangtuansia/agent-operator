@@ -9,7 +9,8 @@ import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL } from '../config/models.ts';
+import { DEFAULT_MODEL, getBedrockModel } from '../config/models.ts';
+import { isBedrockMode } from '../auth/state.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -796,7 +797,10 @@ export class OperatorAgent {
       };
       
       // Configure SDK options
-      const model = this.config.model || DEFAULT_MODEL;
+      // In Bedrock mode, use getBedrockModel to handle ARN formats (Application Inference Profiles)
+      const configuredModel = this.config.model || DEFAULT_MODEL;
+      const model = isBedrockMode() ? getBedrockModel(configuredModel) : configuredModel;
+      debug(`[chat] Model selection: configured=${configuredModel}, effective=${model}, bedrockMode=${isBedrockMode()}`);
 
       // Determine effective thinking level: ultrathink override boosts to max for this message
       const effectiveThinkingLevel: ThinkingLevel = this.ultrathinkOverride ? 'max' : this.thinkingLevel;
@@ -3200,7 +3204,9 @@ Please continue the conversation naturally from where we left off.
   }
 
   getModel(): string {
-    return this.config.model || DEFAULT_MODEL;
+    const configuredModel = this.config.model || DEFAULT_MODEL;
+    // In Bedrock mode, return the effective Bedrock model (may be ARN)
+    return isBedrockMode() ? getBedrockModel(configuredModel) : configuredModel;
   }
 
   /**

@@ -1888,4 +1888,26 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ============================================================
+  // System Permissions (macOS)
+  // ============================================================
+
+  // Check if app has Full Disk Access
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_CHECK_FULL_DISK_ACCESS, async () => {
+    const { hasFullDiskAccess } = await import('./permissions')
+    return hasFullDiskAccess()
+  })
+
+  // Open System Preferences to Full Disk Access pane
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS, async () => {
+    const { openFullDiskAccessSettings } = await import('./permissions')
+    openFullDiskAccessSettings()
+  })
+
+  // Prompt user to grant Full Disk Access (shows dialog then opens settings)
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_PROMPT_FULL_DISK_ACCESS, async () => {
+    const { promptForFullDiskAccess } = await import('./permissions')
+    return promptForFullDiskAccess()
+  })
+
 }
