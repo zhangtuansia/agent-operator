@@ -79,6 +79,11 @@ export function loadShellEnv(): void {
       const pathCount = process.env.PATH.split(':').length
       mainLog.info(`[shell-env] PATH has ${pathCount} entries`)
     }
+
+    // Log Bedrock-related vars for debugging
+    mainLog.info(`[shell-env] CLAUDE_CODE_USE_BEDROCK = ${process.env.CLAUDE_CODE_USE_BEDROCK || '(not set)'}`)
+    mainLog.info(`[shell-env] AWS_REGION = ${process.env.AWS_REGION || '(not set)'}`)
+    mainLog.info(`[shell-env] AWS_PROFILE = ${process.env.AWS_PROFILE || '(not set)'}`)
   } catch (error) {
     // Don't fail app startup if shell env loading fails
     mainLog.warn(`[shell-env] Failed to load shell environment: ${error}`)

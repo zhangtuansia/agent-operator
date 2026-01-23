@@ -12,22 +12,119 @@ import { loadStoredConfig, getActiveWorkspace, saveConfig, generateWorkspaceId, 
 import { getDefaultWorkspacesDir } from '../workspaces/storage.ts';
 import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
+import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
+// Debug logging to file (for GUI launch debugging)
+function debugLog(msg: string): void {
+  try {
+    const logDir = join(homedir(), '.agent-operator', 'logs');
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+    const logFile = join(logDir, 'bedrock-debug.log');
+    const timestamp = new Date().toISOString();
+    appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
+  } catch {
+    // Ignore logging errors
+  }
+}
+
+/**
+ * Shell config files to check for Bedrock configuration.
+ */
+const SHELL_CONFIG_FILES = ['.zshrc', '.bashrc', '.bash_profile', '.profile'];
+
+/**
+ * Check if user has CLAUDE_CODE_USE_BEDROCK=1 in their shell config files.
+ * This is needed because macOS GUI apps don't inherit shell environment variables.
+ * Also extracts and sets AWS_REGION if found.
+ */
+function checkShellConfigForBedrock(): boolean {
+  const home = homedir();
+  debugLog(`checkShellConfigForBedrock: home = ${home}`);
+
+  for (const configFile of SHELL_CONFIG_FILES) {
+    const configPath = join(home, configFile);
+    debugLog(`checkShellConfigForBedrock: checking ${configPath}`);
+    try {
+      if (existsSync(configPath)) {
+        debugLog(`checkShellConfigForBedrock: ${configPath} exists, reading...`);
+        const content = readFileSync(configPath, 'utf-8');
+        // Look for export CLAUDE_CODE_USE_BEDROCK=1 (with or without quotes)
+        const hasBedrockExport = /export\s+CLAUDE_CODE_USE_BEDROCK\s*=\s*["']?1["']?/.test(content);
+        debugLog(`checkShellConfigForBedrock: ${configPath} hasBedrockExport = ${hasBedrockExport}`);
+        if (hasBedrockExport) {
+          debug(`[auth] Found CLAUDE_CODE_USE_BEDROCK=1 in ${configPath}`);
+
+          // Also extract AWS_REGION if present
+          const regionMatch = content.match(/export\s+AWS_REGION\s*=\s*["']?([a-z0-9-]+)["']?/);
+          if (regionMatch && !process.env.AWS_REGION) {
+            process.env.AWS_REGION = regionMatch[1];
+            debug(`[auth] Found AWS_REGION=${regionMatch[1]} in ${configPath}`);
+          }
+
+          // Extract AWS_PROFILE if present
+          const profileMatch = content.match(/export\s+(?:AWS_PROFILE|CLAUDE_CODE_AWS_PROFILE)\s*=\s*["']?([a-zA-Z0-9_-]+)["']?/);
+          if (profileMatch && !process.env.AWS_PROFILE) {
+            process.env.AWS_PROFILE = profileMatch[1];
+            debug(`[auth] Found AWS_PROFILE=${profileMatch[1]} in ${configPath}`);
+          }
+
+          return true;
+        }
+      }
+    } catch {
+      // Ignore read errors
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if AWS credentials are configured for Bedrock.
+ * Looks for ~/.aws/credentials file existence as a hint.
+ */
+function hasAwsCredentials(): boolean {
+  const awsCredentialsPath = join(homedir(), '.aws', 'credentials');
+  return existsSync(awsCredentialsPath);
+}
 
 /**
  * Check if AWS Bedrock mode is enabled.
  * Detection sources (any of these triggers Bedrock mode):
  * 1. Environment variable: CLAUDE_CODE_USE_BEDROCK=1
  * 2. Config file: authType === 'bedrock'
+ * 3. Shell config files (.zshrc, .bashrc, etc.) contain CLAUDE_CODE_USE_BEDROCK=1
  */
 export function isBedrockMode(): boolean {
+  debugLog('isBedrockMode() called');
+  debugLog(`process.env.CLAUDE_CODE_USE_BEDROCK = ${process.env.CLAUDE_CODE_USE_BEDROCK}`);
+
   // Check environment variable first (highest priority)
   if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+    debugLog('Detected via env var');
     return true;
   }
 
   // Check config file
   const config = loadStoredConfig();
-  return config?.authType === 'bedrock';
+  debugLog(`config.authType = ${config?.authType}`);
+  if (config?.authType === 'bedrock') {
+    debugLog('Detected via config file');
+    return true;
+  }
+
+  // Check shell config files (for macOS GUI apps that don't inherit env vars)
+  debugLog('Checking shell config files...');
+  if (checkShellConfigForBedrock()) {
+    // Also set the env var so SDK subprocess can use it
+    process.env.CLAUDE_CODE_USE_BEDROCK = '1';
+    debugLog('Detected via shell config, set env var');
+    return true;
+  }
+
+  debugLog('Not in Bedrock mode');
+  return false;
 }
 
 /**
@@ -35,11 +132,17 @@ export function isBedrockMode(): boolean {
  * but no config.json file yet. This allows them to skip onboarding entirely.
  */
 function ensureBedrockConfig(): void {
-  if (!isBedrockMode()) return;
+  debugLog('ensureBedrockConfig() called');
+  const bedrockMode = isBedrockMode();
+  debugLog(`ensureBedrockConfig: isBedrockMode() = ${bedrockMode}`);
+
+  if (!bedrockMode) return;
 
   const existingConfig = loadStoredConfig();
+  debugLog(`ensureBedrockConfig: existingConfig.authType = ${existingConfig?.authType}`);
   if (existingConfig?.authType === 'bedrock') return; // Already configured
 
+  debugLog('Bedrock mode detected, auto-creating config');
   debug('[auth] Bedrock mode detected, auto-creating config');
 
   const workspaceId = generateWorkspaceId();
@@ -171,10 +274,16 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
  * Get complete authentication state from all sources (config file + credential store)
  */
 export async function getAuthState(): Promise<AuthState> {
+  debugLog('getAuthState() called');
+
   // Auto-create config for Bedrock users if needed
+  debugLog('Calling ensureBedrockConfig()...');
   ensureBedrockConfig();
 
   const config = loadStoredConfig();
+  debugLog(`config.authType = ${config?.authType}`);
+  debugLog(`config.workspaces.length = ${config?.workspaces?.length ?? 0}`);
+  debugLog(`config.activeWorkspaceId = ${config?.activeWorkspaceId}`);
   const manager = getCredentialManager();
 
   const craftToken = await manager.getOperatorOAuth();
@@ -215,6 +324,12 @@ export async function getAuthState(): Promise<AuthState> {
  * Derive what setup steps are needed based on current auth state
  */
 export function getSetupNeeds(state: AuthState): SetupNeeds {
+  debugLog('getSetupNeeds() called');
+  debugLog(`state.craft.hasToken = ${state.craft.hasToken}`);
+  debugLog(`state.billing.type = ${state.billing.type}`);
+  debugLog(`state.billing.hasCredentials = ${state.billing.hasCredentials}`);
+  debugLog(`state.workspace.hasWorkspace = ${state.workspace.hasWorkspace}`);
+
   // OAuth is only required for new users (no workspace) who need to select a space during onboarding
   const needsAuth = !state.craft.hasToken && !state.workspace.hasWorkspace;
 
@@ -227,11 +342,15 @@ export function getSetupNeeds(state: AuthState): SetupNeeds {
   // Need credentials if billing type is set but credentials are missing
   const needsCredentials = state.billing.type !== null && !state.billing.hasCredentials;
 
+  const isFullyConfigured = !needsAuth && !needsReauth && !needsBillingConfig && !needsCredentials;
+
+  debugLog(`getSetupNeeds result: needsAuth=${needsAuth}, needsBillingConfig=${needsBillingConfig}, needsCredentials=${needsCredentials}, isFullyConfigured=${isFullyConfigured}`);
+
   return {
     needsAuth,
     needsReauth,
     needsBillingConfig,
     needsCredentials,
-    isFullyConfigured: !needsAuth && !needsReauth && !needsBillingConfig && !needsCredentials,
+    isFullyConfigured,
   };
 }
