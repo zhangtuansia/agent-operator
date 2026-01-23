@@ -14,11 +14,20 @@ import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from
 import { debug } from '../utils/debug.ts';
 
 /**
- * Check if AWS Bedrock mode is enabled via environment variable.
- * This is set by users who configure Claude Code to use AWS Bedrock.
+ * Check if AWS Bedrock mode is enabled.
+ * Detection sources (any of these triggers Bedrock mode):
+ * 1. Environment variable: CLAUDE_CODE_USE_BEDROCK=1
+ * 2. Config file: authType === 'bedrock'
  */
 export function isBedrockMode(): boolean {
-  return process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+  // Check environment variable first (highest priority)
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+    return true;
+  }
+
+  // Check config file
+  const config = loadStoredConfig();
+  return config?.authType === 'bedrock';
 }
 
 /**

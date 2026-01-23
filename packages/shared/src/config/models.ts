@@ -148,16 +148,35 @@ export function isOpusModel(modelId: string): boolean {
 }
 
 // ============================================
-// BEDROCK AUTO-DETECTION
+// BEDROCK MODEL MAPPING
 // ============================================
 
 /**
- * Check if we're in Bedrock mode (via environment variable)
- * Note: This is duplicated from auth/state.ts to avoid circular imports.
- * The model resolution logic needs this check but can't import from auth.
+ * Build Claude to Bedrock model mapping dynamically from CLAUDE_MODELS and BEDROCK_MODELS.
+ * This ensures the mapping stays in sync when model versions are updated.
  */
-function checkBedrockMode(): boolean {
-  return process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+function buildClaudeToBedrockMapping(): Map<string, string> {
+  const mapping = new Map<string, string>();
+
+  // Map by matching shortName (Opus -> Opus, Sonnet -> Sonnet, Haiku -> Haiku)
+  for (const claudeModel of CLAUDE_MODELS) {
+    const bedrockModel = BEDROCK_MODELS.find(b => b.shortName === claudeModel.shortName);
+    if (bedrockModel) {
+      mapping.set(claudeModel.id, bedrockModel.id);
+    }
+  }
+
+  return mapping;
+}
+
+// Lazily initialized mapping (built once on first use)
+let claudeToBedrockMap: Map<string, string> | null = null;
+
+function getClaudeToBedrockMapping(): Map<string, string> {
+  if (!claudeToBedrockMap) {
+    claudeToBedrockMap = buildClaudeToBedrockMapping();
+  }
+  return claudeToBedrockMap;
 }
 
 /**
@@ -171,10 +190,28 @@ export function isBedrockArn(modelId: string): boolean {
 }
 
 /**
+ * Check if a model ID is a native Bedrock model ID (not ARN).
+ * Native Bedrock model IDs have the format: us.anthropic.claude-*
+ */
+export function isBedrockModelId(modelId: string): boolean {
+  return modelId.startsWith('us.anthropic.') || modelId.startsWith('anthropic.');
+}
+
+/**
+ * Check if a model ID is valid for Bedrock (ARN, native ID, or mappable Claude model).
+ */
+export function isValidBedrockModel(modelId: string): boolean {
+  if (isBedrockArn(modelId)) return true;
+  if (isBedrockModelId(modelId)) return true;
+  // Check if it's a Claude model that can be mapped
+  return getClaudeToBedrockMapping().has(modelId);
+}
+
+/**
  * Get the effective model for Bedrock mode.
  * Priority:
  * 1. ANTHROPIC_MODEL env var (supports ARN format for Application Inference Profiles)
- * 2. App-configured model (if it's a valid Bedrock model ID)
+ * 2. App-configured model (if it's a valid Bedrock model ID or mappable Claude model)
  * 3. Default Bedrock model
  *
  * This allows users to configure custom Inference Profile ARNs while still
@@ -187,34 +224,33 @@ export function getBedrockModel(appConfiguredModel?: string): string {
     return envModel;
   }
 
-  // Second priority: app-configured model if it's a Bedrock model
+  // Second priority: app-configured model
   if (appConfiguredModel) {
-    // Check if it's already a Bedrock model ID or ARN
-    if (isBedrockArn(appConfiguredModel) || appConfiguredModel.includes('anthropic.claude')) {
+    // Already a Bedrock ARN - use as-is
+    if (isBedrockArn(appConfiguredModel)) {
       return appConfiguredModel;
     }
+
+    // Already a native Bedrock model ID - use as-is
+    if (isBedrockModelId(appConfiguredModel)) {
+      return appConfiguredModel;
+    }
+
     // Try to map standard Claude model to Bedrock equivalent
-    const bedrockModel = mapToBedrockModel(appConfiguredModel);
+    const bedrockModel = getClaudeToBedrockMapping().get(appConfiguredModel);
     if (bedrockModel) {
       return bedrockModel;
     }
+
+    // Unmappable model - log warning and fall through to default
+    console.warn(
+      `[Bedrock] Cannot map model "${appConfiguredModel}" to Bedrock format. ` +
+      `Using default Bedrock model. Valid Claude models: ${Array.from(getClaudeToBedrockMapping().keys()).join(', ')}`
+    );
   }
 
   // Fallback: default Bedrock model
-  return DEFAULT_PROVIDER_MODEL.bedrock || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
-}
-
-/**
- * Map a standard Claude model ID to its Bedrock equivalent.
- * Returns undefined if no mapping exists.
- */
-function mapToBedrockModel(modelId: string): string | undefined {
-  const mapping: Record<string, string> = {
-    'claude-opus-4-5-20251101': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
-    'claude-sonnet-4-5-20250929': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-    'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-  };
-  return mapping[modelId];
+  return DEFAULT_PROVIDER_MODEL.bedrock;
 }
 
 /**

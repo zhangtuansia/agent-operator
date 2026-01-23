@@ -5,7 +5,7 @@
  * Full Disk Access is required for operations on protected directories like ~/.Trash
  */
 
-import { app, shell, dialog, systemPreferences } from 'electron'
+import { shell, dialog, systemPreferences } from 'electron'
 import { existsSync, accessSync, constants } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -22,36 +22,29 @@ export function hasFullDiskAccess(): boolean {
     return true // Not applicable on non-macOS
   }
 
-  // Test paths that require Full Disk Access
+  // Test paths that require Full Disk Access (in order of reliability)
   const testPaths = [
     join(homedir(), 'Library', 'Safari'),
     join(homedir(), '.Trash'),
   ]
 
   for (const testPath of testPaths) {
-    try {
-      // Try to access the directory
-      accessSync(testPath, constants.R_OK)
-      // If we can access a protected path, we have FDA
-      return true
-    } catch {
-      // Access denied - continue checking other paths
+    // Skip if path doesn't exist
+    if (!existsSync(testPath)) {
+      continue
     }
-  }
 
-  // If we couldn't access any protected path, we likely don't have FDA
-  // However, some paths might not exist, so do a more specific check
-  const trashPath = join(homedir(), '.Trash')
-  if (existsSync(trashPath)) {
     try {
-      accessSync(trashPath, constants.R_OK)
+      // Try to access the directory - this requires FDA for protected paths
+      accessSync(testPath, constants.R_OK)
       return true
     } catch {
+      // Access denied - we don't have FDA
       return false
     }
   }
 
-  // If .Trash doesn't exist (unusual), assume we have access
+  // If none of the protected paths exist (unusual), assume we have access
   return true
 }
 
