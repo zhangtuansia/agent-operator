@@ -16,17 +16,18 @@ import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-// Debug logging to file (for GUI launch debugging)
-function debugLog(msg: string): void {
-  try {
-    const logDir = join(homedir(), '.agent-operator', 'logs');
-    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-    const logFile = join(logDir, 'bedrock-debug.log');
-    const timestamp = new Date().toISOString();
-    appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
-  } catch {
-    // Ignore logging errors
-  }
+// Debug logging (disabled in production)
+function debugLog(_msg: string): void {
+  // Disabled - uncomment below for debugging
+  // try {
+  //   const logDir = join(homedir(), '.agent-operator', 'logs');
+  //   if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+  //   const logFile = join(logDir, 'bedrock-debug.log');
+  //   const timestamp = new Date().toISOString();
+  //   appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
+  // } catch {
+  //   // Ignore logging errors
+  // }
 }
 
 /**

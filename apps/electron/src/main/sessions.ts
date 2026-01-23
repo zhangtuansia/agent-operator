@@ -497,22 +497,13 @@ export class SessionManager {
       delete process.env.ANTHROPIC_BASE_URL
 
       // Check for AWS Bedrock mode first
-      sessionLog.info('[Bedrock Debug] reinitializeAuth - billing.type =', billing.type)
-      sessionLog.info('[Bedrock Debug] reinitializeAuth - calling isBedrockMode()...')
       const bedrockMode = isBedrockMode()
-      sessionLog.info('[Bedrock Debug] reinitializeAuth - isBedrockMode() =', bedrockMode)
-      sessionLog.info('[Bedrock Debug] reinitializeAuth - process.env.CLAUDE_CODE_USE_BEDROCK =', process.env.CLAUDE_CODE_USE_BEDROCK)
 
       if (billing.type === 'bedrock' || bedrockMode) {
         // Ensure Bedrock env var is set for SDK subprocess
         // isBedrockMode() may have already set this from shell config, but ensure it's set
         process.env.CLAUDE_CODE_USE_BEDROCK = '1'
 
-        sessionLog.info('[Bedrock Debug] reinitializeAuth - Set CLAUDE_CODE_USE_BEDROCK=1')
-        sessionLog.info('[Bedrock Debug] reinitializeAuth - AWS_REGION =', process.env.AWS_REGION)
-        sessionLog.info('[Bedrock Debug] reinitializeAuth - AWS_PROFILE =', process.env.AWS_PROFILE)
-
-        // Log the AWS config being used
         sessionLog.info('Using AWS Bedrock authentication', {
           region: process.env.AWS_REGION || '(from ~/.aws/config)',
           profile: process.env.AWS_PROFILE || 'default',
