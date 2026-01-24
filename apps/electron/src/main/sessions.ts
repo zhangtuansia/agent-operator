@@ -381,6 +381,10 @@ export class SessionManager {
         sessionLog.info(`Status icon changed: ${iconFilename} in ${workspaceId}`)
         this.broadcastStatusesChanged(workspaceId)
       },
+      onLabelsChange: (workspaceId: string) => {
+        sessionLog.info(`Labels/Views config changed in ${workspaceId}`)
+        this.broadcastLabelsChanged(workspaceId)
+      },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)
         this.broadcastAppThemeChanged(theme)
@@ -423,6 +427,15 @@ export class SessionManager {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting statuses changed for ${workspaceId}`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.STATUSES_CHANGED, workspaceId)
+  }
+
+  /**
+   * Broadcast labels/views changed event to all windows
+   */
+  private broadcastLabelsChanged(workspaceId: string): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting labels changed for ${workspaceId}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
   }
 
   /**
@@ -559,7 +572,15 @@ export class SessionManager {
     // Set path to fetch interceptor for SDK subprocess
     // This interceptor captures API errors and adds metadata to MCP tool schemas
     // In monorepo, packages folder is at root level
-    const monorepoRoot = app.isPackaged ? basePath : join(basePath, '..', '..')
+    // Check if we're already at monorepo root (running from project root) or need to go up (running from apps/electron)
+    let monorepoRoot = basePath
+    if (!app.isPackaged) {
+      // Check if packages/shared exists at basePath (we're at monorepo root)
+      if (!existsSync(join(basePath, 'packages', 'shared'))) {
+        // Not at root, go up two levels (from apps/electron)
+        monorepoRoot = join(basePath, '..', '..')
+      }
+    }
     const interceptorPath = join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts')
     if (!existsSync(interceptorPath)) {
       const error = `Network interceptor not found at ${interceptorPath}. The app package may be corrupted.`

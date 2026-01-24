@@ -115,6 +115,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when a status icon file changes */
   onStatusIconChange?: (workspaceId: string, iconFilename: string) => void;
 
+  // Labels & Views callbacks
+  /** Called when labels config.json or views.json changes */
+  onLabelsChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -403,6 +407,18 @@ export class ConfigWatcher {
         }
         return;
       }
+    }
+
+    // Labels changes: labels/config.json
+    if (parts[0] === 'labels' && parts[1] === 'config.json') {
+      this.debounce('labels-config', () => this.handleLabelsChange());
+      return;
+    }
+
+    // Views changes: views.json (top-level file)
+    if (relativePath === 'views.json') {
+      this.debounce('views-config', () => this.handleLabelsChange());
+      return;
     }
   }
 
@@ -818,6 +834,19 @@ export class ConfigWatcher {
   private handleStatusIconChange(iconFilename: string): void {
     debug('[ConfigWatcher] Status icon changed:', this.workspaceId, iconFilename);
     this.callbacks.onStatusIconChange?.(this.workspaceId, iconFilename);
+  }
+
+  // ============================================================
+  // Labels & Views Handlers
+  // ============================================================
+
+  /**
+   * Handle labels config.json or views.json change
+   * Both trigger the same callback since useViews subscribes to LABELS_CHANGED
+   */
+  private handleLabelsChange(): void {
+    debug('[ConfigWatcher] Labels/Views config changed:', this.workspaceId);
+    this.callbacks.onLabelsChange?.(this.workspaceId);
   }
 
   // ============================================================

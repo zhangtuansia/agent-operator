@@ -1704,6 +1704,32 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return listStatuses(workspace.rootPath)
   })
 
+  // ============================================================
+  // Labels Management (Workspace-scoped)
+  // ============================================================
+
+  // List all labels for a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listLabels } = await import('@agent-operator/shared/labels/storage')
+    return listLabels(workspace.rootPath)
+  })
+
+  // ============================================================
+  // Views Management (Workspace-scoped)
+  // ============================================================
+
+  // List all views for a workspace
+  ipcMain.handle(IPC_CHANNELS.VIEWS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listViews } = await import('@agent-operator/shared/views/storage')
+    return listViews(workspace.rootPath)
+  })
+
   // Generic workspace image loading (for source icons, status icons, etc.)
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_READ_IMAGE, async (_event, workspaceId: string, relativePath: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)

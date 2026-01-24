@@ -315,6 +315,25 @@ const api: ElectronAPI = {
     }
   },
 
+  // Labels
+  listLabels: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),
+
+  // Labels change listener (live updates when labels config changes)
+  onLabelsChanged: (callback: (workspaceId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
+      callback(workspaceId)
+    }
+    ipcRenderer.on(IPC_CHANNELS.LABELS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LABELS_CHANGED, handler)
+    }
+  },
+
+  // Views
+  listViews: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWS_LIST, workspaceId),
+
   // Theme (app-level only)
   getAppTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_APP),
   // Preset themes (app-level)

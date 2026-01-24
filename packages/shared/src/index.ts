@@ -17,15 +17,19 @@
  *   - agent: OperatorAgent SDK wrapper, plan tools
  *   - auth: OAuth, token management, auth state
  *   - clients: Craft API client
+ *   - colors: Entity color system (system colors + custom colors with light/dark variants)
  *   - config: Storage, models, preferences
  *   - credentials: Encrypted credential storage
  *   - headless: Non-interactive execution mode
+ *   - icons: Icon configuration and sizing utilities
+ *   - labels: Hierarchical session labels with tree CRUD operations
  *   - mcp: MCP client, connection validation
  *   - prompts: System prompt generation
  *   - sources: Workspace-scoped source management (MCP, API, local)
  *   - utils: Debug logging, file handling, summarization
  *   - validation: URL validation
  *   - version: Version and installation management
+ *   - views: Dynamic views with Filtrex expression evaluation
  *   - workspaces: Workspace management (top-level organizational unit)
  */
 

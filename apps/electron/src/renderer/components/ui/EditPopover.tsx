@@ -64,6 +64,8 @@ export type EditContextKey =
   | 'add-source'
   | 'add-skill'
   | 'edit-statuses'
+  | 'edit-labels'
+  | 'edit-auto-rules'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -266,6 +268,36 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Add a "Blocked" status',
   }),
+
+  // Labels configuration context
+  'edit-labels': (location) => ({
+    context: {
+      label: 'Label Configuration',
+      filePath: `${location}/labels/config.json`,
+      context:
+        'The user wants to customize session labels (tags for categorization). ' +
+        'Labels are stored in labels/config.json with a nested tree structure. ' +
+        'Each label has: id, name, color (EntityColor with light/dark values), optional children array, and optional valueType. ' +
+        'Labels can be nested to form groups (e.g., Development > Code, Bug). ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a "Bug" label under Development',
+  }),
+
+  // Auto-apply rules configuration context
+  'edit-auto-rules': (location) => ({
+    context: {
+      label: 'Auto-Apply Rules',
+      filePath: `${location}/labels/config.json`,
+      context:
+        'The user wants to configure auto-apply rules for labels. ' +
+        'Auto-apply rules are stored in the labels config and use regex patterns to automatically apply labels when matched. ' +
+        'Each label can have an autoApply array with regex patterns. ' +
+        'When a user message matches a pattern, the label is automatically applied to the session. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add an auto-rule to detect GitHub issue URLs',
+  }),
 }
 
 /**
@@ -302,6 +334,8 @@ const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; examp
   'add-source': { labelKey: 'editPopover.addSource', exampleKey: 'editPopover.exampleAddSource', placeholderKey: 'editPopover.placeholderAddSource' },
   'add-skill': { labelKey: 'editPopover.addSkill', exampleKey: 'editPopover.exampleAddSkill', placeholderKey: 'editPopover.placeholderAddSkill' },
   'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
+  'edit-labels': { labelKey: 'editPopover.labelConfiguration', exampleKey: 'editPopover.exampleLabel' },
+  'edit-auto-rules': { labelKey: 'editPopover.autoApplyRules', exampleKey: 'editPopover.exampleAutoRule' },
 }
 
 /**

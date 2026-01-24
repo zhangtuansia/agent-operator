@@ -605,6 +605,13 @@ export const IPC_CHANNELS = {
   STATUSES_LIST: 'statuses:list',
   STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
 
+  // Labels management (workspace-scoped)
+  LABELS_LIST: 'labels:list',
+  LABELS_CHANGED: 'labels:changed',  // Broadcast event
+
+  // Views management (workspace-scoped)
+  VIEWS_LIST: 'views:list',
+
   // Theme management (cascading: app → workspace)
   THEME_APP_CHANGED: 'theme:appChanged',        // Broadcast event
 
@@ -852,6 +859,14 @@ export interface ElectronAPI {
   listStatuses(workspaceId: string): Promise<import('@agent-operator/shared/statuses').StatusConfig[]>
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
+
+  // Labels (workspace-scoped)
+  listLabels(workspaceId: string): Promise<import('@agent-operator/shared/labels').LabelConfig[]>
+  // Labels change listener (live updates when labels config changes)
+  onLabelsChanged(callback: (workspaceId: string) => void): () => void
+
+  // Views (workspace-scoped)
+  listViews(workspaceId: string): Promise<import('@agent-operator/shared/views').ViewConfig[]>
 
   // Generic workspace image loading/saving (returns data URL for images, raw string for SVG)
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>

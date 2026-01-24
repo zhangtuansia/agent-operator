@@ -11,7 +11,6 @@ import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
-import { useLanguage } from '@/context/LanguageContext'
 
 export interface Info_DataTableProps<TData, TValue> {
   /** TanStack Table column definitions */
@@ -39,6 +38,8 @@ export interface Info_DataTableProps<TData, TValue> {
    * Parent should have 'group' class for hover detection.
    */
   floatingAction?: React.ReactNode
+  /** Enable tree/hierarchical rows (passed through to DataTable) */
+  getSubRows?: (row: TData) => TData[] | undefined
   /** Additional class names */
   className?: string
 }
@@ -73,22 +74,22 @@ export function Info_DataTable<TData, TValue>({
   error,
   emptyContent,
   floatingAction,
+  getSubRows,
   className,
 }: Info_DataTableProps<TData, TValue>) {
-  const { t } = useLanguage()
   const [searchValue, setSearchValue] = React.useState('')
 
   // Parse searchable prop
   const searchConfig = React.useMemo(() => {
     if (!searchable) return null
     if (searchable === true) {
-      return { placeholder: t('misc.search'), column: undefined }
+      return { placeholder: 'Search...', column: undefined }
     }
     return {
-      placeholder: searchable.placeholder ?? t('misc.search'),
+      placeholder: searchable.placeholder ?? 'Search...',
       column: searchable.column,
     }
-  }, [searchable, t])
+  }, [searchable])
 
   // Loading state
   if (loading) {
@@ -115,7 +116,10 @@ export function Info_DataTable<TData, TValue>({
   return (
     <div
       className={cn(
-        maxHeight && 'overflow-y-auto',
+        // overflow-x-hidden on outer container so the sticky floating action
+        // doesn't scroll horizontally with table content. The inner wrapper
+        // handles horizontal overflow independently.
+        maxHeight && 'overflow-y-auto overflow-x-hidden',
         className
       )}
       style={maxHeight ? { maxHeight } : undefined}
@@ -130,16 +134,21 @@ export function Info_DataTable<TData, TValue>({
         </div>
       )}
 
-      <DataTable
-        columns={columns}
-        data={data}
-        globalFilter={searchConfig?.column ? undefined : searchValue}
-        filterColumn={searchConfig?.column}
-        filterValue={searchConfig?.column ? searchValue : undefined}
-        emptyContent={emptyContent}
-        noBorder
-        noWrapper
-      />
+      {/* Inner wrapper handles horizontal overflow independently so the table
+          can scroll horizontally without dragging the floating action along. */}
+      <div className="overflow-x-auto">
+        <DataTable
+          columns={columns}
+          data={data}
+          globalFilter={searchConfig?.column ? undefined : searchValue}
+          filterColumn={searchConfig?.column}
+          filterValue={searchConfig?.column ? searchValue : undefined}
+          emptyContent={emptyContent}
+          getSubRows={getSubRows}
+          noBorder
+          noWrapper
+        />
+      </div>
     </div>
   )
 }

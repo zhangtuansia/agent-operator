@@ -68,11 +68,11 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useTranslation } from "@/i18n"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
+import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
 
 // Built-in status IDs that have translations
 const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
@@ -406,17 +406,7 @@ function AppShellContent({
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
-  const [todoStates, setTodoStates] = React.useState<Array<{
-    id: string
-    label: string
-    color: string
-    icon: React.ReactNode
-    iconColorable: boolean
-    category?: 'open' | 'closed'
-    isFixed?: boolean
-    isDefault?: boolean
-    shortcut?: string
-  }>>([])
+  const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
 
   // Convert StatusConfig to TodoState with resolved icons
   React.useEffect(() => {
@@ -1137,7 +1127,7 @@ function AppShellContent({
                           title: getTranslatedStatusLabel(state.id, state.label, t),
                           label: String(todoStateCounts[state.id] || 0),
                           icon: state.icon,
-                          iconColor: state.color,
+                          iconColor: state.resolvedColor,
                           iconColorable: state.iconColorable,
                           variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
                           onClick: () => handleTodoStateClick(state.id),
@@ -1316,11 +1306,8 @@ function AppShellContent({
                               }}
                             >
                               <span
-                                className={cn(
-                                  "h-3.5 w-3.5 flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full",
-                                  applyColor && !isHexColor(state.color) && state.color
-                                )}
-                                style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}
+                                className="h-3.5 w-3.5 flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full"
+                                style={applyColor ? { color: state.resolvedColor } : undefined}
                               >
                                 {state.icon}
                               </span>

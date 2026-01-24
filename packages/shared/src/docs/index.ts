@@ -1678,3 +1678,6 @@ export {
   type ParsedSourceGuide,
   type SourceGuideFrontmatter,
 } from './source-guides.ts';
+
+// Re-export documentation link utilities
+export { getDocUrl, type DocKey } from './doc-links.ts';
