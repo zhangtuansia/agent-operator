@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
 import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn, isHexColor } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@agent-operator/ui"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -46,9 +46,14 @@ import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/sha
 import { useLanguage } from "@/context/LanguageContext"
 import { getDateFnsLocale } from "@/i18n"
 
-// Pagination constants
-const INITIAL_DISPLAY_LIMIT = 20
-const BATCH_SIZE = 20
+// Virtual list constants
+const SESSION_ITEM_HEIGHT = 72  // Estimated height for session items
+const DATE_HEADER_HEIGHT = 32   // Height for date headers
+
+// Virtual item types for mixed list (headers + sessions)
+type VirtualItem =
+  | { type: 'header'; date: Date; label: string }
+  | { type: 'session'; session: SessionMeta; isFirstInGroup: boolean }
 
 /**
  * Format a date for the date header
@@ -590,9 +595,8 @@ export function SessionList({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState("")
-  const [displayLimit, setDisplayLimit] = useState(INITIAL_DISPLAY_LIMIT)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Focus search input when search becomes active (with delay to let dropdown close)
   useEffect(() => {
@@ -620,43 +624,33 @@ export function SessionList({
     })
   }, [sortedItems, searchQuery, newChatFallback])
 
-  // Reset display limit when search query changes
-  useEffect(() => {
-    setDisplayLimit(INITIAL_DISPLAY_LIMIT)
-  }, [searchQuery])
+  // Group sessions by date (all items, virtualization handles rendering)
+  const dateGroups = useMemo(() => groupSessionsByDate(searchFilteredItems, t), [searchFilteredItems, t])
 
-  // Paginate items - only show up to displayLimit
-  const paginatedItems = useMemo(() => {
-    return searchFilteredItems.slice(0, displayLimit)
-  }, [searchFilteredItems, displayLimit])
+  // Create flat list of virtual items (headers + sessions) for virtualization
+  const virtualItems = useMemo((): VirtualItem[] => {
+    const items: VirtualItem[] = []
+    for (const group of dateGroups) {
+      // Add date header
+      items.push({ type: 'header', date: group.date, label: group.label })
+      // Add sessions in group
+      group.sessions.forEach((session, indexInGroup) => {
+        items.push({ type: 'session', session, isFirstInGroup: indexInGroup === 0 })
+      })
+    }
+    return items
+  }, [dateGroups])
 
-  // Check if there are more items to load
-  const hasMore = displayLimit < searchFilteredItems.length
-
-  // Load more items callback
-  const loadMore = useCallback(() => {
-    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
-  }, [searchFilteredItems.length])
-
-  // Intersection observer for infinite scroll
-  useEffect(() => {
-    if (!hasMore || !sentinelRef.current) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore()
-        }
-      },
-      { rootMargin: '100px' }  // Trigger slightly before reaching bottom
-    )
-
-    observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [hasMore, loadMore])
-
-  // Group sessions by date (use paginated items)
-  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems, t), [paginatedItems, t])
+  // Setup virtualizer for efficient rendering of large lists
+  const virtualizer = useVirtualizer({
+    count: virtualItems.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: (index) => {
+      const item = virtualItems[index]
+      return item.type === 'header' ? DATE_HEADER_HEIGHT : SESSION_ITEM_HEIGHT
+    },
+    overscan: 5,  // Render extra items for smooth scrolling
+  })
 
   // Create flat list for keyboard navigation (maintains order across groups)
   const flatItems = useMemo(() => {
@@ -819,11 +813,11 @@ export function SessionList({
 
   return (
     <>
-      {/* ScrollArea with mask-fade-top-short - shorter fade to avoid header overlap */}
-      <ScrollArea className="h-screen select-none mask-fade-top-short">
-        {/* Search input - sticky at top */}
+      {/* Virtualized scroll container */}
+      <div className="h-full flex flex-col select-none">
+        {/* Search input - fixed at top */}
         {searchActive && (
-          <div className="sticky top-0 z-sticky px-2 py-2 border-b border-border/50">
+          <div className="shrink-0 px-2 py-2 border-b border-border/50">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <input
@@ -845,81 +839,106 @@ export function SessionList({
             </div>
           </div>
         )}
-        <div
-          ref={zoneRef}
-          className="flex flex-col pb-14 min-w-0"
-          data-focus-zone="session-list"
-          role="listbox"
-          aria-label={t('aria.sessions')}
-        >
-          {/* No results message when searching */}
-          {searchActive && searchQuery && flatItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">{t('emptyStates.noConversationsFound')}</p>
-              <button
-                onClick={() => onSearchChange?.('')}
-                className="text-xs text-foreground hover:underline mt-1"
-              >
-                {t('sessionList.clearSearch')}
-              </button>
-            </div>
-          )}
-          {dateGroups.map((group) => (
-            <div key={group.date.toISOString()}>
-              {/* Date header - scrolls with content */}
-              <DateHeader label={group.label} />
-              {/* Sessions in this date group */}
-              {group.sessions.map((item, indexInGroup) => {
-                const flatIndex = sessionIndexMap.get(item.id) ?? 0
-                const itemProps = getItemProps(item, flatIndex)
+
+        {/* No results message when searching */}
+        {searchActive && searchQuery && flatItems.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-12 px-4">
+            <p className="text-sm text-muted-foreground">{t('emptyStates.noConversationsFound')}</p>
+            <button
+              onClick={() => onSearchChange?.('')}
+              className="text-xs text-foreground hover:underline mt-1"
+            >
+              {t('sessionList.clearSearch')}
+            </button>
+          </div>
+        ) : (
+          /* Virtual scroll container */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto mask-fade-top-short"
+          >
+            <div
+              ref={zoneRef}
+              className="relative min-w-0"
+              style={{ height: virtualizer.getTotalSize() }}
+              data-focus-zone="session-list"
+              role="listbox"
+              aria-label={t('aria.sessions')}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const item = virtualItems[virtualRow.index]
+
+                if (item.type === 'header') {
+                  return (
+                    <div
+                      key={`header-${item.date.toISOString()}`}
+                      className="absolute top-0 left-0 w-full"
+                      style={{
+                        height: virtualRow.size,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <DateHeader label={item.label} />
+                    </div>
+                  )
+                }
+
+                // Session item
+                const sessionItem = item.session
+                const flatIndex = sessionIndexMap.get(sessionItem.id) ?? 0
+                const itemProps = getItemProps(sessionItem, flatIndex)
 
                 return (
-                  <SessionItem
-                    key={item.id}
-                    item={item}
-                    index={flatIndex}
-                    itemProps={itemProps}
-                    isSelected={session.selected === item.id}
-                    isLast={flatIndex === flatItems.length - 1}
-                    isFirstInGroup={indexInGroup === 0}
-                    onKeyDown={handleKeyDown}
-                    onRenameClick={handleRenameClick}
-                    onTodoStateChange={onTodoStateChange}
-                    onFlag={onFlag ? handleFlagWithToast : undefined}
-                    onUnflag={onUnflag ? handleUnflagWithToast : undefined}
-                    onMarkUnread={onMarkUnread}
-                    onDelete={handleDeleteWithToast}
-                    onSelect={() => {
-                      // Navigate to session with filter context (updates URL and selection)
-                      if (!currentFilter || currentFilter.kind === 'allChats') {
-                        navigate(routes.view.allChats(item.id))
-                      } else if (currentFilter.kind === 'flagged') {
-                        navigate(routes.view.flagged(item.id))
-                      } else if (currentFilter.kind === 'state') {
-                        navigate(routes.view.state(currentFilter.stateId, item.id))
-                      }
-                      // Notify parent
-                      onSessionSelect?.(item)
+                  <div
+                    key={sessionItem.id}
+                    className="absolute top-0 left-0 w-full"
+                    style={{
+                      height: virtualRow.size,
+                      transform: `translateY(${virtualRow.start}px)`,
                     }}
-                    onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                    permissionMode={sessionOptions?.get(item.id)?.permissionMode}
-                    searchQuery={searchQuery}
-                    todoStates={todoStates}
-                    t={t}
-                    language={language}
-                  />
+                  >
+                    <SessionItem
+                      item={sessionItem}
+                      index={flatIndex}
+                      itemProps={itemProps}
+                      isSelected={session.selected === sessionItem.id}
+                      isLast={flatIndex === flatItems.length - 1}
+                      isFirstInGroup={item.isFirstInGroup}
+                      onKeyDown={handleKeyDown}
+                      onRenameClick={handleRenameClick}
+                      onTodoStateChange={onTodoStateChange}
+                      onFlag={onFlag ? handleFlagWithToast : undefined}
+                      onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                      onMarkUnread={onMarkUnread}
+                      onDelete={handleDeleteWithToast}
+                      onSelect={() => {
+                        // Navigate to session with filter context (updates URL and selection)
+                        if (!currentFilter || currentFilter.kind === 'allChats') {
+                          navigate(routes.view.allChats(sessionItem.id))
+                        } else if (currentFilter.kind === 'flagged') {
+                          navigate(routes.view.flagged(sessionItem.id))
+                        } else if (currentFilter.kind === 'state') {
+                          navigate(routes.view.state(currentFilter.stateId, sessionItem.id))
+                        }
+                        // Notify parent
+                        onSessionSelect?.(sessionItem)
+                      }}
+                      onOpenInNewWindow={() => onOpenInNewWindow?.(sessionItem)}
+                      permissionMode={sessionOptions?.get(sessionItem.id)?.permissionMode}
+                      searchQuery={searchQuery}
+                      todoStates={todoStates}
+                      t={t}
+                      language={language}
+                    />
+                  </div>
                 )
               })}
-          </div>
-          ))}
-          {/* Load more sentinel - triggers infinite scroll */}
-          {hasMore && (
-            <div ref={sentinelRef} className="flex justify-center py-4">
-              <Spinner className="text-muted-foreground" />
             </div>
-          )}
-        </div>
-      </ScrollArea>
+            {/* Bottom padding for scroll */}
+            <div className="h-14" />
+          </div>
+        )}
+      </div>
 
       {/* Rename Dialog */}
       <RenameDialog
