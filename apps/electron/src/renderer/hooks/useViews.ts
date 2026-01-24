@@ -89,23 +89,21 @@ export function useViews(workspaceId: string | null): UseViewsResult {
 
     // Build the evaluation context from session metadata.
     // This maps SessionMeta fields to the flat context object expected by expressions.
-    // Note: Some properties may not be available in SessionMeta yet, so we provide defaults.
     const context: ViewEvaluationContext = buildViewContext({
       name: meta.name,
       preview: meta.preview,
       todoState: meta.todoState,
-      // Use optional chaining for properties that may not exist in SessionMeta
-      permissionMode: (meta as any).permissionMode,
-      model: (meta as any).model,
+      permissionMode: meta.permissionMode,
+      model: meta.model,
       lastMessageRole: meta.lastMessageRole,
       lastMessageAt: meta.lastMessageAt,
-      createdAt: (meta as any).createdAt,
-      messageCount: (meta as any).messageCount,
+      createdAt: meta.createdAt,
+      messageCount: meta.messageCount,
       isFlagged: meta.isFlagged,
-      hasUnread: (meta as any).hasUnread,
+      hasUnread: meta.hasUnread,
       isProcessing: meta.isProcessing,
-      labels: (meta as any).labels,
-      tokenUsage: (meta as any).tokenUsage,
+      labels: meta.labels,
+      tokenUsage: meta.tokenUsage,
     })
 
     return evaluateViews(context, compiled)

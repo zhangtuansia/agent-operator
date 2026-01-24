@@ -42,6 +42,20 @@ export interface SessionMeta {
   isAsyncOperationOngoing?: boolean
   /** @deprecated Use isAsyncOperationOngoing instead */
   isRegeneratingTitle?: boolean
+  /** Permission mode for the session */
+  permissionMode?: 'safe' | 'ask' | 'allow-all'
+  /** Model used for the session */
+  model?: string
+  /** When the session was created */
+  createdAt?: number
+  /** Number of messages in the session */
+  messageCount?: number
+  /** Whether the session has unread messages */
+  hasUnread?: boolean
+  /** Labels assigned to the session */
+  labels?: string[]
+  /** Token usage for the session */
+  tokenUsage?: { input: number; output: number }
 }
 
 /**
