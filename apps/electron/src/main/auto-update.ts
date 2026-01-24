@@ -480,13 +480,21 @@ async function installMacOS(): Promise<void> {
     return
   }
 
-  const child = spawn('bash', [scriptPath, downloadedInstallerPath, app.getPath('exe')], {
+  // Get the .app bundle path from the executable path
+  // app.getPath('exe') returns: /Applications/Cowork.app/Contents/MacOS/Cowork
+  // We need: /Applications/Cowork.app
+  const exePath = app.getPath('exe')
+  const appBundlePath = exePath.replace(/\/Contents\/MacOS\/[^/]+$/, '')
+
+  mainLog.info(`[auto-update] App bundle path: ${appBundlePath}`)
+
+  const child = spawn('bash', [scriptPath, downloadedInstallerPath, appBundlePath], {
     detached: true,
     stdio: 'ignore',
     env: {
       ...process.env,
       CRAFT_UPDATE_DMG: downloadedInstallerPath,
-      CRAFT_APP_PATH: app.getPath('exe'),
+      CRAFT_APP_PATH: appBundlePath,
     },
   })
 
