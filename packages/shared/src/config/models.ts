@@ -50,6 +50,27 @@ export const BEDROCK_MODELS: ModelDefinition[] = [
   { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient' },
 ];
 
+// OpenRouter models (uses provider/model-name format)
+export const OPENROUTER_MODELS: ModelDefinition[] = [
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', shortName: 'Sonnet 3.5', description: 'Via OpenRouter' },
+  { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku', shortName: 'Haiku 3.5', description: 'Via OpenRouter' },
+  { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', shortName: 'Opus 3', description: 'Via OpenRouter' },
+  { id: 'openai/gpt-4o', name: 'GPT-4o', shortName: 'GPT-4o', description: 'OpenAI via OpenRouter' },
+  { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', shortName: 'Gemini', description: 'Google via OpenRouter' },
+];
+
+// Ollama models (local models)
+export const OLLAMA_MODELS: ModelDefinition[] = [
+  { id: 'llama3.2', name: 'Llama 3.2', shortName: 'Llama', description: 'Meta Llama 3.2' },
+  { id: 'llama3.2:70b', name: 'Llama 3.2 70B', shortName: 'Llama 70B', description: 'Large Llama model' },
+  { id: 'mistral', name: 'Mistral', shortName: 'Mistral', description: 'Mistral AI' },
+  { id: 'codellama', name: 'Code Llama', shortName: 'CodeLlama', description: 'Optimized for code' },
+  { id: 'qwen2.5', name: 'Qwen 2.5', shortName: 'Qwen', description: 'Alibaba Qwen' },
+];
+
+// Vercel AI Gateway models (proxies Claude models)
+export const VERCEL_MODELS: ModelDefinition[] = CLAUDE_MODELS;
+
 // Provider to models mapping
 export const PROVIDER_MODELS: Record<string, ModelDefinition[]> = {
   anthropic: CLAUDE_MODELS,
@@ -59,6 +80,9 @@ export const PROVIDER_MODELS: Record<string, ModelDefinition[]> = {
   minimax: MINIMAX_MODELS,
   deepseek: DEEPSEEK_MODELS,
   bedrock: BEDROCK_MODELS,  // AWS Bedrock
+  openrouter: OPENROUTER_MODELS,  // OpenRouter
+  vercel: VERCEL_MODELS,  // Vercel AI Gateway
+  ollama: OLLAMA_MODELS,  // Local Ollama
   custom: CLAUDE_MODELS,  // Custom provider defaults to Claude models
 };
 
@@ -71,6 +95,9 @@ export const DEFAULT_PROVIDER_MODEL: Record<string, string> = {
   minimax: 'abab6.5s-chat',
   deepseek: 'deepseek-chat',
   bedrock: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  openrouter: 'anthropic/claude-3.5-sonnet',
+  vercel: 'claude-sonnet-4-5-20250929',
+  ollama: 'llama3.2',
   custom: 'claude-sonnet-4-5-20250929',
 };
 
@@ -140,6 +167,8 @@ const ALL_MODELS: ModelDefinition[] = [
   ...MINIMAX_MODELS,
   ...DEEPSEEK_MODELS,
   ...BEDROCK_MODELS,
+  ...OPENROUTER_MODELS,
+  ...OLLAMA_MODELS,
 ];
 
 /** Get display name for a model ID (full name with version) */

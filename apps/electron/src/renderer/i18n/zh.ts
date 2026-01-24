@@ -144,10 +144,18 @@ export const zh: TranslationKeys = {
     providerAnthropic: 'Anthropic（默认）',
     providerBedrock: 'AWS Bedrock',
     providerBedrockDesc: '通过环境变量配置',
+    providerOpenRouter: 'OpenRouter',
+    providerVercel: 'Vercel AI Gateway',
+    providerOllama: 'Ollama',
     providerGLM: '智谱 GLM',
     providerMiniMax: 'MiniMax',
     providerDeepSeek: 'DeepSeek',
     providerCustom: '自定义端点',
+
+    // Provider-specific help text
+    helpOpenRouter: '模型格式：provider/model-name（例如 anthropic/claude-3.5-sonnet, openai/gpt-4o）',
+    helpOllama: '确保 Ollama 正在本地运行。模型名称与您已拉取的模型匹配（例如 llama3.2, mistral）',
+    helpVercel: 'Vercel AI Gateway 代理请求到 Anthropic。使用标准 Claude 模型名称。',
 
     // Bedrock info
     bedrockConfiguration: '配置',
@@ -777,6 +785,9 @@ export const zh: TranslationKeys = {
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API 密钥',
     awsBedrock: 'AWS Bedrock',
+    openrouter: 'OpenRouter',
+    vercel: 'Vercel AI Gateway',
+    ollama: 'Ollama（本地）',
     minimax: 'MiniMax',
     glm: '智谱 GLM',
     deepseek: 'DeepSeek',

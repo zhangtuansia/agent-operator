@@ -142,10 +142,18 @@ export const en = {
     providerAnthropic: 'Anthropic (Default)',
     providerBedrock: 'AWS Bedrock',
     providerBedrockDesc: 'Configured via environment variables',
+    providerOpenRouter: 'OpenRouter',
+    providerVercel: 'Vercel AI Gateway',
+    providerOllama: 'Ollama',
     providerGLM: 'GLM (智谱)',
     providerMiniMax: 'MiniMax',
     providerDeepSeek: 'DeepSeek',
     providerCustom: 'Custom Endpoint',
+
+    // Provider-specific help text
+    helpOpenRouter: 'Model format: provider/model-name (e.g., anthropic/claude-3.5-sonnet, openai/gpt-4o)',
+    helpOllama: 'Make sure Ollama is running locally. Model names match what you have pulled (e.g., llama3.2, mistral)',
+    helpVercel: 'Vercel AI Gateway proxies requests to Anthropic. Use standard Claude model names.',
 
     // Bedrock info
     bedrockConfiguration: 'Configuration',
@@ -786,6 +794,9 @@ export const en = {
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API Key',
     awsBedrock: 'AWS Bedrock',
+    openrouter: 'OpenRouter',
+    vercel: 'Vercel AI Gateway',
+    ollama: 'Ollama (Local)',
     minimax: 'MiniMax',
     glm: '智谱 GLM',
     deepseek: 'DeepSeek',

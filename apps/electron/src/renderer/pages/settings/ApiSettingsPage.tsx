@@ -58,6 +58,29 @@ const PROVIDERS = [
     readonly: true,
   },
   {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    baseURL: 'https://openrouter.ai/api',
+    apiFormat: 'anthropic' as const,
+    description: 'Access multiple AI models through OpenRouter',
+    modelHint: 'anthropic/claude-3.5-sonnet',
+  },
+  {
+    id: 'vercel',
+    name: 'Vercel AI Gateway',
+    baseURL: 'https://ai-gateway.vercel.sh',
+    apiFormat: 'anthropic' as const,
+    description: 'Vercel AI Gateway proxy',
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    baseURL: 'http://localhost:11434',
+    apiFormat: 'openai' as const,
+    description: 'Run models locally with Ollama',
+    modelHint: 'llama3.2',
+  },
+  {
     id: 'glm',
     name: '智谱 GLM',
     baseURL: 'https://open.bigmodel.cn/api/anthropic',
@@ -93,6 +116,20 @@ interface ProviderConfig {
   provider: string
   baseURL: string
   apiFormat: ApiFormat
+}
+
+// Get provider-specific help text
+function getProviderHelpText(providerId: string, t: (key: string) => string): string | null {
+  switch (providerId) {
+    case 'openrouter':
+      return t('apiSettings.helpOpenRouter')
+    case 'ollama':
+      return t('apiSettings.helpOllama')
+    case 'vercel':
+      return t('apiSettings.helpVercel')
+    default:
+      return null
+  }
 }
 
 export default function ApiSettingsPage() {
@@ -346,6 +383,15 @@ export default function ApiSettingsPage() {
                           className="font-mono text-sm max-w-md"
                         />
                       </SettingsRow>
+
+                      {/* Provider-specific help text */}
+                      {getProviderHelpText(currentProvider, t) && (
+                        <div className="px-4 pb-4 -mt-2">
+                          <p className="text-sm text-muted-foreground">
+                            {getProviderHelpText(currentProvider, t)}
+                          </p>
+                        </div>
+                      )}
 
                       {/* API Format - only show for custom provider */}
                       {currentProvider === 'custom' && (
