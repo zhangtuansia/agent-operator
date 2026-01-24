@@ -31,6 +31,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+import { useNavigationHistory } from '@/hooks/useNavigationHistory'
 import { toast } from 'sonner'
 import { useAtomValue } from 'jotai'
 import { useSession } from '@/hooks/useSession'
@@ -129,16 +130,8 @@ export function NavigationProvider({
   // UNIFIED NAVIGATION STATE - single source of truth for all 3 panels
   const [navigationState, setNavigationState] = useState<NavigationState>(DEFAULT_NAVIGATION_STATE)
 
-  // Track history state for back/forward buttons
-  const [canGoBack, setCanGoBack] = useState(false)
-  const [canGoForward, setCanGoForward] = useState(false)
-
-  // Custom history stack (browser history doesn't work reliably in Electron)
-  const historyStackRef = useRef<Route[]>([])
-  const historyIndexRef = useRef(-1)
-
-  // Flag to prevent pushing to history when navigating via back/forward
-  const isNavigatingHistoryRef = useRef(false)
+  // Navigation history hook - manages back/forward with custom stack
+  const navHistory = useNavigationHistory()
 
   // Ref to hold the latest navigate function (avoids stale closure in goBack/goForward)
   const navigateRef = useRef<((route: Route) => void | Promise<void>) | null>(null)
@@ -440,35 +433,12 @@ export function NavigationProvider({
         url.searchParams.set('route', finalRoute)
         url.searchParams.delete('sidebar')
       }
-      history.replaceState({ route: finalRoute }, '', url.toString())
+      window.history.replaceState({ route: finalRoute }, '', url.toString())
 
-      // Update our custom history stack (unless we're navigating via back/forward)
-      if (isNavigatingHistoryRef.current) {
-        isNavigatingHistoryRef.current = false
-        console.log('[Navigation] Skipping history push (navigating via back/forward)')
-      } else {
-        // Only push if route is different from current route (avoid duplicates)
-        const currentRoute = historyStackRef.current[historyIndexRef.current]
-        if (finalRoute !== currentRoute) {
-          // When navigating to a new route, truncate forward history and push
-          const newIndex = historyIndexRef.current + 1
-          historyStackRef.current = historyStackRef.current.slice(0, newIndex)
-          historyStackRef.current.push(finalRoute)
-          historyIndexRef.current = newIndex
-          console.log('[Navigation] Pushed to history:', finalRoute, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
-        } else {
-          console.log('[Navigation] Skipping duplicate route:', finalRoute)
-        }
-      }
-
-      // Update back/forward availability
-      const newCanGoBack = historyIndexRef.current > 0
-      const newCanGoForward = historyIndexRef.current < historyStackRef.current.length - 1
-      console.log('[Navigation] Updating canGoBack:', newCanGoBack, 'canGoForward:', newCanGoForward)
-      setCanGoBack(newCanGoBack)
-      setCanGoForward(newCanGoForward)
+      // Update our custom history stack
+      navHistory.pushToHistory(finalRoute)
     },
-    [isReady, handleActionNavigation, applyNavigationState]
+    [isReady, handleActionNavigation, applyNavigationState, navHistory]
   )
 
   // Keep navigateRef in sync with latest navigate function
@@ -497,115 +467,20 @@ export function NavigationProvider({
   }, [sessionMetaMap, sources, skills])
 
   // Go back in history (using our custom stack)
-  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
   const goBack = useCallback(() => {
-    const currentIndex = historyIndexRef.current
-    console.log('[Navigation] goBack called, current index:', currentIndex, 'stack length:', historyStackRef.current.length)
-
-    if (currentIndex <= 0) {
-      console.log('[Navigation] Already at beginning of history')
-      return
-    }
-
-    // Find first valid entry going backwards, collecting indices of invalid entries
-    const invalidIndices: number[] = []
-    let targetIndex = -1
-
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      const route = historyStackRef.current[i]
-      if (isRouteValid(route)) {
-        targetIndex = i
-        break
-      }
-      invalidIndices.push(i)
-      console.log('[Navigation] Marking invalid history entry for removal:', route)
-    }
-
-    // Remove invalid entries from stack (in reverse order to preserve indices)
-    if (invalidIndices.length > 0) {
-      for (const idx of invalidIndices.sort((a, b) => b - a)) {
-        historyStackRef.current.splice(idx, 1)
-      }
-      console.log('[Navigation] Removed', invalidIndices.length, 'invalid entries from history')
-    }
-
-    // Recalculate target index after removal
-    if (targetIndex >= 0) {
-      // Adjust for removed entries that were before the target
-      const removedBefore = invalidIndices.filter(i => i < targetIndex).length
-      targetIndex -= removedBefore
-    }
-
-    // Also adjust current index for removed entries
-    const removedBeforeCurrent = invalidIndices.filter(i => i < currentIndex).length
-    historyIndexRef.current = currentIndex - removedBeforeCurrent
-
-    if (targetIndex >= 0) {
-      historyIndexRef.current = targetIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[targetIndex]
-      console.log('[Navigation] Going back to:', route, 'new index:', targetIndex)
+    const route = navHistory.goBack(isRouteValid)
+    if (route) {
       navigateRef.current?.(route)
-    } else {
-      console.log('[Navigation] No valid history entry to go back to')
-      // Update canGoBack/canGoForward since we may have removed entries
-      setCanGoBack(historyIndexRef.current > 0)
-      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
     }
-  }, [isRouteValid])
+  }, [isRouteValid, navHistory])
 
   // Go forward in history (using our custom stack)
-  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
   const goForward = useCallback(() => {
-    const currentIndex = historyIndexRef.current
-    const stackLength = historyStackRef.current.length
-    console.log('[Navigation] goForward called, current index:', currentIndex, 'stack length:', stackLength)
-
-    if (currentIndex >= stackLength - 1) {
-      console.log('[Navigation] Already at end of history')
-      return
-    }
-
-    // Find first valid entry going forwards, collecting indices of invalid entries
-    const invalidIndices: number[] = []
-    let targetIndex = -1
-
-    for (let i = currentIndex + 1; i < stackLength; i++) {
-      const route = historyStackRef.current[i]
-      if (isRouteValid(route)) {
-        targetIndex = i
-        break
-      }
-      invalidIndices.push(i)
-      console.log('[Navigation] Marking invalid history entry for removal:', route)
-    }
-
-    // Remove invalid entries from stack (in reverse order to preserve indices)
-    if (invalidIndices.length > 0) {
-      for (const idx of invalidIndices.sort((a, b) => b - a)) {
-        historyStackRef.current.splice(idx, 1)
-      }
-      console.log('[Navigation] Removed', invalidIndices.length, 'invalid entries from history')
-    }
-
-    // Recalculate target index after removal (invalid entries were between current and target)
-    if (targetIndex >= 0) {
-      targetIndex -= invalidIndices.length
-    }
-
-    if (targetIndex >= 0 && targetIndex < historyStackRef.current.length) {
-      historyIndexRef.current = targetIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[targetIndex]
-      console.log('[Navigation] Going forward to:', route, 'new index:', targetIndex)
+    const route = navHistory.goForward(isRouteValid)
+    if (route) {
       navigateRef.current?.(route)
-    } else {
-      console.log('[Navigation] No valid history entry to go forward to')
-      // Update canGoBack/canGoForward since we may have removed entries
-      setCanGoBack(historyIndexRef.current > 0)
-      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
     }
-  }, [isRouteValid])
+  }, [isRouteValid, navHistory])
 
   // Track whether initial route restoration has been attempted
   const initialRouteRestoredRef = useRef(false)
@@ -614,15 +489,10 @@ export function NavigationProvider({
   useEffect(() => {
     if (!isReady || !workspaceId) return
 
-    // Only initialize once
-    if (historyStackRef.current.length === 0) {
-      const params = new URLSearchParams(window.location.search)
-      const initialRoute = (params.get('route') || 'allChats') as Route
-      historyStackRef.current = [initialRoute]
-      historyIndexRef.current = 0
-      console.log('[Navigation] Initialized history stack with:', initialRoute)
-    }
-  }, [isReady, workspaceId])
+    const params = new URLSearchParams(window.location.search)
+    const initialRoute = (params.get('route') || 'allChats') as Route
+    navHistory.initializeHistory(initialRoute)
+  }, [isReady, workspaceId, navHistory])
 
   // Process pending navigation when ready
   useEffect(() => {
@@ -759,8 +629,8 @@ export function NavigationProvider({
         navigate,
         isReady,
         navigationState,
-        canGoBack,
-        canGoForward,
+        canGoBack: navHistory.canGoBack,
+        canGoForward: navHistory.canGoForward,
         goBack,
         goForward,
         updateRightSidebar,

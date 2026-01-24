@@ -6,8 +6,6 @@ import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredA
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
-import { useEventProcessor } from './event-processor'
-import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
@@ -35,102 +33,18 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
-  sessionAtomFamily,
   sessionMetaMapAtom,
-  backgroundTasksAtomFamily,
-  extractSessionMeta,
-  type SessionMeta,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
-import { getDefaultStore } from 'jotai'
 import { ShikiThemeProvider, PlatformProvider } from '@agent-operator/ui'
+import { useSessionDrafts } from '@/hooks/useSessionDrafts'
+import { useSessionEvents } from '@/hooks/useSessionEvents'
+import { useMenuEvents } from '@/hooks/useMenuEvents'
+import { useSplashScreen } from '@/hooks/useSplashScreen'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
-
-/** Type for the Jotai store returned by useStore() */
-type JotaiStore = ReturnType<typeof getDefaultStore>
-
-/**
- * Helper to handle background task events from the agent.
- * Updates the backgroundTasksAtomFamily based on event type.
- * Extracted to avoid code duplication between streaming and non-streaming paths.
- */
-function handleBackgroundTaskEvent(
-  store: JotaiStore,
-  sessionId: string,
-  event: { type: string },
-  agentEvent: unknown
-): void {
-  // Type guard for accessing properties
-  const evt = agentEvent as Record<string, unknown>
-  const backgroundTasksAtom = backgroundTasksAtomFamily(sessionId)
-
-  if (event.type === 'task_backgrounded' && 'taskId' in evt && 'toolUseId' in evt) {
-    const currentTasks = store.get(backgroundTasksAtom)
-    const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
-    if (!exists) {
-      store.set(backgroundTasksAtom, [
-        ...currentTasks,
-        {
-          id: evt.taskId as string,
-          type: 'agent' as const,
-          toolUseId: evt.toolUseId as string,
-          startTime: Date.now(),
-          elapsedSeconds: 0,
-          intent: evt.intent as string | undefined,
-        },
-      ])
-    }
-  } else if (event.type === 'shell_backgrounded' && 'shellId' in evt && 'toolUseId' in evt) {
-    const currentTasks = store.get(backgroundTasksAtom)
-    const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
-    if (!exists) {
-      store.set(backgroundTasksAtom, [
-        ...currentTasks,
-        {
-          id: evt.shellId as string,
-          type: 'shell' as const,
-          toolUseId: evt.toolUseId as string,
-          startTime: Date.now(),
-          elapsedSeconds: 0,
-          intent: evt.intent as string | undefined,
-        },
-      ])
-    }
-  } else if (event.type === 'task_progress' && 'toolUseId' in evt && 'elapsedSeconds' in evt) {
-    const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.map(t =>
-      t.toolUseId === evt.toolUseId
-        ? { ...t, elapsedSeconds: evt.elapsedSeconds as number }
-        : t
-    ))
-  } else if (event.type === 'shell_killed' && 'shellId' in evt) {
-    // Remove shell task when KillShell succeeds
-    const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.filter(t => t.id !== evt.shellId))
-  } else if (event.type === 'tool_result' && 'toolUseId' in evt) {
-    // Remove task when it completes - but NOT if this is the initial backgrounding result
-    // Background tasks return immediately with agentId/shell_id/backgroundTaskId,
-    // we should only remove when the task actually completes
-    const result = typeof evt.result === 'string' ? evt.result : JSON.stringify(evt.result)
-    const isBackgroundingResult = result && (
-      /agentId:\s*[a-zA-Z0-9_-]+/.test(result) ||
-      /shell_id:\s*[a-zA-Z0-9_-]+/.test(result) ||
-      /"backgroundTaskId":\s*"[a-zA-Z0-9_-]+"/.test(result)
-    )
-    if (!isBackgroundingResult) {
-      const currentTasks = store.get(backgroundTasksAtom)
-      store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== evt.toolUseId))
-    }
-  }
-  // Note: We do NOT clear background tasks on complete/error/interrupted
-  // Background tasks should persist and keep running after the turn ends
-  // They are only removed when:
-  // 1. Their tool_result comes back (task finished)
-  // 2. KillShell succeeds (shell_killed event)
-}
 
 export default function App() {
   // Initialize renderer perf tracking early (debug mode = running from source)
@@ -179,10 +93,8 @@ export default function App() {
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
   // Credential requests per session (queue to handle multiple concurrent requests)
   const [pendingCredentials, setPendingCredentials] = useState<Map<string, CredentialRequest[]>>(new Map())
-  // Draft input text per session (preserved across mode switches and conversation changes)
-  // Using ref instead of state to avoid re-renders during typing - drafts are only
-  // needed for initial value restoration and disk persistence, not reactive updates
-  const sessionDraftsRef = useRef<Map<string, string>>(new Map())
+  // Session drafts hook - manages draft input text per session with debounced persistence
+  const { getDraft, setDraft: handleInputChange, initDrafts } = useSessionDrafts()
   // Unified session options - replaces ultrathinkSessions and sessionModes
   // All session-scoped options in one place (ultrathink, permissionMode)
   const [sessionOptions, setSessionOptions] = useState<Map<string, SessionOptions>>(new Map())
@@ -199,8 +111,6 @@ export default function App() {
 
   // Splash screen state - tracks when app is fully ready (all data loaded)
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
-  const [splashExiting, setSplashExiting] = useState(false)
-  const [splashHidden, setSplashHidden] = useState(false)
 
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -212,17 +122,8 @@ export default function App() {
   // Compute if app is fully ready (all data loaded)
   const isFullyReady = appState === 'ready' && sessionsLoaded
 
-  // Trigger splash exit animation when fully ready
-  useEffect(() => {
-    if (isFullyReady && !splashExiting) {
-      setSplashExiting(true)
-    }
-  }, [isFullyReady, splashExiting])
-
-  // Handler for when splash exit animation completes
-  const handleSplashExitComplete = useCallback(() => {
-    setSplashHidden(true)
-  }, [])
+  // Splash screen hook - manages splash exit animation
+  const { showSplash, splashExiting, handleSplashExitComplete } = useSplashScreen(isFullyReady)
 
   // Apply theme via hook (injects CSS variables)
   // shikiTheme is passed to ShikiThemeProvider to ensure correct syntax highlighting
@@ -235,11 +136,6 @@ export default function App() {
   useEffect(() => {
     sessionOptionsRef.current = sessionOptions
   }, [sessionOptions])
-
-  // Event processor hook - handles all agent events through pure functions
-  const { processAgentEvent } = useEventProcessor()
-
-  const DRAFT_SAVE_DEBOUNCE_MS = 500
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
@@ -337,6 +233,19 @@ export default function App() {
     enabled: notificationsEnabled,
   })
 
+  // Session events hook - handles all agent events from IPC
+  // Must be after useNotifications since it uses showSessionNotification
+  useSessionEvents({
+    store,
+    workspaceId: windowWorkspaceId,
+    updateSessionDirect,
+    showSessionNotification,
+    setPendingPermissions,
+    setPendingCredentials,
+    defaultSessionOptions,
+    setSessionOptions,
+  })
+
   // Load workspaces, sessions, model, notifications setting, and drafts when app is ready
   useEffect(() => {
     if (appState !== 'ready') return
@@ -391,10 +300,10 @@ export default function App() {
         setInitialLanguage(lang)
       }
     })
-    // Load persisted input drafts into ref (no re-render needed)
+    // Load persisted input drafts (no re-render needed)
     window.electronAPI.getAllDrafts().then((drafts) => {
       if (Object.keys(drafts).length > 0) {
-        sessionDraftsRef.current = new Map(Object.entries(drafts))
+        initDrafts(drafts)
       }
     })
     // Load app-level theme
@@ -408,201 +317,6 @@ export default function App() {
     })
     return () => {
       cleanupApp()
-    }
-  }, [])
-
-  // Listen for session events - uses centralized event processor for consistent state transitions
-  //
-  // SOURCE OF TRUTH LOGIC:
-  // - During streaming (atom.isProcessing = true): Atom is source of truth
-  //   All events read from and write to atom. This preserves streaming data.
-  // - When not streaming: React state is source of truth
-  //   Events read/write React state, which syncs to atoms via useEffect.
-  // - Handoff events (complete, error, etc.): End streaming, sync atom → React state
-  //
-  // This is simpler and more robust than checking event types - we just ask
-  // "is this session currently streaming?" and route accordingly.
-  useEffect(() => {
-    // Handoff events signal end of streaming - need to sync back to React state
-    // Also includes todo_state_changed so status updates immediately reflect in sidebar
-    // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'todo_state_changed', 'title_generated', 'async_operation'])
-
-    // Helper to handle side effects (same logic for both paths)
-    const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
-      for (const effect of effects) {
-        switch (effect.type) {
-          case 'permission_request': {
-            setPendingPermissions(prevPerms => {
-              const next = new Map(prevPerms)
-              const existingQueue = next.get(sessionId) || []
-              next.set(sessionId, [...existingQueue, effect.request])
-              return next
-            })
-            break
-          }
-          case 'permission_mode_changed': {
-            console.log('[App] permission_mode_changed:', effect.sessionId, effect.permissionMode)
-            setSessionOptions(prevOpts => {
-              const next = new Map(prevOpts)
-              const current = next.get(effect.sessionId) ?? defaultSessionOptions
-              next.set(effect.sessionId, { ...current, permissionMode: effect.permissionMode })
-              return next
-            })
-            break
-          }
-          case 'credential_request': {
-            console.log('[App] credential_request:', sessionId, effect.request.mode)
-            setPendingCredentials(prevCreds => {
-              const next = new Map(prevCreds)
-              const existingQueue = next.get(sessionId) || []
-              next.set(sessionId, [...existingQueue, effect.request])
-              return next
-            })
-            break
-          }
-          case 'auto_retry': {
-            // A source was auto-activated, automatically re-send the original message
-            console.log('[App] auto_retry: Source', effect.sourceSlug, 'activated, re-sending message')
-            // Add suffix to indicate the source was activated
-            const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
-            // Use setTimeout to ensure the previous turn has fully completed
-            setTimeout(() => {
-              window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
-            }, 100)
-            break
-          }
-        }
-      }
-
-      // Clear pending permissions and credentials on complete
-      if (eventType === 'complete') {
-        setPendingPermissions(prevPerms => {
-          if (prevPerms.has(sessionId)) {
-            const next = new Map(prevPerms)
-            next.delete(sessionId)
-            return next
-          }
-          return prevPerms
-        })
-        setPendingCredentials(prevCreds => {
-          if (prevCreds.has(sessionId)) {
-            const next = new Map(prevCreds)
-            next.delete(sessionId)
-            return next
-          }
-          return prevCreds
-        })
-      }
-    }
-
-    const cleanup = window.electronAPI.onSessionEvent((event: SessionEvent) => {
-      const sessionId = event.sessionId
-      const workspaceId = windowWorkspaceId ?? ''
-      const agentEvent = event as unknown as AgentEvent
-
-      // Dispatch window event when compaction completes
-      // This allows FreeFormInput to sequence the plan execution message after compaction
-      // Note: markCompactionComplete is called on the backend (sessions.ts) to ensure
-      // it happens even if CMD+R occurs during compaction
-      if (event.type === 'info' && event.statusType === 'compaction_complete') {
-        window.dispatchEvent(new CustomEvent('cowork:compaction-complete', {
-          detail: { sessionId }
-        }))
-      }
-
-      // Check if session is currently streaming (atom is source of truth)
-      const atomSession = store.get(sessionAtomFamily(sessionId))
-      const isStreaming = atomSession?.isProcessing === true
-      const isHandoff = handoffEventTypes.has(event.type)
-
-      // During streaming OR for handoff events: use atom as source of truth
-      // This ensures all events during streaming see the complete state
-      if (isStreaming || isHandoff) {
-        const currentSession = atomSession ?? null
-
-        // Process the event
-        const { session: updatedSession, effects } = processAgentEvent(
-          agentEvent,
-          currentSession,
-          workspaceId
-        )
-
-        // Update atom directly (UI sees update immediately)
-        updateSessionDirect(sessionId, () => updatedSession)
-
-        // Handle side effects
-        handleEffects(effects, sessionId, event.type)
-
-        // Handle background task events
-        handleBackgroundTaskEvent(store, sessionId, event, agentEvent)
-
-        // For handoff events, update metadata map for list display
-        // NOTE: No sessionsAtom to sync - atom and metadata are the source of truth
-        if (isHandoff) {
-          // Update metadata map
-          const metaMap = store.get(sessionMetaMapAtom)
-          const newMetaMap = new Map(metaMap)
-          newMetaMap.set(sessionId, extractSessionMeta(updatedSession))
-          store.set(sessionMetaMapAtom, newMetaMap)
-
-          // Show notification on complete (when window is not focused)
-          if (event.type === 'complete') {
-            // Get the last assistant message as preview
-            const lastMessage = updatedSession.messages.findLast(
-              m => m.role === 'assistant' && !m.isIntermediate
-            )
-            const preview = lastMessage?.content?.substring(0, 100) || undefined
-            showSessionNotification(updatedSession, preview)
-          }
-        }
-
-        return
-      }
-
-      // Not streaming: use per-session atoms directly (no sessionsAtom)
-      const currentSession = store.get(sessionAtomFamily(sessionId))
-
-      const { session: updatedSession, effects } = processAgentEvent(
-        agentEvent,
-        currentSession,
-        workspaceId
-      )
-
-      // Handle side effects
-      handleEffects(effects, sessionId, event.type)
-
-      // Handle background task events
-      handleBackgroundTaskEvent(store, sessionId, event, agentEvent)
-
-      // Update per-session atom
-      updateSessionDirect(sessionId, () => updatedSession)
-
-      // Update metadata map
-      const metaMap = store.get(sessionMetaMapAtom)
-      const newMetaMap = new Map(metaMap)
-      newMetaMap.set(sessionId, extractSessionMeta(updatedSession))
-      store.set(sessionMetaMapAtom, newMetaMap)
-    })
-
-    return cleanup
-  }, [processAgentEvent, windowWorkspaceId, store, updateSessionDirect, showSessionNotification])
-
-  // Listen for menu bar events
-  useEffect(() => {
-    const unsubNewChat = window.electronAPI.onMenuNewChat(() => {
-      setMenuNewChatTrigger(n => n + 1)
-    })
-    const unsubSettings = window.electronAPI.onMenuOpenSettings(() => {
-      handleOpenSettings()
-    })
-    const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
-      navigate(routes.view.settings('shortcuts'))
-    })
-    return () => {
-      unsubNewChat()
-      unsubSettings()
-      unsubShortcuts()
     }
   }, [])
 
@@ -880,43 +594,6 @@ export default function App() {
     // ultrathinkEnabled is UI-only (single-shot), no backend persistence needed
   }, [sessionOptions])
 
-  // Handle input draft changes per session with debounced persistence
-  const draftSaveTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-
-  // Cleanup draft save timers on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      draftSaveTimeoutRef.current.forEach(clearTimeout)
-      draftSaveTimeoutRef.current.clear()
-    }
-  }, [])
-
-  // Getter for draft values - reads from ref without triggering re-renders
-  const getDraft = useCallback((sessionId: string): string => {
-    return sessionDraftsRef.current.get(sessionId) ?? ''
-  }, [])
-
-  const handleInputChange = useCallback((sessionId: string, value: string) => {
-    // Update ref immediately (no re-render triggered)
-    if (value) {
-      sessionDraftsRef.current.set(sessionId, value)
-    } else {
-      sessionDraftsRef.current.delete(sessionId) // Clean up empty drafts
-    }
-
-    // Debounced persistence to disk (500ms delay)
-    const existingTimeout = draftSaveTimeoutRef.current.get(sessionId)
-    if (existingTimeout) {
-      clearTimeout(existingTimeout)
-    }
-
-    const timeout = setTimeout(() => {
-      window.electronAPI.setDraft(sessionId, value)
-      draftSaveTimeoutRef.current.delete(sessionId)
-    }, DRAFT_SAVE_DEBOUNCE_MS)
-    draftSaveTimeoutRef.current.set(sessionId, timeout)
-  }, [])
-
   // Open new chat - creates session and selects it
   // Used by components via AppShellContext and for programmatic navigation
   const openNewChat = useCallback(async (params: NewChatActionParams = {}) => {
@@ -1035,6 +712,14 @@ export default function App() {
   const handleOpenSettings = useCallback(() => {
     navigate(routes.view.settings())
   }, [])
+
+  // Menu events hook - handles menu bar actions
+  // Must be after handleOpenSettings is defined
+  const onMenuNewChat = useCallback(() => setMenuNewChatTrigger(n => n + 1), [])
+  useMenuEvents({
+    onNewChat: onMenuNewChat,
+    onOpenSettings: handleOpenSettings,
+  })
 
   const handleOpenKeyboardShortcuts = useCallback(() => {
     navigate(routes.view.settings('shortcuts'))
@@ -1268,9 +953,6 @@ export default function App() {
       </LanguageProvider>
     )
   }
-
-  // Show splash until exit animation completes
-  const showSplash = !splashHidden
 
   // Ready state - main app with splash overlay during data loading
   return (
