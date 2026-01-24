@@ -174,14 +174,20 @@ function filterBetaHeaders(headers: HeadersInitType | undefined, url: string): H
     }
     return newHeaders;
   } else if (Array.isArray(headers)) {
-    return headers.map(([key, value]) => {
-      if (key.toLowerCase() === 'anthropic-beta') {
+    return headers.map((header) => {
+      const key = header[0];
+      const value = header[1];
+      if (key && key.toLowerCase() === 'anthropic-beta' && value) {
         const filtered = filterBetaValue(value);
         debugLog(`[Beta Filter] Filtered beta header: ${value} -> ${filtered}`);
-        return [key, filtered];
+        return [key, filtered] as [string, string];
       }
-      return [key, value];
-    }).filter(([key, value]) => !(key.toLowerCase() === 'anthropic-beta' && !value));
+      return header;
+    }).filter((header) => {
+      const key = header[0];
+      const value = header[1];
+      return !(key && key.toLowerCase() === 'anthropic-beta' && !value);
+    });
   } else {
     const newHeaders = { ...headers };
     const betaHeader = newHeaders['anthropic-beta'];

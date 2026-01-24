@@ -295,7 +295,7 @@ export function getBedrockModel(appConfiguredModel?: string): string {
   }
 
   // Fallback: default Bedrock model
-  return DEFAULT_PROVIDER_MODEL.bedrock;
+  return DEFAULT_PROVIDER_MODEL.bedrock ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 }
 
 /**

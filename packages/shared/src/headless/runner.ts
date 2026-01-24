@@ -1,4 +1,4 @@
-import { OperatorAgent, type OperatorAgentConfig, type PermissionMode, type SdkMcpServerConfig } from '../agent/agent-operator.ts';
+import { OperatorAgent, type OperatorAgentConfig, type PermissionMode, type SdkMcpServerConfig } from '../agent/operator-agent.ts';
 import { createApiServer } from '../sources/api-tools.ts';
 import { listSessions, getOrCreateSessionById, updateSessionSdkId } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
@@ -209,7 +209,7 @@ ${this.config.prompt}
     this.agent = new OperatorAgent(agentConfig);
 
     // Wire up permission handler based on policy
-    this.agent.onPermissionRequest = (request) => {
+    this.agent.onPermissionRequest = (request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' }) => {
       const policy = this.config.permissionPolicy || 'deny-all';
       debug('[HeadlessRunner] Permission request:', request.command, 'policy:', policy);
 
