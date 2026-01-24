@@ -76,11 +76,27 @@ export const DEFAULT_PROVIDER_MODEL: Record<string, string> = {
 
 /**
  * Get models for a specific provider.
- * @param provider - Provider ID (e.g., 'glm', 'minimax', 'deepseek')
+ * For the 'custom' provider, pass customModels from storage/IPC.
+ * @param provider - Provider ID (e.g., 'glm', 'minimax', 'deepseek', 'custom')
+ * @param customModels - Optional custom model definitions (for 'custom' provider, fetched via IPC in renderer)
  * @returns Array of model definitions for the provider
  */
-export function getModelsForProvider(provider: string | undefined): ModelDefinition[] {
+export function getModelsForProvider(
+  provider: string | undefined,
+  customModels?: Array<{ id: string; name: string; shortName?: string; description?: string }>
+): ModelDefinition[] {
   if (!provider) return CLAUDE_MODELS;
+
+  // For custom provider, use passed custom models
+  if (provider === 'custom' && customModels && customModels.length > 0) {
+    return customModels.map(m => ({
+      id: m.id,
+      name: m.name,
+      shortName: m.shortName || m.name,
+      description: m.description || '',
+    }));
+  }
+
   return PROVIDER_MODELS[provider] || CLAUDE_MODELS;
 }
 

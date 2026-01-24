@@ -136,6 +136,70 @@ function isAnthropicMessagesUrl(url: string): boolean {
 }
 
 /**
+ * Check if URL is a custom Anthropic-compatible API (not official Anthropic)
+ */
+function isCustomAnthropicApi(url: string): boolean {
+  return url.includes('/messages') && !url.includes('api.anthropic.com');
+}
+
+/**
+ * Filter out unsupported beta headers for custom API endpoints.
+ * Some third-party Anthropic-compatible APIs don't support all beta features.
+ * This removes the unsupported betas to prevent connection errors.
+ */
+function filterBetaHeaders(headers: HeadersInitType | undefined, url: string): HeadersInitType | undefined {
+  if (!headers || !isCustomAnthropicApi(url)) return headers;
+
+  // Supported betas for most third-party endpoints
+  const supportedBetas = ['context-1m-2025-08-07'];
+
+  const filterBetaValue = (value: string): string => {
+    const betas = value.split(',').map(b => b.trim());
+    const filtered = betas.filter(beta => supportedBetas.includes(beta));
+    return filtered.join(',');
+  };
+
+  if (headers instanceof Headers) {
+    const newHeaders = new Headers(headers);
+    const betaHeader = newHeaders.get('anthropic-beta');
+    if (betaHeader) {
+      const filtered = filterBetaValue(betaHeader);
+      if (filtered) {
+        newHeaders.set('anthropic-beta', filtered);
+        debugLog(`[Beta Filter] Filtered beta header: ${betaHeader} -> ${filtered}`);
+      } else {
+        newHeaders.delete('anthropic-beta');
+        debugLog(`[Beta Filter] Removed all beta headers (none supported)`);
+      }
+    }
+    return newHeaders;
+  } else if (Array.isArray(headers)) {
+    return headers.map(([key, value]) => {
+      if (key.toLowerCase() === 'anthropic-beta') {
+        const filtered = filterBetaValue(value);
+        debugLog(`[Beta Filter] Filtered beta header: ${value} -> ${filtered}`);
+        return [key, filtered];
+      }
+      return [key, value];
+    }).filter(([key, value]) => !(key.toLowerCase() === 'anthropic-beta' && !value));
+  } else {
+    const newHeaders = { ...headers };
+    const betaHeader = newHeaders['anthropic-beta'];
+    if (betaHeader) {
+      const filtered = filterBetaValue(betaHeader);
+      if (filtered) {
+        newHeaders['anthropic-beta'] = filtered;
+        debugLog(`[Beta Filter] Filtered beta header: ${betaHeader} -> ${filtered}`);
+      } else {
+        delete newHeaders['anthropic-beta'];
+        debugLog(`[Beta Filter] Removed all beta headers (none supported)`);
+      }
+    }
+    return newHeaders;
+  }
+}
+
+/**
  * Add _intent and _displayName fields to all MCP tool schemas in Anthropic API request.
  * Only modifies tools that start with "mcp__" (MCP tools from SDK).
  * Returns the modified request body object.
@@ -358,33 +422,41 @@ async function interceptedFetch(
 
   const startTime = Date.now();
 
+  // Filter beta headers for custom API endpoints
+  let modifiedInit = init;
+  if (init && isCustomAnthropicApi(url)) {
+    modifiedInit = {
+      ...init,
+      headers: filterBetaHeaders(init.headers as HeadersInitType, url),
+    };
+  }
 
   // Log all requests as cURL commands
   if (DEBUG) {
     debugLog('\n' + '='.repeat(80));
     debugLog('→ REQUEST');
-    debugLog(toCurl(url, init));
+    debugLog(toCurl(url, modifiedInit));
   }
 
   if (
     isAnthropicMessagesUrl(url) &&
-    init?.method?.toUpperCase() === 'POST' &&
-    init?.body
+    modifiedInit?.method?.toUpperCase() === 'POST' &&
+    modifiedInit?.body
   ) {
     try {
-      const body = typeof init.body === 'string' ? init.body : undefined;
+      const body = typeof modifiedInit.body === 'string' ? modifiedInit.body : undefined;
       if (body) {
         let parsed = JSON.parse(body);
 
         // Add _intent and _displayName to MCP tool schemas
         parsed = addMetadataToMcpTools(parsed);
 
-        const modifiedInit = {
-          ...init,
+        const finalInit = {
+          ...modifiedInit,
           body: JSON.stringify(parsed),
         };
 
-        const response = await originalFetch(url, modifiedInit);
+        const response = await originalFetch(url, finalInit);
         return logResponse(response, url, startTime);
       }
     } catch (e) {
@@ -392,7 +464,7 @@ async function interceptedFetch(
     }
   }
 
-  const response = await originalFetch(input, init);
+  const response = await originalFetch(input, modifiedInit);
   return logResponse(response, url, startTime);
 }
 

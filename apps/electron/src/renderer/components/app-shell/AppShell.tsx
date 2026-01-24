@@ -56,6 +56,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { LeftSidebar } from "./LeftSidebar"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { useSession } from "@/hooks/useSession"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
@@ -1146,6 +1147,9 @@ function AppShellContent({
                             statusId: state.id,
                             onConfigureStatuses: openConfigureStatuses,
                           },
+                          // Drag-and-drop: accept session drops to change status
+                          acceptsDrop: true,
+                          onSessionDrop: (sessionId: string) => onTodoStateChange(sessionId, state.id),
                         })),
                         // Separator before Flagged
                         { id: "separator:before-flagged", type: "separator" },
@@ -1163,6 +1167,9 @@ function AppShellContent({
                             type: 'flagged' as const,
                             onConfigureStatuses: openConfigureStatuses,
                           },
+                          // Drag-and-drop: accept session drops to flag
+                          acceptsDrop: true,
+                          onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
                         },
                       ],
                     },
@@ -1420,6 +1427,7 @@ function AppShellContent({
               <>
                 {/* SessionList: Scrollable list of session cards */}
                 {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
+                <ErrorBoundary level="section">
                 <SessionList
                   key={chatFilter?.kind}
                   items={filteredSessionMetas}
@@ -1462,6 +1470,7 @@ function AppShellContent({
                   }}
                   todoStates={todoStates}
                 />
+                </ErrorBoundary>
               </>
             )}
           </div>

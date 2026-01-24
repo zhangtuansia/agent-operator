@@ -48,6 +48,15 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@agent-operator/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+/**
+ * Custom model definition for user-defined models (Custom provider)
+ */
+export interface CustomModel {
+  id: string           // API 调用使用的模型 ID (必填)
+  name: string         // UI 显示名称 (必填)
+  shortName?: string   // 短名称 (可选)
+  description?: string // 描述 (可选)
+}
 
 /**
  * File/directory entry in a skill folder
@@ -544,6 +553,14 @@ export const IPC_CHANNELS = {
   SESSION_GET_MODEL: 'session:getModel',
   SESSION_SET_MODEL: 'session:setModel',
 
+  // Custom Models (for Custom provider)
+  CUSTOM_MODELS_GET: 'customModels:get',
+  CUSTOM_MODELS_SET: 'customModels:set',
+  CUSTOM_MODELS_ADD: 'customModels:add',
+  CUSTOM_MODELS_UPDATE: 'customModels:update',
+  CUSTOM_MODELS_DELETE: 'customModels:delete',
+  CUSTOM_MODELS_REORDER: 'customModels:reorder',
+
   // Folder dialog (for selecting working directory)
   OPEN_FOLDER_DIALOG: 'dialog:openFolder',
 
@@ -770,6 +787,14 @@ export interface ElectronAPI {
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void>
+
+  // Custom Models (for Custom provider)
+  getCustomModels(): Promise<CustomModel[]>
+  setCustomModels(models: CustomModel[]): Promise<void>
+  addCustomModel(model: CustomModel): Promise<CustomModel[]>
+  updateCustomModel(modelId: string, updates: Partial<Omit<CustomModel, 'id'>>): Promise<CustomModel[]>
+  deleteCustomModel(modelId: string): Promise<CustomModel[]>
+  reorderCustomModels(modelIds: string[]): Promise<CustomModel[]>
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>

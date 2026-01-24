@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
 import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
@@ -178,8 +178,10 @@ interface SessionItemProps {
 /**
  * SessionItem - Individual session card with todo checkbox and dropdown menu
  * Tracks menu open state to keep "..." button visible
+ *
+ * Memoized to prevent unnecessary re-renders when other sessions change.
  */
-function SessionItem({
+const SessionItem = memo(function SessionItem({
   item,
   index,
   itemProps,
@@ -204,9 +206,22 @@ function SessionItem({
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [todoMenuOpen, setTodoMenuOpen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Get current todo state from session properties
   const currentTodoState = getSessionTodoState(item)
+
+  // Drag handlers for drag-and-drop to sidebar status categories
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/x-session-id', item.id)
+    e.dataTransfer.setData('text/plain', item.id) // Fallback
+    e.dataTransfer.effectAllowed = 'move'
+    setIsDragging(true)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+  }
 
   const handleClick = () => {
     // Start perf tracking for session switch
@@ -233,7 +248,15 @@ function SessionItem({
       {/* Wrapper for button + dropdown + context menu, group for hover state */}
       <ContextMenu modal={true} onOpenChange={setContextMenuOpen}>
         <ContextMenuTrigger asChild>
-          <div className="session-content relative group select-none pl-2 mr-2">
+          <div
+            className={cn(
+              "session-content relative group select-none pl-2 mr-2",
+              isDragging && "opacity-50"
+            )}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
         {/* Todo State Icon - positioned absolutely, outside the button */}
         <Popover modal={true} open={todoMenuOpen} onOpenChange={setTodoMenuOpen}>
           <PopoverTrigger asChild>
@@ -462,7 +485,23 @@ function SessionItem({
       </ContextMenu>
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison for performance - only compare essential props
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.name === nextProps.item.name &&
+    prevProps.item.preview === nextProps.item.preview &&
+    prevProps.item.lastMessageAt === nextProps.item.lastMessageAt &&
+    prevProps.item.isProcessing === nextProps.item.isProcessing &&
+    prevProps.item.isFlagged === nextProps.item.isFlagged &&
+    prevProps.item.todoState === nextProps.item.todoState &&
+    prevProps.item.isAsyncOperationOngoing === nextProps.item.isAsyncOperationOngoing &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
+    prevProps.searchQuery === nextProps.searchQuery &&
+    prevProps.permissionMode === nextProps.permissionMode
+  )
+})
 
 /**
  * DateHeader - Simple date group header rendered inline with content.

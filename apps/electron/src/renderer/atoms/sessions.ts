@@ -271,37 +271,93 @@ export const addSessionAtom = atom(
 )
 
 /**
+ * Track pending operations per session (for cleanup)
+ */
+const pendingOperations = new Map<string, Set<AbortController>>()
+
+/**
+ * Register a pending operation for a session
+ */
+export function registerPendingOperation(sessionId: string, controller: AbortController): void {
+  let ops = pendingOperations.get(sessionId)
+  if (!ops) {
+    ops = new Set()
+    pendingOperations.set(sessionId, ops)
+  }
+  ops.add(controller)
+}
+
+/**
+ * Unregister a pending operation
+ */
+export function unregisterPendingOperation(sessionId: string, controller: AbortController): void {
+  const ops = pendingOperations.get(sessionId)
+  if (ops) {
+    ops.delete(controller)
+    if (ops.size === 0) {
+      pendingOperations.delete(sessionId)
+    }
+  }
+}
+
+/**
  * Action atom: remove a session
  */
 export const removeSessionAtom = atom(
   null,
   (get, set, sessionId: string) => {
-    // Clear session atom value first
+    // 1. Abort any pending operations for this session
+    const ops = pendingOperations.get(sessionId)
+    if (ops) {
+      for (const controller of ops) {
+        controller.abort()
+      }
+      pendingOperations.delete(sessionId)
+    }
+
+    // 2. Get and clear session data before removing atom
+    const session = get(sessionAtomFamily(sessionId))
+    if (session) {
+      // Explicitly clear large arrays to help GC
+      session.messages = []
+    }
+
+    // 3. Clear session atom value
     set(sessionAtomFamily(sessionId), null)
     // Remove atom from family cache to allow GC of the atom and its stored value
     sessionAtomFamily.remove(sessionId)
 
-    // Remove from metadata map
+    // 4. Remove from metadata map
     const metaMap = get(sessionMetaMapAtom)
     const newMetaMap = new Map(metaMap)
     newMetaMap.delete(sessionId)
     set(sessionMetaMapAtom, newMetaMap)
 
-    // Remove from IDs list
+    // 5. Remove from IDs list
     const ids = get(sessionIdsAtom)
     set(sessionIdsAtom, ids.filter(id => id !== sessionId))
 
-    // Remove from loaded sessions tracking
+    // 6. Remove from loaded sessions tracking
     const loadedSessions = get(loadedSessionsAtom)
     const newLoadedSessions = new Set(loadedSessions)
     newLoadedSessions.delete(sessionId)
     set(loadedSessionsAtom, newLoadedSessions)
 
-    // Clean up additional atom families to prevent memory leaks
+    // 7. Clean up additional atom families to prevent memory leaks
     // These store per-session UI state that should be garbage collected
     expandedTurnsAtomFamily.remove(sessionId)
     expandedActivityGroupsAtomFamily.remove(sessionId)
     backgroundTasksAtomFamily.remove(sessionId)
+
+    // 8. Request GC hint in development mode (deferred to next tick)
+    if (process.env.NODE_ENV === 'development') {
+      setTimeout(() => {
+        const globalWithGC = globalThis as typeof globalThis & { gc?: () => void }
+        if (typeof globalWithGC.gc === 'function') {
+          globalWithGC.gc()
+        }
+      }, 1000)
+    }
   }
 )
 

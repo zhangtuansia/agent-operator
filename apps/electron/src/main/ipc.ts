@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
+import { z } from 'zod'
 import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
@@ -16,6 +17,21 @@ import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@age
 import { isValidThinkingLevel } from '@agent-operator/shared/agent/thinking-levels'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
+import {
+  SessionIdSchema,
+  WorkspaceIdSchema,
+  SessionCommandSchema,
+  CreateSessionOptionsSchema,
+  CredentialResponseSchema,
+  WorkspaceSettingKeySchema,
+  FileAttachmentSchema,
+  StoredAttachmentSchema,
+  SendMessageOptionsSchema,
+  ProviderConfigSchema,
+  CustomModelSchema,
+  AuthTypeSchema,
+} from '../shared/ipc-schemas'
+import { validateIpcArgs, IpcValidationError } from './ipc-validator'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -232,9 +248,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Create a new session
-  ipcMain.handle(IPC_CHANNELS.CREATE_SESSION, async (_event, workspaceId: string, options?: import('../shared/types').CreateSessionOptions) => {
-    const end = perf.start('ipc.createSession', { workspaceId })
-    const session = sessionManager.createSession(workspaceId, options)
+  ipcMain.handle(IPC_CHANNELS.CREATE_SESSION, async (_event, workspaceId: unknown, options?: unknown) => {
+    // Validate inputs
+    const validatedWorkspaceId = validateIpcArgs(WorkspaceIdSchema, workspaceId, 'CREATE_SESSION.workspaceId')
+    const validatedOptions = options ? validateIpcArgs(CreateSessionOptionsSchema, options, 'CREATE_SESSION.options') : undefined
+
+    const end = perf.start('ipc.createSession', { workspaceId: validatedWorkspaceId })
+    const session = sessionManager.createSession(validatedWorkspaceId, validatedOptions)
     end()
     return session
   })
@@ -317,36 +337,40 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Session commands - consolidated handler for session operations
   ipcMain.handle(IPC_CHANNELS.SESSION_COMMAND, async (
     _event,
-    sessionId: string,
-    command: import('../shared/types').SessionCommand
+    sessionId: unknown,
+    command: unknown
   ) => {
-    switch (command.type) {
+    // Validate inputs
+    const validatedSessionId = validateIpcArgs(SessionIdSchema, sessionId, 'SESSION_COMMAND.sessionId')
+    const validatedCommand = validateIpcArgs(SessionCommandSchema, command, 'SESSION_COMMAND.command')
+
+    switch (validatedCommand.type) {
       case 'flag':
-        return sessionManager.flagSession(sessionId)
+        return sessionManager.flagSession(validatedSessionId)
       case 'unflag':
-        return sessionManager.unflagSession(sessionId)
+        return sessionManager.unflagSession(validatedSessionId)
       case 'rename':
-        return sessionManager.renameSession(sessionId, command.name)
+        return sessionManager.renameSession(validatedSessionId, validatedCommand.name)
       case 'setTodoState':
-        return sessionManager.setTodoState(sessionId, command.state)
+        return sessionManager.setTodoState(validatedSessionId, validatedCommand.state)
       case 'markRead':
-        return sessionManager.markSessionRead(sessionId)
+        return sessionManager.markSessionRead(validatedSessionId)
       case 'markUnread':
-        return sessionManager.markSessionUnread(sessionId)
+        return sessionManager.markSessionUnread(validatedSessionId)
       case 'setPermissionMode':
-        return sessionManager.setSessionPermissionMode(sessionId, command.mode)
+        return sessionManager.setSessionPermissionMode(validatedSessionId, validatedCommand.mode)
       case 'setThinkingLevel':
         // Validate thinking level before passing to session manager
-        if (!isValidThinkingLevel(command.level)) {
-          throw new Error(`Invalid thinking level: ${command.level}. Valid values: 'off', 'think', 'max'`)
+        if (!isValidThinkingLevel(validatedCommand.level)) {
+          throw new Error(`Invalid thinking level: ${validatedCommand.level}. Valid values: 'off', 'think', 'max'`)
         }
-        return sessionManager.setSessionThinkingLevel(sessionId, command.level)
+        return sessionManager.setSessionThinkingLevel(validatedSessionId, validatedCommand.level)
       case 'updateWorkingDirectory':
-        return sessionManager.updateWorkingDirectory(sessionId, command.dir)
+        return sessionManager.updateWorkingDirectory(validatedSessionId, validatedCommand.dir)
       case 'setSources':
-        return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
+        return sessionManager.setSessionSources(validatedSessionId, validatedCommand.sourceSlugs)
       case 'showInFinder': {
-        const sessionPath = sessionManager.getSessionPath(sessionId)
+        const sessionPath = sessionManager.getSessionPath(validatedSessionId)
         if (sessionPath) {
           shell.showItemInFolder(sessionPath)
         }
@@ -354,30 +378,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
       case 'copyPath': {
         // Return the session folder path for copying to clipboard
-        const sessionPath = sessionManager.getSessionPath(sessionId)
+        const sessionPath = sessionManager.getSessionPath(validatedSessionId)
         return sessionPath ? { success: true, path: sessionPath } : { success: false }
       }
       case 'shareToViewer':
-        return sessionManager.shareToViewer(sessionId)
+        return sessionManager.shareToViewer(validatedSessionId)
       case 'updateShare':
-        return sessionManager.updateShare(sessionId)
+        return sessionManager.updateShare(validatedSessionId)
       case 'revokeShare':
-        return sessionManager.revokeShare(sessionId)
+        return sessionManager.revokeShare(validatedSessionId)
       case 'startOAuth':
-        return sessionManager.startSessionOAuth(sessionId, command.requestId)
+        return sessionManager.startSessionOAuth(validatedSessionId, validatedCommand.requestId)
       case 'refreshTitle':
-        ipcLog.info(`IPC: refreshTitle received for session ${sessionId}`)
-        return sessionManager.refreshTitle(sessionId)
+        ipcLog.info(`IPC: refreshTitle received for session ${validatedSessionId}`)
+        return sessionManager.refreshTitle(validatedSessionId)
       // Pending plan execution (Accept & Compact flow)
       case 'setPendingPlanExecution':
-        return sessionManager.setPendingPlanExecution(sessionId, command.planPath)
+        return sessionManager.setPendingPlanExecution(validatedSessionId, validatedCommand.planPath)
       case 'markCompactionComplete':
-        return sessionManager.markCompactionComplete(sessionId)
+        return sessionManager.markCompactionComplete(validatedSessionId)
       case 'clearPendingPlanExecution':
-        return sessionManager.clearPendingPlanExecution(sessionId)
+        return sessionManager.clearPendingPlanExecution(validatedSessionId)
       default: {
-        const _exhaustive: never = command
-        throw new Error(`Unknown session command: ${JSON.stringify(command)}`)
+        const _exhaustive: never = validatedCommand
+        throw new Error(`Unknown session command: ${JSON.stringify(validatedCommand)}`)
       }
     }
   })
@@ -964,6 +988,55 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     ipcLog.info(`Session ${sessionId} model updated to: ${model}`)
   })
 
+  // ============================================================
+  // Custom Models (for Custom provider)
+  // ============================================================
+
+  // Get all custom models
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_GET, async () => {
+    const { getCustomModels } = await import('@agent-operator/shared/config')
+    return getCustomModels()
+  })
+
+  // Set all custom models (replaces existing list)
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_SET, async (_event, models: import('../shared/types').CustomModel[]) => {
+    const { setCustomModels } = await import('@agent-operator/shared/config')
+    setCustomModels(models)
+    ipcLog.info(`Custom models set: ${models.length} models`)
+  })
+
+  // Add a new custom model
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_ADD, async (_event, model: import('../shared/types').CustomModel) => {
+    const { addCustomModel } = await import('@agent-operator/shared/config')
+    const updatedModels = addCustomModel(model)
+    ipcLog.info(`Custom model added: ${model.id} (${model.name})`)
+    return updatedModels
+  })
+
+  // Update an existing custom model
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_UPDATE, async (_event, modelId: string, updates: Partial<import('../shared/types').CustomModel>) => {
+    const { updateCustomModel } = await import('@agent-operator/shared/config')
+    const updatedModels = updateCustomModel(modelId, updates)
+    ipcLog.info(`Custom model updated: ${modelId}`)
+    return updatedModels
+  })
+
+  // Delete a custom model
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_DELETE, async (_event, modelId: string) => {
+    const { deleteCustomModel } = await import('@agent-operator/shared/config')
+    const updatedModels = deleteCustomModel(modelId)
+    ipcLog.info(`Custom model deleted: ${modelId}`)
+    return updatedModels
+  })
+
+  // Reorder custom models
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_MODELS_REORDER, async (_event, modelIds: string[]) => {
+    const { reorderCustomModels } = await import('@agent-operator/shared/config')
+    const updatedModels = reorderCustomModels(modelIds)
+    ipcLog.info(`Custom models reordered: ${modelIds.join(', ')}`)
+    return updatedModels
+  })
+
   // Open native folder dialog for selecting working directory
   ipcMain.handle(IPC_CHANNELS.OPEN_FOLDER_DIALOG, async () => {
     const result = await dialog.showOpenDialog({
@@ -1002,14 +1075,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Update a workspace setting
   // Valid keys: 'name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled'
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: string, key: string, value: unknown) => {
-    const workspace = getWorkspaceOrThrow(workspaceId)
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: unknown, key: unknown, value: unknown) => {
+    // Validate inputs
+    const validatedWorkspaceId = validateIpcArgs(WorkspaceIdSchema, workspaceId, 'WORKSPACE_SETTINGS_UPDATE.workspaceId')
+    const validatedKey = validateIpcArgs(WorkspaceSettingKeySchema, key, 'WORKSPACE_SETTINGS_UPDATE.key')
 
-    // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled']
-    if (!validKeys.includes(key)) {
-      throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
-    }
+    const workspace = getWorkspaceOrThrow(validatedWorkspaceId)
 
     const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@agent-operator/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
@@ -1018,21 +1089,21 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     // Handle 'name' specially - it's a top-level config property, not in defaults
-    if (key === 'name') {
+    if (validatedKey === 'name') {
       config.name = String(value).trim()
-    } else if (key === 'localMcpEnabled') {
+    } else if (validatedKey === 'localMcpEnabled') {
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(value)
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}
-      ;(config.defaults as Record<string, unknown>)[key] = value
+      ;(config.defaults as Record<string, unknown>)[validatedKey] = value
     }
 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
-    ipcLog.info(`Workspace setting updated: ${key} = ${JSON.stringify(value)}`)
+    ipcLog.info(`Workspace setting updated: ${validatedKey} = ${JSON.stringify(value)}`)
   })
 
   // ============================================================

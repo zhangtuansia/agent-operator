@@ -14,6 +14,7 @@ import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
 import { useGlobalShortcuts } from '@/hooks/keyboard'
@@ -1273,6 +1274,7 @@ export default function App() {
 
   // Ready state - main app with splash overlay during data loading
   return (
+    <ErrorBoundary level="app">
     <LanguageProvider initialLanguage={initialLanguage}>
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
@@ -1319,6 +1321,7 @@ export default function App() {
     </ShikiThemeProvider>
     </PlatformProvider>
     </LanguageProvider>
+    </ErrorBoundary>
   )
 }
 

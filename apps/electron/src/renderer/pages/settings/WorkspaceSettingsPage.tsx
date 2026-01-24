@@ -71,6 +71,8 @@ export default function WorkspaceSettingsPage() {
 
   // Provider state (for showing correct model options)
   const [currentProvider, setCurrentProvider] = useState<string | undefined>(undefined)
+  // Custom models for 'custom' provider
+  const [customModels, setCustomModels] = useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
 
   // Load workspace settings when active workspace changes
   useEffect(() => {
@@ -85,6 +87,12 @@ export default function WorkspaceSettingsPage() {
         // Load billing method to get current provider
         const billingInfo = await window.electronAPI.getBillingMethod()
         setCurrentProvider(billingInfo.provider)
+
+        // Load custom models if using custom provider
+        if (billingInfo.provider === 'custom') {
+          const models = await window.electronAPI.getCustomModels()
+          setCustomModels(models || [])
+        }
 
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
@@ -405,7 +413,7 @@ export default function WorkspaceSettingsPage() {
                   description={t('workspaceSettings.defaultModelDescription')}
                   value={wsModel}
                   onValueChange={handleModelChange}
-                  options={getModelsForProvider(currentProvider).map((model) => ({
+                  options={getModelsForProvider(currentProvider, customModels).map((model) => ({
                     value: model.id,
                     label: model.name,
                     description: model.description,

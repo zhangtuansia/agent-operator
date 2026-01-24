@@ -41,6 +41,16 @@ export interface PendingUpdate {
 }
 
 /**
+ * Custom model definition for user-defined models
+ */
+export interface CustomModelDefinition {
+  id: string;           // API 调用使用的模型 ID (必填)
+  name: string;         // UI 显示名称 (必填)
+  shortName?: string;   // 短名称 (可选)
+  description?: string; // 描述 (可选)
+}
+
+/**
  * Provider configuration for third-party AI APIs
  */
 export interface ProviderConfig {
@@ -49,6 +59,8 @@ export interface ProviderConfig {
   apiFormat: 'anthropic' | 'openai';  // API format to use
   // AWS Bedrock specific settings
   awsRegion?: string;  // AWS region for Bedrock (e.g., 'us-east-1')
+  // Custom models for Custom provider
+  customModels?: CustomModelDefinition[];  // User-defined model list
 }
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
@@ -255,16 +267,135 @@ export function getProviderConfig(): ProviderConfig | null {
 /**
  * Set the provider configuration for third-party AI APIs.
  * Pass null to clear and use default Anthropic API.
+ * Note: This preserves existing customModels when updating other fields.
  */
 export function setProviderConfig(providerConfig: ProviderConfig | null): void {
   const config = loadStoredConfig();
   if (!config) return;
   if (providerConfig) {
-    config.providerConfig = providerConfig;
+    // Preserve existing customModels if not provided in the new config
+    const existingCustomModels = config.providerConfig?.customModels;
+    config.providerConfig = {
+      ...providerConfig,
+      customModels: providerConfig.customModels ?? existingCustomModels,
+    };
   } else {
     delete config.providerConfig;
   }
   saveConfig(config);
+}
+
+/**
+ * Get custom models for the Custom provider.
+ * Returns empty array if no custom models are defined.
+ */
+export function getCustomModels(): CustomModelDefinition[] {
+  const config = loadStoredConfig();
+  return config?.providerConfig?.customModels ?? [];
+}
+
+/**
+ * Set custom models for the Custom provider.
+ * Replaces all existing custom models.
+ */
+export function setCustomModels(models: CustomModelDefinition[]): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  // Ensure providerConfig exists
+  if (!config.providerConfig) {
+    config.providerConfig = {
+      provider: 'custom',
+      baseURL: '',
+      apiFormat: 'anthropic',
+    };
+  }
+
+  config.providerConfig.customModels = models;
+  saveConfig(config);
+}
+
+/**
+ * Add a custom model.
+ * Returns the updated list of custom models.
+ * Throws if a model with the same ID already exists.
+ */
+export function addCustomModel(model: CustomModelDefinition): CustomModelDefinition[] {
+  const models = getCustomModels();
+
+  // Check for duplicate ID
+  if (models.some(m => m.id === model.id)) {
+    throw new Error(`Model with ID "${model.id}" already exists`);
+  }
+
+  const updatedModels = [...models, model];
+  setCustomModels(updatedModels);
+  return updatedModels;
+}
+
+/**
+ * Update an existing custom model.
+ * Returns the updated list of custom models.
+ * Throws if the model is not found.
+ */
+export function updateCustomModel(modelId: string, updates: Partial<Omit<CustomModelDefinition, 'id'>>): CustomModelDefinition[] {
+  const models = getCustomModels();
+  const index = models.findIndex(m => m.id === modelId);
+
+  if (index === -1) {
+    throw new Error(`Model with ID "${modelId}" not found`);
+  }
+
+  const updatedModels = [...models];
+  // Explicitly construct the updated model to avoid type issues with partial updates
+  const currentModel = updatedModels[index]!;
+  updatedModels[index] = {
+    id: currentModel.id,
+    name: updates.name ?? currentModel.name,
+    shortName: updates.shortName !== undefined ? updates.shortName : currentModel.shortName,
+    description: updates.description !== undefined ? updates.description : currentModel.description,
+  };
+  setCustomModels(updatedModels);
+  return updatedModels;
+}
+
+/**
+ * Delete a custom model.
+ * Returns the updated list of custom models.
+ */
+export function deleteCustomModel(modelId: string): CustomModelDefinition[] {
+  const models = getCustomModels();
+  const updatedModels = models.filter(m => m.id !== modelId);
+  setCustomModels(updatedModels);
+  return updatedModels;
+}
+
+/**
+ * Reorder custom models.
+ * Pass the model IDs in the desired order.
+ * Returns the updated list of custom models.
+ */
+export function reorderCustomModels(modelIds: string[]): CustomModelDefinition[] {
+  const models = getCustomModels();
+  const modelMap = new Map(models.map(m => [m.id, m]));
+
+  // Build reordered list
+  const reorderedModels: CustomModelDefinition[] = [];
+  for (const id of modelIds) {
+    const model = modelMap.get(id);
+    if (model) {
+      reorderedModels.push(model);
+      modelMap.delete(id);
+    }
+  }
+
+  // Append any models not in the reorder list (shouldn't happen, but be safe)
+  for (const model of modelMap.values()) {
+    reorderedModels.push(model);
+  }
+
+  setCustomModels(reorderedModels);
+  return reorderedModels;
 }
 
 

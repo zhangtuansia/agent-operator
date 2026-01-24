@@ -260,6 +260,8 @@ export function FreeFormInput({
 
   // Provider state for showing correct model options
   const [currentProvider, setCurrentProvider] = React.useState<string | undefined>(undefined)
+  // Custom models for 'custom' provider
+  const [customModels, setCustomModels] = React.useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
 
   // Load provider info on mount and when provider changes
   const loadProvider = React.useCallback(async () => {
@@ -267,6 +269,12 @@ export function FreeFormInput({
     try {
       const billingInfo = await window.electronAPI.getBillingMethod()
       setCurrentProvider(billingInfo.provider)
+
+      // Load custom models if using custom provider
+      if (billingInfo.provider === 'custom') {
+        const models = await window.electronAPI.getCustomModels()
+        setCustomModels(models || [])
+      }
     } catch {
       // Ignore errors, use default models
     }
@@ -1277,7 +1285,7 @@ export function FreeFormInput({
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
               {/* Model options - dynamically loaded based on provider */}
-              {getModelsForProvider(currentProvider).map((model) => {
+              {getModelsForProvider(currentProvider, customModels).map((model) => {
                 const isSelected = currentModel === model.id
                 return (
                   <StyledDropdownMenuItem

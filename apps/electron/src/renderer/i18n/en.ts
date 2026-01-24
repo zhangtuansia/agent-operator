@@ -150,6 +150,28 @@ export const en = {
     // Bedrock info
     bedrockConfiguration: 'Configuration',
     bedrockConfigDescription: 'AWS Bedrock is configured via environment variables. Edit your ~/.zshrc or ~/.bashrc to modify settings.',
+
+    // Custom Models
+    customModels: {
+      title: 'Custom Models',
+      sectionDescription: 'Define custom model names for your API endpoint',
+      addModel: 'Add Model',
+      editTitle: 'Edit Model',
+      addTitle: 'Add Model',
+      dialogDescription: 'Configure a custom model for your API endpoint',
+      modelId: 'Model ID',
+      modelIdHint: 'The model identifier used in API calls (e.g., gpt-4-turbo)',
+      displayName: 'Display Name',
+      shortName: 'Short Name',
+      shortNameHint: 'Displayed in compact views',
+      description: 'Description',
+      descriptionPlaceholder: 'Optional description',
+      emptyState: 'No custom models defined',
+      emptyStateHint: 'Add models that your API endpoint supports',
+      errorIdRequired: 'Model ID is required',
+      errorNameRequired: 'Display name is required',
+      errorIdDuplicate: 'A model with this ID already exists',
+    },
   },
 
   // Workspace Settings
@@ -450,6 +472,17 @@ export const en = {
     permissionDenied: 'Permission denied',
     notFound: 'Not found',
     timeout: 'Request timed out',
+  },
+
+  // Error Boundary
+  errorBoundary: {
+    appError: 'Something went wrong',
+    appErrorDescription: 'The application encountered an unexpected error.',
+    sectionError: 'This section encountered an error',
+    componentError: 'Failed to load',
+    reload: 'Reload Application',
+    retry: 'Try Again',
+    dismiss: 'Dismiss',
   },
 
   // Empty States

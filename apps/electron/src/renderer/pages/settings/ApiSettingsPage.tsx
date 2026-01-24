@@ -8,6 +8,7 @@
  * - API Base URL
  * - API Key
  * - API Format (Anthropic/OpenAI compatible)
+ * - Custom Models (for Custom provider)
  */
 
 import * as React from 'react'
@@ -19,17 +20,19 @@ import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
-import { Eye, EyeOff, Check, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, Check, Plus } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import type { CustomModel } from '../../../shared/types'
 
 import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
   SettingsMenuSelectRow,
-  SettingsInput,
 } from '@/components/settings'
+import { CustomModelItem } from '@/components/settings/CustomModelItem'
+import { CustomModelDialog } from '@/components/settings/CustomModelDialog'
 import { useTranslation } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
@@ -106,6 +109,11 @@ export default function ApiSettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [hasExistingKey, setHasExistingKey] = useState(false)
 
+  // Custom models state
+  const [customModels, setCustomModels] = useState<CustomModel[]>([])
+  const [customModelDialogOpen, setCustomModelDialogOpen] = useState(false)
+  const [editingModel, setEditingModel] = useState<CustomModel | null>(null)
+
   // Load current configuration
   useEffect(() => {
     const loadConfig = async () => {
@@ -128,16 +136,34 @@ export default function ApiSettingsPage() {
 
         setHasExistingKey(billingInfo.hasCredential)
 
-        // Load stored config for baseURL
-        // We need to read the config file to get the baseURL
+        // Load stored config for baseURL and apiFormat
+        // We need to read the config file to get the stored values
         const config = await window.electronAPI.getStoredConfig?.()
-        if (config?.providerConfig?.baseURL) {
-          setBaseURL(config.providerConfig.baseURL)
+        if (config?.providerConfig) {
+          // Use stored baseURL if available
+          if (config.providerConfig.baseURL) {
+            setBaseURL(config.providerConfig.baseURL)
+          } else if (billingInfo.provider) {
+            const providerConfig = PROVIDERS.find(p => p.id === billingInfo.provider)
+            if (providerConfig) {
+              setBaseURL(providerConfig.baseURL)
+            }
+          }
+          // Use stored apiFormat if available
+          if (config.providerConfig.apiFormat) {
+            setApiFormat(config.providerConfig.apiFormat)
+          }
         } else if (billingInfo.provider) {
           const providerConfig = PROVIDERS.find(p => p.id === billingInfo.provider)
           if (providerConfig) {
             setBaseURL(providerConfig.baseURL)
           }
+        }
+
+        // Load custom models
+        const models = await window.electronAPI.getCustomModels?.()
+        if (models) {
+          setCustomModels(models)
         }
       } catch (error) {
         console.error('Failed to load API config:', error)
@@ -159,6 +185,60 @@ export default function ApiSettingsPage() {
     }
   }, [])
 
+  // Custom model handlers
+  const handleAddModel = useCallback(() => {
+    setEditingModel(null)
+    setCustomModelDialogOpen(true)
+  }, [])
+
+  const handleEditModel = useCallback((model: CustomModel) => {
+    setEditingModel(model)
+    setCustomModelDialogOpen(true)
+  }, [])
+
+  const handleSaveModel = useCallback(async (model: CustomModel) => {
+    if (!window.electronAPI) return
+
+    try {
+      let updatedModels: CustomModel[]
+      if (editingModel) {
+        // Update existing model
+        updatedModels = await window.electronAPI.updateCustomModel(model.id, {
+          name: model.name,
+          shortName: model.shortName,
+          description: model.description,
+        })
+      } else {
+        // Add new model
+        updatedModels = await window.electronAPI.addCustomModel(model)
+      }
+      setCustomModels(updatedModels)
+
+      // Emit event to notify model selection to reload
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+        detail: { provider: currentProvider }
+      }))
+    } catch (error) {
+      console.error('Failed to save custom model:', error)
+    }
+  }, [editingModel, currentProvider])
+
+  const handleDeleteModel = useCallback(async (modelId: string) => {
+    if (!window.electronAPI) return
+
+    try {
+      const updatedModels = await window.electronAPI.deleteCustomModel(modelId)
+      setCustomModels(updatedModels)
+
+      // Emit event to notify model selection to reload
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+        detail: { provider: currentProvider }
+      }))
+    } catch (error) {
+      console.error('Failed to delete custom model:', error)
+    }
+  }, [currentProvider])
+
   // Save configuration
   const handleSave = useCallback(async () => {
     if (!window.electronAPI) return
@@ -175,10 +255,12 @@ export default function ApiSettingsPage() {
       })
 
       // Update API key if provided
-      if (apiKey.trim()) {
+      if (apiKey.trim() && !apiKey.startsWith('••••')) {
         await window.electronAPI.updateBillingMethod('api_key', apiKey.trim())
         setHasExistingKey(true)
-        setApiKey('')
+        // Show masked key to indicate it's saved
+        const maskedKey = apiKey.slice(0, 8) + '••••••••' + apiKey.slice(-4)
+        setApiKey(maskedKey)
       }
 
       setSaveSuccess(true)
@@ -307,6 +389,45 @@ export default function ApiSettingsPage() {
                     </SettingsCard>
                   </SettingsSection>
 
+                  {/* Custom Models Section - only show for custom provider */}
+                  {currentProvider === 'custom' && (
+                    <SettingsSection
+                      title={t('apiSettings.customModels.title')}
+                      description={t('apiSettings.customModels.sectionDescription')}
+                    >
+                      <SettingsCard className="p-0 overflow-hidden">
+                        {customModels.length > 0 ? (
+                          <div className="divide-y divide-border">
+                            {customModels.map((model) => (
+                              <CustomModelItem
+                                key={model.id}
+                                model={model}
+                                onEdit={handleEditModel}
+                                onDelete={handleDeleteModel}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="px-4 py-8 text-center text-muted-foreground">
+                            <p className="text-sm">{t('apiSettings.customModels.emptyState')}</p>
+                            <p className="text-xs mt-1">{t('apiSettings.customModels.emptyStateHint')}</p>
+                          </div>
+                        )}
+                        <div className="border-t border-border p-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddModel}
+                            className="w-full"
+                          >
+                            <Plus className="size-4 mr-1.5" />
+                            {t('apiSettings.customModels.addModel')}
+                          </Button>
+                        </div>
+                      </SettingsCard>
+                    </SettingsSection>
+                  )}
+
                   {/* Save Button */}
                   <div className="flex items-center gap-3">
                     <Button
@@ -339,6 +460,15 @@ export default function ApiSettingsPage() {
           </div>
         </ScrollArea>
       </div>
+
+      {/* Custom Model Dialog */}
+      <CustomModelDialog
+        open={customModelDialogOpen}
+        onOpenChange={setCustomModelDialogOpen}
+        model={editingModel}
+        onSave={handleSaveModel}
+        existingIds={customModels.map(m => m.id)}
+      />
     </div>
   )
 }

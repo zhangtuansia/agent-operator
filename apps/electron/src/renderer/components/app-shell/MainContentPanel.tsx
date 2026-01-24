@@ -17,6 +17,7 @@ import { Panel } from './Panel'
 import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import {
   useNavigationState,
   isChatsNavigation,
@@ -98,10 +99,12 @@ export function MainContentPanel({
     if (navState.details) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <SourceInfoPage
-            sourceSlug={navState.details.sourceSlug}
-            workspaceId={activeWorkspaceId || ''}
-          />
+          <ErrorBoundary level="section" key={navState.details.sourceSlug}>
+            <SourceInfoPage
+              sourceSlug={navState.details.sourceSlug}
+              workspaceId={activeWorkspaceId || ''}
+            />
+          </ErrorBoundary>
         </Panel>
       )
     }
@@ -120,10 +123,12 @@ export function MainContentPanel({
     if (navState.details) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <SkillInfoPage
-            skillSlug={navState.details.skillSlug}
-            workspaceId={activeWorkspaceId || ''}
-          />
+          <ErrorBoundary level="section" key={navState.details.skillSlug}>
+            <SkillInfoPage
+              skillSlug={navState.details.skillSlug}
+              workspaceId={activeWorkspaceId || ''}
+            />
+          </ErrorBoundary>
         </Panel>
       )
     }
@@ -142,7 +147,9 @@ export function MainContentPanel({
     if (navState.details) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <ChatPage sessionId={navState.details.sessionId} />
+          <ErrorBoundary level="section" key={navState.details.sessionId}>
+            <ChatPage sessionId={navState.details.sessionId} />
+          </ErrorBoundary>
         </Panel>
       )
     }

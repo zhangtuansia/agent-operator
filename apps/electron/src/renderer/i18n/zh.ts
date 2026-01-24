@@ -152,6 +152,28 @@ export const zh: TranslationKeys = {
     // Bedrock info
     bedrockConfiguration: '配置',
     bedrockConfigDescription: 'AWS Bedrock 通过环境变量配置。编辑 ~/.zshrc 或 ~/.bashrc 以修改设置。',
+
+    // Custom Models
+    customModels: {
+      title: '自定义模型',
+      sectionDescription: '为 API 端点定义自定义模型名称',
+      addModel: '添加模型',
+      editTitle: '编辑模型',
+      addTitle: '添加模型',
+      dialogDescription: '为 API 端点配置自定义模型',
+      modelId: '模型 ID',
+      modelIdHint: 'API 调用中使用的模型标识符（如 gpt-4-turbo）',
+      displayName: '显示名称',
+      shortName: '短名称',
+      shortNameHint: '在紧凑视图中显示',
+      description: '描述',
+      descriptionPlaceholder: '可选描述',
+      emptyState: '未定义自定义模型',
+      emptyStateHint: '添加您的 API 端点支持的模型',
+      errorIdRequired: '模型 ID 为必填项',
+      errorNameRequired: '显示名称为必填项',
+      errorIdDuplicate: '已存在相同 ID 的模型',
+    },
   },
 
   // Workspace Settings
@@ -452,6 +474,17 @@ export const zh: TranslationKeys = {
     permissionDenied: '权限被拒绝',
     notFound: '未找到',
     timeout: '请求超时',
+  },
+
+  // Error Boundary
+  errorBoundary: {
+    appError: '出错了',
+    appErrorDescription: '应用程序遇到意外错误。',
+    sectionError: '此区域发生错误',
+    componentError: '加载失败',
+    reload: '重新加载应用',
+    retry: '重试',
+    dismiss: '关闭',
   },
 
   // Empty States

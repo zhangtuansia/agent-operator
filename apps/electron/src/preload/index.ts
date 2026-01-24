@@ -188,6 +188,20 @@ const api: ElectronAPI = {
   setSessionModel: (sessionId: string, workspaceId: string, model: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model),
 
+  // Custom Models (for Custom provider)
+  getCustomModels: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_GET),
+  setCustomModels: (models: import('../shared/types').CustomModel[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_SET, models),
+  addCustomModel: (model: import('../shared/types').CustomModel) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_ADD, model),
+  updateCustomModel: (modelId: string, updates: Partial<import('../shared/types').CustomModel>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_UPDATE, modelId, updates),
+  deleteCustomModel: (modelId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_DELETE, modelId),
+  reorderCustomModels: (modelIds: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CUSTOM_MODELS_REORDER, modelIds),
+
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SETTINGS_GET, workspaceId),
