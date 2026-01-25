@@ -292,6 +292,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_EDITOR, workspaceId, skillSlug),
   openSkillInFinder: (workspaceId: string, skillSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_FINDER, workspaceId, skillSlug),
+  importSkillFromUrl: (workspaceId: string, url: string, customSlug?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_IMPORT_URL, workspaceId, url, customSlug),
+  importSkillFromContent: (workspaceId: string, content: string, customSlug?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_IMPORT_CONTENT, workspaceId, content, customSlug),
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged: (callback: (skills: import('@agent-operator/shared/skills').LoadedSkill[]) => void) => {

@@ -608,6 +608,8 @@ export const IPC_CHANNELS = {
   SKILLS_OPEN_EDITOR: 'skills:openEditor',
   SKILLS_OPEN_FINDER: 'skills:openFinder',
   SKILLS_CHANGED: 'skills:changed',
+  SKILLS_IMPORT_URL: 'skills:importUrl',
+  SKILLS_IMPORT_CONTENT: 'skills:importContent',
 
   // Status management (workspace-scoped)
   STATUSES_LIST: 'statuses:list',
@@ -859,6 +861,8 @@ export interface ElectronAPI {
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
+  importSkillFromUrl(workspaceId: string, url: string, customSlug?: string): Promise<import('@agent-operator/shared/skills').ImportSkillResult>
+  importSkillFromContent(workspaceId: string, content: string, customSlug?: string): Promise<import('@agent-operator/shared/skills').ImportSkillResult>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void

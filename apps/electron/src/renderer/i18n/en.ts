@@ -405,6 +405,25 @@ export const en = {
     // Skill menu
     showInFinder: 'Show in Finder',
     deleteSkill: 'Delete Skill',
+    // Import
+    import: {
+      button: 'Import Skill',
+      fromUrl: 'Import from URL',
+      title: 'Import Skill',
+      description: 'Import a skill from a URL or paste SKILL.md content directly.',
+      modeUrl: 'From URL',
+      modeContent: 'Paste Content',
+      urlLabel: 'Skill URL',
+      urlPlaceholder: 'https://raw.githubusercontent.com/.../SKILL.md',
+      urlHint: 'Paste a URL to a SKILL.md file (e.g., GitHub raw file URL)',
+      contentLabel: 'SKILL.md Content',
+      contentPlaceholder: '---\nname: My Skill\ndescription: What this skill does\n---\n\n# Instructions\n...',
+      importButton: 'Import',
+      errorEmptyUrl: 'Please enter a URL',
+      errorEmptyContent: 'Please enter skill content',
+      errorUnknown: 'Failed to import skill',
+      success: 'Skill imported successfully',
+    },
   },
 
   // Sidebar

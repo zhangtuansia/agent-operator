@@ -1720,6 +1720,48 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     await shell.showItemInFolder(skillDir)
   })
 
+  // Import skill from URL
+  ipcMain.handle(IPC_CHANNELS.SKILLS_IMPORT_URL, async (_event, workspaceId: string, url: string, customSlug?: string) => {
+    ipcLog.info(`SKILLS_IMPORT_URL: Importing skill from ${url} for workspace ${workspaceId}`)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      ipcLog.error(`SKILLS_IMPORT_URL: Workspace not found: ${workspaceId}`)
+      return { success: false, error: 'Workspace not found' }
+    }
+
+    const { importSkillFromUrl } = await import('@agent-operator/shared/skills')
+    const result = await importSkillFromUrl(workspace.rootPath, url, customSlug)
+
+    if (result.success) {
+      ipcLog.info(`SKILLS_IMPORT_URL: Successfully imported skill: ${result.skill?.slug}`)
+    } else {
+      ipcLog.error(`SKILLS_IMPORT_URL: Failed to import skill: ${result.error}`)
+    }
+
+    return result
+  })
+
+  // Import skill from content (raw SKILL.md content)
+  ipcMain.handle(IPC_CHANNELS.SKILLS_IMPORT_CONTENT, async (_event, workspaceId: string, content: string, customSlug?: string) => {
+    ipcLog.info(`SKILLS_IMPORT_CONTENT: Importing skill from content for workspace ${workspaceId}`)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      ipcLog.error(`SKILLS_IMPORT_CONTENT: Workspace not found: ${workspaceId}`)
+      return { success: false, error: 'Workspace not found' }
+    }
+
+    const { importSkillFromContent } = await import('@agent-operator/shared/skills')
+    const result = await importSkillFromContent(workspace.rootPath, content, customSlug)
+
+    if (result.success) {
+      ipcLog.info(`SKILLS_IMPORT_CONTENT: Successfully imported skill: ${result.skill?.slug}`)
+    } else {
+      ipcLog.error(`SKILLS_IMPORT_CONTENT: Failed to import skill: ${result.error}`)
+    }
+
+    return result
+  })
+
   // ============================================================
   // Status Management (Workspace-scoped)
   // ============================================================

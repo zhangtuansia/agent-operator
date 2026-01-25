@@ -7,12 +7,14 @@
 
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
@@ -31,7 +33,7 @@ import {
 /**
  * Parse SKILL.md content and extract frontmatter + body
  */
-function parseSkillFile(content: string): { metadata: SkillMetadata; body: string } | null {
+export function parseSkillFile(content: string): { metadata: SkillMetadata; body: string } | null {
   try {
     const parsed = matter(content);
 
@@ -242,3 +244,252 @@ export function skillNeedsIconDownload(skill: LoadedSkill): boolean {
 
 // Re-export icon utilities for convenience
 export { isIconUrl } from '../utils/icon.ts';
+
+// ============================================================
+// Import Operations
+// ============================================================
+
+export interface ImportSkillResult {
+  success: boolean;
+  skill?: LoadedSkill;
+  error?: string;
+}
+
+/**
+ * Generate a slug from a skill name
+ * @param name - Skill name
+ */
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 50);
+}
+
+/**
+ * Find a unique slug for a skill
+ * @param workspaceRoot - Absolute path to workspace root
+ * @param baseName - Base name to generate slug from
+ */
+function findUniqueSlug(workspaceRoot: string, baseName: string): string {
+  const baseSlug = generateSlug(baseName);
+  let slug = baseSlug;
+  let counter = 1;
+
+  while (skillExists(workspaceRoot, slug)) {
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+
+  return slug;
+}
+
+/**
+ * Convert GitHub page URL to raw content URL
+ * e.g., https://github.com/owner/repo/blob/main/path/SKILL.md
+ *    -> https://raw.githubusercontent.com/owner/repo/main/path/SKILL.md
+ */
+function convertToRawUrl(url: string): string {
+  // Match GitHub blob URLs: github.com/{owner}/{repo}/blob/{branch}/{path}
+  const githubBlobPattern = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/;
+  const match = url.match(githubBlobPattern);
+
+  if (match) {
+    const [, owner, repo, rest] = match;
+    return `https://raw.githubusercontent.com/${owner}/${repo}/${rest}`;
+  }
+
+  return url;
+}
+
+/**
+ * Import a skill from a URL (GitHub raw file or any URL to a SKILL.md file)
+ * @param workspaceRoot - Absolute path to workspace root
+ * @param url - URL to the SKILL.md file
+ * @param customSlug - Optional custom slug (will auto-generate if not provided)
+ */
+export async function importSkillFromUrl(
+  workspaceRoot: string,
+  url: string,
+  customSlug?: string
+): Promise<ImportSkillResult> {
+  try {
+    // Auto-convert GitHub page URLs to raw URLs
+    const rawUrl = convertToRawUrl(url);
+
+    // Validate URL
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return { success: false, error: 'URL must use HTTP or HTTPS protocol' };
+      }
+    } catch {
+      return { success: false, error: 'Invalid URL format' };
+    }
+
+    // Fetch the content
+    let content: string;
+    try {
+      const response = await fetch(rawUrl, {
+        headers: {
+          'User-Agent': 'Cowork-Skill-Importer/1.0',
+          'Accept': 'text/plain, text/markdown, */*',
+        },
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Failed to fetch: ${response.status} ${response.statusText}`
+        };
+      }
+
+      content = await response.text();
+    } catch (fetchError) {
+      return {
+        success: false,
+        error: `Network error: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
+      };
+    }
+
+    // Parse the content
+    const parsed = parseSkillFile(content);
+    if (!parsed) {
+      return {
+        success: false,
+        error: 'Invalid SKILL.md format: missing required fields (name, description)'
+      };
+    }
+
+    // Determine slug
+    const slug = customSlug
+      ? generateSlug(customSlug)
+      : findUniqueSlug(workspaceRoot, parsed.metadata.name);
+
+    if (!slug) {
+      return { success: false, error: 'Could not generate valid slug' };
+    }
+
+    // Create skill directory
+    const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+    const skillDir = join(skillsDir, slug);
+
+    try {
+      mkdirSync(skillDir, { recursive: true });
+    } catch {
+      return { success: false, error: 'Failed to create skill directory' };
+    }
+
+    // Write SKILL.md
+    const skillFile = join(skillDir, 'SKILL.md');
+    try {
+      writeFileSync(skillFile, content, 'utf-8');
+    } catch {
+      // Clean up directory on failure
+      try { rmSync(skillDir, { recursive: true }); } catch { /* ignore */ }
+      return { success: false, error: 'Failed to write skill file' };
+    }
+
+    // Download icon if specified as URL
+    let iconPath: string | undefined;
+    if (parsed.metadata.icon && isIconUrl(parsed.metadata.icon)) {
+      try {
+        const downloadedPath = await downloadIcon(skillDir, parsed.metadata.icon, 'Skills');
+        if (downloadedPath) {
+          iconPath = downloadedPath;
+        }
+      } catch {
+        // Icon download failed, but skill is still valid
+      }
+    }
+
+    // Load and return the skill
+    const skill = loadSkill(workspaceRoot, slug);
+    if (!skill) {
+      return { success: false, error: 'Skill was created but failed to load' };
+    }
+
+    return { success: true, skill };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
+}
+
+/**
+ * Import a skill from raw content (SKILL.md content as string)
+ * @param workspaceRoot - Absolute path to workspace root
+ * @param content - SKILL.md content with YAML frontmatter
+ * @param customSlug - Optional custom slug (will auto-generate if not provided)
+ */
+export async function importSkillFromContent(
+  workspaceRoot: string,
+  content: string,
+  customSlug?: string
+): Promise<ImportSkillResult> {
+  try {
+    // Parse the content
+    const parsed = parseSkillFile(content);
+    if (!parsed) {
+      return {
+        success: false,
+        error: 'Invalid SKILL.md format: missing required fields (name, description)'
+      };
+    }
+
+    // Determine slug
+    const slug = customSlug
+      ? generateSlug(customSlug)
+      : findUniqueSlug(workspaceRoot, parsed.metadata.name);
+
+    if (!slug) {
+      return { success: false, error: 'Could not generate valid slug' };
+    }
+
+    // Create skill directory
+    const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+    const skillDir = join(skillsDir, slug);
+
+    try {
+      mkdirSync(skillDir, { recursive: true });
+    } catch {
+      return { success: false, error: 'Failed to create skill directory' };
+    }
+
+    // Write SKILL.md
+    const skillFile = join(skillDir, 'SKILL.md');
+    try {
+      writeFileSync(skillFile, content, 'utf-8');
+    } catch {
+      // Clean up directory on failure
+      try { rmSync(skillDir, { recursive: true }); } catch { /* ignore */ }
+      return { success: false, error: 'Failed to write skill file' };
+    }
+
+    // Download icon if specified as URL
+    if (parsed.metadata.icon && isIconUrl(parsed.metadata.icon)) {
+      try {
+        await downloadIcon(skillDir, parsed.metadata.icon, 'Skills');
+      } catch {
+        // Icon download failed, but skill is still valid
+      }
+    }
+
+    // Load and return the skill
+    const skill = loadSkill(workspaceRoot, slug);
+    if (!skill) {
+      return { success: false, error: 'Skill was created but failed to load' };
+    }
+
+    return { success: true, skill };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
+}

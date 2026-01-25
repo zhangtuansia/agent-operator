@@ -23,9 +23,8 @@ import {
 } from '@/components/ui/styled-context-menu'
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SkillMenu } from './SkillMenu'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
-import { useTranslation } from '@/i18n'
+import { useLanguage } from '@/context/LanguageContext'
 import type { LoadedSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
@@ -34,8 +33,6 @@ export interface SkillsListPanelProps {
   onSkillClick: (skill: LoadedSkill) => void
   selectedSkillSlug?: string | null
   workspaceId?: string
-  /** Workspace root path for EditPopover context */
-  workspaceRootPath?: string
   className?: string
 }
 
@@ -45,10 +42,9 @@ export function SkillsListPanel({
   onSkillClick,
   selectedSkillSlug,
   workspaceId,
-  workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
-  const { t } = useTranslation()
+  const { t } = useLanguage()
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
@@ -57,16 +53,6 @@ export function SkillsListPanel({
             <p className="text-sm text-muted-foreground">
               {t('skills.noSkills')}
             </p>
-            {workspaceRootPath && (
-              <EditPopover
-                trigger={
-                  <button className="mt-2 text-sm text-foreground hover:underline">
-                    {t('skills.addFirstSkill')}
-                  </button>
-                }
-                {...getEditConfig('add-skill', workspaceRootPath)}
-              />
-            )}
           </div>
         ) : (
           <div className="pt-2">

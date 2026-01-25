@@ -407,6 +407,25 @@ export const zh: TranslationKeys = {
     // Skill menu
     showInFinder: '在访达中显示',
     deleteSkill: '删除技能',
+    // Import
+    import: {
+      button: '导入技能',
+      fromUrl: '从 URL 导入',
+      title: '导入技能',
+      description: '从 URL 导入技能或直接粘贴 SKILL.md 内容。',
+      modeUrl: '从 URL',
+      modeContent: '粘贴内容',
+      urlLabel: '技能 URL',
+      urlPlaceholder: 'https://raw.githubusercontent.com/.../SKILL.md',
+      urlHint: '粘贴 SKILL.md 文件的 URL（例如 GitHub 原始文件 URL）',
+      contentLabel: 'SKILL.md 内容',
+      contentPlaceholder: '---\nname: 我的技能\ndescription: 这个技能的功能\n---\n\n# 说明\n...',
+      importButton: '导入',
+      errorEmptyUrl: '请输入 URL',
+      errorEmptyContent: '请输入技能内容',
+      errorUnknown: '导入技能失败',
+      success: '技能导入成功',
+    },
   },
 
   // Sidebar

@@ -102,6 +102,14 @@ import type { RightSidebarPanel } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { ImportSkillDialog } from "@/components/ui/ImportSkillDialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
@@ -1301,19 +1309,11 @@ function AppShellContent({
                       overridePlaceholder={t('editPopover.connectPlaceholder')}
                     />
                   )}
-                  {/* Add Skill button (only for skills mode) */}
-                  {isSkillsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t('skills.addSkill')}
-                          data-tutorial="add-skill-button"
-                        />
-                      }
-                      {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-                      example={t('editPopover.skillExample')}
-                      overridePlaceholder={t('editPopover.skillPlaceholder')}
+                  {/* Add Skill button with dropdown (only for skills mode) */}
+                  {isSkillsNavigation(navState) && activeWorkspace && activeWorkspaceId && (
+                    <SkillAddDropdown
+                      workspaceId={activeWorkspaceId}
+                      workspaceRootPath={activeWorkspace.rootPath}
                     />
                   )}
                 </>
@@ -1336,7 +1336,6 @@ function AppShellContent({
               <SkillsListPanel
                 skills={skills}
                 workspaceId={activeWorkspaceId}
-                workspaceRootPath={activeWorkspace?.rootPath}
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details ? navState.details.skillSlug : null}
@@ -1598,5 +1597,158 @@ function AppShellContent({
 
       </TooltipProvider>
     </AppShellProvider>
+  )
+}
+
+/**
+ * SkillAddDropdown - Dropdown menu for adding skills (create or import)
+ */
+function SkillAddDropdown({
+  workspaceId,
+  workspaceRootPath,
+}: {
+  workspaceId: string
+  workspaceRootPath: string
+}) {
+  const { t } = useTranslation()
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [importDialogOpen, setImportDialogOpen] = React.useState(false)
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <HeaderIconButton
+            icon={<Plus className="h-4 w-4" />}
+            tooltip={t('skills.addSkill')}
+            data-tutorial="add-skill-button"
+          />
+        </DropdownMenuTrigger>
+        <StyledDropdownMenuContent align="end">
+          <StyledDropdownMenuItem onSelect={() => setCreateDialogOpen(true)}>
+            <Zap className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('skills.createSkill')}</span>
+          </StyledDropdownMenuItem>
+          <StyledDropdownMenuItem onSelect={() => setImportDialogOpen(true)}>
+            <DatabaseZap className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('skills.import.fromUrl')}</span>
+          </StyledDropdownMenuItem>
+        </StyledDropdownMenuContent>
+      </DropdownMenu>
+
+      {/* CreateSkillDialog - uses same logic as EditPopover but with Dialog UI */}
+      <CreateSkillDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        workspaceRootPath={workspaceRootPath}
+      />
+
+      {/* ImportSkillDialog - controlled by state */}
+      <ImportSkillDialog
+        workspaceId={workspaceId}
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+      />
+    </>
+  )
+}
+
+/**
+ * CreateSkillDialog - Dialog for creating a skill via AI
+ */
+function CreateSkillDialog({
+  open,
+  onOpenChange,
+  workspaceRootPath,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workspaceRootPath: string
+}) {
+  const { t } = useTranslation()
+  const [input, setInput] = React.useState('')
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+
+  // Focus textarea when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [open])
+
+  // Reset input when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setInput('')
+    }
+  }, [open])
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return
+
+    const config = getEditConfig('add-skill', workspaceRootPath)
+    const { context } = config
+
+    // Build the prompt with context (same as EditPopover)
+    const xmlContext = `<edit-context label="${context.label}" file="${context.filePath}">${context.context || ''}</edit-context>`
+    const prompt = `${xmlContext}\n\n${input.trim()}`
+    const badges = [{ type: 'edit-context' as const, label: context.label }]
+
+    const encodedInput = encodeURIComponent(prompt)
+    const encodedBadges = encodeURIComponent(JSON.stringify(badges))
+    const url = `agentoperator://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=allow-all&badges=${encodedBadges}&workdir=none`
+
+    try {
+      await window.electronAPI.openUrl(url)
+    } catch (error) {
+      console.error('[CreateSkillDialog] Failed to open new chat window:', error)
+    }
+
+    onOpenChange(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  const placeholder = `${t('editPopover.skillPlaceholder')}${t('editPopover.examplePrefix')}"${t('editPopover.skillExample')}"`
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle>{t('skills.createSkill')}</DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={cn(
+              'w-full min-h-[100px] resize-none p-3 text-sm leading-relaxed rounded-md',
+              'bg-foreground/5 border border-border',
+              'placeholder:text-muted-foreground placeholder:leading-relaxed',
+              'focus:outline-none focus:ring-1 focus:ring-ring'
+            )}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button onClick={handleSubmit} disabled={!input.trim()}>
+            {t('common.done')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
