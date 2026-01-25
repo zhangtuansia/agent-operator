@@ -65,9 +65,8 @@ const sections: ShortcutSection[] = [
   {
     titleKey: 'chat',
     shortcuts: [
-      { keys: ['Enter'], descriptionKey: 'sendMessage' },
-      { keys: ['Shift', 'Enter'], descriptionKey: 'newLine' },
       { keys: [cmdKey, 'Enter'], descriptionKey: 'sendMessage' },
+      { keys: ['Enter'], descriptionKey: 'newLine' },
     ],
   },
 ]

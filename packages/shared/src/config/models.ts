@@ -3,31 +3,69 @@
  * Update model IDs here when new versions are released.
  */
 
+export interface ModelPricing {
+  /** Cost per 1M input tokens in USD */
+  inputCostPer1M: number;
+  /** Cost per 1M output tokens in USD */
+  outputCostPer1M: number;
+}
+
 export interface ModelDefinition {
   id: string;
   name: string;
   shortName: string;
   description: string;
+  /** Token pricing (optional, defaults provided) */
+  pricing?: ModelPricing;
 }
 
 // ============================================
 // USER-SELECTABLE MODELS (shown in UI)
 // ============================================
 
+// Default pricing per 1M tokens (USD) - https://anthropic.com/pricing
+const PRICING_OPUS: ModelPricing = { inputCostPer1M: 15, outputCostPer1M: 75 };
+const PRICING_SONNET: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 15 };
+const PRICING_HAIKU: ModelPricing = { inputCostPer1M: 0.25, outputCostPer1M: 1.25 };
+const PRICING_GLM_HIGH: ModelPricing = { inputCostPer1M: 5, outputCostPer1M: 15 };
+const PRICING_GLM_PLUS: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 9 };
+const PRICING_GLM_AIR: ModelPricing = { inputCostPer1M: 0.5, outputCostPer1M: 1.5 };
+const PRICING_GLM_FREE: ModelPricing = { inputCostPer1M: 0, outputCostPer1M: 0 };
+const PRICING_DEEPSEEK: ModelPricing = { inputCostPer1M: 0.14, outputCostPer1M: 0.28 };
+const PRICING_MINIMAX: ModelPricing = { inputCostPer1M: 1, outputCostPer1M: 3 };
+const PRICING_FREE: ModelPricing = { inputCostPer1M: 0, outputCostPer1M: 0 };
+const PRICING_DEFAULT: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 15 };
+
+export const DEFAULT_PRICING = {
+  opus: PRICING_OPUS,
+  sonnet: PRICING_SONNET,
+  haiku: PRICING_HAIKU,
+  'glm-4.7': PRICING_GLM_HIGH,
+  'glm-4-plus': PRICING_GLM_PLUS,
+  'glm-4-air': PRICING_GLM_AIR,
+  'glm-4-airx': PRICING_GLM_AIR,
+  'glm-4-flash': PRICING_GLM_FREE,
+  deepseek: PRICING_DEEPSEEK,
+  minimax: PRICING_MINIMAX,
+  openrouter: PRICING_DEFAULT,
+  ollama: PRICING_FREE,
+  default: PRICING_DEFAULT,
+} as const;
+
 // Anthropic Claude models (default)
 export const CLAUDE_MODELS: ModelDefinition[] = [
-  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable' },
-  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced' },
-  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient' },
+  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced', pricing: DEFAULT_PRICING.sonnet },
+  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
 
 // 智谱 GLM models
 export const GLM_MODELS: ModelDefinition[] = [
-  { id: 'glm-4.7', name: 'GLM-4.7', shortName: 'GLM-4.7', description: 'Latest & most capable' },
-  { id: 'glm-4-plus', name: 'GLM-4 Plus', shortName: 'GLM-4+', description: 'Enhanced capabilities' },
-  { id: 'glm-4-air', name: 'GLM-4 Air', shortName: 'GLM-4 Air', description: 'Fast & efficient' },
-  { id: 'glm-4-airx', name: 'GLM-4 AirX', shortName: 'GLM-4 AirX', description: 'Fastest inference' },
-  { id: 'glm-4-flash', name: 'GLM-4 Flash', shortName: 'GLM-4 Flash', description: 'Free tier model' },
+  { id: 'glm-4.7', name: 'GLM-4.7', shortName: 'GLM-4.7', description: 'Latest & most capable', pricing: DEFAULT_PRICING['glm-4.7'] },
+  { id: 'glm-4-plus', name: 'GLM-4 Plus', shortName: 'GLM-4+', description: 'Enhanced capabilities', pricing: DEFAULT_PRICING['glm-4-plus'] },
+  { id: 'glm-4-air', name: 'GLM-4 Air', shortName: 'GLM-4 Air', description: 'Fast & efficient', pricing: DEFAULT_PRICING['glm-4-air'] },
+  { id: 'glm-4-airx', name: 'GLM-4 AirX', shortName: 'GLM-4 AirX', description: 'Fastest inference', pricing: DEFAULT_PRICING['glm-4-airx'] },
+  { id: 'glm-4-flash', name: 'GLM-4 Flash', shortName: 'GLM-4 Flash', description: 'Free tier model', pricing: DEFAULT_PRICING['glm-4-flash'] },
 ];
 
 // MiniMax models
@@ -39,15 +77,15 @@ export const MINIMAX_MODELS: ModelDefinition[] = [
 
 // DeepSeek models
 export const DEEPSEEK_MODELS: ModelDefinition[] = [
-  { id: 'deepseek-chat', name: 'DeepSeek Chat', shortName: 'DeepSeek', description: 'General chat model' },
-  { id: 'deepseek-coder', name: 'DeepSeek Coder', shortName: 'Coder', description: 'Optimized for coding' },
+  { id: 'deepseek-chat', name: 'DeepSeek Chat', shortName: 'DeepSeek', description: 'General chat model', pricing: DEFAULT_PRICING.deepseek },
+  { id: 'deepseek-coder', name: 'DeepSeek Coder', shortName: 'Coder', description: 'Optimized for coding', pricing: DEFAULT_PRICING.deepseek },
 ];
 
 // AWS Bedrock models (Claude via Bedrock)
 export const BEDROCK_MODELS: ModelDefinition[] = [
-  { id: 'us.anthropic.claude-opus-4-5-20251101-v1:0', name: 'Opus 4.5 (Bedrock)', shortName: 'Opus', description: 'Most capable' },
-  { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', name: 'Sonnet 4.5 (Bedrock)', shortName: 'Sonnet', description: 'Balanced' },
-  { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient' },
+  { id: 'us.anthropic.claude-opus-4-5-20251101-v1:0', name: 'Opus 4.5 (Bedrock)', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
+  { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', name: 'Sonnet 4.5 (Bedrock)', shortName: 'Sonnet', description: 'Balanced', pricing: DEFAULT_PRICING.sonnet },
+  { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
 
 // OpenRouter models (uses provider/model-name format)
@@ -59,13 +97,13 @@ export const OPENROUTER_MODELS: ModelDefinition[] = [
   { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', shortName: 'Gemini', description: 'Google via OpenRouter' },
 ];
 
-// Ollama models (local models)
+// Ollama models (local models - free)
 export const OLLAMA_MODELS: ModelDefinition[] = [
-  { id: 'llama3.2', name: 'Llama 3.2', shortName: 'Llama', description: 'Meta Llama 3.2' },
-  { id: 'llama3.2:70b', name: 'Llama 3.2 70B', shortName: 'Llama 70B', description: 'Large Llama model' },
-  { id: 'mistral', name: 'Mistral', shortName: 'Mistral', description: 'Mistral AI' },
-  { id: 'codellama', name: 'Code Llama', shortName: 'CodeLlama', description: 'Optimized for code' },
-  { id: 'qwen2.5', name: 'Qwen 2.5', shortName: 'Qwen', description: 'Alibaba Qwen' },
+  { id: 'llama3.2', name: 'Llama 3.2', shortName: 'Llama', description: 'Meta Llama 3.2', pricing: DEFAULT_PRICING.ollama },
+  { id: 'llama3.2:70b', name: 'Llama 3.2 70B', shortName: 'Llama 70B', description: 'Large Llama model', pricing: DEFAULT_PRICING.ollama },
+  { id: 'mistral', name: 'Mistral', shortName: 'Mistral', description: 'Mistral AI', pricing: DEFAULT_PRICING.ollama },
+  { id: 'codellama', name: 'Code Llama', shortName: 'CodeLlama', description: 'Optimized for code', pricing: DEFAULT_PRICING.ollama },
+  { id: 'qwen2.5', name: 'Qwen 2.5', shortName: 'Qwen', description: 'Alibaba Qwen', pricing: DEFAULT_PRICING.ollama },
 ];
 
 // Vercel AI Gateway models (proxies Claude models)
@@ -190,6 +228,45 @@ export function getModelShortName(modelId: string): string {
 /** Check if model is an Opus model (for cache TTL decisions) */
 export function isOpusModel(modelId: string): boolean {
   return modelId.includes('opus');
+}
+
+/**
+ * Get pricing for a model ID.
+ * @param modelId - Model ID to get pricing for
+ * @returns ModelPricing with input and output costs per 1M tokens
+ */
+export function getModelPricing(modelId: string): ModelPricing {
+  // Try to find model in ALL_MODELS
+  const model = ALL_MODELS.find(m => m.id === modelId);
+  if (model?.pricing) return model.pricing;
+
+  // Fallback: detect pricing from model name
+  const lowerModelId = modelId.toLowerCase();
+  if (lowerModelId.includes('opus')) return PRICING_OPUS;
+  if (lowerModelId.includes('haiku')) return PRICING_HAIKU;
+  if (lowerModelId.includes('sonnet')) return PRICING_SONNET;
+  if (lowerModelId.includes('deepseek')) return PRICING_DEEPSEEK;
+  if (lowerModelId.includes('glm')) return PRICING_GLM_AIR;
+  if (lowerModelId.includes('llama') || lowerModelId.includes('mistral') || lowerModelId.includes('qwen')) {
+    return PRICING_FREE;
+  }
+
+  // Default to Sonnet pricing
+  return PRICING_DEFAULT;
+}
+
+/**
+ * Calculate estimated cost for token usage.
+ * @param inputTokens - Number of input tokens
+ * @param outputTokens - Number of output tokens
+ * @param modelId - Model ID (optional, defaults to Sonnet pricing)
+ * @returns Estimated cost in USD
+ */
+export function calculateTokenCost(inputTokens: number, outputTokens: number, modelId?: string): number {
+  const pricing = modelId ? getModelPricing(modelId) : PRICING_DEFAULT;
+  const inputCost = (inputTokens / 1_000_000) * pricing.inputCostPer1M;
+  const outputCost = (outputTokens / 1_000_000) * pricing.outputCostPer1M;
+  return inputCost + outputCost;
 }
 
 // ============================================

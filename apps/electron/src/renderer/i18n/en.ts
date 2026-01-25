@@ -415,7 +415,7 @@ export const en = {
       modeContent: 'Paste Content',
       urlLabel: 'Skill URL',
       urlPlaceholder: 'https://raw.githubusercontent.com/.../SKILL.md',
-      urlHint: 'Paste a URL to a SKILL.md file (e.g., GitHub raw file URL)',
+      skillsMarket: 'Skills Market',
       contentLabel: 'SKILL.md Content',
       contentPlaceholder: '---\nname: My Skill\ndescription: What this skill does\n---\n\n# Instructions\n...',
       importButton: 'Import',

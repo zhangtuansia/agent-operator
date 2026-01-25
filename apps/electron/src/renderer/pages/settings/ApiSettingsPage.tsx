@@ -23,7 +23,7 @@ import { routes } from '@/lib/navigate'
 import { Eye, EyeOff, Check, Plus } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { CustomModel } from '../../../shared/types'
+import type { CustomModel, AuthType } from '../../../shared/types'
 
 import {
   SettingsSection,
@@ -33,6 +33,15 @@ import {
 } from '@/components/settings'
 import { CustomModelItem } from '@/components/settings/CustomModelItem'
 import { CustomModelDialog } from '@/components/settings/CustomModelDialog'
+import { ApiKeyDialogContent } from '@/components/settings/ApiKeyDialog'
+import { ClaudeOAuthDialogContent } from '@/components/settings/ClaudeOAuthDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { useTranslation } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
@@ -151,11 +160,30 @@ export default function ApiSettingsPage() {
   const [customModelDialogOpen, setCustomModelDialogOpen] = useState(false)
   const [editingModel, setEditingModel] = useState<CustomModel | null>(null)
 
+  // Billing state
+  const [authType, setAuthType] = useState<AuthType>('api_key')
+  const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
+  const [hasCredential, setHasCredential] = useState(false)
+  const [isLoadingBilling, setIsLoadingBilling] = useState(true)
+
+  // API Key dialog state
+  const [apiKeyDialogValue, setApiKeyDialogValue] = useState('')
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false)
+  const [apiKeyError, setApiKeyError] = useState<string | undefined>()
+
+  // Claude OAuth state
+  const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
+  const [claudeOAuthStatus, setClaudeOAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [claudeOAuthError, setClaudeOAuthError] = useState<string | undefined>()
+  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
+  const [authCode, setAuthCode] = useState('')
+
   // Load current configuration
   useEffect(() => {
     const loadConfig = async () => {
       if (!window.electronAPI) {
         setIsLoading(false)
+        setIsLoadingBilling(false)
         return
       }
 
@@ -172,6 +200,10 @@ export default function ApiSettingsPage() {
         }
 
         setHasExistingKey(billingInfo.hasCredential)
+
+        // Set billing state
+        setAuthType(billingInfo.authType)
+        setHasCredential(billingInfo.hasCredential)
 
         // Load stored config for baseURL and apiFormat
         // We need to read the config file to get the stored values
@@ -206,11 +238,28 @@ export default function ApiSettingsPage() {
         console.error('Failed to load API config:', error)
       } finally {
         setIsLoading(false)
+        setIsLoadingBilling(false)
       }
     }
 
     loadConfig()
   }, [])
+
+  // Check for existing Claude token when expanding oauth_token option
+  useEffect(() => {
+    if (expandedMethod !== 'oauth_token') return
+
+    const checkExistingToken = async () => {
+      if (!window.electronAPI) return
+      try {
+        const token = await window.electronAPI.getExistingClaudeToken()
+        setExistingClaudeToken(token)
+      } catch (error) {
+        console.error('Failed to check existing Claude token:', error)
+      }
+    }
+    checkExistingToken()
+  }, [expandedMethod])
 
   // Handle provider change
   const handleProviderChange = useCallback((providerId: string) => {
@@ -276,6 +325,132 @@ export default function ApiSettingsPage() {
     }
   }, [currentProvider])
 
+  // Billing handlers
+  const handleMethodClick = useCallback(async (method: AuthType) => {
+    if (method === authType && hasCredential) {
+      setExpandedMethod(null)
+      return
+    }
+
+    setExpandedMethod(method)
+    setApiKeyError(undefined)
+    setClaudeOAuthStatus('idle')
+    setClaudeOAuthError(undefined)
+  }, [authType, hasCredential])
+
+  const handleCancelBilling = useCallback(() => {
+    setExpandedMethod(null)
+    setApiKeyDialogValue('')
+    setApiKeyError(undefined)
+    setClaudeOAuthStatus('idle')
+    setClaudeOAuthError(undefined)
+  }, [])
+
+  const handleSaveApiKeyDialog = useCallback(async () => {
+    if (!window.electronAPI || !apiKeyDialogValue.trim()) return
+
+    setIsSavingApiKey(true)
+    setApiKeyError(undefined)
+    try {
+      await window.electronAPI.updateBillingMethod('api_key', apiKeyDialogValue.trim())
+      setAuthType('api_key')
+      setHasCredential(true)
+      setHasExistingKey(true)
+      setApiKeyDialogValue('')
+      setExpandedMethod(null)
+    } catch (error) {
+      console.error('Failed to save API key:', error)
+      setApiKeyError(error instanceof Error ? error.message : 'Invalid API key. Please check and try again.')
+    } finally {
+      setIsSavingApiKey(false)
+    }
+  }, [apiKeyDialogValue])
+
+  const handleUseExistingClaudeToken = useCallback(async () => {
+    if (!window.electronAPI || !existingClaudeToken) return
+
+    setClaudeOAuthStatus('loading')
+    setClaudeOAuthError(undefined)
+    try {
+      await window.electronAPI.updateBillingMethod('oauth_token', existingClaudeToken)
+      setAuthType('oauth_token')
+      setHasCredential(true)
+      setClaudeOAuthStatus('success')
+      setExpandedMethod(null)
+    } catch (error) {
+      setClaudeOAuthStatus('error')
+      setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to save token')
+    }
+  }, [existingClaudeToken])
+
+  const handleStartClaudeOAuth = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    setClaudeOAuthStatus('loading')
+    setClaudeOAuthError(undefined)
+
+    try {
+      const result = await window.electronAPI.startClaudeOAuth()
+
+      if (result.success) {
+        setIsWaitingForCode(true)
+        setClaudeOAuthStatus('idle')
+      } else {
+        setClaudeOAuthStatus('error')
+        setClaudeOAuthError(result.error || 'Failed to start OAuth')
+      }
+    } catch (error) {
+      setClaudeOAuthStatus('error')
+      setClaudeOAuthError(error instanceof Error ? error.message : 'OAuth failed')
+    }
+  }, [])
+
+  const handleSubmitAuthCode = useCallback(async (code: string) => {
+    if (!window.electronAPI || !code.trim()) {
+      setClaudeOAuthError('Please enter the authorization code')
+      return
+    }
+
+    setClaudeOAuthStatus('loading')
+    setClaudeOAuthError(undefined)
+
+    try {
+      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
+
+      if (result.success && result.token) {
+        await window.electronAPI.updateBillingMethod('oauth_token', result.token)
+        setAuthType('oauth_token')
+        setHasCredential(true)
+        setClaudeOAuthStatus('success')
+        setIsWaitingForCode(false)
+        setAuthCode('')
+        setExpandedMethod(null)
+      } else {
+        setClaudeOAuthStatus('error')
+        setClaudeOAuthError(result.error || 'Failed to exchange code')
+      }
+    } catch (error) {
+      setClaudeOAuthStatus('error')
+      setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to exchange code')
+    }
+  }, [])
+
+  const handleCancelOAuth = useCallback(async () => {
+    setIsWaitingForCode(false)
+    setAuthCode('')
+    setClaudeOAuthStatus('idle')
+    setClaudeOAuthError(undefined)
+    setExpandedMethod(null)
+
+    if (window.electronAPI) {
+      try {
+        await window.electronAPI.clearClaudeOAuthState()
+      } catch (error) {
+        console.error('Failed to clear OAuth state:', error)
+      }
+    }
+  }, [])
+
   // Save configuration
   const handleSave = useCallback(async () => {
     if (!window.electronAPI) return
@@ -332,6 +507,28 @@ export default function ApiSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-6">
+              {/* Billing - Payment Method Selection */}
+              <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
+                <SettingsCard>
+                  <SettingsMenuSelectRow
+                    label={t('appSettings.paymentMethod')}
+                    description={
+                      authType === 'api_key' && hasCredential
+                        ? t('appSettings.apiKeyConfigured')
+                        : authType === 'oauth_token' && hasCredential
+                          ? t('appSettings.claudeConnected')
+                          : t('appSettings.selectMethod')
+                    }
+                    value={authType}
+                    onValueChange={(v) => handleMethodClick(v as AuthType)}
+                    options={[
+                      { value: 'oauth_token', label: t('appSettings.claudeProMax'), description: t('appSettings.claudeProMaxDesc') },
+                      { value: 'api_key', label: t('appSettings.apiKey'), description: t('appSettings.apiKeyDesc') },
+                    ]}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
               {/* Provider Selection */}
               <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
@@ -515,6 +712,65 @@ export default function ApiSettingsPage() {
         onSave={handleSaveModel}
         existingIds={customModels.map(m => m.id)}
       />
+
+      {/* API Key Dialog */}
+      <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancelBilling()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('appSettings.apiKey')}</DialogTitle>
+            <DialogDescription>
+              {t('appSettings.configureApiKey')}
+            </DialogDescription>
+          </DialogHeader>
+          <ApiKeyDialogContent
+            value={apiKeyDialogValue}
+            onChange={setApiKeyDialogValue}
+            onSave={handleSaveApiKeyDialog}
+            onCancel={handleCancelBilling}
+            isSaving={isSavingApiKey}
+            hasExistingKey={authType === 'api_key' && hasCredential}
+            error={apiKeyError}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Claude OAuth Dialog */}
+      <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('appSettings.claudeProMax')}</DialogTitle>
+            <DialogDescription>
+              {t('appSettings.configureClaudeMax')}
+            </DialogDescription>
+          </DialogHeader>
+          {isWaitingForCode ? (
+            <ClaudeOAuthDialogContent
+              existingToken={existingClaudeToken}
+              isLoading={claudeOAuthStatus === 'loading'}
+              onUseExisting={handleUseExistingClaudeToken}
+              onStartOAuth={handleStartClaudeOAuth}
+              onCancel={handleCancelOAuth}
+              status={claudeOAuthStatus}
+              errorMessage={claudeOAuthError}
+              isWaitingForCode={true}
+              authCode={authCode}
+              onAuthCodeChange={setAuthCode}
+              onSubmitAuthCode={handleSubmitAuthCode}
+            />
+          ) : (
+            <ClaudeOAuthDialogContent
+              existingToken={existingClaudeToken}
+              isLoading={claudeOAuthStatus === 'loading'}
+              onUseExisting={handleUseExistingClaudeToken}
+              onStartOAuth={handleStartClaudeOAuth}
+              onCancel={handleCancelOAuth}
+              status={claudeOAuthStatus}
+              errorMessage={claudeOAuthError}
+              isWaitingForCode={false}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

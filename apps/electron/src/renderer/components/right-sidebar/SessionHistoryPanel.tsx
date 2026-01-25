@@ -30,6 +30,7 @@ import {
   Coins,
 } from 'lucide-react'
 import type { Message } from '../../../shared/types'
+import { calculateTokenCost } from '@config/models'
 
 export interface SessionHistoryPanelProps {
   sessionId?: string
@@ -229,7 +230,7 @@ function ToolCallItem({ entry, isExpanded, onToggle }: {
 }
 
 /** Token usage stats component */
-function TokenUsageStats({ session }: { session: { tokenUsage?: { inputTokens: number; outputTokens: number; contextWindow?: number } } }) {
+function TokenUsageStats({ session }: { session: { model?: string; tokenUsage?: { inputTokens: number; outputTokens: number; contextWindow?: number } } }) {
   const { t } = useTranslation()
 
   if (!session.tokenUsage) return null
@@ -237,8 +238,8 @@ function TokenUsageStats({ session }: { session: { tokenUsage?: { inputTokens: n
   const { inputTokens, outputTokens, contextWindow } = session.tokenUsage
   const totalTokens = inputTokens + outputTokens
 
-  // Estimate cost (rough estimates based on Claude pricing)
-  const estimatedCost = (inputTokens * 0.000003) + (outputTokens * 0.000015)
+  // Calculate cost based on model pricing
+  const estimatedCost = calculateTokenCost(inputTokens, outputTokens, session.model)
 
   return (
     <div className="px-4 py-3 border-b border-border/50">

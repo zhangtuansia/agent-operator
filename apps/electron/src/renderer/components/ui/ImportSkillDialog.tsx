@@ -198,7 +198,14 @@ export function ImportSkillDialog({
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                {t('skills.import.urlHint')}
+                <a
+                  href="https://www.aicowork.chat/skills"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {t('skills.import.skillsMarket')}
+                </a>
               </p>
             </div>
           )}

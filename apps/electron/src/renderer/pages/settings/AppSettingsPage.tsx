@@ -5,8 +5,9 @@
  *
  * Settings:
  * - Appearance (Theme, Font)
+ * - Language
  * - Notifications
- * - Billing (API Key, Claude Max)
+ * - About
  */
 
 import * as React from 'react'
@@ -19,7 +20,6 @@ import { useTheme } from '@/context/ThemeContext'
 import { routes } from '@/lib/navigate'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
-import type { AuthType } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -28,24 +28,14 @@ import {
   SettingsRow,
   SettingsToggle,
   SettingsSegmentedControl,
-  SettingsMenuSelectRow,
   SettingsMenuSelect,
 } from '@/components/settings'
-import { ApiKeyDialogContent } from '@/components/settings/ApiKeyDialog'
-import { ClaudeOAuthDialogContent } from '@/components/settings/ClaudeOAuthDialog'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGES, type Language } from '@/i18n'
 import type { PresetTheme } from '@config/theme'
 import { FONTS, getFontLabel, SYSTEM_FONT } from '@/config/fonts'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -61,24 +51,6 @@ export default function AppSettingsPage() {
 
   // Preset themes state
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
-
-  // Billing state
-  const [authType, setAuthType] = useState<AuthType>('api_key')
-  const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
-  const [hasCredential, setHasCredential] = useState(false)
-  const [isLoadingBilling, setIsLoadingBilling] = useState(true)
-
-  // API Key state
-  const [apiKeyValue, setApiKeyValue] = useState('')
-  const [isSavingApiKey, setIsSavingApiKey] = useState(false)
-  const [apiKeyError, setApiKeyError] = useState<string | undefined>()
-
-  // Claude OAuth state
-  const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
-  const [claudeOAuthStatus, setClaudeOAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [claudeOAuthError, setClaudeOAuthError] = useState<string | undefined>()
-  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
-  const [authCode, setAuthCode] = useState('')
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -96,22 +68,15 @@ export default function AppSettingsPage() {
     }
   }, [updateChecker])
 
-  // Load current billing method, notifications setting, and preset themes on mount
+  // Load notifications setting on mount
   useEffect(() => {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
-          window.electronAPI.getBillingMethod(),
-          window.electronAPI.getNotificationsEnabled(),
-        ])
-        setAuthType(billing.authType)
-        setHasCredential(billing.hasCredential)
+        const notificationsOn = await window.electronAPI.getNotificationsEnabled()
         setNotificationsEnabled(notificationsOn)
       } catch (error) {
         console.error('Failed to load settings:', error)
-      } finally {
-        setIsLoadingBilling(false)
       }
     }
     loadSettings()
@@ -134,157 +99,6 @@ export default function AppSettingsPage() {
       }
     }
     loadThemes()
-  }, [])
-
-  // Check for existing Claude token when expanding oauth_token option
-  useEffect(() => {
-    if (expandedMethod !== 'oauth_token') return
-
-    const checkExistingToken = async () => {
-      if (!window.electronAPI) return
-      try {
-        const token = await window.electronAPI.getExistingClaudeToken()
-        setExistingClaudeToken(token)
-      } catch (error) {
-        console.error('Failed to check existing Claude token:', error)
-      }
-    }
-    checkExistingToken()
-  }, [expandedMethod])
-
-  // Handle clicking on a billing method option
-  const handleMethodClick = useCallback(async (method: AuthType) => {
-    if (method === authType && hasCredential) {
-      setExpandedMethod(null)
-      return
-    }
-
-    setExpandedMethod(method)
-    setApiKeyError(undefined)
-    setClaudeOAuthStatus('idle')
-    setClaudeOAuthError(undefined)
-  }, [authType, hasCredential])
-
-  // Cancel billing method expansion
-  const handleCancel = useCallback(() => {
-    setExpandedMethod(null)
-    setApiKeyValue('')
-    setApiKeyError(undefined)
-    setClaudeOAuthStatus('idle')
-    setClaudeOAuthError(undefined)
-  }, [])
-
-  // Save API key
-  const handleSaveApiKey = useCallback(async () => {
-    if (!window.electronAPI || !apiKeyValue.trim()) return
-
-    setIsSavingApiKey(true)
-    setApiKeyError(undefined)
-    try {
-      await window.electronAPI.updateBillingMethod('api_key', apiKeyValue.trim())
-      setAuthType('api_key')
-      setHasCredential(true)
-      setApiKeyValue('')
-      setExpandedMethod(null)
-    } catch (error) {
-      console.error('Failed to save API key:', error)
-      setApiKeyError(error instanceof Error ? error.message : 'Invalid API key. Please check and try again.')
-    } finally {
-      setIsSavingApiKey(false)
-    }
-  }, [apiKeyValue])
-
-  // Use existing Claude token
-  const handleUseExistingClaudeToken = useCallback(async () => {
-    if (!window.electronAPI || !existingClaudeToken) return
-
-    setClaudeOAuthStatus('loading')
-    setClaudeOAuthError(undefined)
-    try {
-      await window.electronAPI.updateBillingMethod('oauth_token', existingClaudeToken)
-      setAuthType('oauth_token')
-      setHasCredential(true)
-      setClaudeOAuthStatus('success')
-      setExpandedMethod(null)
-    } catch (error) {
-      setClaudeOAuthStatus('error')
-      setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to save token')
-    }
-  }, [existingClaudeToken])
-
-  // Start Claude OAuth flow (native browser-based)
-  const handleStartClaudeOAuth = useCallback(async () => {
-    if (!window.electronAPI) return
-
-    setClaudeOAuthStatus('loading')
-    setClaudeOAuthError(undefined)
-
-    try {
-      // Start OAuth flow - this opens the browser
-      const result = await window.electronAPI.startClaudeOAuth()
-
-      if (result.success) {
-        // Browser opened successfully, now waiting for user to copy the code
-        setIsWaitingForCode(true)
-        setClaudeOAuthStatus('idle')
-      } else {
-        setClaudeOAuthStatus('error')
-        setClaudeOAuthError(result.error || 'Failed to start OAuth')
-      }
-    } catch (error) {
-      setClaudeOAuthStatus('error')
-      setClaudeOAuthError(error instanceof Error ? error.message : 'OAuth failed')
-    }
-  }, [])
-
-  // Submit authorization code from browser
-  const handleSubmitAuthCode = useCallback(async (code: string) => {
-    if (!window.electronAPI || !code.trim()) {
-      setClaudeOAuthError('Please enter the authorization code')
-      return
-    }
-
-    setClaudeOAuthStatus('loading')
-    setClaudeOAuthError(undefined)
-
-    try {
-      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
-
-      if (result.success && result.token) {
-        await window.electronAPI.updateBillingMethod('oauth_token', result.token)
-        setAuthType('oauth_token')
-        setHasCredential(true)
-        setClaudeOAuthStatus('success')
-        setIsWaitingForCode(false)
-        setAuthCode('')
-        setExpandedMethod(null)
-      } else {
-        setClaudeOAuthStatus('error')
-        setClaudeOAuthError(result.error || 'Failed to exchange code')
-      }
-    } catch (error) {
-      setClaudeOAuthStatus('error')
-      setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to exchange code')
-    }
-  }, [])
-
-  // Cancel OAuth flow and clear state
-  const handleCancelOAuth = useCallback(async () => {
-    setIsWaitingForCode(false)
-    setAuthCode('')
-    setClaudeOAuthStatus('idle')
-    setClaudeOAuthError(undefined)
-    setExpandedMethod(null)
-
-    // Clear OAuth state on backend
-    if (window.electronAPI) {
-      try {
-        await window.electronAPI.clearClaudeOAuthState()
-      } catch (error) {
-        // Non-critical: state cleanup failed, but UI is already reset
-        console.error('Failed to clear OAuth state:', error)
-      }
-    }
   }, [])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
@@ -370,87 +184,6 @@ export default function AppSettingsPage() {
                   onCheckedChange={handleNotificationsEnabledChange}
                 />
               </SettingsCard>
-            </SettingsSection>
-
-            {/* Billing */}
-            <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
-              <SettingsCard>
-                <SettingsMenuSelectRow
-                  label={t('appSettings.paymentMethod')}
-                  description={
-                    authType === 'api_key' && hasCredential
-                      ? t('appSettings.apiKeyConfigured')
-                      : authType === 'oauth_token' && hasCredential
-                        ? t('appSettings.claudeConnected')
-                        : t('appSettings.selectMethod')
-                  }
-                  value={authType}
-                  onValueChange={(v) => handleMethodClick(v as AuthType)}
-                  options={[
-                    { value: 'oauth_token', label: t('appSettings.claudeProMax'), description: t('appSettings.claudeProMaxDesc') },
-                    { value: 'api_key', label: t('appSettings.apiKey'), description: t('appSettings.apiKeyDesc') },
-                  ]}
-                />
-              </SettingsCard>
-
-              {/* API Key Dialog */}
-              <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancel()}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{t('appSettings.apiKey')}</DialogTitle>
-                    <DialogDescription>
-                      {t('appSettings.configureApiKey')}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <ApiKeyDialogContent
-                    value={apiKeyValue}
-                    onChange={setApiKeyValue}
-                    onSave={handleSaveApiKey}
-                    onCancel={handleCancel}
-                    isSaving={isSavingApiKey}
-                    hasExistingKey={authType === 'api_key' && hasCredential}
-                    error={apiKeyError}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              {/* Claude OAuth Dialog */}
-              <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{t('appSettings.claudeProMax')}</DialogTitle>
-                    <DialogDescription>
-                      {t('appSettings.configureClaudeMax')}
-                    </DialogDescription>
-                  </DialogHeader>
-                  {isWaitingForCode ? (
-                    <ClaudeOAuthDialogContent
-                      existingToken={existingClaudeToken}
-                      isLoading={claudeOAuthStatus === 'loading'}
-                      onUseExisting={handleUseExistingClaudeToken}
-                      onStartOAuth={handleStartClaudeOAuth}
-                      onCancel={handleCancelOAuth}
-                      status={claudeOAuthStatus}
-                      errorMessage={claudeOAuthError}
-                      isWaitingForCode={true}
-                      authCode={authCode}
-                      onAuthCodeChange={setAuthCode}
-                      onSubmitAuthCode={handleSubmitAuthCode}
-                    />
-                  ) : (
-                    <ClaudeOAuthDialogContent
-                      existingToken={existingClaudeToken}
-                      isLoading={claudeOAuthStatus === 'loading'}
-                      onUseExisting={handleUseExistingClaudeToken}
-                      onStartOAuth={handleStartClaudeOAuth}
-                      onCancel={handleCancelOAuth}
-                      status={claudeOAuthStatus}
-                      errorMessage={claudeOAuthError}
-                      isWaitingForCode={false}
-                    />
-                  )}
-                </DialogContent>
-              </Dialog>
             </SettingsSection>
 
             {/* About */}

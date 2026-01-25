@@ -881,11 +881,7 @@ export function FreeFormInput({
       }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      // Submit message - backend handles interruption if processing
-      submitMessage()
-    }
+    // Only Cmd/Ctrl+Enter sends message (plain Enter is for new line)
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       // Submit message - backend handles interruption if processing
