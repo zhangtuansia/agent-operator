@@ -88,12 +88,13 @@ if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
 
-# 1. Clean previous build artifacts
+# 1. Clean previous build artifacts (keep release directory for multi-arch builds)
 echo "Cleaning previous builds..."
 rm -rf "$ELECTRON_DIR/vendor"
 rm -rf "$ELECTRON_DIR/node_modules/@anthropic-ai"
 rm -rf "$ELECTRON_DIR/packages"
-rm -rf "$ELECTRON_DIR/release"
+# Don't clean release directory - allows building multiple archs without losing previous builds
+# rm -rf "$ELECTRON_DIR/release"
 
 # 2. Install dependencies
 echo "Installing dependencies..."

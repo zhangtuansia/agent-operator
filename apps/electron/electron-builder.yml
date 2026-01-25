@@ -53,11 +53,9 @@ asar: false
 mac:
   category: public.app-category.productivity
   icon: resources/icon.icns
-  target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
+  # Note: Architecture is specified via CLI (--arm64 or --x64) to ensure
+  # each build uses the correct platform-specific bun binary
+  target: dmg
   hardenedRuntime: false
   gatekeeperAssess: false
   identity: null
