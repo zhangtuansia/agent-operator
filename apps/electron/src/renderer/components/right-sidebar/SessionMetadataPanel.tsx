@@ -109,11 +109,18 @@ export function SessionMetadataPanel({ sessionId, closeButton, hideHeader }: Ses
   useEffect(() => {
     if (!sessionId) return
 
-    // Load notes
-    window.electronAPI.getSessionNotes(sessionId).then((content) => {
-      setNotes(content)
-      setNotesLoaded(true)
-    })
+    // Load notes with error handling
+    window.electronAPI.getSessionNotes(sessionId)
+      .then((content) => {
+        setNotes(content)
+        setNotesLoaded(true)
+      })
+      .catch((error) => {
+        console.error('Failed to load session notes:', error)
+        // Still mark as loaded so UI doesn't hang, just with empty notes
+        setNotes('')
+        setNotesLoaded(true)
+      })
   }, [sessionId])
 
   // Debounced save for name
@@ -131,6 +138,9 @@ export function SessionMetadataPanel({ sessionId, closeButton, hideHeader }: Ses
     (content: string) => {
       if (sessionId) {
         window.electronAPI.setSessionNotes(sessionId, content)
+          .catch((error) => {
+            console.error('Failed to save session notes:', error)
+          })
       }
     },
     500
