@@ -18,7 +18,7 @@ Built on top of Claude Agent SDK, Cowork brings the power of Claude to a native 
 
 Cowork is open source under the Apache 2.0 license. Visit [aicowork.chat](https://www.aicowork.chat) for more information.
 
-<img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
+<img width="1372" height="870" alt="Cowork Screenshot" src="assets/screenshot.webp" />
 
 ## Installation
 
