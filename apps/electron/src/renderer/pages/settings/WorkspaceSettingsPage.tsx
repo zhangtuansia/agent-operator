@@ -457,13 +457,19 @@ export default function WorkspaceSettingsPage() {
             >
               <SettingsCard>
                 {(['safe', 'ask', 'allow-all'] as const).map((m) => {
-                  const config = PERMISSION_MODE_CONFIG[m]
                   const isEnabled = enabledModes.includes(m)
+                  // Map mode ID to i18n keys
+                  const modeLabels: Record<string, { label: string; desc: string }> = {
+                    'safe': { label: t('workspaceSettings.modeExplore'), desc: t('workspaceSettings.modeExploreDescription') },
+                    'ask': { label: t('workspaceSettings.modeAsk'), desc: t('workspaceSettings.modeAskDescription') },
+                    'allow-all': { label: t('workspaceSettings.modeAuto'), desc: t('workspaceSettings.modeAutoDescription') },
+                  }
+                  const labels = modeLabels[m]
                   return (
                     <SettingsToggle
                       key={m}
-                      label={config.displayName}
-                      description={config.description}
+                      label={labels.label}
+                      description={labels.desc}
                       checked={isEnabled}
                       onCheckedChange={(checked) => handleModeToggle(m, checked)}
                     />

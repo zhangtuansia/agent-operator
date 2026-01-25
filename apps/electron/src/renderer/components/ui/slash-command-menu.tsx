@@ -79,8 +79,53 @@ function PermissionModeIcon({ mode, className }: PermissionModeIconProps) {
 // Icon size constant
 const MENU_ICON_SIZE = 'h-3.5 w-3.5'
 
-// Generate permission mode commands from centralized config
-const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
+/**
+ * Hook to get translated slash commands
+ * Uses i18n for labels and descriptions
+ */
+export function useTranslatedSlashCommands() {
+  const { t } = useLanguage()
+
+  return React.useMemo(() => {
+    // Map mode ID to i18n keys
+    const modeLabels: Record<PermissionMode, { label: string; desc: string }> = {
+      'safe': { label: t('workspaceSettings.modeExplore'), desc: t('workspaceSettings.modeExploreDescription') },
+      'ask': { label: t('workspaceSettings.modeAsk'), desc: t('workspaceSettings.modeAskDescription') },
+      'allow-all': { label: t('workspaceSettings.modeAuto'), desc: t('workspaceSettings.modeAutoDescription') },
+    }
+
+    const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
+      const labels = modeLabels[mode]
+      return {
+        id: mode as SlashCommandId,
+        label: labels.label,
+        description: labels.desc,
+        icon: <PermissionModeIcon mode={mode} className={MENU_ICON_SIZE} />,
+      }
+    })
+
+    const ultrathinkCommand: SlashCommand = {
+      id: 'ultrathink',
+      label: t('thinkingLevels.high'),
+      description: t('thinkingLevels.highDescription'),
+      icon: <Brain className={MENU_ICON_SIZE} />,
+    }
+
+    return {
+      permissionModeCommands,
+      ultrathinkCommand,
+      allCommands: [...permissionModeCommands, ultrathinkCommand],
+      commandGroups: [
+        { id: 'modes', commands: permissionModeCommands },
+        { id: 'features', commands: [ultrathinkCommand] },
+      ] as CommandGroup[],
+    }
+  }, [t])
+}
+
+// Legacy exports for backwards compatibility (static English versions)
+// Prefer useTranslatedSlashCommands() for i18n support
+const staticPermissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
   const config = PERMISSION_MODE_CONFIG[mode]
   return {
     id: mode as SlashCommandId,
@@ -90,7 +135,7 @@ const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode =>
   }
 })
 
-const ultrathinkCommand: SlashCommand = {
+const staticUltrathinkCommand: SlashCommand = {
   id: 'ultrathink',
   label: 'Ultrathink',
   description: 'Extended reasoning for complex problems',
@@ -98,13 +143,13 @@ const ultrathinkCommand: SlashCommand = {
 }
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
-  ...permissionModeCommands,
-  ultrathinkCommand,
+  ...staticPermissionModeCommands,
+  staticUltrathinkCommand,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
-  { id: 'modes', commands: permissionModeCommands },
-  { id: 'features', commands: [ultrathinkCommand] },
+  { id: 'modes', commands: staticPermissionModeCommands },
+  { id: 'features', commands: [staticUltrathinkCommand] },
 ]
 
 // ============================================================================
@@ -561,6 +606,9 @@ export function useInlineSlashCommand({
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
 
+  // Get translated commands
+  const { permissionModeCommands, ultrathinkCommand } = useTranslatedSlashCommands()
+
   // Build sections from commands and folders
   const sections = React.useMemo((): SlashSection[] => {
     const result: SlashSection[] = []
@@ -602,7 +650,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir, sectionLabels])
+  }, [recentFolders, homeDir, sectionLabels, permissionModeCommands, ultrathinkCommand])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
