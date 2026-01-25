@@ -1,3 +1,4 @@
+/// <reference path="../types/bash-parser.d.ts" />
 /**
  * Bash Command Validator
  *

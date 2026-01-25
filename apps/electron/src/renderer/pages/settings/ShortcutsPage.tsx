@@ -47,18 +47,18 @@ const sections: ShortcutSection[] = [
     titleKey: 'navigation',
     shortcuts: [
       { keys: ['Tab'], descriptionKey: 'moveToNextZone' },
-      { keys: ['Shift', 'Tab'], descriptionKey: 'cyclePermissionMode' },
+      { keys: ['Shift', 'Tab'], descriptionKey: 'moveToPrevZone' },
       { keys: ['←', '→'], descriptionKey: 'moveBetweenZones' },
       { keys: ['↑', '↓'], descriptionKey: 'navigateItems' },
-      { keys: ['Home'], descriptionKey: 'goToFirstItem' },
-      { keys: ['End'], descriptionKey: 'goToLastItem' },
+      { keys: ['Home'], descriptionKey: 'goToFirst' },
+      { keys: ['End'], descriptionKey: 'goToLast' },
       { keys: ['Esc'], descriptionKey: 'closeDialog' },
     ],
   },
   {
     titleKey: 'sessionList',
     shortcuts: [
-      { keys: ['Enter'], descriptionKey: 'focusInput' },
+      { keys: ['Enter'], descriptionKey: 'focusChatInputEnter' },
       { keys: ['Delete'], descriptionKey: 'deleteSession' },
     ],
   },

@@ -197,7 +197,7 @@ export const CreateSourceConfigSchema = z.object({
     transport: z.enum(['http', 'sse', 'stdio']).optional(),
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
     authType: z.enum(['none', 'oauth', 'bearer', 'api-key']).optional(),
   }).optional(),
   api: z.object({

@@ -98,6 +98,7 @@ import {
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
+import type { RightSidebarPanel } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -222,7 +223,7 @@ function AppShellContent({
   const [session, setSession] = useSession()
   const { resolvedMode } = useTheme()
   const { t } = useTranslation()
-  const { canGoBack, canGoForward, goBack, goForward } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -233,6 +234,14 @@ function AppShellContent({
 
   // Derive chat filter from navigation state (only when in chats navigator)
   const chatFilter = isChatsNavigation(navState) ? navState.filter : null
+
+  // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
+  const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
+
+  // Handle right sidebar panel switch
+  const handleSwitchPanel = useCallback((panel: RightSidebarPanel) => {
+    updateRightSidebar(panel)
+  }, [updateRightSidebar])
 
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
   const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {
@@ -1470,13 +1479,14 @@ function AppShellContent({
                     opacity: isRightSidebarVisible ? 1 : 0,
                   }}
                   transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                  className="h-full bg-foreground-2 shadow-middle rounded-l-[10px] rounded-r-[14px]"
+                  className="h-full bg-foreground-2 shadow-middle rounded-l-[10px] rounded-r-[14px] relative z-panel titlebar-no-drag"
                   style={{ width: rightSidebarWidth }}
                 >
                   <RightSidebar
-                    panel={{ type: 'sessionMetadata' }}
+                    panel={rightSidebarPanel}
                     sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
                     closeButton={rightSidebarCloseButton}
+                    onSwitchPanel={handleSwitchPanel}
                   />
                 </motion.div>
               </motion.div>
@@ -1505,11 +1515,12 @@ function AppShellContent({
                     transition={skipRightSidebarAnimation ? { duration: 0 } : springTransition}
                     className="fixed inset-y-0 right-0 w-[316px] h-screen z-overlay p-1.5"
                   >
-                    <div className="h-full bg-foreground-2 overflow-hidden shadow-strong rounded-[12px]">
+                    <div className="h-full bg-foreground-2 overflow-hidden shadow-strong rounded-[12px] titlebar-no-drag">
                       <RightSidebar
-                        panel={{ type: 'sessionMetadata' }}
+                        panel={rightSidebarPanel}
                         sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
                         closeButton={rightSidebarCloseButton}
+                        onSwitchPanel={handleSwitchPanel}
                       />
                     </div>
                   </motion.div>

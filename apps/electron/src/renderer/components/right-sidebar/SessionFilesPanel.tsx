@@ -15,7 +15,13 @@ import { PanelHeader } from '../app-shell/PanelHeader'
 import { SessionFilesSection } from './SessionFilesSection'
 import { Markdown } from '@/components/markdown'
 import { Spinner } from '@agent-operator/ui'
-import { ArrowLeft, FileText, Image as ImageIcon, Code, File, ExternalLink, Copy, Check } from 'lucide-react'
+import { ArrowLeft, FileText, Image as ImageIcon, Code, File, ExternalLink, Copy, Check, Eye, FileCode, FolderOpen, MoreHorizontal } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 
@@ -28,14 +34,27 @@ export interface SessionFilesPanelProps {
   closeButton?: React.ReactNode
   /** Callback when a file is selected */
   onFileSelect?: (path: string | undefined) => void
+  /** Hide the panel header (useful when embedded in another panel) */
+  hideHeader?: boolean
 }
 
 /** File type detection based on extension */
-type FileType = 'code' | 'markdown' | 'image' | 'text' | 'binary'
+type FileType = 'code' | 'markdown' | 'image' | 'text' | 'binary' | 'html'
+
+/** Check if file is HTML */
+function isHtmlFile(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return ['html', 'htm'].includes(ext)
+}
 
 /** Get file type from extension */
 function getFileType(filename: string): FileType {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+  // HTML files (can be previewed)
+  if (['html', 'htm'].includes(ext)) {
+    return 'html'
+  }
 
   // Images
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'].includes(ext)) {
@@ -52,7 +71,7 @@ function getFileType(filename: string): FileType {
     'ts', 'tsx', 'js', 'jsx', 'json', 'yaml', 'yml',
     'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
     'c', 'cpp', 'h', 'hpp', 'cs', 'php',
-    'html', 'css', 'scss', 'less', 'sass',
+    'css', 'scss', 'less', 'sass',
     'sh', 'bash', 'zsh', 'fish',
     'sql', 'graphql', 'prisma',
     'toml', 'ini', 'env', 'conf', 'config',
@@ -127,10 +146,15 @@ function getFileTypeIcon(type: FileType) {
       return <FileText className="h-4 w-4" />
     case 'code':
       return <Code className="h-4 w-4" />
+    case 'html':
+      return <FileCode className="h-4 w-4" />
     default:
       return <File className="h-4 w-4" />
   }
 }
+
+/** View mode for HTML files */
+type ViewMode = 'code' | 'preview'
 
 /**
  * File content viewer component
@@ -147,6 +171,7 @@ function FileViewer({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('preview') // Default to preview for HTML
 
   const filename = filePath.split('/').pop() || filePath
   const fileType = getFileType(filename)
@@ -202,9 +227,14 @@ function FileViewer({
     }
   }, [content])
 
-  // Handle open in external editor
-  const handleOpenExternal = useCallback(() => {
+  // Handle open with default app
+  const handleOpenWithApp = useCallback(() => {
     window.electronAPI.openFile(filePath)
+  }, [filePath])
+
+  // Handle show in Finder
+  const handleShowInFinder = useCallback(() => {
+    window.electronAPI.showInFolder(filePath)
   }, [filePath])
 
   // Render loading state
@@ -216,7 +246,8 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={false}
         />
@@ -236,7 +267,8 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={false}
         />
@@ -259,7 +291,8 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={true}
         />
@@ -268,7 +301,7 @@ function FileViewer({
             <File className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">{t('fileViewer.binaryFile')}</p>
             <button
-              onClick={handleOpenExternal}
+              onClick={handleOpenWithApp}
               className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-foreground/5 hover:bg-foreground/10 transition-colors"
             >
               <ExternalLink className="h-3 w-3" />
@@ -289,7 +322,8 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={true}
         />
@@ -313,13 +347,51 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={true}
         />
         <div className="flex-1 overflow-auto px-4 py-3">
           <Markdown mode="full">{content}</Markdown>
         </div>
+      </div>
+    )
+  }
+
+  // Render HTML with preview toggle
+  if (fileType === 'html' && content) {
+    return (
+      <div className="h-full flex flex-col">
+        <FileViewerHeader
+          filename={filename}
+          fileType={fileType}
+          onBack={onBack}
+          onCopy={handleCopy}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
+          copied={copied}
+          showActions={true}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          showViewModeToggle={true}
+        />
+        {viewMode === 'preview' ? (
+          // HTML Preview using iframe
+          <div className="flex-1 overflow-hidden bg-white">
+            <iframe
+              srcDoc={content}
+              title={filename}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        ) : (
+          // Code view with syntax highlighting
+          <div className="flex-1 overflow-auto text-sm">
+            <Markdown mode="full">{`\`\`\`html\n${content}\n\`\`\``}</Markdown>
+          </div>
+        )}
       </div>
     )
   }
@@ -336,7 +408,8 @@ function FileViewer({
           fileType={fileType}
           onBack={onBack}
           onCopy={handleCopy}
-          onOpenExternal={handleOpenExternal}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
           copied={copied}
           showActions={true}
         />
@@ -355,7 +428,8 @@ function FileViewer({
         fileType={fileType}
         onBack={onBack}
         onCopy={handleCopy}
-        onOpenExternal={handleOpenExternal}
+        onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
         copied={copied}
         showActions={true}
       />
@@ -376,17 +450,25 @@ function FileViewerHeader({
   fileType,
   onBack,
   onCopy,
-  onOpenExternal,
+  onOpenWithApp,
+  onShowInFinder,
   copied,
   showActions,
+  viewMode,
+  onViewModeChange,
+  showViewModeToggle = false,
 }: {
   filename: string
   fileType: FileType
   onBack: () => void
   onCopy: () => void
-  onOpenExternal: () => void
+  onOpenWithApp: () => void
+  onShowInFinder: () => void
   copied: boolean
   showActions: boolean
+  viewMode?: ViewMode
+  onViewModeChange?: (mode: ViewMode) => void
+  showViewModeToggle?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -409,6 +491,36 @@ function FileViewerHeader({
         <span className="text-sm font-medium truncate">{filename}</span>
       </div>
 
+      {/* View mode toggle for HTML files */}
+      {showViewModeToggle && viewMode && onViewModeChange && (
+        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-foreground/5">
+          <button
+            onClick={() => onViewModeChange('preview')}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              viewMode === 'preview'
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title={t('fileViewer.preview')}
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onViewModeChange('code')}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              viewMode === 'code'
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title={t('fileViewer.code')}
+          >
+            <Code className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Actions */}
       {showActions && (
         <div className="flex items-center gap-1">
@@ -425,14 +537,27 @@ function FileViewerHeader({
             )}
           </button>
 
-          {/* Open external button */}
-          <button
-            onClick={onOpenExternal}
-            className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-muted-foreground hover:text-foreground"
-            title={t('common.openInNewWindow')}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </button>
+          {/* Open menu with dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-muted-foreground hover:text-foreground"
+                title={t('fileViewer.openOptions')}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[160px]">
+              <DropdownMenuItem onClick={onOpenWithApp} className="gap-2">
+                <ExternalLink className="h-4 w-4" />
+                <span>{t('fileViewer.openWithDefaultApp')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onShowInFinder} className="gap-2">
+                <FolderOpen className="h-4 w-4" />
+                <span>{t('fileViewer.showInFinder')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </div>
@@ -447,6 +572,7 @@ export function SessionFilesPanel({
   filePath,
   closeButton,
   onFileSelect,
+  hideHeader = false,
 }: SessionFilesPanelProps) {
   const { t } = useTranslation()
   const [selectedPath, setSelectedPath] = useState<string | undefined>(filePath)
@@ -474,7 +600,7 @@ export function SessionFilesPanel({
   if (!sessionId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title={t('chatInfo.files')} actions={closeButton} />
+        {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
           <p className="text-sm text-center">{t('fileViewer.noFileSelected')}</p>
         </div>
@@ -486,7 +612,7 @@ export function SessionFilesPanel({
   if (selectedPath) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title={t('chatInfo.files')} actions={closeButton} />
+        {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
         <div className="flex-1 min-h-0 overflow-hidden">
           <FileViewer filePath={selectedPath} onBack={handleBack} />
         </div>
@@ -497,7 +623,7 @@ export function SessionFilesPanel({
   // No file selected - show file tree
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('chatInfo.files')} actions={closeButton} />
+      {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
       <div className="flex-1 min-h-0 overflow-hidden">
         <SessionFilesSectionWithCallback
           sessionId={sessionId}

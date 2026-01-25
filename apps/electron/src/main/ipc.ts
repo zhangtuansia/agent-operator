@@ -1976,15 +1976,17 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.LANGUAGE_GET, async () => {
     const { loadStoredConfig } = await import('@agent-operator/shared/config/storage')
     const config = loadStoredConfig()
-    return config.uiLanguage || null
+    return config?.uiLanguage || null
   })
 
   // Set UI language
   ipcMain.handle(IPC_CHANNELS.LANGUAGE_SET, async (_event, language: 'en' | 'zh') => {
-    const { loadStoredConfig, saveStoredConfig } = await import('@agent-operator/shared/config/storage')
+    const { loadStoredConfig, saveConfig } = await import('@agent-operator/shared/config/storage')
     const config = loadStoredConfig()
-    config.uiLanguage = language
-    saveStoredConfig(config)
+    if (config) {
+      config.uiLanguage = language
+      saveConfig(config)
+    }
   })
 
   // Update app badge count

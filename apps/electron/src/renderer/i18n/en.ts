@@ -421,6 +421,13 @@ export const en = {
     closeSidebar: 'Close sidebar',
   },
 
+  // Right Sidebar
+  rightSidebar: {
+    info: 'Info',
+    activity: 'Activity',
+    files: 'Files',
+  },
+
   // App Menu
   appMenu: {
     newChat: 'New Chat',
@@ -970,7 +977,7 @@ export const en = {
     deepInThought: 'Deep in thought…',
     hmm: 'Hmm…',
     letMeSee: 'Let me see…',
-    oneмомent: 'One moment…',
+    oneMoment: 'One moment…',
     holdOn: 'Hold on…',
     bearWithMe: 'Bear with me…',
     justASec: 'Just a sec…',
@@ -1155,6 +1162,21 @@ export const en = {
     stopAgent: 'Stop agent (when processing)',
   },
 
+  // Session history panel
+  history: {
+    title: 'Activity',
+    noSessionSelected: 'No session selected',
+    tokenUsage: 'Token Usage',
+    input: 'Input',
+    output: 'Output',
+    total: 'Total',
+    estimatedCost: 'Est. Cost',
+    contextUsed: 'Context Used',
+    toolCalls: 'tool calls',
+    noToolCalls: 'No tool calls yet',
+    noToolCallsHint: 'Tool calls will appear here as the agent works',
+  },
+
   // File viewer
   fileViewer: {
     failedToLoad: 'Failed to load file',
@@ -1164,6 +1186,11 @@ export const en = {
     errorLoading: 'Error loading file',
     binaryFile: 'Cannot preview binary file',
     openWithDefault: 'Open with default app',
+    openOptions: 'Open options',
+    openWithDefaultApp: 'Open with Default App',
+    showInFinder: 'Show in Finder',
+    preview: 'Preview',
+    code: 'Code',
   },
 
   // Info page

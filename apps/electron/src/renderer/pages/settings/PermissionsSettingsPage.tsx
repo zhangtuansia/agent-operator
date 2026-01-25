@@ -87,16 +87,10 @@ function buildDefaultPermissionsData(config: PermissionsConfigFile | null): Perm
 /**
  * Build custom permissions data from workspace permissions.json.
  * These are user-added patterns that extend the defaults.
+ * Note: blockedTools are hardcoded and not configurable via JSON.
  */
 function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRow[] {
   const rows: PermissionRow[] = []
-
-  // Additional blocked tools
-  config.blockedTools?.forEach((item) => {
-    const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? 'Custom blocked tool' : (item.comment || 'Custom blocked tool')
-    rows.push({ access: 'blocked', type: 'tool', pattern, comment })
-  })
 
   // Additional bash patterns
   config.allowedBashPatterns?.forEach((item) => {

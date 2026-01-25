@@ -39,11 +39,8 @@ function StateItemContent({ state, t }: { state: TodoState; t: (key: string) => 
   return (
     <>
       <span
-        className={cn(
-          "shrink-0 flex items-center",
-          applyColor && !isHexColor(state.color) && (state.color || "text-muted-foreground")
-        )}
-        style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}
+        className="shrink-0 flex items-center"
+        style={applyColor && state.resolvedColor ? { color: state.resolvedColor } : undefined}
       >
         {state.icon}
       </span>

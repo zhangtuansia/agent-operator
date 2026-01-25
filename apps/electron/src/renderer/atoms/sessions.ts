@@ -55,7 +55,13 @@ export interface SessionMeta {
   /** Labels assigned to the session */
   labels?: string[]
   /** Token usage for the session */
-  tokenUsage?: { input: number; output: number }
+  tokenUsage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    costUsd?: number
+    contextTokens?: number
+  }
 }
 
 /**

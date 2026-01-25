@@ -595,33 +595,48 @@ export function NavigationProvider({
 
   // Right sidebar navigation helpers
   const updateRightSidebar = useCallback((panel: RightSidebarPanel | undefined) => {
-    if (!navigationState) return
+    setNavigationState((prevState) => {
+      if (!prevState) return prevState
 
-    const newState = {
-      ...navigationState,
-      rightSidebar: panel,
-    }
+      const newState = {
+        ...prevState,
+        rightSidebar: panel,
+      }
 
-    setNavigationState(newState)
+      // Update URL with sidebar param (side effect, but safe here)
+      const url = buildUrlWithState(newState)
+      const fullUrl = new URL(window.location.href)
+      fullUrl.search = url
+      history.replaceState({ route: buildRouteFromNavigationState(newState) }, '', fullUrl.toString())
 
-    // Update URL with sidebar param
-    const url = buildUrlWithState(newState)
-    const fullUrl = new URL(window.location.href)
-    fullUrl.search = url
-    history.replaceState({ route: buildRouteFromNavigationState(newState) }, '', fullUrl.toString())
-  }, [navigationState])
+      return newState
+    })
+  }, [])
 
   const toggleRightSidebar = useCallback((panel?: RightSidebarPanel) => {
-    if (!navigationState) return
+    setNavigationState((prevState) => {
+      if (!prevState) return prevState
 
-    // If panel specified, open to that panel
-    // If no panel, toggle between closed and default panel (sessionMetadata)
-    const newPanel = panel || (navigationState.rightSidebar && navigationState.rightSidebar.type !== 'none'
-      ? { type: 'none' as const }
-      : { type: 'sessionMetadata' as const })
+      // If panel specified, open to that panel
+      // If no panel, toggle between closed and default panel (sessionMetadata)
+      const newPanel = panel || (prevState.rightSidebar && prevState.rightSidebar.type !== 'none'
+        ? { type: 'none' as const }
+        : { type: 'sessionMetadata' as const })
 
-    updateRightSidebar(newPanel)
-  }, [navigationState, updateRightSidebar])
+      const newState = {
+        ...prevState,
+        rightSidebar: newPanel,
+      }
+
+      // Update URL with sidebar param
+      const url = buildUrlWithState(newState)
+      const fullUrl = new URL(window.location.href)
+      fullUrl.search = url
+      history.replaceState({ route: buildRouteFromNavigationState(newState) }, '', fullUrl.toString())
+
+      return newState
+    })
+  }, [])
 
   return (
     <NavigationContext.Provider

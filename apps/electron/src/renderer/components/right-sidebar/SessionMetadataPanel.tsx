@@ -3,9 +3,10 @@
  *
  * Displays two vertically stacked sections:
  * - Top: Editable session name and notes (auto-saved)
- * - Bottom: Files in the session directory
+ * - Bottom: Files in the session directory with preview capability
  *
  * A horizontal resize handle allows adjusting the split between sections.
+ * Clicking on a file shows a preview; click back to return to the file list.
  */
 
 import * as React from 'react'
@@ -16,12 +17,15 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { HorizontalResizeHandle } from '../ui/horizontal-resize-handle'
 import { SessionFilesSection } from './SessionFilesSection'
+import { SessionFilesPanel } from './SessionFilesPanel'
 import * as storage from '@/lib/local-storage'
 import { useLanguage } from '@/context/LanguageContext'
 
 export interface SessionMetadataPanelProps {
   sessionId?: string
   closeButton?: React.ReactNode
+  /** Hide the panel header (when tabs are shown externally) */
+  hideHeader?: boolean
 }
 
 // Default and constraints for metadata section height
@@ -70,7 +74,7 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
 /**
  * Panel displaying session metadata with minimal styling
  */
-export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadataPanelProps) {
+export function SessionMetadataPanel({ sessionId, closeButton, hideHeader }: SessionMetadataPanelProps) {
   const { onRenameSession } = useAppShellContext()
   const containerRef = useRef<HTMLDivElement>(null)
   const { t } = useLanguage()
@@ -79,6 +83,9 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [notesLoaded, setNotesLoaded] = useState(false)
+
+  // State for file preview
+  const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>(undefined)
 
   // State for resizable panel split - height of metadata section
   const [metadataHeight, setMetadataHeight] = useState(() => {
@@ -92,6 +99,11 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   useEffect(() => {
     setName(session?.name || '')
   }, [session?.name])
+
+  // Reset file preview when session changes
+  useEffect(() => {
+    setSelectedFilePath(undefined)
+  }, [sessionId])
 
   // Load notes when session changes
   useEffect(() => {
@@ -159,11 +171,23 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
     storage.set(storage.KEYS.sessionInfoMetadataHeight, metadataHeight)
   }, [metadataHeight])
 
+  // Handle file click - show preview
+  const handleFileClick = useCallback((file: { path: string; type: string; name: string }) => {
+    if (file.type === 'file') {
+      setSelectedFilePath(file.path)
+    }
+  }, [])
+
+  // Handle file selection change (for back navigation)
+  const handleFileSelect = useCallback((path: string | undefined) => {
+    setSelectedFilePath(path)
+  }, [])
+
   // Early return if no sessionId
   if (!sessionId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
+        {!hideHeader && <PanelHeader title={t('chatInfo.title')} actions={closeButton} />}
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
           <p className="text-sm text-center">{t('chatInfo.noSessionSelected')}</p>
         </div>
@@ -174,7 +198,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   if (!session) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
+        {!hideHeader && <PanelHeader title={t('chatInfo.title')} actions={closeButton} />}
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
           <p className="text-sm text-center">{t('chatInfo.loadingSession')}</p>
         </div>
@@ -184,7 +208,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
-      <PanelHeader title={t('chatInfo.title')} actions={closeButton} />
+      {!hideHeader && <PanelHeader title={t('chatInfo.title')} actions={closeButton} />}
 
       {/* Metadata section (Name + Notes) - fixed height based on state */}
       <div
@@ -232,7 +256,21 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
 
       {/* Files section - takes remaining space */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <SessionFilesSection sessionId={sessionId} />
+        {selectedFilePath ? (
+          // Show file preview when a file is selected
+          <SessionFilesPanel
+            sessionId={sessionId}
+            filePath={selectedFilePath}
+            onFileSelect={handleFileSelect}
+            hideHeader
+          />
+        ) : (
+          // Show file list when no file is selected
+          <SessionFilesSection
+            sessionId={sessionId}
+            onFileClick={handleFileClick}
+          />
+        )}
       </div>
     </div>
   )

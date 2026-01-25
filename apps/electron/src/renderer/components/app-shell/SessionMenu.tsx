@@ -151,9 +151,8 @@ export function SessionMenu({
                   className={cn(
                     'shrink-0 flex items-center justify-center -mt-px h-3.5 w-3.5',
                     '[&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full',
-                    applyColor && !isHexColor(state.color) && state.color
                   )}
-                  style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}
+                  style={applyColor && state.resolvedColor ? { color: state.resolvedColor } : undefined}
                 >
                   {state.icon}
                 </span>

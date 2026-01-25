@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'
 import { useSetAtom } from 'jotai'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
-import type { LoadedSource, LoadedSkill, PermissionMode } from '../../../../shared/types'
+import type { LoadedSource, LoadedSkill, PermissionMode } from '../../../shared/types'
 
 export interface WorkspaceData {
   sources: LoadedSource[]

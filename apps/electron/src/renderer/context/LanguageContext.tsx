@@ -21,8 +21,8 @@ interface LanguageContextValue {
   setLanguage: (language: Language) => void;
   /** Get all translations for current language */
   translations: TranslationKeys;
-  /** Translation function - get a specific translation by key path */
-  t: (key: string) => string;
+  /** Translation function - get a specific translation by key path, with optional interpolation */
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const LanguageContext = React.createContext<LanguageContextValue | null>(null);
@@ -41,7 +41,16 @@ export function LanguageProvider({ children, initialLanguage }: LanguageProvider
   const translations = React.useMemo(() => getTranslations(language), [language]);
 
   const t = React.useCallback(
-    (key: string): string => getNestedValue(translations, key),
+    (key: string, params?: Record<string, string | number>): string => {
+      let value = getNestedValue(translations, key);
+      if (params) {
+        // Replace {placeholder} with values from params
+        Object.entries(params).forEach(([k, v]) => {
+          value = value.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+        });
+      }
+      return value;
+    },
     [translations]
   );
 

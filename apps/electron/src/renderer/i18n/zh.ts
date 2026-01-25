@@ -423,6 +423,13 @@ export const zh: TranslationKeys = {
     closeSidebar: '关闭侧边栏',
   },
 
+  // Right Sidebar
+  rightSidebar: {
+    info: '信息',
+    activity: '活动',
+    files: '文件',
+  },
+
   // App Menu
   appMenu: {
     newChat: '新建聊天',
@@ -972,7 +979,7 @@ export const zh: TranslationKeys = {
     deepInThought: '深度思考…',
     hmm: '嗯…',
     letMeSee: '让我看看…',
-    oneмомент: '稍等片刻…',
+    oneMoment: '稍等片刻…',
     holdOn: '请稍候…',
     bearWithMe: '请耐心等待…',
     justASec: '马上就好…',
@@ -1157,6 +1164,21 @@ export const zh: TranslationKeys = {
     stopAgent: '停止 Agent（处理中时）',
   },
 
+  // Session history panel
+  history: {
+    title: '活动',
+    noSessionSelected: '未选择会话',
+    tokenUsage: 'Token 用量',
+    input: '输入',
+    output: '输出',
+    total: '总计',
+    estimatedCost: '预估费用',
+    contextUsed: '上下文使用',
+    toolCalls: '次工具调用',
+    noToolCalls: '暂无工具调用',
+    noToolCallsHint: '当 Agent 工作时，工具调用将显示在这里',
+  },
+
   // File viewer
   fileViewer: {
     failedToLoad: '加载文件失败',
@@ -1166,6 +1188,11 @@ export const zh: TranslationKeys = {
     errorLoading: '加载文件出错',
     binaryFile: '无法预览二进制文件',
     openWithDefault: '使用默认应用打开',
+    openOptions: '打开选项',
+    openWithDefaultApp: '使用默认应用打开',
+    showInFinder: '在访达中显示',
+    preview: '预览',
+    code: '代码',
   },
 
   // Info page

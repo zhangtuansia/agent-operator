@@ -73,11 +73,11 @@ export function useAppInitialization(): UseAppInitializationResult {
         setWorkspaces(ws)
 
         // Get window's workspace ID
-        const wsId = await window.electronAPI.getWindowWorkspaceId()
+        const wsId = await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
 
         // Load theme
-        const theme = await window.electronAPI.getResolvedTheme()
+        const theme = await window.electronAPI.getAppTheme()
         setAppTheme(theme)
 
         // Load language
@@ -86,19 +86,19 @@ export function useAppInitialization(): UseAppInitializationResult {
 
         // Load model with provider-aware default
         const config = await window.electronAPI.getStoredConfig()
-        const provider = config?.provider || 'anthropic'
-        const savedModel = config?.model
+        const provider = config?.providerConfig?.provider || 'anthropic'
+        const savedModel = await window.electronAPI.getModel()
         const providerDefault = getDefaultModelForProvider(provider)
         setCurrentModel(savedModel || providerDefault || DEFAULT_MODEL)
 
         // Load notifications setting
-        const settings = await window.electronAPI.getAppSettings()
-        setNotificationsEnabled(settings?.notificationsEnabled ?? true)
+        const notificationsEnabled = await window.electronAPI.getNotificationsEnabled()
+        setNotificationsEnabled(notificationsEnabled)
 
-        // Load todo states
+        // Load todo states (statuses)
         if (wsId) {
-          const states = await window.electronAPI.getTodoStates(wsId)
-          setTodoStates(states)
+          const statuses = await window.electronAPI.listStatuses(wsId)
+          setTodoStates(statuses.map(s => s.id))
         }
       } catch (error) {
         console.error('Failed to load config:', error)
@@ -110,20 +110,20 @@ export function useAppInitialization(): UseAppInitializationResult {
 
   // Listen for theme changes
   useEffect(() => {
-    const cleanup = window.electronAPI.onThemeChanged((theme) => {
+    const cleanup = window.electronAPI.onAppThemeChange((theme) => {
       setAppTheme(theme)
     })
     return cleanup
   }, [])
 
-  // Listen for workspace config changes (todo states, etc.)
+  // Listen for statuses changes (todo states)
   useEffect(() => {
     if (!windowWorkspaceId) return
 
-    const cleanup = window.electronAPI.onWorkspaceConfigChanged(async (workspaceId) => {
+    const cleanup = window.electronAPI.onStatusesChanged(async (workspaceId: string) => {
       if (workspaceId === windowWorkspaceId) {
-        const states = await window.electronAPI.getTodoStates(workspaceId)
-        setTodoStates(states)
+        const statuses = await window.electronAPI.listStatuses(workspaceId)
+        setTodoStates(statuses.map(s => s.id))
       }
     })
     return cleanup

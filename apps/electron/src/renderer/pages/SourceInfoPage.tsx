@@ -69,16 +69,10 @@ function getSourceUrl(source: LoadedSource): string | null {
 
 /**
  * Convert permissions config to PermissionRow[] for API/local sources
+ * Note: blockedTools are hardcoded and not configurable via JSON.
  */
 function buildApiPermissionsData(config: PermissionsConfigFile): PermissionRow[] {
   const rows: PermissionRow[] = []
-
-  // Blocked Tools
-  config.blockedTools?.forEach((item) => {
-    const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? null : item.comment
-    rows.push({ access: 'blocked', type: 'tool', pattern, comment })
-  })
 
   // Allowed Bash Patterns
   config.allowedBashPatterns?.forEach((item) => {
@@ -99,16 +93,10 @@ function buildApiPermissionsData(config: PermissionsConfigFile): PermissionRow[]
 
 /**
  * Convert permissions config to PermissionRow[] for MCP sources
+ * Note: blockedTools are hardcoded and not configurable via JSON.
  */
 function buildMcpPermissionsData(config: PermissionsConfigFile): PermissionRow[] {
   const rows: PermissionRow[] = []
-
-  // Blocked Tools
-  config.blockedTools?.forEach((item) => {
-    const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? null : item.comment
-    rows.push({ access: 'blocked', type: 'mcp', pattern, comment })
-  })
 
   // Allowed MCP Patterns
   config.allowedMcpPatterns?.forEach((item) => {

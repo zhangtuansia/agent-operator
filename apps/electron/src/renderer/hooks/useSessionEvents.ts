@@ -9,6 +9,7 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { getDefaultStore } from 'jotai'
 import type { SessionEvent, PermissionRequest, CredentialRequest, Session } from '../../shared/types'
+import type { SessionOptions } from './useSessionOptions'
 
 /** Type for the Jotai store */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -35,9 +36,9 @@ export interface UseSessionEventsOptions {
   /** Set pending credentials map */
   setPendingCredentials: React.Dispatch<React.SetStateAction<Map<string, CredentialRequest[]>>>
   /** Default session options getter */
-  defaultSessionOptions: { ultrathinkEnabled: boolean; permissionMode: 'safe' | 'ask' | 'allow-all'; thinkingLevel: 'think' | 'think_hard' }
+  defaultSessionOptions: SessionOptions
   /** Session options updater */
-  setSessionOptions: React.Dispatch<React.SetStateAction<Map<string, { ultrathinkEnabled: boolean; permissionMode: 'safe' | 'ask' | 'allow-all'; thinkingLevel: 'think' | 'think_hard' }>>>
+  setSessionOptions: React.Dispatch<React.SetStateAction<Map<string, SessionOptions>>>
 }
 
 /**
