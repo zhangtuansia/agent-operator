@@ -2,38 +2,35 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![Website](https://img.shields.io/badge/Website-aicowork.chat-brightgreen)](https://www.aicowork.chat)
 
-Cowork is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
+Cowork is a powerful desktop application for working effectively with AI agents. It enables intuitive multitasking, seamless connection to any API or Service, session sharing, and a more document-centric workflow - in a beautiful and fluid UI.
 
-It leans on Claude Code through the Claude Agent SDK - follow what we found great, and improves areas where we've desired improvements.
+Built on top of Claude Agent SDK, Cowork brings the power of Claude to a native desktop experience with advanced features like multi-session management, permission controls, and extensible source connections.
 
-It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
+**Key Highlights:**
+- 🖥️ Native desktop app with beautiful UI
+- 🔄 Multi-session inbox with status workflow
+- 🔌 Connect to MCP servers, REST APIs, and local files
+- 🛡️ Three-level permission system (Explore / Ask / Auto)
+- 🎨 Customizable themes and workspaces
+- 📦 Skills system for specialized agent instructions
 
-Cowork is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Cowork with Cowork only - no code editors - so really, any customisation is just a prompt away.
-
-We built Cowork because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
+Cowork is open source under the Apache 2.0 license. Visit [aicowork.chat](https://www.aicowork.chat) for more information.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
 ## Installation
 
-### One-Line Install (Recommended)
+### Download
 
-**macOS / Linux:**
-```bash
-curl -fsSL https://agents.craft.do/install-app.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://agents.craft.do/install-app.ps1 | iex
-```
+Visit [aicowork.chat](https://www.aicowork.chat) to download the latest version for your platform.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/agent-operators-oss.git
-cd agent-operators-oss
+git clone https://github.com/zhangtuansia/agent-operator.git
+cd agent-operator
 bun install
 bun run electron:start
 ```
@@ -41,16 +38,16 @@ bun run electron:start
 ## Features
 
 - **Multi-Session Inbox**: Desktop app with session management, status workflow, and flagging
-- **Claude Code Experience**: Streaming responses, tool visualization, real-time updates
-- **Craft MCP Integration**: Access to 32+ Craft document tools (blocks, collections, search, tasks)
+- **Streaming Responses**: Real-time tool visualization and progress updates
 - **Sources**: Connect to MCP servers, REST APIs (Google, Slack, Microsoft), and local filesystems
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
 - **Background Tasks**: Run long-running operations with progress tracking
 - **Dynamic Status System**: Customizable session workflow states (Todo, In Progress, Done, etc.)
 - **Theme System**: Cascading themes at app and workspace levels
 - **Multi-File Diff**: VS Code-style window for viewing all file changes in a turn
-- **Skills**: Specialized agent instructions stored per-workspace
+- **Skills**: Specialized agent instructions stored per-workspace ([Skills Market](https://www.aicowork.chat/skills))
 - **File Attachments**: Drag-drop images, PDFs, Office documents with auto-conversion
+- **i18n Support**: English and Chinese language support
 
 ## Quick Start
 
@@ -76,7 +73,7 @@ Connect external data sources to your workspace:
 
 | Type | Examples |
 |------|----------|
-| **MCP Servers** | Craft, Linear, GitHub, Notion, custom servers |
+| **MCP Servers** | Linear, GitHub, Notion, and any custom MCP servers |
 | **REST APIs** | Google (Gmail, Calendar, Drive), Slack, Microsoft |
 | **Local Files** | Filesystem, Obsidian vaults, Git repos |
 
@@ -96,10 +93,12 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 |----------|--------|
 | `Cmd+N` | New chat |
 | `Cmd+1/2/3` | Focus sidebar/list/chat |
-| `Cmd+/` | Keyboard shortcuts dialog |
+| `Cmd+,` | Open settings |
+| `Cmd+B` | Toggle sidebar |
 | `SHIFT+TAB` | Cycle permission modes |
-| `Enter` | Send message |
-| `Shift+Enter` | New line |
+| `Cmd+Enter` | Send message |
+| `Enter` | New line |
+| `Esc` | Interrupt agent |
 
 ## Architecture
 
@@ -213,7 +212,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "Cowork" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Cowork" is a trademark. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 
