@@ -320,7 +320,11 @@ export const en = {
     addNotes: 'Add notes...',
     loading: 'Loading...',
     files: 'Files',
+    sessionFiles: 'Session Files',
+    workspaceFiles: 'Workspace Files',
     filesEmptyState: 'Files attached or created by this chat will appear here.',
+    filesPanelComingSoon: 'Files panel - Coming soon',
+    historyPanelComingSoon: 'History panel - Coming soon',
   },
 
   // Session Menu
@@ -382,6 +386,11 @@ export const en = {
     statusFailed: 'Failed',
     statusNotTested: 'Not Tested',
     statusDisabled: 'Disabled',
+    // Source menu
+    showInFinder: 'Show in Finder',
+    deleteSource: 'Delete Source',
+    authenticateToViewData: 'Authenticate with this source to view available data',
+    authenticateToViewTools: 'Authenticate with this source to view available tools',
   },
 
   // Skills
@@ -393,6 +402,9 @@ export const en = {
     addSkill: 'Add Skill',
     enabled: 'Enabled',
     disabled: 'Disabled',
+    // Skill menu
+    showInFinder: 'Show in Finder',
+    deleteSkill: 'Delete Skill',
   },
 
   // Sidebar
@@ -485,12 +497,13 @@ export const en = {
   // Error Boundary
   errorBoundary: {
     appError: 'Something went wrong',
-    appErrorDescription: 'The application encountered an unexpected error.',
+    appErrorDescription: 'The application encountered an unexpected error. Please reload to continue.',
     sectionError: 'This section encountered an error',
     componentError: 'Failed to load',
     reload: 'Reload Application',
     retry: 'Try Again',
     dismiss: 'Dismiss',
+    technicalDetails: 'Technical Details',
   },
 
   // Empty States
@@ -509,6 +522,8 @@ export const en = {
     sourceNotFound: 'Source not found',
     skillNotFound: 'Skill not found',
     startFreshWithEmptyWorkspace: 'Start fresh with an empty workspace.',
+    noLabelsConfigured: 'No labels configured.',
+    addNewLabel: 'Add New Label',
   },
 
   // Actions
@@ -1089,6 +1104,24 @@ export const en = {
     exampleStatus: 'Add a "Blocked" status',
   },
 
+  // Labels settings page
+  labelsSettings: {
+    title: 'Labels',
+    aboutLabels: 'About Labels',
+    aboutDescription1: 'Labels help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.',
+    aboutDescription2: 'Each label can optionally carry a value with a specific type (text, number, or enum). This turns labels into structured metadata — for example, a "priority" label with values "high", "medium", "low", or a "project" label carrying the project name.',
+    aboutDescription3: 'Label values are not yet fully implemented on the UI, coming soon.',
+    aboutDescription4: 'Auto-apply rules assign labels automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed.',
+    learnMore: 'Learn more',
+    labelHierarchy: 'Label Hierarchy',
+    labelHierarchyDescription: 'All labels configured for this workspace. Labels can be nested to form groups.',
+    noLabelsConfigured: 'No labels configured.',
+    noLabelsHint: 'Labels can be created by the agent or by editing labels/config.json in your workspace.',
+    autoApplyRules: 'Auto-Apply Rules',
+    autoApplyRulesDescription: 'Regex patterns that automatically apply labels when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID.',
+    value: 'value',
+  },
+
   // Shortcuts page
   shortcuts: {
     title: 'Shortcuts',
@@ -1129,6 +1162,8 @@ export const en = {
     clickToView: 'Click a file path in the chat to view it here',
     loadingContent: 'Loading content...',
     errorLoading: 'Error loading file',
+    binaryFile: 'Cannot preview binary file',
+    openWithDefault: 'Open with default app',
   },
 
   // Info page
@@ -1169,4 +1204,11 @@ export const en = {
   },
 } as const;
 
-export type TranslationKeys = typeof en;
+// Helper type to convert literal string types to string
+type DeepStringify<T> = T extends string
+  ? string
+  : T extends object
+    ? { [K in keyof T]: DeepStringify<T[K]> }
+    : T;
+
+export type TranslationKeys = DeepStringify<typeof en>;

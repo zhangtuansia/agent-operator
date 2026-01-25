@@ -1,19 +1,13 @@
 import * as React from 'react'
-import * as ReactDOM from 'react-dom'
-import { Command as CommandPrimitive } from 'cmdk'
 import { toast } from 'sonner'
 import {
   Paperclip,
   ArrowUp,
   Square,
   Check,
-  DatabaseZap,
   ChevronDown,
   Loader2,
 } from 'lucide-react'
-import { Icon_Folder } from '@agent-operator/ui'
-
-import * as storage from '@/lib/local-storage'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -48,8 +42,9 @@ import { cn } from '@/lib/utils'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { getModelShortName, getModelsForProvider } from '@config/models'
-import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { WorkingDirectoryBadge, getRecentDirs, addRecentDir } from './WorkingDirectoryBadge'
+import { SourceSelectorBadge } from './SourceSelectorBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@agent-operator/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
@@ -253,8 +248,6 @@ export function FreeFormInput({
 
   const [isDraggingOver, setIsDraggingOver] = React.useState(false)
   const [loadingCount, setLoadingCount] = React.useState(0)
-  const [sourceDropdownOpen, setSourceDropdownOpen] = React.useState(false)
-  const [sourceFilter, setSourceFilter] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
 
@@ -307,9 +300,6 @@ export function FreeFormInput({
 
   const dragCounterRef = React.useRef(0)
   const containerRef = React.useRef<HTMLDivElement>(null)
-  const sourceButtonRef = React.useRef<HTMLButtonElement>(null)
-  const sourceFilterInputRef = React.useRef<HTMLInputElement>(null)
-  const [sourceDropdownPosition, setSourceDropdownPosition] = React.useState<{ top: number; left: number } | null>(null)
 
   // Merge refs for RichTextInput
   const internalInputRef = React.useRef<RichTextInputHandle>(null)
@@ -1096,162 +1086,16 @@ export function FreeFormInput({
 
           {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (
-            <div className="relative">
-              <FreeFormInputContextBadge
-                buttonRef={sourceButtonRef}
-                icon={
-                  optimisticSourceSlugs.length === 0 ? (
-                    <DatabaseZap className="h-4 w-4" />
-                  ) : (
-                    <div className="flex items-center -ml-0.5">
-                      {(() => {
-                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
-                        const displaySources = enabledSources.slice(0, 3)
-                        const remainingCount = enabledSources.length - 3
-                        return (
-                          <>
-                            {displaySources.map((source, index) => (
-                              <div
-                                key={source.config.slug}
-                                className={cn("relative h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center", index > 0 && "-ml-1")}
-                                style={{ zIndex: index + 1 }}
-                              >
-                                <SourceAvatar source={source} size="xs" />
-                              </div>
-                            ))}
-                            {remainingCount > 0 && (
-                              <div
-                                className="-ml-1 h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center text-[8px] font-medium text-muted-foreground"
-                                style={{ zIndex: displaySources.length + 1 }}
-                              >
-                                +{remainingCount}
-                              </div>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </div>
-                  )
-                }
-                label={
-                  optimisticSourceSlugs.length === 0
-                    ? t('input.chooseSources')
-                    : (() => {
-                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
-                        if (enabledSources.length === 1) return enabledSources[0].config.name
-                        if (enabledSources.length === 2) return enabledSources.map(s => s.config.name).join(', ')
-                        return t('input.nSources').replace('{n}', String(enabledSources.length))
-                      })()
-                }
-                isExpanded={isEmptySession}
-                hasSelection={optimisticSourceSlugs.length > 0}
-                showChevron={true}
-                isOpen={sourceDropdownOpen}
-                disabled={disabled}
-                data-tutorial="source-selector-button"
-                onClick={() => {
-                  if (!sourceDropdownOpen && sourceButtonRef.current) {
-                    const rect = sourceButtonRef.current.getBoundingClientRect()
-                    setSourceDropdownPosition({
-                      top: rect.top,
-                      left: rect.left,
-                    })
-                    // Focus filter input after popover opens
-                    setTimeout(() => sourceFilterInputRef.current?.focus(), 0)
-                  } else {
-                    // Clear filter when closing
-                    setSourceFilter('')
-                  }
-                  setSourceDropdownOpen(!sourceDropdownOpen)
-                }}
-                tooltip={t('sidebar.sources')}
-              />
-              {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
-                <>
-                  <div
-                    className="fixed inset-0 z-floating-backdrop"
-                    onClick={() => {
-                      setSourceDropdownOpen(false)
-                      setSourceFilter('')
-                    }}
-                  />
-                  <div
-                    className="fixed z-floating-menu min-w-[200px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small"
-                    style={{
-                      top: sourceDropdownPosition.top - 8,
-                      left: sourceDropdownPosition.left,
-                      transform: 'translateY(-100%)',
-                    }}
-                  >
-                    {sources.length === 0 ? (
-                      <div className="text-xs text-muted-foreground p-3">
-                        {t('sources.noSourcesConfigured')}
-                        <br />
-                        {t('sources.addSourcesInSettings')}
-                      </div>
-                    ) : (
-                      <CommandPrimitive
-                        className="min-w-[200px]"
-                        shouldFilter={false}
-                      >
-                        <div className="border-b border-border/50 px-3 py-2">
-                          <CommandPrimitive.Input
-                            ref={sourceFilterInputRef}
-                            value={sourceFilter}
-                            onValueChange={setSourceFilter}
-                            placeholder={t('sources.searchSources')}
-                            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                          />
-                        </div>
-                        <CommandPrimitive.List className="max-h-[240px] overflow-y-auto p-1">
-                          {sources
-                            .filter(source => source.config.name.toLowerCase().includes(sourceFilter.toLowerCase()))
-                            .map((source, index) => {
-                              const isEnabled = optimisticSourceSlugs.includes(source.config.slug)
-                              return (
-                                <CommandPrimitive.Item
-                                  key={source.config.slug}
-                                  value={source.config.slug}
-                                  data-tutorial={index === 0 ? "source-dropdown-item-first" : undefined}
-                                  onSelect={() => {
-                                    const newSlugs = isEnabled
-                                      ? optimisticSourceSlugs.filter(slug => slug !== source.config.slug)
-                                      : [...optimisticSourceSlugs, source.config.slug]
-                                    // Optimistic update - UI updates immediately
-                                    setOptimisticSourceSlugs(newSlugs)
-                                    // Then trigger async server update
-                                    onSourcesChange?.(newSlugs)
-                                  }}
-                                  className={cn(
-                                    "flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-2 text-[13px]",
-                                    "outline-none data-[selected=true]:bg-foreground/5",
-                                    isEnabled && "bg-foreground/3"
-                                  )}
-                                >
-                                  <div className="shrink-0 text-muted-foreground flex items-center">
-                                    <SourceAvatar
-                                      source={source}
-                                      size="sm"
-                                    />
-                                  </div>
-                                  <div className="flex-1 min-w-0 truncate">{source.config.name}</div>
-                                  <div className={cn(
-                                    "shrink-0 h-4 w-4 rounded-full bg-current flex items-center justify-center",
-                                    !isEnabled && "opacity-0"
-                                  )}>
-                                    <Check className="h-2.5 w-2.5 text-white dark:text-black" strokeWidth={3} />
-                                  </div>
-                                </CommandPrimitive.Item>
-                              )
-                            })}
-                        </CommandPrimitive.List>
-                      </CommandPrimitive>
-                    )}
-                  </div>
-                </>,
-                document.body
-              )}
-            </div>
+            <SourceSelectorBadge
+              sources={sources}
+              enabledSourceSlugs={optimisticSourceSlugs}
+              onSourcesChange={(newSlugs) => {
+                setOptimisticSourceSlugs(newSlugs)
+                onSourcesChange(newSlugs)
+              }}
+              isEmptySession={isEmptySession}
+              disabled={disabled}
+            />
           )}
 
           {/* 3. Working Directory Selector Badge */}
@@ -1436,231 +1280,5 @@ export function FreeFormInput({
         </div>
       </div>
     </form>
-  )
-}
-
-/**
- * Helper functions for recent directories storage
- */
-function getRecentDirs(): string[] {
-  return storage.get<string[]>(storage.KEYS.recentWorkingDirs, [])
-}
-
-function addRecentDir(path: string): void {
-  const recent = getRecentDirs().filter(p => p !== path)
-  const updated = [path, ...recent].slice(0, 25)
-  storage.set(storage.KEYS.recentWorkingDirs, updated)
-}
-
-/**
- * Format path for display, with home directory shortened
- */
-function formatPathForDisplay(path: string, homeDir: string): string {
-  let displayPath = path
-  if (homeDir && path.startsWith(homeDir)) {
-    const relativePath = path.slice(homeDir.length)
-    displayPath = relativePath || '/'
-  }
-  return `in ${displayPath}`
-}
-
-/**
- * WorkingDirectoryBadge - Context badge for selecting working directory
- * Uses cmdk for filterable folder list when there are more than 5 recent folders.
- */
-function WorkingDirectoryBadge({
-  workingDirectory,
-  onWorkingDirectoryChange,
-  sessionFolderPath,
-  isEmptySession = false,
-}: {
-  workingDirectory?: string
-  onWorkingDirectoryChange: (path: string) => void
-  sessionFolderPath?: string
-  isEmptySession?: boolean
-}) {
-  const { t } = useTranslation()
-  const [recentDirs, setRecentDirs] = React.useState<string[]>([])
-  const [popoverOpen, setPopoverOpen] = React.useState(false)
-  const [homeDir, setHomeDir] = React.useState<string>('')
-  const [filter, setFilter] = React.useState('')
-  const inputRef = React.useRef<HTMLInputElement>(null)
-
-  // Load home directory and recent directories on mount
-  React.useEffect(() => {
-    setRecentDirs(getRecentDirs())
-    window.electronAPI?.getHomeDir?.().then((dir: string) => {
-      if (dir) setHomeDir(dir)
-    })
-  }, [])
-
-  // Reset filter and focus input when popover opens
-  React.useEffect(() => {
-    if (popoverOpen) {
-      setFilter('')
-      // Focus input after popover animation completes (only if filter is shown)
-      const timer = setTimeout(() => {
-        inputRef.current?.focus()
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [popoverOpen])
-
-  const handleChooseFolder = async () => {
-    if (!window.electronAPI) return
-    setPopoverOpen(false)
-    const selectedPath = await window.electronAPI.openFolderDialog()
-    if (selectedPath) {
-      addRecentDir(selectedPath)
-      setRecentDirs(getRecentDirs())
-      onWorkingDirectoryChange(selectedPath)
-    }
-  }
-
-  const handleSelectRecent = (path: string) => {
-    addRecentDir(path) // Move to top of recent list
-    setRecentDirs(getRecentDirs())
-    onWorkingDirectoryChange(path)
-    setPopoverOpen(false)
-  }
-
-  const handleReset = () => {
-    if (sessionFolderPath) {
-      onWorkingDirectoryChange(sessionFolderPath)
-      setPopoverOpen(false)
-    }
-  }
-
-  // Filter out current directory from recent list and sort alphabetically by folder name
-  const filteredRecent = recentDirs
-    .filter(p => p !== workingDirectory)
-    .sort((a, b) => {
-      const nameA = (a.split('/').pop() || '').toLowerCase()
-      const nameB = (b.split('/').pop() || '').toLowerCase()
-      return nameA.localeCompare(nameB)
-    })
-  // Show filter input only when more than 5 recent folders
-  const showFilter = filteredRecent.length > 5
-
-  // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
-  const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : t('input.workInFolder')
-
-  // Show reset option when a folder is selected and it differs from session folder
-  const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
-
-  // Styles matching todo-filter-menu.tsx for consistency
-  const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
-  const MENU_LIST_STYLE = 'max-h-[200px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
-  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
-
-  return (
-    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <PopoverTrigger asChild>
-        <span>
-          <FreeFormInputContextBadge
-            icon={<Icon_Folder className="h-4 w-4" strokeWidth={1.75} />}
-            label={folderName}
-            isExpanded={isEmptySession}
-            hasSelection={hasFolder}
-            showChevron={true}
-            isOpen={popoverOpen}
-            tooltip={
-              hasFolder ? (
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">{t('input.workInFolder')}</span>
-                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                </span>
-              ) : t('input.chooseWorkingDir')
-            }
-          />
-        </span>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" sideOffset={8} className={MENU_CONTAINER_STYLE}>
-        <CommandPrimitive shouldFilter={showFilter}>
-          {/* Filter input - only shown when more than 5 recent folders */}
-          {showFilter && (
-            <div className="border-b border-border/50 px-3 py-2">
-              <CommandPrimitive.Input
-                ref={inputRef}
-                value={filter}
-                onValueChange={setFilter}
-                placeholder={t('input.filterFolders')}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-              />
-            </div>
-          )}
-
-          <CommandPrimitive.List className={MENU_LIST_STYLE}>
-            {/* Current Folder Display - shown at top with checkmark */}
-            {hasFolder && (
-              <CommandPrimitive.Item
-                value={`current-${workingDirectory}`}
-                className={cn(MENU_ITEM_STYLE, 'pointer-events-none bg-foreground/5')}
-                disabled
-              >
-                <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                <span className="flex-1 min-w-0 truncate">
-                  <span>{folderName}</span>
-                  <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                </span>
-                <Check className="h-4 w-4 shrink-0" />
-              </CommandPrimitive.Item>
-            )}
-
-            {/* Separator after current folder */}
-            {hasFolder && filteredRecent.length > 0 && (
-              <div className="h-px bg-border my-1 mx-1" />
-            )}
-
-            {/* Recent Directories - filterable (current directory already filtered out via filteredRecent) */}
-            {filteredRecent.map((path) => {
-              const recentFolderName = path.split('/').pop() || 'Folder'
-              return (
-                <CommandPrimitive.Item
-                  key={path}
-                  value={`${recentFolderName} ${path}`}
-                  onSelect={() => handleSelectRecent(path)}
-                  className={cn(MENU_ITEM_STYLE, 'data-[selected=true]:bg-foreground/5')}
-                >
-                  <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                  <span className="flex-1 min-w-0 truncate">
-                    <span>{recentFolderName}</span>
-                    <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(path, homeDir)}</span>
-                  </span>
-                </CommandPrimitive.Item>
-              )
-            })}
-
-            {/* Empty state when filtering */}
-            {showFilter && (
-              <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-                {t('input.noFoldersFound')}
-              </CommandPrimitive.Empty>
-            )}
-          </CommandPrimitive.List>
-
-          {/* Bottom actions - always visible, outside scrollable area */}
-          <div className="border-t border-border/50 p-1">
-            <button
-              type="button"
-              onClick={handleChooseFolder}
-              className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
-            >
-              {t('input.chooseFolder')}
-            </button>
-            {showReset && (
-              <button
-                type="button"
-                onClick={handleReset}
-                className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
-              >
-                {t('input.reset')}
-              </button>
-            )}
-          </div>
-        </CommandPrimitive>
-      </PopoverContent>
-    </Popover>
   )
 }

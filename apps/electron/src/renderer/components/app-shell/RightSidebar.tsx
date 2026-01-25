@@ -8,6 +8,8 @@
 import * as React from 'react'
 import type { RightSidebarPanel } from '../../../shared/types'
 import { SessionMetadataPanel } from '../right-sidebar/SessionMetadataPanel'
+import { SessionFilesPanel } from '../right-sidebar/SessionFilesPanel'
+import { useTranslation } from '@/i18n'
 
 export interface RightSidebarProps {
   /** Current panel configuration */
@@ -16,29 +18,35 @@ export interface RightSidebarProps {
   sessionId?: string
   /** Close button to display in panel header */
   closeButton?: React.ReactNode
+  /** Callback when file selection changes in files panel */
+  onFileSelect?: (path: string | undefined) => void
 }
 
 /**
  * Routes right sidebar content based on panel type
  */
-export function RightSidebar({ panel, sessionId, closeButton }: RightSidebarProps) {
+export function RightSidebar({ panel, sessionId, closeButton, onFileSelect }: RightSidebarProps) {
+  const { t } = useTranslation()
+
   switch (panel.type) {
     case 'sessionMetadata':
       return <SessionMetadataPanel sessionId={sessionId} closeButton={closeButton} />
 
     case 'files':
-      // TODO: Implement SessionFilesPanel
       return (
-        <div className="h-full flex items-center justify-center text-muted-foreground">
-          <p className="text-sm">Files panel - Coming soon</p>
-        </div>
+        <SessionFilesPanel
+          sessionId={sessionId}
+          filePath={panel.path}
+          closeButton={closeButton}
+          onFileSelect={onFileSelect}
+        />
       )
 
     case 'history':
       // TODO: Implement SessionHistoryPanel
       return (
         <div className="h-full flex items-center justify-center text-muted-foreground">
-          <p className="text-sm">History panel - Coming soon</p>
+          <p className="text-sm">{t('chatInfo.historyPanelComingSoon')}</p>
         </div>
       )
 

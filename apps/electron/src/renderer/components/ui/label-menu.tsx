@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { LabelIcon } from './label-icon'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import { flattenLabels } from '@agent-operator/shared/labels'
+import { useTranslation } from '@/i18n'
 
 // ============================================================================
 // Types
@@ -135,6 +136,7 @@ export function InlineLabelMenu({
   position,
   className,
 }: InlineLabelMenuProps) {
+  const { t } = useTranslation()
   const menuRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const [selectedIndex, setSelectedIndex] = React.useState(0)
@@ -242,7 +244,7 @@ export function InlineLabelMenu({
             <div className="shrink-0 text-muted-foreground">
               <Plus className="h-3.5 w-3.5" />
             </div>
-            <span className="text-[13px]">Add New Label</span>
+            <span className="text-[13px]">{t('emptyStates.addNewLabel')}</span>
           </div>
         ) : (
           filteredItems.map((item, index) => {

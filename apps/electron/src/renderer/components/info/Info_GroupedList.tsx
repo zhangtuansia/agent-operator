@@ -9,6 +9,7 @@ import * as React from 'react'
 import { cva } from 'class-variance-authority'
 import { Spinner } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 
 const groupHeaderVariants = cva(
   'px-4 py-2 border-b border-border/30 text-xs font-semibold uppercase tracking-wide',
@@ -61,6 +62,8 @@ function Info_GroupedListRoot({
   empty,
   className,
 }: Info_GroupedListProps) {
+  const { t } = useTranslation()
+
   if (loading) {
     return (
       <div className={cn('flex items-center justify-center py-8', className)}>
@@ -73,7 +76,7 @@ function Info_GroupedListRoot({
     return (
       <div className={cn('px-4 py-4 text-sm text-muted-foreground', className)}>
         {error === 'Source requires authentication' ? (
-          <span>Authenticate with this source to view available tools</span>
+          <span>{t('sources.authenticateToViewTools')}</span>
         ) : (
           <span>{error}</span>
         )}

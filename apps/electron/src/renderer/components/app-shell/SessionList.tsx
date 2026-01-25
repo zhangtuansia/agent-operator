@@ -7,6 +7,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { cn, isHexColor } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@agent-operator/ui"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -897,39 +898,41 @@ export function SessionList({
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                   >
-                    <SessionItem
-                      item={sessionItem}
-                      index={flatIndex}
-                      itemProps={itemProps}
-                      isSelected={session.selected === sessionItem.id}
-                      isLast={flatIndex === flatItems.length - 1}
-                      isFirstInGroup={item.isFirstInGroup}
-                      onKeyDown={handleKeyDown}
-                      onRenameClick={handleRenameClick}
-                      onTodoStateChange={onTodoStateChange}
-                      onFlag={onFlag ? handleFlagWithToast : undefined}
-                      onUnflag={onUnflag ? handleUnflagWithToast : undefined}
-                      onMarkUnread={onMarkUnread}
-                      onDelete={handleDeleteWithToast}
-                      onSelect={() => {
-                        // Navigate to session with filter context (updates URL and selection)
-                        if (!currentFilter || currentFilter.kind === 'allChats') {
-                          navigate(routes.view.allChats(sessionItem.id))
-                        } else if (currentFilter.kind === 'flagged') {
-                          navigate(routes.view.flagged(sessionItem.id))
-                        } else if (currentFilter.kind === 'state') {
-                          navigate(routes.view.state(currentFilter.stateId, sessionItem.id))
-                        }
-                        // Notify parent
-                        onSessionSelect?.(sessionItem)
-                      }}
-                      onOpenInNewWindow={() => onOpenInNewWindow?.(sessionItem)}
-                      permissionMode={sessionOptions?.get(sessionItem.id)?.permissionMode}
-                      searchQuery={searchQuery}
-                      todoStates={todoStates}
-                      t={t}
-                      language={language}
-                    />
+                    <ErrorBoundary level="component" resetKey={sessionItem.id}>
+                      <SessionItem
+                        item={sessionItem}
+                        index={flatIndex}
+                        itemProps={itemProps}
+                        isSelected={session.selected === sessionItem.id}
+                        isLast={flatIndex === flatItems.length - 1}
+                        isFirstInGroup={item.isFirstInGroup}
+                        onKeyDown={handleKeyDown}
+                        onRenameClick={handleRenameClick}
+                        onTodoStateChange={onTodoStateChange}
+                        onFlag={onFlag ? handleFlagWithToast : undefined}
+                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                        onMarkUnread={onMarkUnread}
+                        onDelete={handleDeleteWithToast}
+                        onSelect={() => {
+                          // Navigate to session with filter context (updates URL and selection)
+                          if (!currentFilter || currentFilter.kind === 'allChats') {
+                            navigate(routes.view.allChats(sessionItem.id))
+                          } else if (currentFilter.kind === 'flagged') {
+                            navigate(routes.view.flagged(sessionItem.id))
+                          } else if (currentFilter.kind === 'state') {
+                            navigate(routes.view.state(currentFilter.stateId, sessionItem.id))
+                          }
+                          // Notify parent
+                          onSessionSelect?.(sessionItem)
+                        }}
+                        onOpenInNewWindow={() => onOpenInNewWindow?.(sessionItem)}
+                        permissionMode={sessionOptions?.get(sessionItem.id)?.permissionMode}
+                        searchQuery={searchQuery}
+                        todoStates={todoStates}
+                        t={t}
+                        language={language}
+                      />
+                    </ErrorBoundary>
                   </div>
                 )
               })}

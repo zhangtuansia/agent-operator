@@ -64,6 +64,7 @@ import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInt
 import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
+import { useLayoutState } from "@/hooks/useLayoutState"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useTranslation } from "@/i18n"
@@ -191,41 +192,30 @@ function AppShellContent({
     openNewChat,
   } = contextValue
 
-  const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
-    return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
-  })
-  const [sidebarWidth, setSidebarWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sidebarWidth, 220)
-  })
-  // Session list width in pixels (min 240, max 480)
-  const [sessionListWidth, setSessionListWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sessionListWidth, 300)
-  })
-
-  // Right sidebar state (min 280, max 480)
-  const [isRightSidebarVisible, setIsRightSidebarVisible] = React.useState(() => {
-    return storage.get(storage.KEYS.rightSidebarVisible, false)
-  })
-  const [rightSidebarWidth, setRightSidebarWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.rightSidebarWidth, 300)
-  })
-  const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = React.useState(false)
-
-  // Window width tracking for responsive behavior
-  const [windowWidth, setWindowWidth] = React.useState(window.innerWidth)
-
-  // Calculate overlay threshold dynamically based on actual sidebar widths
-  // Formula: 600px (300px right sidebar + 300px center) + leftSidebar + sessionList
-  // This ensures we switch to overlay mode when inline right sidebar would compress content
-  const MIN_INLINE_SPACE = 600 // 300px for right sidebar + 300px for center content
-  const leftSidebarEffectiveWidth = isSidebarVisible ? sidebarWidth : 0
-  const OVERLAY_THRESHOLD = MIN_INLINE_SPACE + leftSidebarEffectiveWidth + sessionListWidth
-  const shouldUseOverlay = windowWidth < OVERLAY_THRESHOLD
-
-  const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | 'right-sidebar' | null>(null)
-  const [sidebarHandleY, setSidebarHandleY] = React.useState<number | null>(null)
-  const [sessionListHandleY, setSessionListHandleY] = React.useState<number | null>(null)
-  const [rightSidebarHandleY, setRightSidebarHandleY] = React.useState<number | null>(null)
+  // Layout state (sidebar widths, visibility, resize handling)
+  const {
+    isSidebarVisible,
+    setIsSidebarVisible,
+    sidebarWidth,
+    setSidebarWidth,
+    sessionListWidth,
+    setSessionListWidth,
+    isRightSidebarVisible,
+    setIsRightSidebarVisible,
+    rightSidebarWidth,
+    setRightSidebarWidth,
+    skipRightSidebarAnimation,
+    setSkipRightSidebarAnimation,
+    shouldUseOverlay,
+    isResizing,
+    setIsResizing,
+    sidebarHandleY,
+    setSidebarHandleY,
+    sessionListHandleY,
+    setSessionListHandleY,
+    rightSidebarHandleY,
+    setRightSidebarHandleY,
+  } = useLayoutState({ defaultCollapsed })
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
@@ -290,12 +280,6 @@ function AppShellContent({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Track window width for responsive right sidebar behavior
-  React.useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   // Unified sidebar keyboard navigation state
   // Load expanded folders from localStorage (default: all collapsed)
@@ -540,59 +524,6 @@ function AppShellContent({
     return () => document.removeEventListener('paste', handleGlobalPaste)
   }, [])
 
-  // Resize effect for sidebar, session list, and right sidebar
-  React.useEffect(() => {
-    if (!isResizing) return
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing === 'sidebar') {
-        const newWidth = Math.min(Math.max(e.clientX, 180), 320)
-        setSidebarWidth(newWidth)
-        if (resizeHandleRef.current) {
-          const rect = resizeHandleRef.current.getBoundingClientRect()
-          setSidebarHandleY(e.clientY - rect.top)
-        }
-      } else if (isResizing === 'session-list') {
-        const offset = isSidebarVisible ? sidebarWidth : 0
-        const newWidth = Math.min(Math.max(e.clientX - offset, 240), 480)
-        setSessionListWidth(newWidth)
-        if (sessionListHandleRef.current) {
-          const rect = sessionListHandleRef.current.getBoundingClientRect()
-          setSessionListHandleY(e.clientY - rect.top)
-        }
-      } else if (isResizing === 'right-sidebar') {
-        // Calculate from right edge
-        const newWidth = Math.min(Math.max(window.innerWidth - e.clientX, 280), 480)
-        setRightSidebarWidth(newWidth)
-        if (rightSidebarHandleRef.current) {
-          const rect = rightSidebarHandleRef.current.getBoundingClientRect()
-          setRightSidebarHandleY(e.clientY - rect.top)
-        }
-      }
-    }
-
-    const handleMouseUp = () => {
-      if (isResizing === 'sidebar') {
-        storage.set(storage.KEYS.sidebarWidth, sidebarWidth)
-        setSidebarHandleY(null)
-      } else if (isResizing === 'session-list') {
-        storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
-        setSessionListHandleY(null)
-      } else if (isResizing === 'right-sidebar') {
-        storage.set(storage.KEYS.rightSidebarWidth, rightSidebarWidth)
-        setRightSidebarHandleY(null)
-      }
-      setIsResizing(null)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [isResizing, sidebarWidth, sessionListWidth, rightSidebarWidth, isSidebarVisible])
 
   // Spring transition config - shared between sidebar and header
   // Critical damping (no bounce): damping = 2 * sqrt(stiffness * mass)

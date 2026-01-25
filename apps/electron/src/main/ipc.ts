@@ -1160,10 +1160,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Session Info Panel (files, notes, file watching)
   // ============================================================
 
-  // Recursive directory scanner for session files
+  // Recursive directory scanner for session/workspace files
   // Filters out internal files (session.jsonl) and hidden files (. prefix)
   // Returns only non-empty directories
-  async function scanSessionDirectory(dirPath: string): Promise<import('../shared/types').SessionFile[]> {
+  // excludeDirs: directories to skip (e.g., sessions, sources, skills for workspace scan)
+  async function scanDirectory(dirPath: string, excludeDirs: string[] = []): Promise<import('../shared/types').SessionFile[]> {
     const { readdir, stat } = await import('fs/promises')
     const entries = await readdir(dirPath, { withFileTypes: true })
     const files: import('../shared/types').SessionFile[] = []
@@ -1171,12 +1172,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     for (const entry of entries) {
       // Skip internal and hidden files
       if (entry.name === 'session.jsonl' || entry.name.startsWith('.')) continue
+      // Skip excluded directories
+      if (excludeDirs.includes(entry.name)) continue
 
       const fullPath = join(dirPath, entry.name)
 
       if (entry.isDirectory()) {
-        // Recursively scan subdirectory
-        const children = await scanSessionDirectory(fullPath)
+        // Recursively scan subdirectory (no exclusions for nested dirs)
+        const children = await scanDirectory(fullPath, [])
         // Only include non-empty directories
         if (children.length > 0) {
           files.push({
@@ -1204,17 +1207,43 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     })
   }
 
-  // Get files in session directory (recursive tree structure)
+  // Get files in session directory and workspace directory (recursive tree structure)
+  // Returns { sessionFiles, workspaceFiles } for separate display in UI
   ipcMain.handle(IPC_CHANNELS.GET_SESSION_FILES, async (_event, sessionId: string) => {
     const sessionPath = sessionManager.getSessionPath(sessionId)
-    if (!sessionPath) return []
+    const workspacePath = sessionManager.getSessionWorkspacePath(sessionId)
 
-    try {
-      return await scanSessionDirectory(sessionPath)
-    } catch (error) {
-      ipcLog.error('Failed to get session files:', error)
-      return []
+    const result: { sessionFiles: import('../shared/types').SessionFile[], workspaceFiles: import('../shared/types').SessionFile[] } = {
+      sessionFiles: [],
+      workspaceFiles: [],
     }
+
+    // Scan session directory
+    if (sessionPath) {
+      try {
+        result.sessionFiles = await scanDirectory(sessionPath)
+      } catch (error) {
+        ipcLog.error('Failed to get session files:', error)
+      }
+    }
+
+    // Scan workspace directory (excluding system directories)
+    if (workspacePath) {
+      try {
+        // Exclude sessions, sources, skills, statuses, labels directories (managed separately)
+        result.workspaceFiles = await scanDirectory(workspacePath, [
+          'sessions',
+          'sources',
+          'skills',
+          'statuses',
+          'labels',
+        ])
+      } catch (error) {
+        ipcLog.error('Failed to get workspace files:', error)
+      }
+    }
+
+    return result
   })
 
   // Session file watcher state - only one session watched at a time

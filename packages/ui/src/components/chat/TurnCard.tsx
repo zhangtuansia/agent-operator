@@ -1572,6 +1572,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
+            translations={translations}
           />
         </div>
       )}

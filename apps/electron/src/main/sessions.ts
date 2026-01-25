@@ -1128,6 +1128,15 @@ export class SessionManager {
     return getSessionStoragePath(managed.workspace.rootPath, sessionId)
   }
 
+  /**
+   * Get the workspace root path for a session
+   */
+  getSessionWorkspacePath(sessionId: string): string | null {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return null
+    return managed.workspace.rootPath
+  }
+
   async createSession(workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {

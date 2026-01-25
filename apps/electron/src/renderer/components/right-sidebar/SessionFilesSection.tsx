@@ -61,6 +61,8 @@ const itemVariants: Variants = {
 export interface SessionFilesSectionProps {
   sessionId?: string
   className?: string
+  /** Optional callback when a file is clicked (for file preview). If not provided, reveals in Finder. */
+  onFileClick?: (file: { path: string; type: string; name: string }) => void
 }
 
 /**
@@ -260,8 +262,9 @@ function FileTreeItem({
 /**
  * Section displaying session files as a tree
  */
-export function SessionFilesSection({ sessionId, className }: SessionFilesSectionProps) {
-  const [files, setFiles] = useState<SessionFile[]>([])
+export function SessionFilesSection({ sessionId, className, onFileClick: externalOnFileClick }: SessionFilesSectionProps) {
+  const [sessionFiles, setSessionFiles] = useState<SessionFile[]>([])
+  const [workspaceFiles, setWorkspaceFiles] = useState<SessionFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const mountedRef = useRef(true)
@@ -287,20 +290,23 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
   // Load files
   const loadFiles = useCallback(async () => {
     if (!sessionId) {
-      setFiles([])
+      setSessionFiles([])
+      setWorkspaceFiles([])
       return
     }
 
     setIsLoading(true)
     try {
-      const sessionFiles = await window.electronAPI.getSessionFiles(sessionId)
+      const result = await window.electronAPI.getSessionFiles(sessionId)
       if (mountedRef.current) {
-        setFiles(sessionFiles)
+        setSessionFiles(result.sessionFiles)
+        setWorkspaceFiles(result.workspaceFiles)
       }
     } catch (error) {
       console.error('Failed to load session files:', error)
       if (mountedRef.current) {
-        setFiles([])
+        setSessionFiles([])
+        setWorkspaceFiles([])
       }
     } finally {
       if (mountedRef.current) {
@@ -337,14 +343,21 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
     }
   }, [sessionId, loadFiles])
 
-  // Handle file click - reveal in Finder
+  // Handle file click - call external callback if provided, otherwise reveal in Finder
   const handleFileClick = useCallback((file: SessionFile) => {
+    // If external callback is provided, use it for files
+    if (externalOnFileClick && file.type === 'file') {
+      externalOnFileClick({ path: file.path, type: file.type, name: file.name })
+      return
+    }
+
+    // Default behavior: reveal in Finder
     if (file.type === 'directory') {
       window.electronAPI.openFile(file.path)
     } else {
       window.electronAPI.showInFolder(file.path)
     }
-  }, [])
+  }, [externalOnFileClick])
 
   // Handle double-click - open the file
   const handleFileDoubleClick = useCallback((file: SessionFile) => {
@@ -369,37 +382,69 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
     return null
   }
 
+  const hasSessionFiles = sessionFiles.length > 0
+  const hasWorkspaceFiles = workspaceFiles.length > 0
+  const hasNoFiles = !hasSessionFiles && !hasWorkspaceFiles
+
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
-      {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-        <span className="text-xs font-medium text-muted-foreground">{t('chatInfo.files')}</span>
-      </div>
-
       {/* File tree - px-2 is on nav to match LeftSidebar exactly (constrains grid width) */}
       {/* overflow-x-hidden prevents horizontal scroll, forcing truncation */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-2 min-h-0">
-        {files.length === 0 ? (
-          <div className="px-4 text-muted-foreground select-none">
-            <p className="text-xs">
-              {isLoading ? t('chatInfo.loading') : t('chatInfo.filesEmptyState')}
-            </p>
+        {isLoading ? (
+          <div className="px-4 pt-4 text-muted-foreground select-none">
+            <p className="text-xs">{t('chatInfo.loading')}</p>
+          </div>
+        ) : hasNoFiles ? (
+          <div className="px-4 pt-4 text-muted-foreground select-none">
+            <p className="text-xs">{t('chatInfo.filesEmptyState')}</p>
           </div>
         ) : (
-          /* Root nav has px-2 to match LeftSidebar exactly - this constrains grid width */
-          <nav className="grid gap-0.5 px-2">
-            {files.map((file) => (
-              <FileTreeItem
-                key={file.path}
-                file={file}
-                depth={0}
-                expandedPaths={expandedPaths}
-                onToggleExpand={handleToggleExpand}
-                onFileClick={handleFileClick}
-                onFileDoubleClick={handleFileDoubleClick}
-              />
-            ))}
-          </nav>
+          <>
+            {/* Session Files Section */}
+            {hasSessionFiles && (
+              <div className="mb-2">
+                <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
+                  <span className="text-xs font-medium text-muted-foreground">{t('chatInfo.sessionFiles')}</span>
+                </div>
+                <nav className="grid gap-0.5 px-2">
+                  {sessionFiles.map((file) => (
+                    <FileTreeItem
+                      key={file.path}
+                      file={file}
+                      depth={0}
+                      expandedPaths={expandedPaths}
+                      onToggleExpand={handleToggleExpand}
+                      onFileClick={handleFileClick}
+                      onFileDoubleClick={handleFileDoubleClick}
+                    />
+                  ))}
+                </nav>
+              </div>
+            )}
+
+            {/* Workspace Files Section */}
+            {hasWorkspaceFiles && (
+              <div>
+                <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
+                  <span className="text-xs font-medium text-muted-foreground">{t('chatInfo.workspaceFiles')}</span>
+                </div>
+                <nav className="grid gap-0.5 px-2">
+                  {workspaceFiles.map((file) => (
+                    <FileTreeItem
+                      key={file.path}
+                      file={file}
+                      depth={0}
+                      expandedPaths={expandedPaths}
+                      onToggleExpand={handleToggleExpand}
+                      onFileClick={handleFileClick}
+                      onFileDoubleClick={handleFileDoubleClick}
+                    />
+                  ))}
+                </nav>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

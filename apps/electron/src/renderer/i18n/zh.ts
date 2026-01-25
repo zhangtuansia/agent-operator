@@ -322,7 +322,11 @@ export const zh: TranslationKeys = {
     addNotes: '添加备注...',
     loading: '加载中...',
     files: '文件',
+    sessionFiles: '会话文件',
+    workspaceFiles: '工作区文件',
     filesEmptyState: '此聊天中附加或创建的文件将显示在这里。',
+    filesPanelComingSoon: '文件面板 - 即将推出',
+    historyPanelComingSoon: '历史面板 - 即将推出',
   },
 
   // Session Menu
@@ -384,6 +388,11 @@ export const zh: TranslationKeys = {
     statusFailed: '失败',
     statusNotTested: '未测试',
     statusDisabled: '已禁用',
+    // Source menu
+    showInFinder: '在访达中显示',
+    deleteSource: '删除数据源',
+    authenticateToViewData: '请先验证此数据源以查看可用数据',
+    authenticateToViewTools: '请先验证此数据源以查看可用工具',
   },
 
   // Skills
@@ -395,6 +404,9 @@ export const zh: TranslationKeys = {
     addSkill: '添加技能',
     enabled: '已启用',
     disabled: '已禁用',
+    // Skill menu
+    showInFinder: '在访达中显示',
+    deleteSkill: '删除技能',
   },
 
   // Sidebar
@@ -486,13 +498,14 @@ export const zh: TranslationKeys = {
 
   // Error Boundary
   errorBoundary: {
-    appError: '出错了',
-    appErrorDescription: '应用程序遇到意外错误。',
-    sectionError: '此区域发生错误',
+    appError: '出现错误',
+    appErrorDescription: '应用遇到意外错误，请重新加载继续使用。',
+    sectionError: '此区域遇到错误',
     componentError: '加载失败',
-    reload: '重新加载应用',
+    reload: '重新加载',
     retry: '重试',
     dismiss: '关闭',
+    technicalDetails: '技术详情',
   },
 
   // Empty States
@@ -511,6 +524,8 @@ export const zh: TranslationKeys = {
     sourceNotFound: '未找到数据源',
     skillNotFound: '未找到技能',
     startFreshWithEmptyWorkspace: '从空白工作区开始。',
+    noLabelsConfigured: '未配置标签。',
+    addNewLabel: '添加新标签',
   },
 
   // Actions
@@ -1091,6 +1106,24 @@ export const zh: TranslationKeys = {
     exampleStatus: '添加"已阻塞"状态',
   },
 
+  // Labels settings page
+  labelsSettings: {
+    title: '标签',
+    aboutLabels: '关于标签',
+    aboutDescription1: '标签帮助您用彩色标记组织会话。您可以按项目、主题或优先级对对话进行分类——方便以后筛选和查找相关会话。',
+    aboutDescription2: '每个标签可以选择性地携带一个特定类型（文本、数字或枚举）的值。这将标签转变为结构化元数据——例如，一个"优先级"标签可以有"高"、"中"、"低"等值，或者一个"项目"标签携带项目名称。',
+    aboutDescription3: '标签值功能在 UI 上尚未完全实现，即将推出。',
+    aboutDescription4: '自动应用规则会在消息匹配正则表达式模式时自动应用标签。例如，粘贴 Linear 问题 URL 可以自动为会话添加项目名称和问题 ID 标签——无需手动标记。',
+    learnMore: '了解更多',
+    labelHierarchy: '标签层级',
+    labelHierarchyDescription: '此工作区配置的所有标签。标签可以嵌套形成分组。',
+    noLabelsConfigured: '未配置标签。',
+    noLabelsHint: '标签可以由智能体创建，或通过编辑工作区中的 labels/config.json 文件来创建。',
+    autoApplyRules: '自动应用规则',
+    autoApplyRulesDescription: '当用户消息匹配正则表达式模式时自动应用标签。例如，粘贴 Linear 问题 URL 可以自动为会话添加项目名称和问题 ID 标签。',
+    value: '值',
+  },
+
   // Shortcuts page
   shortcuts: {
     title: '快捷键',
@@ -1131,6 +1164,8 @@ export const zh: TranslationKeys = {
     clickToView: '点击聊天中的文件路径在此查看',
     loadingContent: '正在加载内容...',
     errorLoading: '加载文件出错',
+    binaryFile: '无法预览二进制文件',
+    openWithDefault: '使用默认应用打开',
   },
 
   // Info page

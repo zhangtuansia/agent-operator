@@ -80,6 +80,14 @@ export interface SessionFile {
   children?: SessionFile[]  // Recursive children for directories
 }
 
+/**
+ * Combined session and workspace files response
+ */
+export interface SessionFilesResult {
+  sessionFiles: SessionFile[]
+  workspaceFiles: SessionFile[]
+}
+
 // Import auth request types for unified auth flow
 import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@agent-operator/shared/agent';
 export type { SharedAuthRequest as AuthRequest };
@@ -821,7 +829,7 @@ export interface ElectronAPI {
   getAllDrafts(): Promise<Record<string, string>>
 
   // Session Info Panel
-  getSessionFiles(sessionId: string): Promise<SessionFile[]>
+  getSessionFiles(sessionId: string): Promise<SessionFilesResult>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>
