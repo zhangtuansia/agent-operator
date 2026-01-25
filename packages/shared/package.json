@@ -49,7 +49,8 @@
     "./views": "./src/views/index.ts",
     "./views/storage": "./src/views/storage.ts",
     "./docs": "./src/docs/index.ts",
-    "./docs/doc-links": "./src/docs/doc-links.ts"
+    "./docs/doc-links": "./src/docs/doc-links.ts",
+    "./permissions": "./src/permissions/index.ts"
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",

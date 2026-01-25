@@ -115,6 +115,17 @@ export const en = {
     downloadUpdate: 'Download Update',
     downloadFailed: 'Download failed',
     retryDownload: 'Retry Download',
+
+    // System Permissions (macOS)
+    systemPermissions: 'System Permissions',
+    systemPermissionsDesc: 'Grant permissions to enable advanced features like emptying trash and automation.',
+    fullDiskAccess: 'Full Disk Access',
+    fullDiskAccessDesc: 'Access protected directories like Trash and Mail.',
+    accessibility: 'Accessibility',
+    accessibilityDesc: 'Control other apps and automate system tasks.',
+    permissionGranted: 'Granted',
+    authorize: 'Authorize',
+    permissionWarning: 'Some features may not work without these permissions. After authorizing, you may need to restart the app.',
   },
 
   // API Settings

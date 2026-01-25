@@ -29,6 +29,7 @@ import {
   SettingsToggle,
   SettingsSegmentedControl,
   SettingsMenuSelect,
+  SystemPermissionsSection,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -185,6 +186,9 @@ export default function AppSettingsPage() {
                 />
               </SettingsCard>
             </SettingsSection>
+
+            {/* System Permissions (macOS only) */}
+            <SystemPermissionsSection />
 
             {/* About */}
             <SettingsSection title={t('appSettings.about')}>

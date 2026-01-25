@@ -124,3 +124,24 @@ export function requestAccessibilityAccess(): boolean {
   }
   return systemPreferences.isTrustedAccessibilityClient(true)
 }
+
+/**
+ * Open System Preferences to the Accessibility pane.
+ */
+export function openAccessibilitySettings(): void {
+  if (process.platform !== 'darwin') {
+    return
+  }
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+  mainLog.info('Opened Accessibility settings')
+}
+
+/**
+ * Get all permissions status
+ */
+export function getAllPermissionsStatus(): { fullDiskAccess: boolean; accessibility: boolean } {
+  return {
+    fullDiskAccess: hasFullDiskAccess(),
+    accessibility: hasAccessibilityAccess(),
+  }
+}

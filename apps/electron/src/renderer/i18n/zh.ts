@@ -117,6 +117,17 @@ export const zh: TranslationKeys = {
     downloadUpdate: '下载更新',
     downloadFailed: '下载失败',
     retryDownload: '重新下载',
+
+    // System Permissions (macOS)
+    systemPermissions: '系统权限',
+    systemPermissionsDesc: '授权后可以执行更多系统操作，如清空废纸篓、自动化等。',
+    fullDiskAccess: '完全磁盘访问权限',
+    fullDiskAccessDesc: '访问废纸篓、邮件等受保护目录。',
+    accessibility: '辅助功能权限',
+    accessibilityDesc: '控制其他应用、执行自动化操作。',
+    permissionGranted: '已授权',
+    authorize: '授权',
+    permissionWarning: '部分功能需要这些权限才能正常工作。授权后可能需要重启应用。',
   },
 
   // API Settings

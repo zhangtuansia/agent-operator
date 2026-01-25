@@ -445,6 +445,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS),
   promptFullDiskAccess: () =>
     ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_PROMPT_FULL_DISK_ACCESS) as Promise<boolean>,
+  checkAccessibilityAccess: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_CHECK_ACCESSIBILITY) as Promise<boolean>,
+  openAccessibilitySettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS),
+  getAllPermissions: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_GET_ALL) as Promise<{ fullDiskAccess: boolean; accessibility: boolean }>,
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

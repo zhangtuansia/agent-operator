@@ -666,6 +666,9 @@ export const IPC_CHANNELS = {
   PERMISSIONS_CHECK_FULL_DISK_ACCESS: 'permissions:checkFullDiskAccess',
   PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS: 'permissions:openFullDiskAccessSettings',
   PERMISSIONS_PROMPT_FULL_DISK_ACCESS: 'permissions:promptFullDiskAccess',
+  PERMISSIONS_CHECK_ACCESSIBILITY: 'permissions:checkAccessibility',
+  PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS: 'permissions:openAccessibilitySettings',
+  PERMISSIONS_GET_ALL: 'permissions:getAll',
 } as const
 
 // Re-import types for ElectronAPI
@@ -926,6 +929,9 @@ export interface ElectronAPI {
   checkFullDiskAccess(): Promise<boolean>
   openFullDiskAccessSettings(): Promise<void>
   promptFullDiskAccess(): Promise<boolean>
+  checkAccessibilityAccess(): Promise<boolean>
+  openAccessibilitySettings(): Promise<void>
+  getAllPermissions(): Promise<{ fullDiskAccess: boolean; accessibility: boolean }>
 }
 
 /**

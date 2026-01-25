@@ -92,3 +92,9 @@ export {
   SettingsTextarea,
   type SettingsTextareaProps,
 } from './SettingsTextarea'
+
+// System Permissions (macOS)
+export {
+  SystemPermissionsSection,
+  type SystemPermissionsSectionProps,
+} from './SystemPermissionsSection'

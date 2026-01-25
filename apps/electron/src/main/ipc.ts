@@ -2080,4 +2080,22 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return promptForFullDiskAccess()
   })
 
+  // Check if app has Accessibility permission
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_CHECK_ACCESSIBILITY, async () => {
+    const { hasAccessibilityAccess } = await import('./permissions')
+    return hasAccessibilityAccess()
+  })
+
+  // Open System Preferences to Accessibility pane
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS, async () => {
+    const { openAccessibilitySettings } = await import('./permissions')
+    openAccessibilitySettings()
+  })
+
+  // Get all permissions status
+  ipcMain.handle(IPC_CHANNELS.PERMISSIONS_GET_ALL, async () => {
+    const { getAllPermissionsStatus } = await import('./permissions')
+    return getAllPermissionsStatus()
+  })
+
 }
