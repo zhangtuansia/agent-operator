@@ -617,7 +617,6 @@ export default function ApiSettingsPage() {
               {/* Provider Selection - only show for Claude */}
               {agentType === 'claude' && (
               <SettingsSection title={t('apiSettings.provider')}>
-              <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
                     label={t('apiSettings.provider')}
@@ -636,7 +635,6 @@ export default function ApiSettingsPage() {
 
               {/* Bedrock Mode Info - only show for Claude */}
               {agentType === 'claude' && currentProvider === 'bedrock' && (
-              {currentProvider === 'bedrock' && (
                 <SettingsSection title={t('apiSettings.providerBedrock')}>
                   <SettingsCard>
                     <SettingsRow
