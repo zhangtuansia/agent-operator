@@ -131,6 +131,19 @@ export const en = {
   // API Settings
   apiSettings: {
     title: 'API Configuration',
+
+    // Agent Type (Claude vs Codex)
+    agentType: 'AI Agent',
+    agentTypeDescription: 'Choose your AI assistant backend',
+    claudeActive: 'Using Claude (Anthropic)',
+    claudeDescription: 'Claude AI by Anthropic',
+    codexActive: 'Using Codex (OpenAI)',
+    codexDescription: 'Codex AI by OpenAI',
+    codexConnected: 'Connected to ChatGPT',
+    codexNotConfigured: 'Codex requires ChatGPT login',
+    codexRequiresLogin: 'Requires ChatGPT Plus/Pro subscription',
+    codexLoggingIn: 'Opening ChatGPT login...',
+
     provider: 'Provider',
     providerDescription: 'Select the AI service provider',
     baseUrl: 'Base URL',

@@ -133,6 +133,19 @@ export const zh: TranslationKeys = {
   // API Settings
   apiSettings: {
     title: 'API 配置',
+
+    // Agent Type (Claude vs Codex)
+    agentType: 'AI 助手',
+    agentTypeDescription: '选择你的 AI 助手后端',
+    claudeActive: '正在使用 Claude (Anthropic)',
+    claudeDescription: 'Anthropic 的 Claude AI',
+    codexActive: '正在使用 Codex (OpenAI)',
+    codexDescription: 'OpenAI 的 Codex AI',
+    codexConnected: '已连接 ChatGPT',
+    codexNotConfigured: 'Codex 需要登录 ChatGPT',
+    codexRequiresLogin: '需要 ChatGPT Plus/Pro 订阅',
+    codexLoggingIn: '正在打开 ChatGPT 登录...',
+
     provider: '服务商',
     providerDescription: '选择 AI 服务提供商',
     baseUrl: '接口地址',
