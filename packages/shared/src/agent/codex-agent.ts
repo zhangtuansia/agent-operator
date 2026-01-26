@@ -40,26 +40,28 @@ interface CodexEvent {
 }
 
 /**
- * Codex item types
+ * Codex item types (matching @openai/codex-sdk types)
  */
 interface CodexItem {
   id: string;
-  type: 'agent_message' | 'command_execution' | 'file_change' | 'reasoning' | 'mcp_tool_call' | 'web_search' | 'plan_update';
-  status?: 'in_progress' | 'completed' | 'error';
+  type: 'agent_message' | 'command_execution' | 'file_change' | 'reasoning' | 'mcp_tool_call' | 'web_search' | 'todo_list' | 'error';
+  status?: 'in_progress' | 'completed' | 'failed';
   // For agent_message
   text?: string;
   // For command_execution
   command?: string;
-  output?: string;
+  aggregated_output?: string;
   exit_code?: number;
   // For file_change
-  path?: string;
-  action?: 'create' | 'edit' | 'delete';
-  diff?: string;
+  changes?: Array<{ path: string; kind: 'add' | 'delete' | 'update' }>;
   // For mcp_tool_call
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_result?: string;
+  server?: string;
+  tool?: string;
+  arguments?: unknown;
+  result?: { content?: unknown[]; structured_content?: unknown };
+  error?: { message: string };
+  // For web_search
+  query?: string;
 }
 
 /**
@@ -231,13 +233,15 @@ export class CodexAgent {
               break;
 
             case 'file_change':
-              const toolName = item.action === 'create' ? 'Write' :
-                               item.action === 'delete' ? 'Bash' : 'Edit';
+              // Determine tool name from first change's kind
+              const firstChange = item.changes?.[0];
+              const fileToolName = firstChange?.kind === 'add' ? 'Write' :
+                                   firstChange?.kind === 'delete' ? 'Bash' : 'Edit';
               events.push({
                 type: 'tool_start',
-                toolName,
+                toolName: fileToolName,
                 toolUseId,
-                input: { file_path: item.path || '', action: item.action },
+                input: { files: item.changes?.map(c => c.path) || [] },
                 turnId,
               });
               break;
@@ -245,9 +249,9 @@ export class CodexAgent {
             case 'mcp_tool_call':
               events.push({
                 type: 'tool_start',
-                toolName: item.tool_name || 'MCP Tool',
+                toolName: `${item.server}/${item.tool}` || 'MCP Tool',
                 toolUseId,
-                input: item.tool_input || {},
+                input: (item.arguments as Record<string, unknown>) || { _: 'mcp_call' },
                 turnId,
               });
               break;
@@ -257,7 +261,7 @@ export class CodexAgent {
                 type: 'tool_start',
                 toolName: 'WebSearch',
                 toolUseId,
-                input: {},
+                input: { query: item.query || '' },
                 turnId,
               });
               break;
@@ -286,31 +290,37 @@ export class CodexAgent {
               events.push({
                 type: 'tool_result',
                 toolUseId,
-                result: item.output || '',
-                isError: item.status === 'error' || (item.exit_code !== undefined && item.exit_code !== 0),
+                result: item.aggregated_output || '',
+                isError: item.status === 'failed' || (item.exit_code !== undefined && item.exit_code !== 0),
                 input: { command: item.command || '' },
                 turnId,
               });
               break;
 
             case 'file_change':
+              // Format file changes for display
+              const changesDesc = item.changes?.map(c => `${c.kind}: ${c.path}`).join('\n') || 'File changes applied';
               events.push({
                 type: 'tool_result',
                 toolUseId,
-                result: item.diff || `File ${item.action}: ${item.path}`,
-                isError: item.status === 'error',
-                input: { file_path: item.path || '' },
+                result: changesDesc,
+                isError: item.status === 'failed',
+                input: { files: item.changes?.map(c => c.path) || [] },
                 turnId,
               });
               break;
 
             case 'mcp_tool_call':
+              // Extract result from MCP response
+              const mcpResult = item.error?.message ||
+                               (item.result?.content ? JSON.stringify(item.result.content) : '') ||
+                               '';
               events.push({
                 type: 'tool_result',
                 toolUseId,
-                result: item.tool_result || '',
-                isError: item.status === 'error',
-                input: item.tool_input || {},
+                result: mcpResult,
+                isError: item.status === 'failed' || !!item.error,
+                input: (item.arguments as Record<string, unknown>) || { _: 'mcp_call' },
                 turnId,
               });
               break;
