@@ -135,12 +135,12 @@ export const zh: TranslationKeys = {
     title: 'API 配置',
 
     // Agent Type (Claude vs Codex)
-    agentType: 'AI 助手',
-    agentTypeDescription: '选择你的 AI 助手后端',
+    agentType: 'AI Agent',
+    agentTypeDescription: '选择 AI Agent 后端',
     claudeActive: '正在使用 Claude (Anthropic)',
-    claudeDescription: 'Anthropic 的 Claude AI',
+    claudeDescription: 'Anthropic Claude',
     codexActive: '正在使用 Codex (OpenAI)',
-    codexDescription: 'OpenAI 的 Codex AI',
+    codexDescription: 'OpenAI Codex',
     codexConnected: '已连接 ChatGPT',
     codexNotConfigured: 'Codex 需要登录 ChatGPT',
     codexRequiresLogin: '需要 ChatGPT Plus/Pro 订阅',
