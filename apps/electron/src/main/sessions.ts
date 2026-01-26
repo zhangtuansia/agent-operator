@@ -653,7 +653,7 @@ export class SessionManager {
             id: meta.id,
             workspace,
             agent: null,  // Lazy-load agent when needed
-            agentType: getAgentType(),  // Current agent type setting
+            agentType: meta.agentType ?? getAgentType(),  // Use stored type or fallback to current setting
             messages: [],  // Lazy-load messages when needed
             isProcessing: false,
             lastMessageAt: meta.lastUsedAt,
@@ -718,6 +718,7 @@ export class SessionManager {
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
         thinkingLevel: managed.thinkingLevel,
+        agentType: managed.agentType,
         messages: persistableMessages.map(messageToStored),
         tokenUsage: managed.tokenUsage ?? {
           inputTokens: 0,

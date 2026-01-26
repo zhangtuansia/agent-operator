@@ -12,6 +12,7 @@
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@agent-operator/core/types';
+import type { AgentType } from '../config/storage.ts';
 
 /**
  * Todo state for sessions (user-controlled, never automatic)
@@ -84,6 +85,8 @@ export interface SessionConfig {
   model?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Agent type for this session ('claude' or 'codex') */
+  agentType?: AgentType;
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -143,6 +146,8 @@ export interface SessionHeader {
   model?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Agent type for this session ('claude' or 'codex') */
+  agentType?: AgentType;
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -200,4 +205,6 @@ export interface SessionMetadata {
   model?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Agent type for this session ('claude' or 'codex') */
+  agentType?: AgentType;
 }
