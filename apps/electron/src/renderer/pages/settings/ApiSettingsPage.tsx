@@ -23,7 +23,7 @@ import { routes } from '@/lib/navigate'
 import { Eye, EyeOff, Check, Plus } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { CustomModel, AuthType } from '../../../shared/types'
+import type { CustomModel, AuthType, AgentType } from '../../../shared/types'
 
 import {
   SettingsSection,
@@ -160,6 +160,11 @@ export default function ApiSettingsPage() {
   const [customModelDialogOpen, setCustomModelDialogOpen] = useState(false)
   const [editingModel, setEditingModel] = useState<CustomModel | null>(null)
 
+  // Agent type state (Claude vs Codex)
+  const [agentType, setAgentTypeState] = useState<AgentType>('claude')
+  const [isCodexAuthenticated, setIsCodexAuthenticated] = useState(false)
+  const [isCodexLoggingIn, setIsCodexLoggingIn] = useState(false)
+
   // Billing state
   const [authType, setAuthType] = useState<AuthType>('api_key')
   const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
@@ -188,6 +193,14 @@ export default function ApiSettingsPage() {
       }
 
       try {
+        // Load agent type
+        const currentAgentType = await window.electronAPI.getAgentType?.() || 'claude'
+        setAgentTypeState(currentAgentType)
+
+        // Check Codex auth status
+        const codexAuth = await window.electronAPI.checkCodexAuth?.() || false
+        setIsCodexAuthenticated(codexAuth)
+
         const billingInfo = await window.electronAPI.getBillingMethod()
 
         if (billingInfo.provider) {
@@ -260,6 +273,33 @@ export default function ApiSettingsPage() {
     }
     checkExistingToken()
   }, [expandedMethod])
+
+  // Handle agent type change
+  const handleAgentTypeChange = useCallback(async (newAgentType: AgentType) => {
+    if (!window.electronAPI) return
+
+    // If switching to Codex, check if authenticated
+    if (newAgentType === 'codex' && !isCodexAuthenticated) {
+      // Start Codex login flow
+      setIsCodexLoggingIn(true)
+      try {
+        const result = await window.electronAPI.startCodexLogin?.()
+        if (result?.success) {
+          setIsCodexAuthenticated(true)
+          setAgentTypeState('codex')
+          await window.electronAPI.setAgentType?.('codex')
+        }
+      } catch (error) {
+        console.error('Codex login failed:', error)
+      } finally {
+        setIsCodexLoggingIn(false)
+      }
+      return
+    }
+
+    setAgentTypeState(newAgentType)
+    await window.electronAPI.setAgentType?.(newAgentType)
+  }, [isCodexAuthenticated])
 
   // Handle provider change
   const handleProviderChange = useCallback((providerId: string) => {
@@ -507,7 +547,51 @@ export default function ApiSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-6">
-              {/* Billing - Payment Method Selection */}
+              {/* Agent Type Selection (Claude vs Codex) */}
+              <SettingsSection
+                title={t('apiSettings.agentType') || 'AI Agent'}
+                description={t('apiSettings.agentTypeDescription') || 'Choose your AI assistant backend'}
+              >
+                <SettingsCard>
+                  <SettingsMenuSelectRow
+                    label={t('apiSettings.agentType') || 'AI Agent'}
+                    description={
+                      agentType === 'claude'
+                        ? (t('apiSettings.claudeActive') || 'Using Claude (Anthropic)')
+                        : isCodexAuthenticated
+                          ? (t('apiSettings.codexActive') || 'Using Codex (OpenAI)')
+                          : (t('apiSettings.codexNotConfigured') || 'Codex requires ChatGPT login')
+                    }
+                    value={agentType}
+                    onValueChange={(v) => handleAgentTypeChange(v as AgentType)}
+                    options={[
+                      {
+                        value: 'claude',
+                        label: 'Claude (Anthropic)',
+                        description: t('apiSettings.claudeDescription') || 'Claude AI by Anthropic'
+                      },
+                      {
+                        value: 'codex',
+                        label: 'Codex (OpenAI)',
+                        description: isCodexAuthenticated
+                          ? (t('apiSettings.codexConnected') || 'Connected to ChatGPT')
+                          : (t('apiSettings.codexRequiresLogin') || 'Requires ChatGPT Plus/Pro subscription')
+                      },
+                    ]}
+                  />
+                  {isCodexLoggingIn && (
+                    <div className="px-4 pb-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Spinner className="size-4" />
+                        <span>{t('apiSettings.codexLoggingIn') || 'Opening ChatGPT login...'}</span>
+                      </div>
+                    </div>
+                  )}
+                </SettingsCard>
+              </SettingsSection>
+
+              {/* Billing - Payment Method Selection (only show for Claude) */}
+              {agentType === 'claude' && (
               <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
@@ -528,8 +612,11 @@ export default function ApiSettingsPage() {
                   />
                 </SettingsCard>
               </SettingsSection>
+              )}
 
-              {/* Provider Selection */}
+              {/* Provider Selection - only show for Claude */}
+              {agentType === 'claude' && (
+              <SettingsSection title={t('apiSettings.provider')}>
               <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
@@ -545,8 +632,10 @@ export default function ApiSettingsPage() {
                   />
                 </SettingsCard>
               </SettingsSection>
+              )}
 
-              {/* Bedrock Mode Info */}
+              {/* Bedrock Mode Info - only show for Claude */}
+              {agentType === 'claude' && currentProvider === 'bedrock' && (
               {currentProvider === 'bedrock' && (
                 <SettingsSection title={t('apiSettings.providerBedrock')}>
                   <SettingsCard>
@@ -563,8 +652,8 @@ export default function ApiSettingsPage() {
                 </SettingsSection>
               )}
 
-              {/* API Configuration - hide for Bedrock */}
-              {currentProvider !== 'bedrock' && (
+              {/* API Configuration - only show for Claude and hide for Bedrock */}
+              {agentType === 'claude' && currentProvider !== 'bedrock' && (
                 <>
                   <SettingsSection title={t('apiSettings.baseUrl')}>
                     <SettingsCard>

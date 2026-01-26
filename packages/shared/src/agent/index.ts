@@ -1,4 +1,5 @@
 export * from './operator-agent.ts';
+export * from './codex-agent.ts';
 export * from './errors.ts';
 export * from './options.ts';
 

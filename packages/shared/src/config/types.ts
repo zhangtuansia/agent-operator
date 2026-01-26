@@ -12,3 +12,6 @@ export type {
   AuthType,
   OAuthCredentials,
 } from '@agent-operator/core/types';
+
+// Agent type - which AI backend to use
+export type AgentType = 'claude' | 'codex';

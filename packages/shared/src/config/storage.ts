@@ -63,6 +63,11 @@ export interface ProviderConfig {
   customModels?: CustomModelDefinition[];  // User-defined model list
 }
 
+/**
+ * Agent type - which AI backend to use
+ */
+export type AgentType = 'claude' | 'codex';
+
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
@@ -70,6 +75,8 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
+  // Agent type: 'claude' (Anthropic) or 'codex' (OpenAI). Default: 'claude'
+  agentType?: AgentType;
   // Provider configuration (for third-party AI APIs)
   providerConfig?: ProviderConfig;
   // Notifications
@@ -252,6 +259,25 @@ export function setModel(model: string): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.model = model;
+  saveConfig(config);
+}
+
+/**
+ * Get the agent type (claude or codex).
+ * Defaults to 'claude' if not set.
+ */
+export function getAgentType(): AgentType {
+  const config = loadStoredConfig();
+  return config?.agentType ?? 'claude';
+}
+
+/**
+ * Set the agent type (claude or codex).
+ */
+export function setAgentType(agentType: AgentType): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.agentType = agentType;
   saveConfig(config);
 }
 

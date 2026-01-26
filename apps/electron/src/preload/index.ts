@@ -174,6 +174,13 @@ const api: ElectronAPI = {
   updateBillingMethod: (authType: AuthType, credential?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential),
 
+  // Settings - Agent Type (Claude vs Codex)
+  getAgentType: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_AGENT_TYPE),
+  setAgentType: (agentType: 'claude' | 'codex') =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_AGENT_TYPE, agentType),
+  checkCodexAuth: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CHECK_CODEX_AUTH),
+  startCodexLogin: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_START_CODEX_LOGIN),
+
   // Settings - Provider Config
   getStoredConfig: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_STORED_CONFIG),
   updateProviderConfig: (config: { provider: string; baseURL: string; apiFormat: 'anthropic' | 'openai' }) =>

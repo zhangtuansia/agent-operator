@@ -11,7 +11,8 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@agent-operator/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace } from '@agent-operator/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getAgentType, setAgentType, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace, type AgentType } from '@agent-operator/shared/config'
+import { isCodexAuthenticated, startCodexOAuth } from '@agent-operator/shared/auth'
 import { getSessionAttachmentsPath } from '@agent-operator/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@agent-operator/shared/sources'
 import { isValidThinkingLevel } from '@agent-operator/shared/agent/thinking-levels'
@@ -929,6 +930,39 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (authError) {
       ipcLog.error('Failed to reinitialize auth:', authError)
       // Don't fail the whole operation if auth reinit fails
+    }
+  })
+
+  // ============================================================
+  // Settings - Agent Type (Claude vs Codex)
+  // ============================================================
+
+  // Get current agent type
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_AGENT_TYPE, async (): Promise<AgentType> => {
+    return getAgentType()
+  })
+
+  // Set agent type
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_AGENT_TYPE, async (_event, agentType: AgentType) => {
+    setAgentType(agentType)
+    ipcLog.info(`Agent type updated to: ${agentType}`)
+  })
+
+  // Check if Codex is authenticated
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_CHECK_CODEX_AUTH, async (): Promise<boolean> => {
+    return isCodexAuthenticated()
+  })
+
+  // Start Codex login flow
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_START_CODEX_LOGIN, async () => {
+    try {
+      await startCodexOAuth((status) => {
+        ipcLog.info(`Codex OAuth status: ${status}`)
+      })
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Codex login error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' }
     }
   })
 

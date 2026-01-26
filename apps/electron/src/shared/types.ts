@@ -37,8 +37,8 @@ export type {
 // Import and re-export auth types for onboarding
 // Use types-only subpaths to avoid pulling in Node.js dependencies
 import type { AuthState, SetupNeeds } from '@agent-operator/shared/auth/types';
-import type { AuthType } from '@agent-operator/shared/config/types';
-export type { AuthState, SetupNeeds, AuthType };
+import type { AuthType, AgentType } from '@agent-operator/shared/config/types';
+export type { AuthState, SetupNeeds, AuthType, AgentType };
 
 // Import source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@agent-operator/shared/sources/types';
@@ -550,6 +550,12 @@ export const IPC_CHANNELS = {
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
+
+  // Settings - Agent Type (Claude vs Codex)
+  SETTINGS_GET_AGENT_TYPE: 'settings:getAgentType',
+  SETTINGS_SET_AGENT_TYPE: 'settings:setAgentType',
+  SETTINGS_CHECK_CODEX_AUTH: 'settings:checkCodexAuth',
+  SETTINGS_START_CODEX_LOGIN: 'settings:startCodexLogin',
 
   // Settings - Provider Config
   SETTINGS_GET_STORED_CONFIG: 'settings:getStoredConfig',

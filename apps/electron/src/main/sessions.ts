@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
-import { OperatorAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { OperatorAgent, CodexAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -12,7 +12,9 @@ import {
   getWorkspaceByNameOrId,
   loadConfigDefaults,
   getProviderConfig,
+  getAgentType,
   type Workspace,
+  type AgentType,
 } from '@agent-operator/shared/config'
 import { loadWorkspaceConfig } from '@agent-operator/shared/workspaces'
 import {
@@ -122,10 +124,14 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   return result
 }
 
+// Agent type union - supports both Claude (OperatorAgent) and Codex (CodexAgent)
+type Agent = OperatorAgent | CodexAgent
+
 interface ManagedSession {
   id: string
   workspace: Workspace
-  agent: OperatorAgent | null  // Lazy-loaded - null until first message
+  agent: Agent | null  // Lazy-loaded - null until first message
+  agentType: AgentType  // Which agent backend to use
   messages: Message[]
   isProcessing: boolean
   lastMessageAt: number
@@ -647,6 +653,7 @@ export class SessionManager {
             id: meta.id,
             workspace,
             agent: null,  // Lazy-load agent when needed
+            agentType: getAgentType(),  // Current agent type setting
             messages: [],  // Lazy-load messages when needed
             isProcessing: false,
             lastMessageAt: meta.lastUsedAt,
@@ -1181,6 +1188,7 @@ export class SessionManager {
       id: storedSession.id,
       workspace,
       agent: null,  // Lazy-load agent on first message
+      agentType: getAgentType(),  // Current agent type setting
       messages: [],
       isProcessing: false,
       lastMessageAt: storedSession.lastUsedAt,
@@ -1221,11 +1229,41 @@ export class SessionManager {
 
   /**
    * Get or create agent for a session (lazy loading)
+   * Supports both Claude (OperatorAgent) and Codex (CodexAgent) based on agentType
    */
-  private async getOrCreateAgent(managed: ManagedSession): Promise<OperatorAgent> {
+  private async getOrCreateAgent(managed: ManagedSession): Promise<Agent> {
     if (!managed.agent) {
-      const end = perf.start('agent.create', { sessionId: managed.id })
+      const end = perf.start('agent.create', { sessionId: managed.id, agentType: managed.agentType })
       const config = loadStoredConfig()
+
+      // Create agent based on type
+      if (managed.agentType === 'codex') {
+        // Create Codex agent (OpenAI)
+        managed.agent = new CodexAgent({
+          workingDirectory: managed.workingDirectory || managed.workspace.rootPath,
+          sessionId: managed.sdkSessionId,
+          skipGitRepoCheck: true,
+        })
+        sessionLog.info(`Created Codex agent for session ${managed.id}`)
+
+        // Set up permission handler (Codex handles permissions internally, but we forward for UI)
+        managed.agent.onPermissionRequest = (request) => {
+          sessionLog.info(`Permission request for session ${managed.id}:`, request.command)
+          this.sendEvent({
+            type: 'permission_request',
+            sessionId: managed.id,
+            request: {
+              ...request,
+              sessionId: managed.id,
+            }
+          }, managed.workspace.id)
+        }
+
+        end()
+        return managed.agent
+      }
+
+      // Create Claude agent (Anthropic) - default
       managed.agent = new OperatorAgent({
         workspace: managed.workspace,
         // Session model takes priority, fallback to global config
@@ -1282,7 +1320,7 @@ export class SessionManager {
           logFilePath: getLogFilePath(),
         } : undefined,
       })
-      sessionLog.info(`Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request) => {
