@@ -547,29 +547,35 @@ export default function ApiSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-6">
-              {/* Agent Type Selection (Claude vs Codex) */}
-              <SettingsSection
-                title={t('apiSettings.agentType') || 'AI Agent'}
-                description={t('apiSettings.agentTypeDescription') || 'Choose your AI assistant backend'}
-              >
+              {/* Billing - Payment Method Selection */}
+              <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label={t('apiSettings.agentType') || 'AI Agent'}
+                    label={t('appSettings.paymentMethod')}
                     description={
-                      agentType === 'claude'
-                        ? (t('apiSettings.claudeActive') || 'Using Claude (Anthropic)')
-                        : isCodexAuthenticated
-                          ? (t('apiSettings.codexActive') || 'Using Codex (OpenAI)')
-                          : (t('apiSettings.codexNotConfigured') || 'Codex requires ChatGPT login')
+                      agentType === 'codex'
+                        ? (isCodexAuthenticated ? (t('apiSettings.codexConnected') || 'Connected to ChatGPT') : (t('apiSettings.codexNotConfigured') || 'Codex requires login'))
+                        : authType === 'api_key' && hasCredential
+                          ? t('appSettings.apiKeyConfigured')
+                          : authType === 'oauth_token' && hasCredential
+                            ? t('appSettings.claudeConnected')
+                            : t('appSettings.selectMethod')
                     }
-                    value={agentType}
-                    onValueChange={(v) => handleAgentTypeChange(v as AgentType)}
+                    value={agentType === 'codex' ? 'codex' : authType}
+                    onValueChange={(v) => {
+                      if (v === 'codex') {
+                        handleAgentTypeChange('codex')
+                      } else {
+                        // Switch back to Claude if selecting Claude auth methods
+                        if (agentType === 'codex') {
+                          handleAgentTypeChange('claude')
+                        }
+                        handleMethodClick(v as AuthType)
+                      }
+                    }}
                     options={[
-                      {
-                        value: 'claude',
-                        label: 'Claude (Anthropic)',
-                        description: t('apiSettings.claudeDescription') || 'Claude AI by Anthropic'
-                      },
+                      { value: 'oauth_token', label: t('appSettings.claudeProMax'), description: t('appSettings.claudeProMaxDesc') },
+                      { value: 'api_key', label: t('appSettings.apiKey'), description: t('appSettings.apiKeyDesc') },
                       {
                         value: 'codex',
                         label: 'Codex (OpenAI)',
@@ -590,32 +596,8 @@ export default function ApiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
-              {/* Billing - Payment Method Selection (only show for Claude) */}
-              {agentType === 'claude' && (
-              <SettingsSection title={t('appSettings.billing')} description={t('appSettings.billingDescription')}>
-                <SettingsCard>
-                  <SettingsMenuSelectRow
-                    label={t('appSettings.paymentMethod')}
-                    description={
-                      authType === 'api_key' && hasCredential
-                        ? t('appSettings.apiKeyConfigured')
-                        : authType === 'oauth_token' && hasCredential
-                          ? t('appSettings.claudeConnected')
-                          : t('appSettings.selectMethod')
-                    }
-                    value={authType}
-                    onValueChange={(v) => handleMethodClick(v as AuthType)}
-                    options={[
-                      { value: 'oauth_token', label: t('appSettings.claudeProMax'), description: t('appSettings.claudeProMaxDesc') },
-                      { value: 'api_key', label: t('appSettings.apiKey'), description: t('appSettings.apiKeyDesc') },
-                    ]}
-                  />
-                </SettingsCard>
-              </SettingsSection>
-              )}
-
-              {/* Provider Selection - only show for Claude */}
-              {agentType === 'claude' && (
+              {/* Provider Selection - only show for Claude (not Codex) */}
+              {agentType !== 'codex' && (
               <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
@@ -634,7 +616,7 @@ export default function ApiSettingsPage() {
               )}
 
               {/* Bedrock Mode Info - only show for Claude */}
-              {agentType === 'claude' && currentProvider === 'bedrock' && (
+              {agentType !== 'codex' && currentProvider === 'bedrock' && (
                 <SettingsSection title={t('apiSettings.providerBedrock')}>
                   <SettingsCard>
                     <SettingsRow
@@ -651,7 +633,7 @@ export default function ApiSettingsPage() {
               )}
 
               {/* API Configuration - only show for Claude and hide for Bedrock */}
-              {agentType === 'claude' && currentProvider !== 'bedrock' && (
+              {agentType !== 'codex' && currentProvider !== 'bedrock' && (
                 <>
                   <SettingsSection title={t('apiSettings.baseUrl')}>
                     <SettingsCard>
