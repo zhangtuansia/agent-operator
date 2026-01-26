@@ -123,7 +123,7 @@ export async function startCodexOAuth(
   onStatus?.('Opening browser for ChatGPT login...');
 
   // Codex CLI handles OAuth internally via `codex login`
-  // We spawn the login command which opens the browser
+  // We spawn the login command and capture output (stdio: 'inherit' doesn't work in Electron)
   const { spawn } = await import('child_process');
 
   return new Promise((resolve, reject) => {
@@ -150,8 +150,41 @@ export async function startCodexOAuth(
     onStatus?.('Starting Codex login...');
 
     const loginProcess = spawn(codexPath, ['login'], {
-      stdio: 'inherit', // Show output to user
+      stdio: ['ignore', 'pipe', 'pipe'], // Capture stdout/stderr for Electron compatibility
       shell: true,
+    });
+
+    let outputBuffer = '';
+
+    // Capture stdout - may contain login URL
+    loginProcess.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      outputBuffer += text;
+      debug('[CodexAuth] stdout:', text);
+
+      // Try to extract and open any URL in the output
+      const urlMatch = text.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        const url = urlMatch[0];
+        debug('[CodexAuth] Found URL, opening:', url);
+        onStatus?.('Opening login page in browser...');
+        open(url);
+      }
+    });
+
+    // Capture stderr
+    loginProcess.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      debug('[CodexAuth] stderr:', text);
+
+      // Some CLIs output the URL to stderr
+      const urlMatch = text.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        const url = urlMatch[0];
+        debug('[CodexAuth] Found URL in stderr, opening:', url);
+        onStatus?.('Opening login page in browser...');
+        open(url);
+      }
     });
 
     loginProcess.on('close', (code) => {
@@ -159,6 +192,7 @@ export async function startCodexOAuth(
         onStatus?.('Login successful!');
         resolve();
       } else {
+        debug('[CodexAuth] Login failed with code:', code, 'output:', outputBuffer);
         reject(new Error(`Codex login failed with code ${code}`));
       }
     });

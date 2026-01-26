@@ -75,6 +75,7 @@ export class CodexAgent {
   // Callbacks matching OperatorAgent interface
   public onPermissionRequest: ((request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' }) => void) | null = null;
   public onDebug: ((message: string) => void) | null = null;
+  public onThreadIdUpdate: ((threadId: string) => void) | null = null;
 
   constructor(config: CodexAgentConfig) {
     this.config = config;
@@ -144,7 +145,12 @@ export class CodexAgent {
         for (const agentEvent of agentEvents) {
           // Capture thread ID from thread.started event
           if (event.type === 'thread.started' && (event as CodexEvent).thread_id) {
-            this.threadId = (event as CodexEvent).thread_id!;
+            const newThreadId = (event as CodexEvent).thread_id!;
+            if (newThreadId !== this.threadId) {
+              this.threadId = newThreadId;
+              // Notify listener so session can persist the thread ID
+              this.onThreadIdUpdate?.(newThreadId);
+            }
           }
 
           // Capture turn ID

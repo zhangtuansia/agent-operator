@@ -1240,15 +1240,16 @@ export class SessionManager {
       // Create agent based on type
       if (managed.agentType === 'codex') {
         // Create Codex agent (OpenAI)
-        managed.agent = new CodexAgent({
+        const codexAgent = new CodexAgent({
           workingDirectory: managed.workingDirectory || managed.workspace.rootPath,
           sessionId: managed.sdkSessionId,
           skipGitRepoCheck: true,
         })
+        managed.agent = codexAgent
         sessionLog.info(`Created Codex agent for session ${managed.id}`)
 
         // Set up permission handler (Codex handles permissions internally, but we forward for UI)
-        managed.agent.onPermissionRequest = (request) => {
+        codexAgent.onPermissionRequest = (request) => {
           sessionLog.info(`Permission request for session ${managed.id}:`, request.command)
           this.sendEvent({
             type: 'permission_request',
@@ -1258,6 +1259,14 @@ export class SessionManager {
               sessionId: managed.id,
             }
           }, managed.workspace.id)
+        }
+
+        // Capture thread ID after chat starts (for session resume)
+        codexAgent.onThreadIdUpdate = (threadId: string) => {
+          managed.sdkSessionId = threadId
+          sessionLog.info(`Codex thread ID captured for ${managed.id}: ${threadId}`)
+          this.persistSession(managed)
+          sessionPersistenceQueue.flush(managed.id)
         }
 
         end()
