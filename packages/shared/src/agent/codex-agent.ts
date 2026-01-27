@@ -5,7 +5,19 @@
  * allowing users to choose between Claude (Anthropic) and Codex (OpenAI) as their AI backend.
  */
 
-import { Codex, type Thread } from '@openai/codex-sdk';
+// Dynamic import for ESM-only @openai/codex-sdk (needed for CJS compatibility in Electron main process)
+type CodexModule = typeof import('@openai/codex-sdk');
+type Codex = InstanceType<CodexModule['Codex']>;
+type Thread = Awaited<ReturnType<Codex['startThread']>>;
+
+let codexModule: CodexModule | null = null;
+async function getCodexModule(): Promise<CodexModule> {
+  if (!codexModule) {
+    codexModule = await import('@openai/codex-sdk');
+  }
+  return codexModule;
+}
+
 import type { AgentEvent, AgentEventUsage } from '@agent-operator/core/types';
 import { debug } from '../utils/debug.ts';
 
@@ -69,7 +81,7 @@ interface CodexItem {
  */
 export class CodexAgent {
   private config: CodexAgentConfig;
-  private codex: Codex;
+  private codex: Codex | null = null;
   private thread: Thread | null = null;
   private currentAbortController: AbortController | null = null;
   private threadId: string | null = null;
@@ -83,14 +95,21 @@ export class CodexAgent {
     this.config = config;
     this.threadId = config.sessionId ?? null;
 
-    // Initialize Codex SDK
-    // SDK automatically reads credentials from ~/.codex/auth.json
-    this.codex = new Codex();
-
     debug('[CodexAgent] Initialized with config:', {
       workingDirectory: config.workingDirectory,
       sessionId: config.sessionId,
     });
+  }
+
+  /**
+   * Initialize Codex SDK lazily (needed for ESM dynamic import)
+   */
+  private async ensureCodex(): Promise<Codex> {
+    if (!this.codex) {
+      const { Codex } = await getCodexModule();
+      this.codex = new Codex();
+    }
+    return this.codex;
   }
 
   /**
@@ -108,16 +127,19 @@ export class CodexAgent {
     try {
       debug('[CodexAgent] Starting chat:', userMessage.substring(0, 100));
 
+      // Ensure Codex SDK is loaded (dynamic import for ESM compatibility)
+      const codex = await this.ensureCodex();
+
       // Create or resume thread
       if (!this.thread) {
         if (this.threadId) {
           // Resume existing thread
           debug('[CodexAgent] Resuming thread:', this.threadId);
-          this.thread = await this.codex.resumeThread(this.threadId);
+          this.thread = await codex.resumeThread(this.threadId);
         } else {
           // Start new thread
           debug('[CodexAgent] Starting new thread');
-          this.thread = await this.codex.startThread({
+          this.thread = await codex.startThread({
             workingDirectory: this.config.workingDirectory,
             skipGitRepoCheck: this.config.skipGitRepoCheck ?? false,
           });

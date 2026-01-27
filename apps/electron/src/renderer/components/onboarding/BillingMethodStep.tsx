@@ -8,6 +8,7 @@ import { ProviderLogo } from "@/components/icons/ProviderLogo"
 export type BillingMethod =
   | 'api_key'
   | 'claude_oauth'
+  | 'codex'
   | 'minimax'
   | 'glm'
   | 'deepseek'
@@ -29,13 +30,18 @@ const PRIMARY_OPTIONS: BillingOption[] = [
     recommended: true,
   },
   {
-    id: 'api_key',
-    nameKey: 'billingMethods.anthropicApiKey',
+    id: 'codex',
+    nameKey: 'billingMethods.codex',
     useLogo: true,
   },
 ]
 
 const MORE_OPTIONS: BillingOption[] = [
+  {
+    id: 'api_key',
+    nameKey: 'billingMethods.anthropicApiKey',
+    useLogo: true,
+  },
   {
     id: 'minimax',
     nameKey: 'billingMethods.minimax',

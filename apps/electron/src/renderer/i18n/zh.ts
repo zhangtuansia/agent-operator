@@ -849,6 +849,7 @@ export const zh: TranslationKeys = {
     moreOptions: '更多选项',
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API 密钥',
+    codex: 'Codex (OpenAI)',
     awsBedrock: 'AWS Bedrock',
     openrouter: 'OpenRouter',
     vercel: 'Vercel AI Gateway',

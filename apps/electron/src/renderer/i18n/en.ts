@@ -858,6 +858,7 @@ export const en = {
     moreOptions: 'More options',
     claudeProMax: 'Claude Pro / Max',
     anthropicApiKey: 'Anthropic API Key',
+    codex: 'Codex (OpenAI)',
     awsBedrock: 'AWS Bedrock',
     openrouter: 'OpenRouter',
     vercel: 'Vercel AI Gateway',

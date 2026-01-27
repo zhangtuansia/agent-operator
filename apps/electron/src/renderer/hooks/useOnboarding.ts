@@ -64,6 +64,7 @@ function billingMethodToAuthType(method: BillingMethod): AuthType {
   switch (method) {
     case 'api_key': return 'api_key'
     case 'claude_oauth': return 'oauth_token'
+    case 'codex': return 'api_key' // Codex uses its own auth system
     case 'minimax':
     case 'glm':
     case 'deepseek':
@@ -134,6 +135,36 @@ export function useOnboarding({
         break
 
       case 'billing-method':
+        // Handle Codex specially - trigger login flow directly
+        if (state.billingMethod === 'codex') {
+          setState(s => ({ ...s, credentialStatus: 'validating' }))
+          try {
+            const result = await window.electronAPI.startCodexLogin?.()
+            if (result?.success) {
+              // Set agent type to codex
+              await window.electronAPI.setAgentType?.('codex')
+              setState(s => ({
+                ...s,
+                credentialStatus: 'success',
+                completionStatus: 'complete',
+                step: 'complete',
+              }))
+            } else {
+              setState(s => ({
+                ...s,
+                credentialStatus: 'error',
+                errorMessage: result?.error || 'Codex login failed',
+              }))
+            }
+          } catch (error) {
+            setState(s => ({
+              ...s,
+              credentialStatus: 'error',
+              errorMessage: error instanceof Error ? error.message : 'Codex login failed',
+            }))
+          }
+          return
+        }
         // Go to credentials step for API Key or Claude OAuth
         setState(s => ({ ...s, step: 'credentials' }))
         break

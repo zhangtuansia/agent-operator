@@ -23,6 +23,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   anthropic: claudeLogo,
   claude_oauth: claudeLogo,
   api_key: claudeLogo,
+  codex: openaiLogo,
   deepseek: deepseekLogo,
   minimax: minimaxLogo,
   openai: openaiLogo,

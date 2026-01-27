@@ -372,6 +372,14 @@ export default function ApiSettingsPage() {
       return
     }
 
+    // For api_key, just switch the auth type without showing dialog
+    // The actual API key configuration is done in the provider section
+    if (method === 'api_key') {
+      setAuthType('api_key')
+      setExpandedMethod(null)
+      return
+    }
+
     setExpandedMethod(method)
     setApiKeyError(undefined)
     setClaudeOAuthStatus('idle')
