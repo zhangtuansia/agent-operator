@@ -17,6 +17,9 @@ export type ErrorCode =
   | 'mcp_auth_required'
   | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
   | 'billing_error'          // HTTP 402 Payment Required
+  | 'model_no_tool_support'  // Model doesn't support tool/function calling
+  | 'invalid_model'          // Model ID not found
+  | 'data_policy_error'      // OpenRouter data policy restriction
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -144,6 +147,30 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     message: 'Your account has a billing issue. Check your Anthropic account status.',
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
+    ],
+    canRetry: false,
+  },
+  model_no_tool_support: {
+    title: 'Model Does Not Support Tools',
+    message: 'The selected model does not support tool/function calling. Please select a different model.',
+    actions: [
+      { key: 's', label: 'Change model', command: '/settings', action: 'settings' },
+    ],
+    canRetry: false,
+  },
+  invalid_model: {
+    title: 'Invalid Model',
+    message: 'The specified model ID was not found. Please select a valid model.',
+    actions: [
+      { key: 's', label: 'Change model', command: '/settings', action: 'settings' },
+    ],
+    canRetry: false,
+  },
+  data_policy_error: {
+    title: 'Data Policy Restriction',
+    message: 'The request was blocked due to data policy restrictions from the model provider.',
+    actions: [
+      { key: 's', label: 'Check settings', command: '/settings', action: 'settings' },
     ],
     canRetry: false,
   },

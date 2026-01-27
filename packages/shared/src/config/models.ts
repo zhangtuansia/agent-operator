@@ -68,17 +68,16 @@ export const GLM_MODELS: ModelDefinition[] = [
   { id: 'glm-4-flash', name: 'GLM-4 Flash', shortName: 'GLM-4 Flash', description: 'Free tier model', pricing: DEFAULT_PRICING['glm-4-flash'] },
 ];
 
-// MiniMax models
+// MiniMax models (2025 - M2.1 series)
 export const MINIMAX_MODELS: ModelDefinition[] = [
-  { id: 'abab6.5s-chat', name: 'ABAB 6.5s', shortName: 'ABAB 6.5s', description: 'Most capable' },
-  { id: 'abab6.5g-chat', name: 'ABAB 6.5g', shortName: 'ABAB 6.5g', description: 'General purpose' },
-  { id: 'abab5.5-chat', name: 'ABAB 5.5', shortName: 'ABAB 5.5', description: 'Fast & efficient' },
+  { id: 'MiniMax-M2.1', name: 'MiniMax M2.1', shortName: 'M2.1', description: 'Latest flagship (229B), SOTA coding & agents', pricing: PRICING_MINIMAX },
+  { id: 'MiniMax-M2', name: 'MiniMax M2', shortName: 'M2', description: 'Previous generation', pricing: PRICING_MINIMAX },
 ];
 
-// DeepSeek models
+// DeepSeek models (2025 - V3.2 series, 671B MoE)
 export const DEEPSEEK_MODELS: ModelDefinition[] = [
-  { id: 'deepseek-chat', name: 'DeepSeek Chat', shortName: 'DeepSeek', description: 'General chat model', pricing: DEFAULT_PRICING.deepseek },
-  { id: 'deepseek-coder', name: 'DeepSeek Coder', shortName: 'Coder', description: 'Optimized for coding', pricing: DEFAULT_PRICING.deepseek },
+  { id: 'deepseek-chat', name: 'DeepSeek V3.2', shortName: 'V3.2', description: 'Latest flagship (non-thinking mode)', pricing: DEFAULT_PRICING.deepseek },
+  { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', shortName: 'Reasoner', description: 'V3.2 thinking mode with tool-use', pricing: DEFAULT_PRICING.deepseek },
 ];
 
 // AWS Bedrock models (Claude via Bedrock)
@@ -88,22 +87,25 @@ export const BEDROCK_MODELS: ModelDefinition[] = [
   { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
 
-// OpenRouter models (uses provider/model-name format)
+// OpenRouter models (uses provider/model-name format, 2025 updated)
 export const OPENROUTER_MODELS: ModelDefinition[] = [
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', shortName: 'Sonnet 3.5', description: 'Via OpenRouter' },
-  { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku', shortName: 'Haiku 3.5', description: 'Via OpenRouter' },
-  { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', shortName: 'Opus 3', description: 'Via OpenRouter' },
+  { id: 'anthropic/claude-opus-4.5', name: 'Claude Opus 4.5', shortName: 'Opus 4.5', description: 'Frontier reasoning model ($5/$25 per 1M)' },
+  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', shortName: 'Sonnet 4.5', description: 'Advanced Sonnet ($3/$15 per 1M)' },
+  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', shortName: 'Haiku 4.5', description: 'Fastest model, near-frontier' },
+  { id: 'anthropic/claude-opus-4', name: 'Claude Opus 4', shortName: 'Opus 4', description: 'World best coding model' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', shortName: 'Sonnet 4', description: 'Balanced performance' },
   { id: 'openai/gpt-4o', name: 'GPT-4o', shortName: 'GPT-4o', description: 'OpenAI via OpenRouter' },
-  { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', shortName: 'Gemini', description: 'Google via OpenRouter' },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', shortName: 'Gemini 2.5', description: 'Google via OpenRouter' },
 ];
 
-// Ollama models (local models - free)
+// Ollama models (local models - free, 2025 updated)
 export const OLLAMA_MODELS: ModelDefinition[] = [
-  { id: 'llama3.2', name: 'Llama 3.2', shortName: 'Llama', description: 'Meta Llama 3.2', pricing: DEFAULT_PRICING.ollama },
-  { id: 'llama3.2:70b', name: 'Llama 3.2 70B', shortName: 'Llama 70B', description: 'Large Llama model', pricing: DEFAULT_PRICING.ollama },
+  { id: 'llama4:scout', name: 'Llama 4 Scout', shortName: 'Llama 4', description: 'Meta Llama 4 multimodal', pricing: DEFAULT_PRICING.ollama },
+  { id: 'llama4:maverick', name: 'Llama 4 Maverick', shortName: 'Llama 4 Mav', description: 'Llama 4 advanced variant', pricing: DEFAULT_PRICING.ollama },
+  { id: 'qwen3', name: 'Qwen 3', shortName: 'Qwen 3', description: 'Alibaba Qwen 3 (235B MoE flagship)', pricing: DEFAULT_PRICING.ollama },
+  { id: 'qwen3:30b', name: 'Qwen 3 30B', shortName: 'Qwen 3 30B', description: 'Qwen 3 efficient MoE', pricing: DEFAULT_PRICING.ollama },
+  { id: 'deepseek-r1:32b', name: 'DeepSeek R1 32B', shortName: 'DS-R1', description: 'DeepSeek reasoning model', pricing: DEFAULT_PRICING.ollama },
   { id: 'mistral', name: 'Mistral', shortName: 'Mistral', description: 'Mistral AI', pricing: DEFAULT_PRICING.ollama },
-  { id: 'codellama', name: 'Code Llama', shortName: 'CodeLlama', description: 'Optimized for code', pricing: DEFAULT_PRICING.ollama },
-  { id: 'qwen2.5', name: 'Qwen 2.5', shortName: 'Qwen', description: 'Alibaba Qwen', pricing: DEFAULT_PRICING.ollama },
 ];
 
 // Vercel AI Gateway models (proxies Claude models)
@@ -130,12 +132,12 @@ export const DEFAULT_PROVIDER_MODEL: Record<string, string> = {
   api_key: 'claude-sonnet-4-5-20250929',
   claude_oauth: 'claude-sonnet-4-5-20250929',
   glm: 'glm-4.7',
-  minimax: 'abab6.5s-chat',
+  minimax: 'MiniMax-M2.1',
   deepseek: 'deepseek-chat',
   bedrock: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-  openrouter: 'anthropic/claude-3.5-sonnet',
+  openrouter: 'anthropic/claude-sonnet-4.5',
   vercel: 'claude-sonnet-4-5-20250929',
-  ollama: 'llama3.2',
+  ollama: 'llama4:scout',
   custom: 'claude-sonnet-4-5-20250929',
 };
 

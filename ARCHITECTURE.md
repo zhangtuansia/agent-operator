@@ -175,7 +175,7 @@ agent-operators-oss/
 
 ```json
 {
-  "@anthropic-ai/claude-agent-sdk": "^0.2.12",  // 核心 Agent SDK
+  "@anthropic-ai/claude-agent-sdk": "^0.2.19",  // 核心 Agent SDK
   "@anthropic-ai/sdk": ">=0.70.0",              // Claude API 客户端
   "@modelcontextprotocol/sdk": ">=1.0.0"        // MCP 协议支持
 }
@@ -186,7 +186,7 @@ agent-operators-oss/
 | 层级 | 技术 | 版本 |
 |------|------|------|
 | 运行时 | Bun | - |
-| AI | Claude Agent SDK | 0.2.12 |
+| AI | Claude Agent SDK | 0.2.20 |
 | 桌面框架 | Electron | 39.2.7 |
 | 前端框架 | React | 18.3.1 |
 | 类型系统 | TypeScript | 5.0.0 |

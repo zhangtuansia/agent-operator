@@ -47,6 +47,21 @@ export type AuthStatus = 'pending' | 'completed' | 'cancelled' | 'failed';
 export type ToolStatus = 'pending' | 'executing' | 'completed' | 'error' | 'backgrounded';
 
 /**
+ * Tool display metadata - embedded at storage time for viewer compatibility
+ * Icons are base64-encoded to work in both Electron and web viewer
+ */
+export interface ToolDisplayMeta {
+  /** Display name for the tool (e.g., "Commit", "Linear") */
+  displayName: string;
+  /** Base64-encoded icon as data URL (e.g., "data:image/png;base64,...") - 32x32px */
+  iconDataUrl?: string;
+  /** Description of what this tool does */
+  description?: string;
+  /** Category for grouping/styling */
+  category?: 'skill' | 'source' | 'native' | 'mcp';
+}
+
+/**
  * Attachment type categories
  */
 export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'unknown';
@@ -68,7 +83,7 @@ export interface MessageAttachment {
  */
 export interface ContentBadge {
   /** Badge type - used for fallback icon if iconBase64 not available */
-  type: 'source' | 'skill' | 'context' | 'command' | 'file';
+  type: 'source' | 'skill' | 'context' | 'command' | 'file' | 'folder';
   /** Display label (e.g., "Linear", "Commit") */
   label: string;
   /** Original text pattern (e.g., "@linear", "@commit") */
@@ -128,6 +143,8 @@ export interface Message {
   toolDuration?: number;
   toolIntent?: string;
   toolDisplayName?: string;
+  /** Tool display metadata with base64 icon - embedded at storage time for viewer */
+  toolDisplayMeta?: ToolDisplayMeta;
   // Parent tool ID for nested tool calls (e.g., child tools inside Task subagent)
   parentToolUseId?: string;
   // Background task fields
@@ -180,6 +197,7 @@ export interface Message {
   };
   authDescription?: string;       // Description/instructions
   authHint?: string;              // Hint about where to find credentials
+  authSourceUrl?: string;         // Source URL for password manager domain matching (1Password)
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
@@ -203,6 +221,8 @@ export interface StoredMessage {
   toolDuration?: number;
   toolIntent?: string;
   toolDisplayName?: string;
+  /** Tool display metadata with base64 icon - embedded at storage time for viewer */
+  toolDisplayMeta?: ToolDisplayMeta;
   // Parent tool ID for nested tool calls (persisted for session restore)
   parentToolUseId?: string;
   // Background task fields (persisted)
@@ -245,6 +265,7 @@ export interface StoredMessage {
   };
   authDescription?: string;
   authHint?: string;
+  authSourceUrl?: string;
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
@@ -292,6 +313,9 @@ export type ErrorCode =
   | 'mcp_auth_required'
   | 'mcp_unreachable'
   | 'billing_error'
+  | 'model_no_tool_support'  // Model doesn't support tool/function calling
+  | 'invalid_model'          // Model ID not found
+  | 'data_policy_error'      // OpenRouter data policy restriction
   | 'unknown_error';
 
 /**
@@ -350,7 +374,7 @@ export type AgentEvent =
   | { type: 'info'; message: string }
   | { type: 'text_delta'; text: string; turnId?: string }
   | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
-  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
   | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | { type: 'parent_update'; toolUseId: string; parentToolUseId: string }
   | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
