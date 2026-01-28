@@ -2293,14 +2293,44 @@ export class SessionManager {
         sessionLog.info('Attachments:', attachments.length)
       }
 
-      // Skills mentioned via @mentions are handled by the Agent SDK's Skill tool
-      // The @skill-name text remains in the message for the agent to process
+      // Inject skill content into message when skills are mentioned via @mentions
+      // This ensures Claude receives the skill instructions in context
+      let finalMessage = message
       if (options?.skillSlugs?.length) {
         sessionLog.info(`Message contains ${options.skillSlugs.length} skill mention(s): ${options.skillSlugs.join(', ')}`)
+
+        // Load skill content for each mentioned skill
+        const { loadSkill } = await import('@agent-operator/shared/skills')
+        const skillContents: string[] = []
+
+        for (const slug of options.skillSlugs) {
+          const skill = loadSkill(workspaceRootPath, slug)
+          if (skill && skill.content) {
+            skillContents.push(`<skill name="${skill.metadata.name}" slug="${slug}">
+${skill.content}
+</skill>`)
+            sessionLog.info(`Loaded skill content for: ${slug} (${skill.metadata.name})`)
+          } else {
+            sessionLog.warn(`Could not load skill: ${slug}`)
+          }
+        }
+
+        // Prepend skill context to the message
+        if (skillContents.length > 0) {
+          const skillContext = `<skill_context>
+The user has activated the following skill(s) for this message. Follow these instructions:
+
+${skillContents.join('\n\n')}
+</skill_context>
+
+`
+          finalMessage = skillContext + message
+          sessionLog.info(`Injected ${skillContents.length} skill(s) into message context`)
+        }
       }
 
       sendSpan.mark('chat.starting')
-      const chatIterator = agent.chat(message, attachments)
+      const chatIterator = agent.chat(finalMessage, attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
