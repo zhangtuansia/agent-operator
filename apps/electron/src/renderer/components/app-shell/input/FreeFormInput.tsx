@@ -256,7 +256,7 @@ export function FreeFormInput({
   // Custom models for 'custom' provider
   const [customModels, setCustomModels] = React.useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
 
-  // Load provider info on mount and when provider changes
+  // Load provider info on mount
   const loadProvider = React.useCallback(async () => {
     if (!window.electronAPI) return
     try {
@@ -277,8 +277,29 @@ export function FreeFormInput({
     loadProvider()
 
     // Listen for provider changes from API settings
-    const handleProviderChange = () => {
-      loadProvider()
+    // Use event detail directly to avoid extra IPC call
+    const handleProviderChange = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ provider: string }>
+      const newProvider = customEvent.detail?.provider
+
+      if (newProvider) {
+        setCurrentProvider(newProvider)
+
+        // Load custom models if using custom provider
+        if (newProvider === 'custom') {
+          try {
+            const models = await window.electronAPI.getCustomModels()
+            setCustomModels(models || [])
+          } catch {
+            // Ignore errors
+          }
+        } else {
+          setCustomModels([])
+        }
+      } else {
+        // Fallback to full reload if no provider in event
+        loadProvider()
+      }
     }
     window.addEventListener('cowork:provider-changed', handleProviderChange)
     return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)

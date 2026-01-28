@@ -101,16 +101,16 @@ Use `generateMessageId()` for consistent ID format:
 const id = generateMessageId(); // "msg-1702736400000-a1b2c3"
 ```
 
-## Future Migration
+## Architecture Notes
 
-This package is designed to eventually contain more than just types. The migration plan:
+The monorepo uses a layered architecture:
 
-1. **Current:** Types only, implementation in root `src/`
-2. **Phase 2:** Move storage logic to `@agent-operator/core`
-3. **Phase 3:** Move auth, credentials, MCP client
-4. **Phase 4:** Move agent logic, prompts
+- **@agent-operator/core** - Pure types, no dependencies
+- **@agent-operator/shared** - Business logic (agent, auth, config, IPC, routing)
+- **@agent-operator/ui** - React components
+- **apps/electron** - Electron app, imports from packages
 
-Apps would then import from workspace packages instead of relative paths.
+Most business logic has been migrated to `@agent-operator/shared`. The `core` package remains types-only to avoid circular dependencies.
 
 ## Peer Dependencies
 

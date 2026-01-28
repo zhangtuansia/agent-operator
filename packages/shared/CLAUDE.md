@@ -28,6 +28,16 @@ import { loadWorkspaceSources, type LoadedSource } from '@agent-operator/shared/
 import { loadStatusConfig, createStatus } from '@agent-operator/shared/statuses';
 import { resolveTheme } from '@agent-operator/shared/config/theme';
 import { debug } from '@agent-operator/shared/utils';
+
+// IPC types and schemas (new)
+import { IPC_CHANNELS, type Session, type SessionEvent } from '@agent-operator/shared/ipc';
+import { SessionIdSchema } from '@agent-operator/shared/ipc/schemas';
+
+// Routing utilities (new)
+import { parseRouteToNavigationState, buildRouteFromNavigationState } from '@agent-operator/shared/routing';
+
+// Promise utilities (new)
+import { withTimeout, withRetry, sleep } from '@agent-operator/shared/utils/promises';
 ```
 
 ## Directory Structure
@@ -39,13 +49,15 @@ src/
 ├── config/             # Storage, preferences, models, theme, watcher
 ├── credentials/        # Secure credential storage (AES-256-GCM)
 ├── headless/           # Non-interactive execution mode
+├── ipc/                # IPC types, schemas (Zod), channel constants
 ├── mcp/                # MCP client and connection validation
 ├── prompts/            # System prompt generation
+├── routing/            # Route parsing and building for navigation
 ├── sessions/           # Session index, storage, persistence-queue
 ├── sources/            # Source types, storage, service
 ├── statuses/           # Dynamic status types, CRUD, storage
 ├── subscription/       # Craft subscription checking
-├── utils/              # Debug logging, file handling, summarization
+├── utils/              # Debug logging, file handling, promises, summarization
 ├── validation/         # URL validation
 ├── version/            # Version management, install scripts
 ├── workspaces/         # Workspace storage
@@ -141,6 +153,51 @@ File watcher for live config updates:
 
 ### Sources (`src/sources/`)
 Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.agent-operator/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
+
+### IPC Module (`src/ipc/`)
+Centralized IPC (Inter-Process Communication) types and validation for Electron apps:
+
+**Files:**
+- `schemas.ts` - Zod validation schemas for IPC messages
+- `types.ts` - TypeScript types for sessions, events, navigation state
+- `channels.ts` - IPC channel name constants
+- `index.ts` - Re-exports
+
+**Key types:**
+- `Session`, `SessionEvent`, `SessionCommand` - Session management
+- `NavigationState`, `ChatFilter`, `RightSidebarPanel` - UI navigation
+- `FileAttachment`, `CredentialResponse` - IPC payloads
+
+**Usage:**
+```typescript
+import { IPC_CHANNELS, type Session, type SessionEvent } from '@agent-operator/shared/ipc';
+import { SessionIdSchema, SendMessageArgsSchema } from '@agent-operator/shared/ipc/schemas';
+```
+
+### Routing Module (`src/routing/`)
+Route parsing and building for deep links and navigation:
+
+**Functions:**
+- `parseRoute()` - Parse action/view routes
+- `parseCompoundRoute()` - Parse compound routes (allChats/chat/abc123)
+- `parseRouteToNavigationState()` - Parse directly to NavigationState
+- `buildRouteFromNavigationState()` - Build route string from state
+- `buildUrlWithState()` - Build full URL with query params
+
+**Usage:**
+```typescript
+import { parseRouteToNavigationState, buildRouteFromNavigationState } from '@agent-operator/shared/routing';
+```
+
+### Promise Utilities (`src/utils/promises.ts`)
+Common async patterns:
+
+- `withTimeout()` - Add timeout to promises
+- `withRetry()` - Retry with exponential backoff
+- `sleep()` - Simple delay
+- `createDeferred()` - Externally resolvable promise
+- `withConcurrency()` - Limit concurrent operations
+- `raceWithFallback()` - Race with fallback value
 
 ## Dependencies
 

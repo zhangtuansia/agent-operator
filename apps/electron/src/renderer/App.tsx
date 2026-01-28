@@ -27,7 +27,7 @@ import type { Language } from '@/i18n'
 import { useTranslation } from '@/i18n'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
-import { DEFAULT_MODEL, getDefaultModelForProvider } from '@config/models'
+import { DEFAULT_MODEL, getDefaultModelForProvider, isModelValidForProvider, getModelsForProvider } from '@config/models'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -319,6 +319,37 @@ export default function App() {
       cleanupApp()
     }
   }, [])
+
+  // Listen for provider changes and update model if necessary
+  useEffect(() => {
+    const handleProviderChange = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ provider: string }>
+      const newProvider = customEvent.detail?.provider
+
+      if (!newProvider) return
+
+      // Load custom models if needed (for 'custom' provider)
+      let customModels: Array<{ id: string }> | undefined
+      if (newProvider === 'custom') {
+        try {
+          customModels = await window.electronAPI.getCustomModels?.()
+        } catch {
+          // Ignore errors
+        }
+      }
+
+      // Check if current model is valid for the new provider
+      if (!isModelValidForProvider(currentModel, newProvider, customModels)) {
+        // Current model not valid for new provider, switch to default
+        const newDefaultModel = getDefaultModelForProvider(newProvider)
+        setCurrentModel(newDefaultModel)
+        window.electronAPI.setModel(newDefaultModel)
+      }
+    }
+
+    window.addEventListener('cowork:provider-changed', handleProviderChange)
+    return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)
+  }, [currentModel])
 
   const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
     const session = await window.electronAPI.createSession(workspaceId, options)

@@ -177,6 +177,22 @@ export function getDefaultModelForProvider(provider: string | undefined): string
   return DEFAULT_PROVIDER_MODEL[provider] || DEFAULT_MODEL;
 }
 
+/**
+ * Check if a model is valid for a specific provider.
+ * @param modelId - Model ID to check
+ * @param provider - Provider ID
+ * @param customModels - Optional custom models (for 'custom' provider)
+ * @returns true if model is valid for the provider
+ */
+export function isModelValidForProvider(
+  modelId: string,
+  provider: string | undefined,
+  customModels?: Array<{ id: string }>
+): boolean {
+  const models = getModelsForProvider(provider, customModels);
+  return models.some(m => m.id === modelId);
+}
+
 // Legacy export for backward compatibility
 export const MODELS: ModelDefinition[] = CLAUDE_MODELS;
 

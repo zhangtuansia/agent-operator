@@ -31,7 +31,7 @@ import {
   ProviderConfigSchema,
   CustomModelSchema,
   AuthTypeSchema,
-} from '../shared/ipc-schemas'
+} from '@agent-operator/shared/ipc/schemas'
 import { validateIpcArgs, IpcValidationError } from './ipc-validator'
 
 /**
@@ -867,15 +867,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       hasCredential = true
     }
 
-    // Return provider based on auth type
-    // - api_key: return configured provider (anthropic, glm, minimax, etc.)
-    // - bedrock: return 'bedrock'
-    // - oauth_token: no provider (uses Claude models directly)
+    // Return provider from config (independent of auth type)
+    // Auth type determines how to authenticate, provider determines API endpoint and models
+    // - bedrock overrides to 'bedrock' provider
+    // - Otherwise use configured provider (anthropic, glm, minimax, etc.)
     let provider: string | undefined
-    if (authType === 'api_key') {
-      provider = providerConfig?.provider
-    } else if (authType === 'bedrock') {
+    if (authType === 'bedrock') {
       provider = 'bedrock'
+    } else {
+      provider = providerConfig?.provider
     }
 
     return { authType, hasCredential, provider }

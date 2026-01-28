@@ -32,6 +32,7 @@
     "./sources/types": "./src/sources/types.ts",
     "./workspaces": "./src/workspaces/index.ts",
     "./utils": "./src/utils/index.ts",
+    "./utils/promises": "./src/utils/promises.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",
     "./utils/logo": "./src/utils/logo.ts",
     "./utils/service-url": "./src/utils/service-url.ts",
@@ -51,7 +52,13 @@
     "./views/storage": "./src/views/storage.ts",
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
-    "./permissions": "./src/permissions/index.ts"
+    "./permissions": "./src/permissions/index.ts",
+    "./ipc": "./src/ipc/index.ts",
+    "./ipc/schemas": "./src/ipc/schemas.ts",
+    "./ipc/types": "./src/ipc/types.ts",
+    "./ipc/channels": "./src/ipc/channels.ts",
+    "./routing": "./src/routing/index.ts",
+    "./routing/parser": "./src/routing/parser.ts"
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",

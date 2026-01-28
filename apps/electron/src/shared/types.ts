@@ -1,5 +1,6 @@
 // Types shared between main and renderer processes
-// Core types are re-exported from @agent-operator/core
+// Most IPC types are now in @agent-operator/shared/ipc
+// This file re-exports them and adds Electron-specific types
 
 // Import and re-export core types
 import type {
@@ -48,45 +49,57 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata } from '@agent-operator/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
-/**
- * Custom model definition for user-defined models (Custom provider)
- */
-export interface CustomModel {
-  id: string           // API 调用使用的模型 ID (必填)
-  name: string         // UI 显示名称 (必填)
-  shortName?: string   // 短名称 (可选)
-  description?: string // 描述 (可选)
-}
+// Re-export IPC types from shared package
+export type {
+  // Session types
+  Session,
+  CreateSessionOptions,
+  TodoState,
+  BuiltInStatusId,
+  SessionEvent,
+  SessionCommand,
+  PermissionRequest,
+  // Result types
+  OAuthResult,
+  McpValidationResult,
+  McpToolWithPermission,
+  McpToolsResult,
+  ShareResult,
+  RefreshTitleResult,
+  OnboardingSaveResult,
+  ClaudeOAuthResult,
+  // Settings types
+  BillingMethodInfo,
+  UpdateInfo,
+  WorkspaceSettings,
+  // File types
+  FileAttachment,
+  SkillFile,
+  SessionFile,
+  SessionFilesResult,
+  // Plan types
+  Plan,
+  PlanStep,
+  // Credential types
+  CredentialResponse,
+  CustomModel,
+  // Send message types
+  SendMessageOptions,
+  NewChatActionParams,
+  DeepLinkNavigation,
+  // Navigation types
+  RightSidebarPanel,
+  ChatFilter,
+  SettingsSubpage,
+  ChatsNavigationState,
+  SourcesNavigationState,
+  SettingsNavigationState,
+  SkillsNavigationState,
+  NavigationState,
+} from '@agent-operator/shared/ipc/types';
 
-/**
- * File/directory entry in a skill folder
- */
-export interface SkillFile {
-  name: string
-  type: 'file' | 'directory'
-  size?: number
-  children?: SkillFile[]
-}
-
-/**
- * File/directory entry in a session folder
- * Supports recursive tree structure with children for directories
- */
-export interface SessionFile {
-  name: string
-  path: string
-  type: 'file' | 'directory'
-  size?: number
-  children?: SessionFile[]  // Recursive children for directories
-}
-
-/**
- * Combined session and workspace files response
- */
-export interface SessionFilesResult {
-  sessionFiles: SessionFile[]
-  workspaceFiles: SessionFile[]
-}
+// Re-export IPC channels
+export { IPC_CHANNELS } from '@agent-operator/shared/ipc/channels';
 
 // Import auth request types for unified auth flow
 import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@agent-operator/shared/agent';
@@ -96,589 +109,37 @@ export type { SharedCredentialInputMode as CredentialInputMode };
 export type CredentialRequest = SharedCredentialAuthRequest;
 export { generateMessageId } from '@agent-operator/core/types';
 
-/**
- * OAuth result from main process
- */
-export interface OAuthResult {
-  success: boolean
-  error?: string
-}
-
-/**
- * MCP connection validation result
- */
-export interface McpValidationResult {
-  success: boolean
-  error?: string
-  tools?: string[]
-}
-
-/**
- * MCP tool with safe mode permission status
- */
-export interface McpToolWithPermission {
-  name: string
-  description?: string
-  allowed: boolean  // true if allowed in safe mode, false if requires permission
-}
-
-/**
- * Result of fetching MCP tools with permission status
- */
-export interface McpToolsResult {
-  success: boolean
-  error?: string
-  tools?: McpToolWithPermission[]
-}
-
-/**
- * Result of sharing or revoking a session
- */
-export interface ShareResult {
-  success: boolean
-  url?: string
-  error?: string
-}
-
-/**
- * Result of refreshing/regenerating a session title
- */
-export interface RefreshTitleResult {
-  success: boolean
-  title?: string
-  error?: string
-}
-
-
-// Re-export permission types from core, extended with sessionId for multi-session context
+// Re-export permission types from core
 export type { PermissionRequest as BasePermissionRequest } from '@agent-operator/core/types';
-import type { PermissionRequest as BasePermissionRequest } from '@agent-operator/core/types';
 
-/**
- * Permission request with session context (for multi-session Electron app)
- */
-export interface PermissionRequest extends BasePermissionRequest {
-  sessionId: string
-}
+// =============================================================================
+// Electron-specific Types (not in shared package)
+// =============================================================================
 
-// ============================================
-// Credential Input Types (Secure Auth UI)
-// ============================================
-
-// CredentialInputMode is imported from @agent-operator/shared/agent above
-
-/**
- * Credential response from user (for credential auth requests)
- */
-export interface CredentialResponse {
-  type: 'credential'
-  /** Single value for bearer/header/query modes */
-  value?: string
-  /** Username for basic auth */
-  username?: string
-  /** Password for basic auth */
-  password?: string
-  /** Whether user cancelled */
-  cancelled: boolean
-}
-
-// ============================================
-// Plan Types (SubmitPlan workflow)
-// ============================================
-
-/**
- * Step in a plan
- */
-export interface PlanStep {
-  id: string
-  description: string
-  tools?: string[]
-  status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
-}
-
-/**
- * Plan from the agent
- */
-export interface Plan {
-  id: string
-  title: string
-  summary?: string
-  steps: PlanStep[]
-  questions?: string[]
-  state?: 'creating' | 'refining' | 'ready' | 'executing' | 'completed' | 'cancelled'
-  createdAt?: number
-  updatedAt?: number
-}
-
-
-// ============================================
-// Onboarding Types
-// ============================================
-
-/**
- * Result of saving onboarding configuration
- */
-export interface OnboardingSaveResult {
-  success: boolean
-  error?: string
-  workspaceId?: string
-}
-
-/**
- * File attachment for sending with messages
- * Matches the FileAttachment interface from src/utils/files.ts
- */
-export interface FileAttachment {
-  type: 'image' | 'text' | 'pdf' | 'office' | 'unknown'
-  path: string
-  name: string
-  mimeType: string
-  base64?: string  // For images, PDFs, and Office files
-  text?: string    // For text files
-  size: number
-  thumbnailBase64?: string  // Quick Look thumbnail (generated by Electron main process)
-}
-
-// Import types needed for Session interface
+// Import types needed for ElectronAPI
 import type { Message } from '@agent-operator/core/types';
-
-/**
- * Electron-specific Session type (includes runtime state)
- * Extends core Session with messages array and processing state
- */
-/**
- * Todo state for sessions (user-controlled, never automatic)
- *
- * Dynamic status ID referencing workspace status config.
- * Validated at runtime via validateSessionStatus().
- * Falls back to 'todo' if status doesn't exist.
- *
- * Built-in status IDs (for reference):
- * - 'todo': Not started
- * - 'in-progress': Currently working on
- * - 'needs-review': Awaiting review
- * - 'done': Completed successfully
- * - 'cancelled': Cancelled/abandoned
- */
-export type TodoState = string
-
-// Helper type for TypeScript consumers
-export type BuiltInStatusId = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
-
-export interface Session {
-  id: string
-  workspaceId: string
-  workspaceName: string
-  name?: string  // User-defined or AI-generated session name
-  /** Preview of first user message (from JSONL header, for lazy-loaded sessions) */
-  preview?: string
-  lastMessageAt: number
-  messages: Message[]
-  isProcessing: boolean
-  // Session metadata
-  isFlagged?: boolean
-  // Advanced options (persisted per session)
-  /** Permission mode for this session ('safe', 'ask', 'allow-all') */
-  permissionMode?: PermissionMode
-  // Todo state (user-controlled) - determines open vs closed
-  todoState?: TodoState
-  // Read/unread tracking - ID of last message user has read
-  lastReadMessageId?: string
-  // Per-session source selection (source slugs)
-  enabledSourceSlugs?: string[]
-  // Working directory for this session (used by agent for bash commands)
-  workingDirectory?: string
-  // Session folder path (for "Reset to Session Root" option)
-  sessionFolderPath?: string
-  // Shared viewer URL (if shared via viewer)
-  sharedUrl?: string
-  // Shared session ID in viewer (for revoke)
-  sharedId?: string
-  // Model to use for this session (overrides global config if set)
-  model?: string
-  // Thinking level for this session ('off', 'think', 'max')
-  thinkingLevel?: ThinkingLevel
-  // Role/type of the last message (for badge display without loading messages)
-  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
-  // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
-  // Used for shimmer effect on session title in sidebar and panel header
-  isAsyncOperationOngoing?: boolean
-  /** @deprecated Use isAsyncOperationOngoing instead */
-  isRegeneratingTitle?: boolean
-  // Current status for ProcessingIndicator (e.g., compacting)
-  currentStatus?: {
-    message: string
-    statusType?: string
-  }
-  // Token usage for context tracking
-  tokenUsage?: {
-    inputTokens: number
-    outputTokens: number
-    totalTokens: number
-    contextTokens: number
-    costUsd: number
-    cacheReadTokens?: number
-    cacheCreationTokens?: number
-    /** Model's context window size in tokens (from SDK modelUsage) */
-    contextWindow?: number
-  }
-}
-
-/**
- * Options for creating a new session
- * Note: Session creation itself has no options - auto-send is handled by NavigationContext
- */
-export interface CreateSessionOptions {
-  /** Initial permission mode for the session (overrides workspace default) */
-  permissionMode?: PermissionMode
-  /**
-   * Working directory for the session:
-   * - 'user_default' or undefined: Use workspace's configured default working directory
-   * - 'none': No working directory (session folder only)
-   * - Absolute path string: Use this specific path
-   */
-  workingDirectory?: string | 'user_default' | 'none'
-}
-
-// Events sent from main to renderer
-// turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
-export type SessionEvent =
-  | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
-  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
-  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; turnId?: string; parentToolUseId?: string }
-  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean }
-  | { type: 'parent_update'; sessionId: string; toolUseId: string; parentToolUseId: string }
-  | { type: 'error'; sessionId: string; error: string }
-  | { type: 'typed_error'; sessionId: string; error: TypedError }
-  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage'] }
-  | { type: 'interrupted'; sessionId: string; message?: Message }
-  | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
-  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
-  | { type: 'title_generated'; sessionId: string; title: string }
-  | { type: 'title_regenerating'; sessionId: string; isRegenerating: boolean }
-  // Generic async operation state (sharing, updating share, revoking, title regeneration)
-  | { type: 'async_operation'; sessionId: string; isOngoing: boolean }
-  | { type: 'working_directory_changed'; sessionId: string; workingDirectory: string }
-  | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
-  | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
-  // Permission mode events
-  | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode }
-  | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
-  // Source events
-  | { type: 'sources_changed'; sessionId: string; enabledSourceSlugs: string[] }
-  // Background task/shell events
-  | { type: 'task_backgrounded'; sessionId: string; toolUseId: string; taskId: string; intent?: string; turnId?: string }
-  | { type: 'shell_backgrounded'; sessionId: string; toolUseId: string; shellId: string; intent?: string; command?: string; turnId?: string }
-  | { type: 'task_progress'; sessionId: string; toolUseId: string; elapsedSeconds: number; turnId?: string }
-  | { type: 'shell_killed'; sessionId: string; shellId: string }
-  // User message events (for optimistic UI with backend as source of truth)
-  | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing' }
-  // Session metadata events (for multi-window sync)
-  | { type: 'session_flagged'; sessionId: string }
-  | { type: 'session_unflagged'; sessionId: string }
-  | { type: 'session_model_changed'; sessionId: string; model: string | null }
-  | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
-  | { type: 'session_deleted'; sessionId: string }
-  | { type: 'session_shared'; sessionId: string; sharedUrl: string }
-  | { type: 'session_unshared'; sessionId: string }
-  // Auth request events (unified auth flow)
-  | { type: 'auth_request'; sessionId: string; message: CoreMessage; request: SharedAuthRequest }
-  | { type: 'auth_completed'; sessionId: string; requestId: string; success: boolean; cancelled?: boolean; error?: string }
-  // Source activation events (for auto-retry on mid-turn activation)
-  | { type: 'source_activated'; sessionId: string; sourceSlug: string; originalMessage: string }
-  // Real-time usage update during processing (for context display)
-  | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
-
-// Options for sendMessage
-export interface SendMessageOptions {
-  /** Enable ultrathink mode for extended reasoning */
-  ultrathinkEnabled?: boolean
-  /** Skill slugs to activate for this message (from @mentions) */
-  skillSlugs?: string[]
-  /** Content badges for inline display (sources, skills with embedded icons) */
-  badges?: import('@agent-operator/core').ContentBadge[]
-}
-
-// =============================================================================
-// IPC Command Pattern Types
-// =============================================================================
-
-/**
- * SessionCommand - Consolidated session operations
- * Replaces individual IPC calls: flag, unflag, rename, setTodoState, etc.
- */
-export type SessionCommand =
-  | { type: 'flag' }
-  | { type: 'unflag' }
-  | { type: 'rename'; name: string }
-  | { type: 'setTodoState'; state: TodoState }
-  | { type: 'markRead' }
-  | { type: 'markUnread' }
-  | { type: 'setPermissionMode'; mode: PermissionMode }
-  | { type: 'setThinkingLevel'; level: ThinkingLevel }
-  | { type: 'updateWorkingDirectory'; dir: string }
-  | { type: 'setSources'; sourceSlugs: string[] }
-  | { type: 'showInFinder' }
-  | { type: 'copyPath' }
-  | { type: 'shareToViewer' }
-  | { type: 'updateShare' }
-  | { type: 'revokeShare' }
-  | { type: 'startOAuth'; requestId: string }
-  | { type: 'refreshTitle' }
-  // Pending plan execution (Accept & Compact flow)
-  | { type: 'setPendingPlanExecution'; planPath: string }
-  | { type: 'markCompactionComplete' }
-  | { type: 'clearPendingPlanExecution' }
-
-/**
- * Parameters for opening a new chat session
- */
-export interface NewChatActionParams {
-  /** Text to pre-fill in the input (not sent automatically) */
-  input?: string
-  /** Session name */
-  name?: string
-}
-
-// IPC channel names
-export const IPC_CHANNELS = {
-  // Session management
-  GET_SESSIONS: 'sessions:get',
-  CREATE_SESSION: 'sessions:create',
-  DELETE_SESSION: 'sessions:delete',
-  GET_SESSION_MESSAGES: 'sessions:getMessages',
-  SEND_MESSAGE: 'sessions:sendMessage',
-  CANCEL_PROCESSING: 'sessions:cancel',
-  KILL_SHELL: 'sessions:killShell',
-  GET_TASK_OUTPUT: 'tasks:getOutput',
-  RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
-  RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
-
-  // Consolidated session command
-  SESSION_COMMAND: 'sessions:command',
-
-  // Pending plan execution (for reload recovery)
-  GET_PENDING_PLAN_EXECUTION: 'sessions:getPendingPlanExecution',
-
-  // Workspace management
-  GET_WORKSPACES: 'workspaces:get',
-  CREATE_WORKSPACE: 'workspaces:create',
-  CHECK_WORKSPACE_SLUG: 'workspaces:checkSlug',
-
-  // Window management
-  GET_WINDOW_WORKSPACE: 'window:getWorkspace',
-  GET_WINDOW_MODE: 'window:getMode',
-  OPEN_WORKSPACE: 'window:openWorkspace',
-  OPEN_SESSION_IN_NEW_WINDOW: 'window:openSessionInNewWindow',
-  SWITCH_WORKSPACE: 'window:switchWorkspace',
-  CLOSE_WINDOW: 'window:close',
-  // Close request events (main → renderer, for intercepting X button / Cmd+W)
-  WINDOW_CLOSE_REQUESTED: 'window:closeRequested',
-  WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
-  // Traffic light visibility (macOS only - hide when fullscreen overlays are open)
-  WINDOW_SET_TRAFFIC_LIGHTS: 'window:setTrafficLights',
-
-  // Events from main to renderer
-  SESSION_EVENT: 'session:event',
-
-  // File operations
-  READ_FILE: 'file:read',
-  OPEN_FILE_DIALOG: 'file:openDialog',
-  READ_FILE_ATTACHMENT: 'file:readAttachment',
-  STORE_ATTACHMENT: 'file:storeAttachment',
-  GENERATE_THUMBNAIL: 'file:generateThumbnail',
-
-  // Session info panel
-  GET_SESSION_FILES: 'sessions:getFiles',
-  GET_SESSION_NOTES: 'sessions:getNotes',
-  SET_SESSION_NOTES: 'sessions:setNotes',
-  WATCH_SESSION_FILES: 'sessions:watchFiles',      // Start watching session directory
-  UNWATCH_SESSION_FILES: 'sessions:unwatchFiles',  // Stop watching
-  SESSION_FILES_CHANGED: 'sessions:filesChanged',  // Event: main → renderer
-
-  // Theme
-  GET_SYSTEM_THEME: 'theme:getSystemPreference',
-  SYSTEM_THEME_CHANGED: 'theme:systemChanged',
-
-  // System
-  GET_VERSIONS: 'system:versions',
-  GET_HOME_DIR: 'system:homeDir',
-  IS_DEBUG_MODE: 'system:isDebugMode',
-
-  // Auto-update
-  UPDATE_CHECK: 'update:check',
-  UPDATE_GET_INFO: 'update:getInfo',
-  UPDATE_INSTALL: 'update:install',
-  UPDATE_DISMISS: 'update:dismiss',  // Dismiss update for this version (persists across restarts)
-  UPDATE_GET_DISMISSED: 'update:getDismissed',  // Get dismissed version
-  UPDATE_AVAILABLE: 'update:available',  // main → renderer broadcast
-  UPDATE_DOWNLOAD_PROGRESS: 'update:downloadProgress',  // main → renderer broadcast
-
-  // Shell operations (open external URLs/files)
-  OPEN_URL: 'shell:openUrl',
-  OPEN_FILE: 'shell:openFile',
-  SHOW_IN_FOLDER: 'shell:showInFolder',
-
-  // Menu actions (main → renderer)
-  MENU_NEW_CHAT: 'menu:newChat',
-  MENU_NEW_WINDOW: 'menu:newWindow',
-  MENU_OPEN_SETTINGS: 'menu:openSettings',
-  MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
-  // Deep link navigation (main → renderer, for external agentoperator:// URLs)
-  DEEP_LINK_NAVIGATE: 'deeplink:navigate',
-
-  // Auth
-  LOGOUT: 'auth:logout',
-  SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
-  SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
-
-  // Onboarding
-  ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
-  ONBOARDING_VALIDATE_MCP: 'onboarding:validateMcp',
-  ONBOARDING_START_MCP_OAUTH: 'onboarding:startMcpOAuth',
-  ONBOARDING_SAVE_CONFIG: 'onboarding:saveConfig',
-  // Claude OAuth
-  ONBOARDING_GET_EXISTING_CLAUDE_TOKEN: 'onboarding:getExistingClaudeToken',
-  ONBOARDING_IS_CLAUDE_CLI_INSTALLED: 'onboarding:isClaudeCliInstalled',
-  ONBOARDING_RUN_CLAUDE_SETUP_TOKEN: 'onboarding:runClaudeSetupToken',
-  // Native Claude OAuth (two-step flow)
-  ONBOARDING_START_CLAUDE_OAUTH: 'onboarding:startClaudeOAuth',
-  ONBOARDING_EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
-  ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
-  ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
-
-  // Settings - Billing
-  SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
-  SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
-
-  // Settings - Agent Type (Claude vs Codex)
-  SETTINGS_GET_AGENT_TYPE: 'settings:getAgentType',
-  SETTINGS_SET_AGENT_TYPE: 'settings:setAgentType',
-  SETTINGS_CHECK_CODEX_AUTH: 'settings:checkCodexAuth',
-  SETTINGS_START_CODEX_LOGIN: 'settings:startCodexLogin',
-
-  // Settings - Provider Config
-  SETTINGS_GET_STORED_CONFIG: 'settings:getStoredConfig',
-  SETTINGS_UPDATE_PROVIDER_CONFIG: 'settings:updateProviderConfig',
-
-  // Settings - Model
-  SETTINGS_GET_MODEL: 'settings:getModel',
-  SETTINGS_SET_MODEL: 'settings:setModel',
-  SESSION_GET_MODEL: 'session:getModel',
-  SESSION_SET_MODEL: 'session:setModel',
-
-  // Custom Models (for Custom provider)
-  CUSTOM_MODELS_GET: 'customModels:get',
-  CUSTOM_MODELS_SET: 'customModels:set',
-  CUSTOM_MODELS_ADD: 'customModels:add',
-  CUSTOM_MODELS_UPDATE: 'customModels:update',
-  CUSTOM_MODELS_DELETE: 'customModels:delete',
-  CUSTOM_MODELS_REORDER: 'customModels:reorder',
-
-  // Folder dialog (for selecting working directory)
-  OPEN_FOLDER_DIALOG: 'dialog:openFolder',
-
-  // User Preferences
-  PREFERENCES_READ: 'preferences:read',
-  PREFERENCES_WRITE: 'preferences:write',
-
-  // Session Drafts (input text persisted across app restarts)
-  DRAFTS_GET: 'drafts:get',
-  DRAFTS_SET: 'drafts:set',
-  DRAFTS_DELETE: 'drafts:delete',
-  DRAFTS_GET_ALL: 'drafts:getAll',
-
-  // Sources (workspace-scoped)
-  SOURCES_GET: 'sources:get',
-  SOURCES_CREATE: 'sources:create',
-  SOURCES_DELETE: 'sources:delete',
-  SOURCES_START_OAUTH: 'sources:startOAuth',
-  SOURCES_SAVE_CREDENTIALS: 'sources:saveCredentials',
-  SOURCES_CHANGED: 'sources:changed',
-  
-  // Source permissions config
-  SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
-  // Workspace permissions config (for Explore mode)
-  WORKSPACE_GET_PERMISSIONS: 'workspace:getPermissions',
-  // Default permissions from ~/.agent-operator/permissions/default.json
-  DEFAULT_PERMISSIONS_GET: 'permissions:getDefaults',
-  // Broadcast when default permissions change (file watcher)
-  DEFAULT_PERMISSIONS_CHANGED: 'permissions:defaultsChanged',
-  // MCP tools listing
-  SOURCES_GET_MCP_TOOLS: 'sources:getMcpTools',
-
-  // Skills (workspace-scoped)
-  SKILLS_GET: 'skills:get',
-  SKILLS_GET_FILES: 'skills:getFiles',
-  SKILLS_DELETE: 'skills:delete',
-  SKILLS_OPEN_EDITOR: 'skills:openEditor',
-  SKILLS_OPEN_FINDER: 'skills:openFinder',
-  SKILLS_CHANGED: 'skills:changed',
-  SKILLS_IMPORT_URL: 'skills:importUrl',
-  SKILLS_IMPORT_CONTENT: 'skills:importContent',
-
-  // Status management (workspace-scoped)
-  STATUSES_LIST: 'statuses:list',
-  STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
-
-  // Labels management (workspace-scoped)
-  LABELS_LIST: 'labels:list',
-  LABELS_CHANGED: 'labels:changed',  // Broadcast event
-
-  // Views management (workspace-scoped)
-  VIEWS_LIST: 'views:list',
-
-  // Theme management (cascading: app → workspace)
-  THEME_APP_CHANGED: 'theme:appChanged',        // Broadcast event
-
-  // Generic workspace image loading/saving (for icons, etc.)
-  WORKSPACE_READ_IMAGE: 'workspace:readImage',
-  WORKSPACE_WRITE_IMAGE: 'workspace:writeImage',
-
-  // Workspace settings (per-workspace configuration)
-  WORKSPACE_SETTINGS_GET: 'workspaceSettings:get',
-  WORKSPACE_SETTINGS_UPDATE: 'workspaceSettings:update',
-
-  // Theme (app-level only)
-  THEME_GET_APP: 'theme:getApp',
-  THEME_GET_PRESETS: 'theme:getPresets',
-  THEME_LOAD_PRESET: 'theme:loadPreset',
-  THEME_GET_COLOR_THEME: 'theme:getColorTheme',
-  THEME_SET_COLOR_THEME: 'theme:setColorTheme',
-  THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
-  THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
-
-  // Logo URL resolution (uses Node.js filesystem cache)
-  LOGO_GET_URL: 'logo:getUrl',
-
-  // Notifications
-  NOTIFICATION_SHOW: 'notification:show',
-  NOTIFICATION_NAVIGATE: 'notification:navigate',  // Broadcast: { workspaceId, sessionId }
-  NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
-  NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
-
-  // Language
-  LANGUAGE_GET: 'language:get',
-  LANGUAGE_SET: 'language:set',
-
-  BADGE_UPDATE: 'badge:update',
-  BADGE_CLEAR: 'badge:clear',
-  BADGE_SET_ICON: 'badge:setIcon',
-  BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
-  WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
-  WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
-
-  // System Permissions (macOS)
-  PERMISSIONS_CHECK_FULL_DISK_ACCESS: 'permissions:checkFullDiskAccess',
-  PERMISSIONS_OPEN_FULL_DISK_ACCESS_SETTINGS: 'permissions:openFullDiskAccessSettings',
-  PERMISSIONS_PROMPT_FULL_DISK_ACCESS: 'permissions:promptFullDiskAccess',
-  PERMISSIONS_CHECK_ACCESSIBILITY: 'permissions:checkAccessibility',
-  PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS: 'permissions:openAccessibilitySettings',
-  PERMISSIONS_GET_ALL: 'permissions:getAll',
-} as const
-
-// Re-import types for ElectronAPI
-import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@agent-operator/core/types';
+import type {
+  Session,
+  CreateSessionOptions,
+  SessionEvent,
+  SessionCommand,
+  FileAttachment,
+  SkillFile,
+  SessionFilesResult,
+  ShareResult,
+  RefreshTitleResult,
+  OAuthResult,
+  OnboardingSaveResult,
+  ClaudeOAuthResult,
+  BillingMethodInfo,
+  UpdateInfo,
+  WorkspaceSettings,
+  McpToolsResult,
+  CredentialResponse,
+  SendMessageOptions,
+  DeepLinkNavigation,
+  CustomModel,
+} from '@agent-operator/shared/ipc/types';
 
 // Type-safe IPC API exposed to renderer
 export interface ElectronAPI {
@@ -687,7 +148,7 @@ export interface ElectronAPI {
   getSessionMessages(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
-  sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
+  sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: CoreStoredAttachment[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
@@ -701,8 +162,8 @@ export interface ElectronAPI {
   getPendingPlanExecution(sessionId: string): Promise<{ planPath: string; awaitingCompaction: boolean } | null>
 
   // Workspace management
-  getWorkspaces(): Promise<Workspace[]>
-  createWorkspace(folderPath: string, name: string): Promise<Workspace>
+  getWorkspaces(): Promise<CoreWorkspace[]>
+  createWorkspace(folderPath: string, name: string): Promise<CoreWorkspace>
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
 
   // Window management
@@ -725,7 +186,7 @@ export interface ElectronAPI {
   readFile(path: string): Promise<string>
   openFileDialog(): Promise<string[]>
   readFileAttachment(path: string): Promise<FileAttachment | null>
-  storeAttachment(sessionId: string, attachment: FileAttachment): Promise<import('../../../../packages/core/src/types/index.ts').StoredAttachment>
+  storeAttachment(sessionId: string, attachment: FileAttachment): Promise<CoreStoredAttachment>
   generateThumbnail(base64: string, mimeType: string): Promise<string | null>
 
   // Theme
@@ -769,12 +230,12 @@ export interface ElectronAPI {
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
   saveOnboardingConfig(config: {
-    authType?: AuthType  // Optional - if not provided, preserves existing auth type (for add workspace)
-    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
-    credential?: string  // API key or OAuth token based on authType
-    mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
-    providerConfig?: {  // Provider-specific configuration (for third-party APIs)
-      provider: string  // 'minimax' | 'glm' | 'deepseek' | 'custom'
+    authType?: AuthType
+    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }
+    credential?: string
+    mcpCredentials?: { accessToken: string; clientId?: string }
+    providerConfig?: {
+      provider: string
       baseURL: string
       apiFormat: 'anthropic' | 'openai'
     }
@@ -940,162 +401,19 @@ export interface ElectronAPI {
   getAllPermissions(): Promise<{ fullDiskAccess: boolean; accessibility: boolean }>
 }
 
-/**
- * Result from Claude OAuth (setup-token) flow
- */
-export interface ClaudeOAuthResult {
-  success: boolean
-  token?: string
-  error?: string
-}
-
-/**
- * Current billing method info for settings
- */
-export interface BillingMethodInfo {
-  authType: AuthType
-  hasCredential: boolean
-  /** Provider ID if using third-party API (e.g., 'glm', 'minimax', 'deepseek') */
-  provider?: string
-}
-
-/**
- * Auto-update information
- */
-export interface UpdateInfo {
-  /** Whether an update is available */
-  available: boolean
-  /** Current installed version */
-  currentVersion: string
-  /** Latest available version (null if check failed) */
-  latestVersion: string | null
-  /** Download URL for the update DMG */
-  downloadUrl: string | null
-  /** Download state */
-  downloadState: 'idle' | 'downloading' | 'ready' | 'installing' | 'error'
-  /** Download progress (0-100) */
-  downloadProgress: number
-  /** Error message if download/install failed */
-  error?: string
-}
-
-/**
- * Per-workspace settings
- */
-export interface WorkspaceSettings {
-  name?: string
-  model?: string
-  permissionMode?: PermissionMode
-  /** Permission modes available for SHIFT+TAB cycling (min 2 modes) */
-  cyclablePermissionModes?: PermissionMode[]
-  /** Default thinking level for new sessions ('off', 'think', 'max'). Defaults to 'think'. */
-  thinkingLevel?: ThinkingLevel
-  workingDirectory?: string
-  /** Whether local (stdio) MCP servers are enabled */
-  localMcpEnabled?: boolean
-}
-
-/**
- * Navigation payload for deep links (main → renderer)
- */
-export interface DeepLinkNavigation {
-  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
-  view?: string
-  /** Tab type */
-  tabType?: string
-  tabParams?: Record<string, string>
-  action?: string
-  actionParams?: Record<string, string>
-}
-
 // ============================================
-// Unified Navigation State Types
+// Navigation State Utilities (types imported from shared)
 // ============================================
 
-/**
- * Right sidebar panel types
- * Defines the content displayed in the right sidebar
- */
-export type RightSidebarPanel =
-  | { type: 'sessionMetadata' }
-  | { type: 'files'; path?: string }
-  | { type: 'history' }
-  | { type: 'none' }
-
-/**
- * Chat filter options - determines which sessions to show
- * - 'allChats': All sessions regardless of status
- * - 'flagged': Only flagged sessions
- * - 'state': Sessions with specific status ID
- */
-export type ChatFilter =
-  | { kind: 'allChats' }
-  | { kind: 'flagged' }
-  | { kind: 'state'; stateId: string }
-
-/**
- * Settings subpage options
- */
-export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'permissions' | 'shortcuts' | 'preferences'
-
-/**
- * Chats navigation state - shows SessionList in navigator
- */
-export interface ChatsNavigationState {
-  navigator: 'chats'
-  filter: ChatFilter
-  /** Selected chat details, or null for empty state */
-  details: { type: 'chat'; sessionId: string } | null
-  /** Optional right sidebar panel state */
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
- * Sources navigation state - shows SourcesListPanel in navigator
- */
-export interface SourcesNavigationState {
-  navigator: 'sources'
-  /** Selected source details, or null for empty state */
-  details: { type: 'source'; sourceSlug: string } | null
-  /** Optional right sidebar panel state */
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
- * Settings navigation state - shows SettingsNavigator in navigator
- * Settings subpages are the details themselves (no separate selection)
- */
-export interface SettingsNavigationState {
-  navigator: 'settings'
-  subpage: SettingsSubpage
-  /** Optional right sidebar panel state */
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
- * Skills navigation state - shows SkillsListPanel in navigator
- */
-export interface SkillsNavigationState {
-  navigator: 'skills'
-  /** Selected skill details, or null for empty state */
-  details: { type: 'skill'; skillSlug: string } | null
-  /** Optional right sidebar panel state */
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
- * Unified navigation state - single source of truth for all 3 panels
- *
- * From this state we can derive:
- * - LeftSidebar: which item is highlighted (from navigator + filter/subpage)
- * - NavigatorPanel: which list/content to show (from navigator)
- * - MainContentPanel: what details to display (from details or subpage)
- */
-export type NavigationState =
-  | ChatsNavigationState
-  | SourcesNavigationState
-  | SettingsNavigationState
-  | SkillsNavigationState
+import type {
+  NavigationState,
+  ChatsNavigationState,
+  SourcesNavigationState,
+  SettingsNavigationState,
+  SkillsNavigationState,
+  ChatFilter,
+  SettingsSubpage,
+} from '@agent-operator/shared/ipc/types'
 
 /**
  * Type guard to check if state is chats navigation
