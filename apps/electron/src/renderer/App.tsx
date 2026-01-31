@@ -285,13 +285,21 @@ export default function App() {
     // Load stored model preference and provider info
     Promise.all([
       window.electronAPI.getModel(),
-      window.electronAPI.getBillingMethod()
-    ]).then(([storedModel, billingInfo]) => {
-      if (storedModel) {
+      window.electronAPI.getBillingMethod(),
+      window.electronAPI.getCustomModels?.() || Promise.resolve([])
+    ]).then(([storedModel, billingInfo, customModels]) => {
+      // For OAuth, default to 'anthropic' provider
+      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
+
+      // Validate stored model against current provider
+      if (storedModel && isModelValidForProvider(storedModel, effectiveProvider, customModels)) {
         setCurrentModel(storedModel)
       } else {
-        // If no stored model, use provider-specific default
-        setCurrentModel(getDefaultModelForProvider(billingInfo.provider))
+        // If no stored model or model is invalid for current provider, use provider-specific default
+        const defaultModel = getDefaultModelForProvider(effectiveProvider)
+        setCurrentModel(defaultModel)
+        // Persist the new default model
+        window.electronAPI.setModel(defaultModel)
       }
     })
     // Load UI language preference

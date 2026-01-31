@@ -309,6 +309,10 @@ export default function ApiSettingsPage() {
       setBaseURL(provider.baseURL)
       setApiFormat(provider.apiFormat)
     }
+    // Dispatch provider change event so WorkspaceSettingsPage can update models immediately
+    window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+      detail: { provider: providerId }
+    }))
   }, [])
 
   // Custom model handlers
@@ -377,14 +381,29 @@ export default function ApiSettingsPage() {
     if (method === 'api_key') {
       setAuthType('api_key')
       setExpandedMethod(null)
+      // Dispatch provider change event so WorkspaceSettingsPage can update models
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+        detail: { provider: currentProvider }
+      }))
       return
+    }
+
+    // For oauth_token, reset provider to Anthropic (OAuth only works with official API)
+    if (method === 'oauth_token') {
+      setCurrentProvider('anthropic')
+      setBaseURL('https://api.anthropic.com')
+      setApiFormat('anthropic')
+      // Dispatch provider change event
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+        detail: { provider: 'anthropic' }
+      }))
     }
 
     setExpandedMethod(method)
     setApiKeyError(undefined)
     setClaudeOAuthStatus('idle')
     setClaudeOAuthError(undefined)
-  }, [authType, hasCredential])
+  }, [authType, hasCredential, currentProvider])
 
   const handleCancelBilling = useCallback(() => {
     setExpandedMethod(null)
@@ -421,10 +440,23 @@ export default function ApiSettingsPage() {
     setClaudeOAuthError(undefined)
     try {
       await window.electronAPI.updateBillingMethod('oauth_token', existingClaudeToken)
+      // OAuth only works with Anthropic official API - update provider config
+      await window.electronAPI.updateProviderConfig?.({
+        provider: 'anthropic',
+        baseURL: 'https://api.anthropic.com',
+        apiFormat: 'anthropic',
+      })
+      setCurrentProvider('anthropic')
+      setBaseURL('https://api.anthropic.com')
+      setApiFormat('anthropic')
       setAuthType('oauth_token')
       setHasCredential(true)
       setClaudeOAuthStatus('success')
       setExpandedMethod(null)
+      // Emit provider change event
+      window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+        detail: { provider: 'anthropic' }
+      }))
     } catch (error) {
       setClaudeOAuthStatus('error')
       setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to save token')
@@ -467,12 +499,25 @@ export default function ApiSettingsPage() {
 
       if (result.success && result.token) {
         await window.electronAPI.updateBillingMethod('oauth_token', result.token)
+        // OAuth only works with Anthropic official API - update provider config
+        await window.electronAPI.updateProviderConfig?.({
+          provider: 'anthropic',
+          baseURL: 'https://api.anthropic.com',
+          apiFormat: 'anthropic',
+        })
+        setCurrentProvider('anthropic')
+        setBaseURL('https://api.anthropic.com')
+        setApiFormat('anthropic')
         setAuthType('oauth_token')
         setHasCredential(true)
         setClaudeOAuthStatus('success')
         setIsWaitingForCode(false)
         setAuthCode('')
         setExpandedMethod(null)
+        // Emit provider change event
+        window.dispatchEvent(new CustomEvent('cowork:provider-changed', {
+          detail: { provider: 'anthropic' }
+        }))
       } else {
         setClaudeOAuthStatus('error')
         setClaudeOAuthError(result.error || 'Failed to exchange code')
@@ -604,8 +649,8 @@ export default function ApiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
-              {/* Provider Selection - only show for Claude (not Codex) */}
-              {agentType !== 'codex' && (
+              {/* Provider Selection - only show for Claude with API Key (not OAuth or Codex) */}
+              {agentType !== 'codex' && authType === 'api_key' && (
               <SettingsSection title={t('apiSettings.provider')}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
@@ -623,8 +668,8 @@ export default function ApiSettingsPage() {
               </SettingsSection>
               )}
 
-              {/* Bedrock Mode Info - only show for Claude */}
-              {agentType !== 'codex' && currentProvider === 'bedrock' && (
+              {/* Bedrock Mode Info - only show for Claude with API Key */}
+              {agentType !== 'codex' && authType === 'api_key' && currentProvider === 'bedrock' && (
                 <SettingsSection title={t('apiSettings.providerBedrock')}>
                   <SettingsCard>
                     <SettingsRow
@@ -640,8 +685,8 @@ export default function ApiSettingsPage() {
                 </SettingsSection>
               )}
 
-              {/* API Configuration - only show for Claude and hide for Bedrock */}
-              {agentType !== 'codex' && currentProvider !== 'bedrock' && (
+              {/* API Configuration - only show for Claude with API Key (not OAuth) and hide for Bedrock */}
+              {agentType !== 'codex' && authType === 'api_key' && currentProvider !== 'bedrock' && (
                 <>
                   <SettingsSection title={t('apiSettings.baseUrl')}>
                     <SettingsCard>

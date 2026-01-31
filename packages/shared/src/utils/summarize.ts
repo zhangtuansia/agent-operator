@@ -14,6 +14,9 @@ export const TOKEN_LIMIT = 15000;
 // Max tokens to send to Haiku for summarization (~400KB, Haiku handles this quickly)
 const MAX_SUMMARIZATION_INPUT = 100000;
 
+// Truncation limit when API key is unavailable (~40KB, preserves most content)
+const FALLBACK_TRUNCATION_LIMIT = 40000;
+
 // Lazy-initialized Anthropic client for summarization
 let anthropicClient: Anthropic | null = null;
 
@@ -95,7 +98,7 @@ export async function summarizeLargeResult(
   // If no client (no API key), fall back to truncation
   if (!client) {
     debug('[summarize] Falling back to truncation (no API key for Haiku summarization)');
-    return response.substring(0, 40000) + '\n\n[Result truncated due to size - smart summarization requires API key auth]';
+    return response.substring(0, FALLBACK_TRUNCATION_LIMIT) + '\n\n[Result truncated due to size - smart summarization requires API key auth]';
   }
 
   // Build context from tool input (safely stringify to handle cyclic structures)

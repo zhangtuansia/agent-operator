@@ -261,10 +261,12 @@ export function FreeFormInput({
     if (!window.electronAPI) return
     try {
       const billingInfo = await window.electronAPI.getBillingMethod()
-      setCurrentProvider(billingInfo.provider)
+      // For OAuth, default to 'anthropic' provider
+      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
+      setCurrentProvider(effectiveProvider)
 
       // Load custom models if using custom provider
-      if (billingInfo.provider === 'custom') {
+      if (effectiveProvider === 'custom') {
         const models = await window.electronAPI.getCustomModels()
         setCustomModels(models || [])
       }

@@ -9,6 +9,35 @@ import type { SavedWindow } from './window-state'
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
+// ============================================================
+// Window Size Constants
+// ============================================================
+
+/**
+ * Window dimensions for different modes.
+ * Focused mode: Smaller window for single session view (quick tasks)
+ * Normal mode: Larger window for multi-session workspace view
+ */
+const WINDOW_SIZES = {
+  focused: { width: 900, height: 700 },
+  normal: { width: 1400, height: 900 },
+  min: { width: 800, height: 600 },
+} as const
+
+/**
+ * macOS traffic light (window controls) position.
+ * Positioned with padding from the window edge for hiddenInset title bar.
+ */
+const TRAFFIC_LIGHT_POSITION = { x: 18, y: 18 } as const
+
+/**
+ * Windows build numbers for transparency feature detection.
+ */
+const WINDOWS_BUILD = {
+  WIN11_MICA: 22000,      // Windows 11 - supports Mica effect
+  WIN10_ACRYLIC: 17763,   // Windows 10 1809 - supports Acrylic effect
+} as const
+
 /**
  * Get the appropriate background material for Windows transparency effects
  * - Windows 11 (build 22000+): Mica effect
@@ -21,10 +50,10 @@ function getWindowsBackgroundMaterial(): 'mica' | 'acrylic' | undefined {
   // os.release() returns "10.0.xxxxx" where xxxxx is the build number
   const buildNumber = parseInt(release().split('.')[2] || '0', 10)
 
-  if (buildNumber >= 22000) {
+  if (buildNumber >= WINDOWS_BUILD.WIN11_MICA) {
     windowLog.info('Windows 11 detected (build ' + buildNumber + '), using Mica')
     return 'mica'
-  } else if (buildNumber >= 17763) {
+  } else if (buildNumber >= WINDOWS_BUILD.WIN10_ACRYLIC) {
     windowLog.info('Windows 10 1809+ detected (build ' + buildNumber + '), using Acrylic')
     return 'acrylic'
   }
@@ -81,8 +110,7 @@ export class WindowManager {
     }
 
     // Use smaller window size for focused mode (single session view)
-    const windowWidth = focused ? 900 : 1400
-    const windowHeight = focused ? 700 : 900
+    const windowSize = focused ? WINDOW_SIZES.focused : WINDOW_SIZES.normal
 
     // Platform-specific window options
     const isMac = process.platform === 'darwin'
@@ -90,17 +118,17 @@ export class WindowManager {
     const windowsBackgroundMaterial = getWindowsBackgroundMaterial()
 
     const window = new BrowserWindow({
-      width: windowWidth,
-      height: windowHeight,
-      minWidth: 800,
-      minHeight: 600,
+      width: windowSize.width,
+      height: windowSize.height,
+      minWidth: WINDOW_SIZES.min.width,
+      minHeight: WINDOW_SIZES.min.height,
       show: false, // Don't show until ready-to-show event (faster perceived startup)
       title: '',
       icon: iconExists ? iconPath : undefined,
       // macOS-specific: hidden title bar with inset traffic lights
       ...(isMac && {
         titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 18, y: 18 },
+        trafficLightPosition: TRAFFIC_LIGHT_POSITION,
         vibrancy: 'under-window',
         visualEffectState: 'active',
       }),

@@ -20,6 +20,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
+import DOMPurify from 'dompurify'
 import { isEmoji } from '@agent-operator/shared/utils/icon-constants'
 import type { ResolvedEntityIcon } from '@agent-operator/shared/icons'
 
@@ -637,15 +638,22 @@ async function loadIconFile(
 
 /**
  * Sanitize SVG content for safe inline rendering via dangerouslySetInnerHTML.
- * Removes script tags, event handlers, and JavaScript URLs.
- * Also strips width/height attributes so SVG fills its container.
+ * Uses DOMPurify for robust XSS prevention, then strips width/height for responsive sizing.
  */
 function sanitizeSvgForInline(svg: string): string {
-  return svg
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '')
-    .replace(/on\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
+  // Configure DOMPurify for SVG-specific sanitization
+  const sanitized = DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    // Remove potentially dangerous elements
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+    // Remove event handlers and dangerous attributes
+    FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover', 'onfocus', 'onblur', 'xlink:href'],
+    // Allow data: URLs only for images, not scripts
+    ALLOW_DATA_ATTR: false,
+  })
+
+  // Strip width/height attributes so SVG fills its container
+  return sanitized
     .replace(/\s+width="[^"]*"/gi, '')
     .replace(/\s+height="[^"]*"/gi, '')
 }

@@ -74,6 +74,31 @@ export default function WorkspaceSettingsPage() {
   // Custom models for 'custom' provider
   const [customModels, setCustomModels] = useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
 
+  // Load provider info
+  const loadProviderInfo = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    try {
+      const billingInfo = await window.electronAPI.getBillingMethod()
+      // For OAuth, default to 'anthropic' provider
+      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
+      setCurrentProvider(effectiveProvider)
+
+      // Load custom models if using custom provider
+      if (effectiveProvider === 'custom') {
+        const models = await window.electronAPI.getCustomModels()
+        setCustomModels(models || [])
+      } else {
+        setCustomModels([])
+      }
+
+      return effectiveProvider
+    } catch (error) {
+      console.error('Failed to load provider info:', error)
+      return undefined
+    }
+  }, [])
+
   // Load workspace settings when active workspace changes
   useEffect(() => {
     const loadWorkspaceSettings = async () => {
@@ -85,21 +110,14 @@ export default function WorkspaceSettingsPage() {
       setIsLoadingWorkspace(true)
       try {
         // Load billing method to get current provider
-        const billingInfo = await window.electronAPI.getBillingMethod()
-        setCurrentProvider(billingInfo.provider)
-
-        // Load custom models if using custom provider
-        if (billingInfo.provider === 'custom') {
-          const models = await window.electronAPI.getCustomModels()
-          setCustomModels(models || [])
-        }
+        const effectiveProvider = await loadProviderInfo()
 
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
           // Use provider-specific default model if no model is set
-          setWsModel(settings.model || getDefaultModelForProvider(billingInfo.provider))
+          setWsModel(settings.model || getDefaultModelForProvider(effectiveProvider))
           setWsThinkingLevel(settings.thinkingLevel || DEFAULT_THINKING_LEVEL)
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
@@ -139,7 +157,7 @@ export default function WorkspaceSettingsPage() {
     }
 
     loadWorkspaceSettings()
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, loadProviderInfo])
 
   // Save workspace setting
   const updateWorkspaceSetting = useCallback(
@@ -154,6 +172,31 @@ export default function WorkspaceSettingsPage() {
     },
     [activeWorkspaceId]
   )
+
+  // Listen for provider changes from ApiSettingsPage
+  useEffect(() => {
+    const handleProviderChanged = async (event: CustomEvent<{ provider: string }>) => {
+      const newProvider = event.detail?.provider || 'anthropic'
+      setCurrentProvider(newProvider)
+
+      // Reset model to default for the new provider if current model is not valid
+      const models = getModelsForProvider(newProvider, customModels)
+      if (!models.some(m => m.id === wsModel)) {
+        const defaultModel = getDefaultModelForProvider(newProvider)
+        setWsModel(defaultModel)
+        // Also update workspace settings
+        if (activeWorkspaceId && window.electronAPI) {
+          await window.electronAPI.updateWorkspaceSetting(activeWorkspaceId, 'model', defaultModel)
+          onModelChange?.(defaultModel)
+        }
+      }
+    }
+
+    window.addEventListener('cowork:provider-changed', handleProviderChanged as EventListener)
+    return () => {
+      window.removeEventListener('cowork:provider-changed', handleProviderChanged as EventListener)
+    }
+  }, [wsModel, customModels, activeWorkspaceId, onModelChange])
 
   // Workspace icon upload handler
   const handleIconUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

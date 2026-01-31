@@ -71,6 +71,12 @@ function getWorkspaceOrThrow(workspaceId: string): Workspace {
 /**
  * Validates that a file path is within allowed directories to prevent path traversal attacks.
  * Allowed directories: user's home directory and /tmp
+ *
+ * Security measures:
+ * 1. Normalizes path to resolve . and .. components
+ * 2. Resolves symlinks to prevent symlink-based bypass
+ * 3. Validates parent directories when file doesn't exist
+ * 4. Blocks sensitive files even within allowed directories
  */
 async function validateFilePath(filePath: string): Promise<string> {
   // Normalize the path to resolve . and .. components
@@ -86,26 +92,55 @@ async function validateFilePath(filePath: string): Promise<string> {
     throw new Error('Only absolute file paths are allowed')
   }
 
-  // Resolve symlinks to get the real path
-  let realPath: string
-  try {
-    realPath = await realpath(normalizedPath)
-  } catch {
-    // File doesn't exist or can't be resolved - use normalized path
-    realPath = normalizedPath
-  }
-
   // Define allowed base directories
   const allowedDirs = [
     homedir(),      // User's home directory
     '/tmp',         // Temporary files
     '/var/folders', // macOS temp folders
+    tmpdir(),       // OS-specific temp directory
   ]
 
-  // Check if the real path is within an allowed directory
-  const isAllowed = allowedDirs.some(dir => realPath.startsWith(dir + '/') || realPath === dir)
+  // Helper to check if path is within allowed directories
+  const isPathAllowed = (pathToCheck: string): boolean => {
+    return allowedDirs.some(dir => pathToCheck.startsWith(dir + '/') || pathToCheck === dir)
+  }
 
-  if (!isAllowed) {
+  // Resolve symlinks to get the real path
+  let realPath: string
+  try {
+    realPath = await realpath(normalizedPath)
+  } catch {
+    // File doesn't exist - validate by checking parent directories
+    // Walk up the path until we find an existing directory and resolve it
+    let currentPath = normalizedPath
+    let existingParent: string | null = null
+
+    while (currentPath !== '/' && currentPath !== dirname(currentPath)) {
+      currentPath = dirname(currentPath)
+      try {
+        existingParent = await realpath(currentPath)
+        break
+      } catch {
+        // Parent doesn't exist either, keep walking up
+      }
+    }
+
+    // If we found an existing parent, verify it's in allowed directories
+    if (existingParent) {
+      if (!isPathAllowed(existingParent)) {
+        throw new Error('Access denied: file path is outside allowed directories')
+      }
+      // Reconstruct the path using the resolved parent
+      const relativePart = normalizedPath.slice(currentPath.length)
+      realPath = join(existingParent, relativePart)
+    } else {
+      // No parent exists - use normalized path but still validate
+      realPath = normalizedPath
+    }
+  }
+
+  // Final check: ensure the real path is within an allowed directory
+  if (!isPathAllowed(realPath)) {
     throw new Error('Access denied: file path is outside allowed directories')
   }
 
@@ -120,6 +155,8 @@ async function validateFilePath(filePath: string): Promise<string> {
     /secrets?\./i,
     /\.pem$/,
     /\.key$/,
+    /\.kube\/config/,  // Kubernetes config
+    /\.docker\/config\.json/,  // Docker credentials
   ]
 
   if (sensitivePatterns.some(pattern => pattern.test(realPath))) {
@@ -127,6 +164,103 @@ async function validateFilePath(filePath: string): Promise<string> {
   }
 
   return realPath
+}
+
+// ============================================================================
+// Rate Limiting
+// ============================================================================
+
+interface RateLimitEntry {
+  count: number
+  resetAt: number
+}
+
+/**
+ * Simple in-memory rate limiter for IPC handlers.
+ * Prevents abuse by limiting request frequency per channel.
+ */
+class IpcRateLimiter {
+  private limits = new Map<string, RateLimitEntry>()
+
+  /**
+   * Check if a request should be allowed.
+   * @param key - Unique identifier (typically channel name)
+   * @param limit - Maximum requests allowed in the window
+   * @param windowMs - Time window in milliseconds
+   * @returns true if request is allowed, false if rate limited
+   */
+  check(key: string, limit: number, windowMs: number): boolean {
+    const now = Date.now()
+    let entry = this.limits.get(key)
+
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs }
+    }
+
+    entry.count++
+    this.limits.set(key, entry)
+
+    return entry.count <= limit
+  }
+
+  /**
+   * Get remaining requests for a key.
+   */
+  getRemaining(key: string, limit: number): number {
+    const entry = this.limits.get(key)
+    if (!entry || Date.now() > entry.resetAt) {
+      return limit
+    }
+    return Math.max(0, limit - entry.count)
+  }
+
+  /**
+   * Clean up expired entries to prevent memory leaks.
+   * Call periodically (e.g., every minute).
+   */
+  cleanup(): void {
+    const now = Date.now()
+    for (const [key, entry] of this.limits) {
+      if (now > entry.resetAt) {
+        this.limits.delete(key)
+      }
+    }
+  }
+}
+
+const rateLimiter = new IpcRateLimiter()
+
+// Clean up expired rate limit entries every minute
+setInterval(() => rateLimiter.cleanup(), 60_000)
+
+// Rate limit configurations for different operations
+const RATE_LIMITS = {
+  // High-frequency operations: 100 req/min
+  HIGH_FREQUENCY: { limit: 100, windowMs: 60_000 },
+  // Normal operations: 60 req/min
+  NORMAL: { limit: 60, windowMs: 60_000 },
+  // Sensitive operations: 10 req/min
+  SENSITIVE: { limit: 10, windowMs: 60_000 },
+  // File operations: 30 req/min
+  FILE_OPS: { limit: 30, windowMs: 60_000 },
+} as const
+
+/**
+ * Wrapper to apply rate limiting to an IPC handler.
+ * Throws an error if rate limit is exceeded.
+ */
+function withRateLimit<T extends unknown[], R>(
+  channel: string,
+  config: { limit: number; windowMs: number },
+  handler: (...args: T) => Promise<R>
+): (...args: T) => Promise<R> {
+  return async (...args: T): Promise<R> => {
+    if (!rateLimiter.check(channel, config.limit, config.windowMs)) {
+      const remaining = rateLimiter.getRemaining(channel, config.limit)
+      throw new Error(`Rate limit exceeded for ${channel}. Try again later. (${remaining} remaining)`)
+    }
+    return handler(...args)
+  }
 }
 
 export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
@@ -416,7 +550,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Read a file (with path validation to prevent traversal attacks)
+  // Rate limited to prevent abuse
   ipcMain.handle(IPC_CHANNELS.READ_FILE, async (_event, path: string) => {
+    // Apply rate limiting for file operations
+    if (!rateLimiter.check('READ_FILE', RATE_LIMITS.FILE_OPS.limit, RATE_LIMITS.FILE_OPS.windowMs)) {
+      throw new Error('Rate limit exceeded for file reads. Please wait before trying again.')
+    }
+
     try {
       // Validate and normalize the path
       const safePath = await validateFilePath(path)
@@ -444,7 +584,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Read file and return as FileAttachment with Quick Look thumbnail
+  // Rate limited to prevent abuse
   ipcMain.handle(IPC_CHANNELS.READ_FILE_ATTACHMENT, async (_event, path: string) => {
+    // Apply rate limiting for file operations
+    if (!rateLimiter.check('READ_FILE_ATTACHMENT', RATE_LIMITS.FILE_OPS.limit, RATE_LIMITS.FILE_OPS.windowMs)) {
+      throw new Error('Rate limit exceeded for file reads. Please wait before trying again.')
+    }
+
     try {
       // Validate path first to prevent path traversal
       const safePath = await validateFilePath(path)
@@ -824,7 +970,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Logout - clear all credentials and config
+  // Rate limited as a sensitive operation
   ipcMain.handle(IPC_CHANNELS.LOGOUT, async () => {
+    // Apply strict rate limiting for logout
+    if (!rateLimiter.check('LOGOUT', RATE_LIMITS.SENSITIVE.limit, RATE_LIMITS.SENSITIVE.windowMs)) {
+      throw new Error('Rate limit exceeded. Please wait before trying again.')
+    }
+
     try {
       const manager = getCredentialManager()
 
@@ -870,10 +1022,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Return provider from config (independent of auth type)
     // Auth type determines how to authenticate, provider determines API endpoint and models
     // - bedrock overrides to 'bedrock' provider
+    // - oauth_token always uses 'anthropic' (OAuth only works with official API)
     // - Otherwise use configured provider (anthropic, glm, minimax, etc.)
     let provider: string | undefined
     if (authType === 'bedrock') {
       provider = 'bedrock'
+    } else if (authType === 'oauth_token') {
+      // OAuth only works with official Anthropic API
+      provider = 'anthropic'
     } else {
       provider = providerConfig?.provider
     }
@@ -882,7 +1038,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Update billing method and credential
+  // Rate limited as a sensitive operation
   ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, async (_event, authType: AuthType, credential?: string) => {
+    // Apply strict rate limiting for credential operations
+    if (!rateLimiter.check('SETTINGS_UPDATE_BILLING_METHOD', RATE_LIMITS.SENSITIVE.limit, RATE_LIMITS.SENSITIVE.windowMs)) {
+      throw new Error('Rate limit exceeded for credential updates. Please wait before trying again.')
+    }
+
     const manager = getCredentialManager()
 
     // Clear old credentials when switching auth types

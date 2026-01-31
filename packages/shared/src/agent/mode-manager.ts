@@ -83,10 +83,24 @@ function expandHome(path: string): string {
 }
 
 /**
- * Convert a simple glob pattern to a regex
+ * Cache for compiled glob-to-regex patterns.
+ * Prevents repeated regex compilation for the same patterns.
+ * Uses LRU-like eviction when cache exceeds max size.
+ */
+const globRegexCache = new Map<string, RegExp>();
+const GLOB_CACHE_MAX_SIZE = 500; // Max cached patterns
+
+/**
+ * Convert a simple glob pattern to a regex (with caching)
  * Supports: ** (recursive), * (single segment), ? (single char)
  */
 function globToRegex(pattern: string): RegExp {
+  // Check cache first
+  const cached = globRegexCache.get(pattern);
+  if (cached) {
+    return cached;
+  }
+
   // Expand ~ in pattern
   const expandedPattern = expandHome(pattern);
 
@@ -98,7 +112,17 @@ function globToRegex(pattern: string): RegExp {
     .replace(/\0DOUBLE_STAR\0/g, '.*')      // ** matches anything including /
     .replace(/\?/g, '.');                   // ? matches single char
 
-  return new RegExp(`^${regex}$`);
+  const compiled = new RegExp(`^${regex}$`);
+
+  // Cache the compiled regex (with LRU-like eviction)
+  if (globRegexCache.size >= GLOB_CACHE_MAX_SIZE) {
+    // Remove oldest entry (first key in Map maintains insertion order)
+    const firstKey = globRegexCache.keys().next().value;
+    if (firstKey) globRegexCache.delete(firstKey);
+  }
+  globRegexCache.set(pattern, compiled);
+
+  return compiled;
 }
 
 /**
