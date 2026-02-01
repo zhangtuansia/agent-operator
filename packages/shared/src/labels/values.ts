@@ -95,6 +95,22 @@ export function extractLabelId(entry: string): string {
   return separatorIndex === -1 ? entry : entry.substring(0, separatorIndex);
 }
 
+/**
+ * Format a raw label value for human-readable display.
+ * Dates get locale-formatted (e.g. "Jan 30, 2026"), numbers and strings pass through.
+ * Used by UI badge components to render the value portion after the interpunct.
+ */
+export function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date'): string {
+  if (valueType === 'date') {
+    // Parse date-only or datetime strings (matching the storage formats in parseLabelEntry)
+    const date = new Date(rawValue.includes('T') ? rawValue + ':00Z' : rawValue + 'T00:00:00Z');
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }
+  return rawValue;
+}
+
 // ============================================================
 // Internal Helpers
 // ============================================================

@@ -116,6 +116,15 @@ export type { PermissionRequest as BasePermissionRequest } from '@agent-operator
 // Electron-specific Types (not in shared package)
 // =============================================================================
 
+/**
+ * Git Bash detection status (Windows-only concern)
+ */
+export interface GitBashStatus {
+  found: boolean
+  path: string | null
+  platform: 'win32' | 'darwin' | 'linux'
+}
+
 // Import types needed for ElectronAPI
 import type { Message } from '@agent-operator/core/types';
 import type {

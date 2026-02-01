@@ -10,6 +10,8 @@ import type { EntityColor } from '@agent-operator/shared/colors'
 import { resolveEntityColor } from '@agent-operator/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
+import { Hash, CalendarDays, Type } from 'lucide-react'
+import type { LabelConfig } from '@agent-operator/shared/labels'
 
 interface LabelIconProps {
   /** Label configuration (matches LabelConfig from @agent-operator/shared/labels) */
@@ -72,4 +74,39 @@ export function LabelIcon({ label, size = 'sm', hasChildren, className }: LabelI
       </span>
     </span>
   )
+}
+
+/**
+ * LabelValueTypeIcon - Renders a placeholder icon for typed labels with no value set.
+ *
+ * Maps valueType to a Lucide icon:
+ *   - number → Hash
+ *   - date   → CalendarDays
+ *   - string → Type
+ *
+ * Returns null if the label has no valueType (boolean/presence-only labels).
+ * Used in both SessionList and LabelBadge to indicate a typed label awaiting a value.
+ */
+const VALUE_TYPE_ICONS = {
+  number: Hash,
+  date: CalendarDays,
+  string: Type,
+} as const
+
+interface LabelValueTypeIconProps {
+  /** The label's valueType ('number' | 'date' | 'string' | undefined) */
+  valueType: LabelConfig['valueType']
+  /** Icon size in pixels (default: 11) */
+  size?: number
+  /** Additional className */
+  className?: string
+}
+
+export function LabelValueTypeIcon({ valueType, size = 11, className }: LabelValueTypeIconProps) {
+  if (!valueType) return null
+
+  const IconComponent = VALUE_TYPE_ICONS[valueType]
+  if (!IconComponent) return null
+
+  return <IconComponent size={size} className={cn('shrink-0 opacity-45', className)} />
 }
