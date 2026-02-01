@@ -1,6 +1,9 @@
 // Base overlay components
 export { FullscreenOverlayBase, type FullscreenOverlayBaseProps } from './FullscreenOverlayBase'
+export { FullscreenOverlayBaseHeader, type FullscreenOverlayBaseHeaderProps } from './FullscreenOverlayBaseHeader'
 export { PreviewOverlay, type PreviewOverlayProps, type BadgeVariant } from './PreviewOverlay'
+export { ContentFrame, type ContentFrameProps } from './ContentFrame'
+export { OverlayErrorBanner, type OverlayErrorBannerProps } from './OverlayErrorBanner'
 
 // Helper components
 export { CopyButton, type CopyButtonProps } from './CopyButton'
@@ -14,3 +17,6 @@ export { GenericOverlay, detectLanguageFromPath, type GenericOverlayProps } from
 export { JSONPreviewOverlay, type JSONPreviewOverlayProps } from './JSONPreviewOverlay'
 export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay'
 export { DocumentFormattedMarkdownOverlay, type DocumentFormattedMarkdownOverlayProps } from './DocumentFormattedMarkdownOverlay'
+export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
+export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
+export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePreviewOverlay'

@@ -58,10 +58,13 @@
     "./ipc/types": "./src/ipc/types.ts",
     "./ipc/channels": "./src/ipc/channels.ts",
     "./routing": "./src/routing/index.ts",
-    "./routing/parser": "./src/routing/parser.ts"
+    "./routing/parser": "./src/routing/parser.ts",
+    "./search": "./src/search/index.ts"
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",
+    "@isaacs/ttlcache": "^2.1.4",
+    "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",
     "filtrex": "^3.1.0",
     "incr-regex-package": "^1.0.4",

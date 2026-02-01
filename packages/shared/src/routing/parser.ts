@@ -62,7 +62,7 @@ const COMPOUND_ROUTE_PREFIXES = [
  * Check if a route is a compound route (new format)
  */
 export function isCompoundRoute(route: string): boolean {
-  const firstSegment = route.split('/')[0]
+  const firstSegment = route.split('/')[0] ?? ''
   return COMPOUND_ROUTE_PREFIXES.includes(firstSegment)
 }
 
@@ -239,7 +239,7 @@ export function parseRoute(route: string): ParsedRoute | null {
 
     // Parse action routes: action/{name}[/{id}]
     const [pathPart, queryPart] = route.split('?')
-    const segments = pathPart.split('/').filter(Boolean)
+    const segments = (pathPart ?? '').split('/').filter(Boolean)
 
     if (segments.length < 2) {
       return null
@@ -250,7 +250,7 @@ export function parseRoute(route: string): ParsedRoute | null {
       return null
     }
 
-    const name = segments[1]
+    const name = segments[1]!
     const id = segments[2]
 
     // Parse query params
@@ -262,7 +262,7 @@ export function parseRoute(route: string): ParsedRoute | null {
       })
     }
 
-    return { type: 'action', name, id, params }
+    return { type: 'action' as const, name, id, params }
   } catch {
     return null
   }

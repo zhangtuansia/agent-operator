@@ -187,7 +187,7 @@ export function getDefaultModelForProvider(provider: string | undefined): string
 export function isModelValidForProvider(
   modelId: string,
   provider: string | undefined,
-  customModels?: Array<{ id: string }>
+  customModels?: Array<{ id: string; name: string; shortName?: string; description?: string }>
 ): boolean {
   const models = getModelsForProvider(provider, customModels);
   return models.some(m => m.id === modelId);
