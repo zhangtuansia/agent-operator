@@ -6,21 +6,29 @@
  * - Responsive modal (>=1200px) vs fullscreen (<1200px) modes
  * - Escape key to close
  * - Backdrop click to close (modal mode)
- * - Consistent header layout with badge, title, close button
+ * - Consistent header layout with badges, close button
  * - Optional error banner
  *
- * Used by: CodePreviewOverlay, DiffPreviewOverlay, TerminalPreviewOverlay, GenericOverlay
+ * Header is delegated to FullscreenOverlayBase in fullscreen mode (which renders
+ * FullscreenOverlayBaseHeader). In modal/embedded mode, renders the header directly.
+ *
+ * Used by: CodePreviewOverlay, TerminalPreviewOverlay, GenericOverlay, etc.
  */
 
 import { useEffect, type ReactNode } from 'react'
 import * as ReactDOM from 'react-dom'
-import { X, type LucideIcon } from 'lucide-react'
+import { type LucideIcon } from 'lucide-react'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
-import { PreviewHeader, PreviewHeaderBadge, type PreviewBadgeVariant } from '../ui/PreviewHeader'
 import { FullscreenOverlayBase } from './FullscreenOverlayBase'
+import { FullscreenOverlayBaseHeader } from './FullscreenOverlayBaseHeader'
+import { OverlayErrorBanner } from './OverlayErrorBanner'
+import type { PreviewBadgeVariant } from '../ui/PreviewHeader'
 
 /** Badge color variants - re-export for backwards compatibility */
 export type BadgeVariant = PreviewBadgeVariant
+
+/** Shared background class for all overlay modes - single source of truth */
+const OVERLAY_BG = 'bg-background'
 
 export interface PreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -30,19 +38,21 @@ export interface PreviewOverlayProps {
   /** Theme mode */
   theme?: 'light' | 'dark'
 
-  /** Header badge configuration */
-  badge: {
+  /** Type badge configuration — tool/format indicator */
+  typeBadge: {
     icon: LucideIcon
     label: string
     variant: BadgeVariant
   }
 
-  /** Main title (e.g., file path) */
-  title: string
-  /** Callback when title is clicked (e.g., to open file) */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  filePath?: string
+  /** Title — displayed as badge. Fallback when no file path. */
+  title?: string
+  /** Callback when title badge is clicked (only used when no filePath) */
   onTitleClick?: () => void
   /** Optional subtitle (e.g., line range info) */
-  subtitle?: ReactNode
+  subtitle?: string
 
   /** Optional error state */
   error?: {
@@ -50,32 +60,36 @@ export interface PreviewOverlayProps {
     message: string
   }
 
-  /** Actions to show in header (rendered after badges) */
+  /** Actions to show in header right side */
   headerActions?: ReactNode
 
   /** Main content */
   children: ReactNode
 
-  /** Background color override (default: theme-based) */
-  backgroundColor?: string
-  /** Text color override (default: theme-based) */
-  textColor?: string
+  /** Render inline (no dialog/portal) — for embedding in design system playground */
+  embedded?: boolean
+
+  /** Custom class names for the overlay container (e.g., to override bg-background) */
+  className?: string
 }
 
 export function PreviewOverlay({
   isOpen,
   onClose,
   theme = 'light',
-  badge,
+  typeBadge,
+  filePath,
   title,
   onTitleClick,
   subtitle,
   error,
   headerActions,
   children,
-  backgroundColor,
-  textColor,
+  embedded = false,
+  className,
 }: PreviewOverlayProps) {
+  // Use custom className if provided, otherwise fall back to default bg
+  const bgClass = className || OVERLAY_BG
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'
 
@@ -93,54 +107,79 @@ export function PreviewOverlay({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, isModal, onClose])
 
-  if (!isOpen) return null
+  if (!isOpen && !embedded) return null
 
-  const defaultBg = theme === 'dark' ? '#1e1e1e' : '#ffffff'
-  const defaultText = theme === 'dark' ? '#e4e4e4' : '#1a1a1a'
-  const bgColor = backgroundColor ?? defaultBg
-  const txtColor = textColor ?? defaultText
-
+  // Header rendered in modal/embedded mode (fullscreen delegates to FullscreenOverlayBase)
   const header = (
-    <PreviewHeader onClose={onClose} height={isModal ? 48 : 54}>
-      <PreviewHeaderBadge
-        icon={badge.icon}
-        label={badge.label}
-        variant={badge.variant}
-      />
-      <PreviewHeaderBadge label={title} onClick={onTitleClick} shrinkable />
-      {subtitle && <PreviewHeaderBadge label={String(subtitle)} />}
-      {headerActions}
-    </PreviewHeader>
+    <FullscreenOverlayBaseHeader
+      onClose={onClose}
+      typeBadge={typeBadge}
+      filePath={filePath}
+      title={title}
+      onTitleClick={onTitleClick}
+      subtitle={subtitle}
+      headerActions={headerActions}
+    />
   )
 
+  // Error banner — uses shared OverlayErrorBanner with tinted-shadow styling.
+  // Rendered inside the centering wrapper so error + content are centered together.
   const errorBanner = error && (
-    <div className="px-4 py-3 bg-destructive/10 border-b border-destructive/20 flex items-start gap-3">
-      <X className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-semibold text-destructive/70 mb-0.5">{error.label}</div>
-        <p className="text-sm text-destructive whitespace-pre-wrap break-words">{error.message}</p>
+    <div className="px-6 pb-4">
+      <OverlayErrorBanner label={error.label} message={error.message} />
+    </div>
+  )
+
+  // Gradient fade mask for modal/embedded modes — mirrors FullscreenOverlayBase's
+  // scroll container structure so children (ContentFrame, etc.) work identically
+  // in all modes using flow-based layout inside a scrollable, masked viewport.
+  const FADE_SIZE = 24
+  const FADE_MASK = `linear-gradient(to bottom, transparent 0%, black ${FADE_SIZE}px, black calc(100% - ${FADE_SIZE}px), transparent 100%)`
+
+  const contentArea = (
+    <div
+      className="flex-1 min-h-0 relative"
+      style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK }}
+    >
+      <div
+        className="absolute inset-0 overflow-y-auto"
+        style={{ paddingTop: FADE_SIZE, paddingBottom: FADE_SIZE, scrollPaddingTop: FADE_SIZE }}
+      >
+        {/* Centering wrapper — error + content are vertically centered together when small */}
+        <div className="min-h-full flex flex-col justify-center">
+          {errorBanner}
+          {children}
+        </div>
       </div>
     </div>
   )
 
-  const contentArea = <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+  // Embedded mode — renders inline without dialog/portal, for design system playground
+  if (embedded) {
+    return (
+      <div className={`flex flex-col ${bgClass} h-full w-full overflow-hidden rounded-lg border border-foreground/5`}>
+        {header}
+        {contentArea}
+      </div>
+    )
+  }
 
-  // Fullscreen mode - uses FullscreenOverlayBase for portal, traffic lights, and ESC handling
+  // Fullscreen mode — FullscreenOverlayBase renders the header via structured props
+  // and owns the masked scroll container. Children are rendered directly inside it.
   if (!isModal) {
     return (
       <FullscreenOverlayBase
         isOpen={isOpen}
         onClose={onClose}
-        className="flex flex-col bg-background"
+        typeBadge={typeBadge}
+        filePath={filePath}
+        title={title}
+        onTitleClick={onTitleClick}
+        subtitle={subtitle}
+        headerActions={headerActions}
+        error={error}
       >
-        <div
-          className="flex flex-col flex-1 min-h-0"
-          style={{ backgroundColor: bgColor, color: txtColor }}
-        >
-          {header}
-          {errorBanner}
-          {contentArea}
-        </div>
+        {children}
       </FullscreenOverlayBase>
     )
   }
@@ -154,10 +193,8 @@ export function PreviewOverlay({
       }}
     >
       <div
-        className="flex flex-col bg-background shadow-3xl overflow-hidden smooth-corners"
+        className={`flex flex-col ${bgClass} shadow-3xl overflow-hidden smooth-corners`}
         style={{
-          backgroundColor: bgColor,
-          color: txtColor,
           width: '90vw',
           maxWidth: OVERLAY_LAYOUT.modalMaxWidth,
           height: `${OVERLAY_LAYOUT.modalMaxHeightPercent}vh`,
@@ -165,7 +202,6 @@ export function PreviewOverlay({
         }}
       >
         {header}
-        {errorBanner}
         {contentArea}
       </div>
     </div>,
