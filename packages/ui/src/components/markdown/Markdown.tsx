@@ -4,6 +4,7 @@ import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { cn } from '../../lib/utils'
 import { CodeBlock, InlineCode } from './CodeBlock'
+import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -157,7 +158,14 @@ function createComponents(
         // Block code - use CodeBlock with full mode
         if (match || isBlock) {
           const code = String(children).replace(/\n$/, '')
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+          const language = match?.[1]?.toLowerCase()
+
+          // Mermaid diagrams - render as SVG
+          if (language === 'mermaid') {
+            return <MarkdownMermaidBlock code={code} className="my-2" />
+          }
+
+          return <CodeBlock code={code} language={language} mode="full" className="my-1" />
         }
 
         // Inline code
@@ -217,7 +225,14 @@ function createComponents(
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+        const language = match?.[1]?.toLowerCase()
+
+        // Mermaid diagrams - render as SVG
+        if (language === 'mermaid') {
+          return <MarkdownMermaidBlock code={code} className="my-2" />
+        }
+
+        return <CodeBlock code={code} language={language} mode="full" className="my-1" />
       }
 
       return <InlineCode>{children}</InlineCode>
