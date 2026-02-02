@@ -708,6 +708,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
   const intentOrDescription = activity.intent || (activity.toolInput?.description as string | undefined)
   const inputSummary = formatToolInput(activity.toolInput)
   const diffStats = computeEditWriteDiffStats(activity.toolName, activity.toolInput)
+
   const isComplete = activity.status === 'completed' || activity.status === 'error'
   const isBackgrounded = activity.status === 'backgrounded'
 
@@ -737,20 +738,18 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
         {!isBackgrounded && diffStats && (
           <span className="flex items-center gap-1.5 text-[10px] shrink-0">
             {diffStats.deletions > 0 && (
-              <span
-                className="px-1.5 py-0.5 bg-[color-mix(in_oklab,var(--destructive)_5%,var(--background))] shadow-tinted rounded-[4px] text-destructive"
-                style={{ '--shadow-color': 'var(--destructive-rgb)' } as React.CSSProperties}
-              >{diffStats.deletions}</span>
+              <span className="px-1.5 py-0.5 bg-destructive/10 rounded-[4px] text-destructive font-medium">
+                -{diffStats.deletions}
+              </span>
             )}
             {diffStats.additions > 0 && (
-              <span
-                className="px-1.5 py-0.5 bg-[color-mix(in_oklab,var(--success)_5%,var(--background))] shadow-tinted rounded-[4px] text-success"
-                style={{ '--shadow-color': 'var(--success-rgb)' } as React.CSSProperties}
-              >{diffStats.additions}</span>
+              <span className="px-1.5 py-0.5 bg-success/10 rounded-[4px] text-success font-medium">
+                +{diffStats.additions}
+              </span>
             )}
             {/* Filename badge */}
             {activity.toolInput?.file_path && (
-              <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[11px] text-foreground/70">
+              <span className="px-1.5 py-0.5 bg-foreground/5 rounded-[4px] text-[11px] text-foreground/70">
                 {(activity.toolInput.file_path as string).split('/').pop()}
               </span>
             )}
