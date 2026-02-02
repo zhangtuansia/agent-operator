@@ -130,6 +130,29 @@ export const en = {
     permissionWarning: 'Some features may not work without these permissions. After authorizing, you may need to restart the app.',
   },
 
+  // Input Settings
+  inputSettings: {
+    title: 'Input',
+
+    // Typing
+    typing: 'Typing',
+    typingDescription: 'Control how text is entered in the chat input.',
+    autoCapitalisation: 'Auto capitalisation',
+    autoCapitalisationDesc: 'Automatically capitalise the first letter when typing a message.',
+    spellCheck: 'Spell check',
+    spellCheckDesc: 'Underline misspelled words while typing.',
+
+    // Sending
+    sending: 'Sending',
+    sendingDescription: 'Choose how to send messages.',
+    sendMessageWith: 'Send message with',
+    sendMessageWithDesc: 'Keyboard shortcut for sending messages',
+    enterKey: 'Enter',
+    enterKeyDesc: 'Use Shift+Enter for new lines',
+    cmdEnterKey: '⌘ Enter',
+    cmdEnterKeyDesc: 'Use Enter for new lines',
+  },
+
   // API Settings
   apiSettings: {
     title: 'API Configuration',

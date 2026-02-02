@@ -132,6 +132,29 @@ export const zh: TranslationKeys = {
     permissionWarning: '部分功能需要这些权限才能正常工作。授权后可能需要重启应用。',
   },
 
+  // Input Settings
+  inputSettings: {
+    title: '输入',
+
+    // Typing
+    typing: '输入',
+    typingDescription: '控制聊天输入框的文本输入方式。',
+    autoCapitalisation: '自动大写',
+    autoCapitalisationDesc: '输入消息时自动将首字母大写。',
+    spellCheck: '拼写检查',
+    spellCheckDesc: '输入时为拼写错误的单词添加下划线。',
+
+    // Sending
+    sending: '发送',
+    sendingDescription: '选择发送消息的方式。',
+    sendMessageWith: '发送消息快捷键',
+    sendMessageWithDesc: '发送消息的键盘快捷键',
+    enterKey: 'Enter',
+    enterKeyDesc: '使用 Shift+Enter 换行',
+    cmdEnterKey: '⌘ Enter',
+    cmdEnterKeyDesc: '使用 Enter 换行',
+  },
+
   // API Settings
   apiSettings: {
     title: 'API 配置',
