@@ -78,26 +78,31 @@ function computeEditWriteDiffStats(
 ): { additions: number; deletions: number } | null {
   if (!toolInput) return null
 
-  if (toolName === 'Edit') {
-    const oldString = (toolInput.old_string as string) ?? ''
-    const newString = (toolInput.new_string as string) ?? ''
-    if (!oldString && !newString) return null
+  try {
+    if (toolName === 'Edit') {
+      const oldString = (toolInput.old_string as string) ?? ''
+      const newString = (toolInput.new_string as string) ?? ''
+      if (!oldString && !newString) return null
 
-    const oldFile: FileContents = { name: 'file', contents: oldString, lang: 'text' }
-    const newFile: FileContents = { name: 'file', contents: newString, lang: 'text' }
-    const fileDiff = parseDiffFromFile(oldFile, newFile)
-    return getDiffStats(fileDiff)
-  }
+      const oldFile: FileContents = { name: 'file', contents: oldString, lang: 'text' }
+      const newFile: FileContents = { name: 'file', contents: newString, lang: 'text' }
+      const fileDiff = parseDiffFromFile(oldFile, newFile)
+      return getDiffStats(fileDiff)
+    }
 
-  if (toolName === 'Write') {
-    const content = (toolInput.content as string) ?? ''
-    if (!content) return null
+    if (toolName === 'Write') {
+      const content = (toolInput.content as string) ?? ''
+      if (!content) return null
 
-    // For Write, everything is an addition (new file content)
-    const oldFile: FileContents = { name: 'file', contents: '', lang: 'text' }
-    const newFile: FileContents = { name: 'file', contents: content, lang: 'text' }
-    const fileDiff = parseDiffFromFile(oldFile, newFile)
-    return getDiffStats(fileDiff)
+      // For Write, everything is an addition (new file content)
+      const oldFile: FileContents = { name: 'file', contents: '', lang: 'text' }
+      const newFile: FileContents = { name: 'file', contents: content, lang: 'text' }
+      const fileDiff = parseDiffFromFile(oldFile, newFile)
+      return getDiffStats(fileDiff)
+    }
+  } catch (e) {
+    console.warn('[computeEditWriteDiffStats] Error computing diff stats:', e)
+    return null
   }
 
   return null
