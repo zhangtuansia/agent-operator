@@ -389,6 +389,14 @@ export interface ElectronAPI {
   getLanguage(): Promise<'en' | 'zh' | null>
   setLanguage(language: 'en' | 'zh'): Promise<void>
 
+  // Input settings
+  getAutoCapitalisation(): Promise<boolean>
+  setAutoCapitalisation(enabled: boolean): Promise<void>
+  getSendMessageKey(): Promise<'enter' | 'cmd-enter'>
+  setSendMessageKey(key: 'enter' | 'cmd-enter'): Promise<void>
+  getSpellCheck(): Promise<boolean>
+  setSpellCheck(enabled: boolean): Promise<void>
+
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>
   setDockIconWithBadge(dataUrl: string): Promise<void>
@@ -520,7 +528,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'workspace', 'api', 'permissions', 'shortcuts', 'preferences'].includes(subpage)) {
+    if (['app', 'workspace', 'api', 'input', 'permissions', 'shortcuts', 'preferences'].includes(subpage)) {
       return { navigator: 'settings', subpage }
     }
   }

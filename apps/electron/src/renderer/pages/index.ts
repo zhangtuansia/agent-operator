@@ -13,6 +13,7 @@ export {
   AppSettingsPage,
   WorkspaceSettingsPage,
   ApiSettingsPage,
+  InputSettingsPage,
   PermissionsSettingsPage,
   ShortcutsPage,
   PreferencesPage,

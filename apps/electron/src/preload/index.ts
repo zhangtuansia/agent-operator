@@ -409,6 +409,20 @@ const api: ElectronAPI = {
   setLanguage: (language: 'en' | 'zh') =>
     ipcRenderer.invoke(IPC_CHANNELS.LANGUAGE_SET, language),
 
+  // Input settings
+  getAutoCapitalisation: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_GET_AUTO_CAPITALISATION) as Promise<boolean>,
+  setAutoCapitalisation: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_SET_AUTO_CAPITALISATION, enabled),
+  getSendMessageKey: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_GET_SEND_MESSAGE_KEY) as Promise<'enter' | 'cmd-enter'>,
+  setSendMessageKey: (key: 'enter' | 'cmd-enter') =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_SET_SEND_MESSAGE_KEY, key),
+  getSpellCheck: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_GET_SPELL_CHECK) as Promise<boolean>,
+  setSpellCheck: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, enabled),
+
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>

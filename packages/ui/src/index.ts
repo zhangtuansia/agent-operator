@@ -145,6 +145,13 @@ export {
 // Utilities
 export { cn } from './lib/utils'
 
+// File classification
+export {
+  classifyFile,
+  type FileClassification,
+  type FilePreviewType,
+} from './lib/file-classification'
+
 // Layout constants and hooks
 export {
   CHAT_LAYOUT,

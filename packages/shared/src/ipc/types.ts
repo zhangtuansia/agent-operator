@@ -428,7 +428,7 @@ export type ChatFilter =
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'permissions' | 'shortcuts' | 'preferences'
+export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'permissions' | 'shortcuts' | 'preferences'
 
 /**
  * Chats navigation state - shows SessionList in navigator

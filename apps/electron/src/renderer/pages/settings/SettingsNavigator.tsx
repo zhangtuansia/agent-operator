@@ -114,6 +114,23 @@ const ApiIcon = ({ className }: { className?: string }) => (
     />
   </svg>
 )
+
+/** Text input/cursor icon for input settings */
+const InputIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M3 5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5ZM8 7C7.44772 7 7 7.44772 7 8V16C7 16.5523 7.44772 17 8 17C8.55228 17 9 16.5523 9 16V13H11V16C11 16.5523 11.4477 17 12 17C12.5523 17 13 16.5523 13 16V13H15V16C15 16.5523 15.4477 17 16 17C16.5523 17 17 16.5523 17 16V8C17 7.44772 16.5523 7 16 7C15.4477 7 15 7.44772 15 8V11H13V8C13 7.44772 12.5523 7 12 7C11.4477 7 11 7.44772 11 8V11H9V8C9 7.44772 8.55228 7 8 7Z"
+      fill="currentColor"
+    />
+  </svg>
+)
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -157,6 +174,12 @@ const settingsItems: SettingsItem[] = [
     labelKey: 'api',
     icon: ApiIcon,
     descriptionKey: 'apiDescription',
+  },
+  {
+    id: 'input',
+    labelKey: 'input',
+    icon: InputIcon,
+    descriptionKey: 'inputDescription',
   },
   {
     id: 'permissions',

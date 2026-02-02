@@ -225,6 +225,14 @@ export const IPC_CHANNELS = {
   LANGUAGE_GET: 'language:get',
   LANGUAGE_SET: 'language:set',
 
+  // Input settings
+  INPUT_GET_AUTO_CAPITALISATION: 'input:getAutoCapitalisation',
+  INPUT_SET_AUTO_CAPITALISATION: 'input:setAutoCapitalisation',
+  INPUT_GET_SEND_MESSAGE_KEY: 'input:getSendMessageKey',
+  INPUT_SET_SEND_MESSAGE_KEY: 'input:setSendMessageKey',
+  INPUT_GET_SPELL_CHECK: 'input:getSpellCheck',
+  INPUT_SET_SPELL_CHECK: 'input:setSpellCheck',
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
