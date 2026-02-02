@@ -23,7 +23,7 @@ import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { Spinner } from '../ui/LoadingIndicator'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
+import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
@@ -456,35 +456,90 @@ function getPreviewText(
 // Sub-Components
 // ============================================================================
 
-/** Status icon for an activity - shows tool-specific icons for Edit/Write when completed */
-export function ActivityStatusIcon({ status, toolName }: { status: ActivityStatus; toolName?: string }) {
-  switch (status) {
-    case 'pending':
-      return <Circle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
-    case 'running':
-      return (
-        <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
-          <Spinner className={SIZE_CONFIG.spinnerSize} />
-        </div>
-      )
-    case 'backgrounded':
-      return (
-        <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
-          <Spinner className={cn(SIZE_CONFIG.spinnerSize, "text-accent")} />
-        </div>
-      )
-    case 'completed':
-      // Show tool-specific icons for Edit/Write
-      if (toolName === 'Edit') {
-        return <Pencil className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
+/**
+ * Status icon for an activity - exported for reuse in inline execution.
+ * Supports custom icons from skill/source metadata when completed.
+ * Edit/Write tools show tool-specific icons; others show checkmark or custom icon.
+ */
+export function ActivityStatusIcon({
+  status,
+  toolName,
+  customIcon
+}: {
+  status: ActivityStatus
+  toolName?: string
+  /** Custom icon from tool metadata - emoji or data URL (base64) */
+  customIcon?: string
+}) {
+  // Render the appropriate icon based on status
+  const renderIcon = () => {
+    // For completed status with custom icon, use it instead of checkmark
+    if (status === 'completed' && customIcon) {
+      // Check if it's an emoji (short string, not a URL or data URL)
+      // Emojis can be 1-4+ characters due to ZWJ sequences
+      const isLikelyEmoji = customIcon.length <= 8 && !/^(https?:\/\/|data:)/.test(customIcon)
+      if (isLikelyEmoji) {
+        return (
+          <span className={cn(SIZE_CONFIG.iconSize, "shrink-0 flex items-center justify-center text-[10px] leading-none")}>
+            {customIcon}
+          </span>
+        )
       }
-      if (toolName === 'Write') {
-        return <FilePenLine className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
-      }
-      return <CheckCircle2 className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
-    case 'error':
-      return <XCircle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-destructive")} />
+      // Otherwise it's a data URL (base64) or HTTP URL
+      return (
+        <img
+          src={customIcon}
+          alt=""
+          className={cn(SIZE_CONFIG.iconSize, "shrink-0 rounded-sm object-contain")}
+        />
+      )
+    }
+
+    // Default icon logic
+    switch (status) {
+      case 'pending':
+        return <Circle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
+      case 'running':
+        return (
+          <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+            <Spinner className={SIZE_CONFIG.spinnerSize} />
+          </div>
+        )
+      case 'backgrounded':
+        return (
+          <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+            <Spinner className={cn(SIZE_CONFIG.spinnerSize, "text-accent")} />
+          </div>
+        )
+      case 'completed':
+        // Edit and Write tools get their own icons with accent color instead of green checkmark
+        if (toolName === 'Edit') {
+          return <Pencil className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
+        }
+        if (toolName === 'Write') {
+          return <FilePenLine className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
+        }
+        return <CheckCircle2 className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
+      case 'error':
+        return <XCircle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-destructive")} />
+    }
   }
+
+  // Wrap in AnimatePresence for crossfade between states
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={status}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="shrink-0"
+      >
+        {renderIcon()}
+      </motion.div>
+    </AnimatePresence>
+  )
 }
 
 interface ActivityRowProps {
@@ -649,21 +704,21 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
         {!isBackgrounded && inputSummary && (
           <span className="opacity-50 truncate min-w-0">{inputSummary}</span>
         )}
-        {/* Error message with tooltip for full text on hover */}
+        {/* Error badge with tooltip for full error message */}
         {activity.status === 'error' && activity.error && (
-          <>
-            <span className="text-destructive/60 shrink-0">·</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-destructive truncate min-w-[120px] max-w-[300px] cursor-help">{activity.error}</span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[400px] break-words">
-                  {activity.error}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="px-1.5 py-0.5 bg-[color-mix(in_oklab,var(--destructive)_4%,var(--background))] shadow-tinted rounded-[4px] text-[10px] text-destructive font-medium cursor-default shrink-0"
+                style={{ '--shadow-color': 'var(--destructive-rgb)' } as React.CSSProperties}
+              >
+                Error
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[400px]">
+              {activity.error}
+            </TooltipContent>
+          </Tooltip>
         )}
         {/* Spacer to push details button to right */}
         <span className="flex-1" />
