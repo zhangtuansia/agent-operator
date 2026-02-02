@@ -66,6 +66,7 @@ export type EditContextKey =
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
+  | 'edit-tool-icons'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -298,6 +299,20 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Add an auto-rule to detect GitHub issue URLs',
   }),
+
+  // Tool icons configuration context
+  'edit-tool-icons': (location) => ({
+    context: {
+      label: 'Tool Icons',
+      filePath: location, // location is the full path to tool-icons.json
+      context:
+        'The user wants to customize CLI tool icons shown in chat activity. ' +
+        'The tool-icons.json file maps CLI commands to icons. Each entry has: id, displayName, icon (filename), commands (array of CLI names). ' +
+        'Icon files should be placed in the same directory (PNG, SVG, ICO supported). ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add an icon for kubectl',
+  }),
 }
 
 /**
@@ -336,6 +351,7 @@ const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; examp
   'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
   'edit-labels': { labelKey: 'editPopover.labelConfiguration', exampleKey: 'editPopover.exampleLabel' },
   'edit-auto-rules': { labelKey: 'editPopover.autoApplyRules', exampleKey: 'editPopover.exampleAutoRule' },
+  'edit-tool-icons': { labelKey: 'editPopover.toolIcons', exampleKey: 'editPopover.exampleToolIcon' },
 }
 
 /**

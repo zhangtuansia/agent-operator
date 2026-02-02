@@ -1187,6 +1187,12 @@ export const zh: TranslationKeys = {
     exampleAddSkill: '按照我们的代码标准审查 PR',
     placeholderAddSkill: '我应该学会做什么？',
     exampleStatus: '添加"已阻塞"状态',
+    labelConfiguration: '标签配置',
+    exampleLabel: '在"开发"下添加"Bug"标签',
+    autoApplyRules: '自动应用规则',
+    exampleAutoRule: '添加自动检测 GitHub issue URL 的规则',
+    toolIcons: '工具图标',
+    exampleToolIcon: '为 kubectl 添加图标',
   },
 
   // Labels settings page

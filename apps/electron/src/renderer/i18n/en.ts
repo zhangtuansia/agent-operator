@@ -1185,6 +1185,12 @@ export const en = {
     exampleAddSkill: 'Review PRs following our code standards',
     placeholderAddSkill: 'What should I learn to do?',
     exampleStatus: 'Add a "Blocked" status',
+    labelConfiguration: 'Label Configuration',
+    exampleLabel: 'Add a "Bug" label under Development',
+    autoApplyRules: 'Auto-Apply Rules',
+    exampleAutoRule: 'Add an auto-rule to detect GitHub issue URLs',
+    toolIcons: 'Tool Icons',
+    exampleToolIcon: 'Add an icon for kubectl',
   },
 
   // Labels settings page
