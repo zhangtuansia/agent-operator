@@ -372,6 +372,10 @@ const api: ElectronAPI = {
   getLogoUrl: (serviceUrl: string, provider?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),
 
+  // Tool icon mappings (for Appearance settings page)
+  getToolIconMappings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.TOOL_ICONS_GET_MAPPINGS) as Promise<import('@agent-operator/shared/ipc').ToolIconMapping[]>,
+
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange: (callback: (theme: import('@agent-operator/shared/config').ThemeOverrides | null) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, theme: import('@agent-operator/shared/config').ThemeOverrides | null) => {

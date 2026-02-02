@@ -128,6 +128,13 @@ export const en = {
     permissionGranted: 'Granted',
     authorize: 'Authorize',
     permissionWarning: 'Some features may not work without these permissions. After authorizing, you may need to restart the app.',
+
+    // Tool Icons
+    toolIcons: 'Tool Icons',
+    toolIconsDescription: 'Icons shown next to CLI commands in chat activity. Stored in ~/.agent-operator/tool-icons/.',
+    searchTools: 'Search tools...',
+    noToolIconMappings: 'No tool icon mappings found',
+    editFile: 'Edit File',
   },
 
   // Input Settings

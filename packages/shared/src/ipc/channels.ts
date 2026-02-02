@@ -215,6 +215,9 @@ export const IPC_CHANNELS = {
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
 
+  // Tool icon mappings (for Appearance settings)
+  TOOL_ICONS_GET_MAPPINGS: 'toolIcons:getMappings',
+
   // Notifications
   NOTIFICATION_SHOW: 'notification:show',
   NOTIFICATION_NAVIGATE: 'notification:navigate',  // Broadcast: { workspaceId, sessionId }

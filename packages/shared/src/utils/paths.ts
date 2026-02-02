@@ -7,6 +7,7 @@
 
 import { homedir } from 'os';
 import { resolve, join, normalize, isAbsolute } from 'path';
+import { existsSync } from 'fs';
 
 /**
  * Expand path variables (~, ${HOME}, $HOME) to absolute paths.
@@ -155,4 +156,50 @@ export function stripPathPrefix(filePath: string, prefix: string): string {
     return normalizedFile.slice(normalizedPrefix.length + 1);
   }
   return filePath;
+}
+
+// ============================================================
+// Bundled Assets Resolution
+// ============================================================
+
+/**
+ * Module-level base directory for bundled assets.
+ * Set once at Electron startup via setBundledAssetsRoot(__dirname).
+ * In non-Electron contexts (tests, dev mode), process.cwd() candidates are used.
+ */
+let _assetsRoot: string | undefined;
+
+/**
+ * Register the Electron main process directory as the root for bundled assets.
+ * Call this once at app startup: setBundledAssetsRoot(__dirname)
+ *
+ * After this, getBundledAssetsDir('docs') will resolve to `<__dirname>/assets/docs/`
+ * in the packaged app, or fall back to dev paths if that doesn't exist.
+ */
+export function setBundledAssetsRoot(dir: string): void {
+  _assetsRoot = dir;
+}
+
+/**
+ * Resolve the path to a bundled assets subdirectory.
+ *
+ * Tries candidates in order:
+ * 1. Electron main process: <assetsRoot>/assets/<subfolder> (set via setBundledAssetsRoot)
+ * 2. Dev monorepo source:   <cwd>/packages/shared/assets/<subfolder>
+ * 3. Dev dist output:       <cwd>/dist/assets/<subfolder>
+ *
+ * Returns the first candidate that exists on disk, or undefined if none found.
+ *
+ * @param subfolder - Name of the assets subdirectory (e.g. 'docs', 'tool-icons', 'themes', 'permissions')
+ */
+export function getBundledAssetsDir(subfolder: string): string | undefined {
+  const candidates = [
+    // Electron main process (set via setBundledAssetsRoot at startup)
+    ...(_assetsRoot ? [join(_assetsRoot, 'assets', subfolder)] : []),
+    // Dev: monorepo source
+    join(process.cwd(), 'packages', 'shared', 'assets', subfolder),
+    // Dev: dist output (after build:copy)
+    join(process.cwd(), 'dist', 'assets', subfolder),
+  ];
+  return candidates.find(p => existsSync(p));
 }

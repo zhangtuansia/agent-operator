@@ -12,15 +12,18 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
+import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { useTheme } from '@/context/ThemeContext'
 import { routes } from '@/lib/navigate'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import type { ToolIconMapping } from '@agent-operator/shared/ipc'
 
 import {
   SettingsSection,
@@ -31,6 +34,8 @@ import {
   SettingsMenuSelect,
   SystemPermissionsSection,
 } from '@/components/settings'
+import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
+import { Info_Badge } from '@/components/info/Info_Badge'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useLanguage } from '@/context/LanguageContext'
@@ -43,6 +48,61 @@ export const meta: DetailsPageMeta = {
   slug: 'app',
 }
 
+// ============================================
+// Tool Icons Table
+// ============================================
+
+/**
+ * Column definitions for the tool icon mappings table.
+ * Shows a preview icon, tool name, and the CLI commands that trigger it.
+ */
+const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
+  {
+    accessorKey: 'iconDataUrl',
+    header: () => <span className="p-1.5 pl-2.5">Icon</span>,
+    cell: ({ row }) => (
+      <div className="p-1.5 pl-2.5">
+        <img
+          src={row.original.iconDataUrl}
+          alt={row.original.displayName}
+          className="w-5 h-5 object-contain"
+        />
+      </div>
+    ),
+    size: 60,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'displayName',
+    header: ({ column }) => <SortableHeader column={column} title="Tool" />,
+    cell: ({ row }) => (
+      <div className="p-1.5 pl-2.5 font-medium">
+        {row.original.displayName}
+      </div>
+    ),
+    size: 150,
+  },
+  {
+    accessorKey: 'commands',
+    header: () => <span className="p-1.5 pl-2.5">Commands</span>,
+    cell: ({ row }) => (
+      <div className="p-1.5 pl-2.5 flex flex-wrap gap-1">
+        {row.original.commands.map(cmd => (
+          <Info_Badge key={cmd} color="muted" className="font-mono">
+            {cmd}
+          </Info_Badge>
+        ))}
+      </div>
+    ),
+    meta: { fillWidth: true },
+    enableSorting: false,
+  },
+]
+
+// ============================================
+// Main Component
+// ============================================
+
 export default function AppSettingsPage() {
   const { mode, setMode, colorTheme, setColorTheme, setPreviewColorTheme, font, setFont } = useTheme()
   const { language, setLanguage, t } = useLanguage()
@@ -52,6 +112,12 @@ export default function AppSettingsPage() {
 
   // Preset themes state
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
+
+  // Tool icon mappings loaded from main process
+  const [toolIcons, setToolIcons] = useState<ToolIconMapping[]>([])
+
+  // Resolved path to tool-icons.json (needed for EditPopover and "Edit File" action)
+  const [toolIconsJsonPath, setToolIconsJsonPath] = useState<string | null>(null)
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -100,6 +166,24 @@ export default function AppSettingsPage() {
       }
     }
     loadThemes()
+  }, [])
+
+  // Load tool icon mappings and resolve the config file path on mount
+  useEffect(() => {
+    const load = async () => {
+      if (!window.electronAPI) return
+      try {
+        const [mappings, homeDir] = await Promise.all([
+          window.electronAPI.getToolIconMappings(),
+          window.electronAPI.getHomeDir(),
+        ])
+        setToolIcons(mappings)
+        setToolIconsJsonPath(`${homeDir}/.agent-operator/tool-icons/tool-icons.json`)
+      } catch (error) {
+        console.error('Failed to load tool icon mappings:', error)
+      }
+    }
+    load()
   }, [])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
@@ -183,6 +267,34 @@ export default function AppSettingsPage() {
                   description={t('appSettings.desktopNotificationsDesc')}
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
+                />
+              </SettingsCard>
+            </SettingsSection>
+
+            {/* Tool Icons — shows the command → icon mapping used in turn cards */}
+            <SettingsSection
+              title={t('appSettings.toolIcons')}
+              description={t('appSettings.toolIconsDescription')}
+              action={
+                toolIconsJsonPath ? (
+                  <EditPopover
+                    trigger={<EditButton />}
+                    {...getEditConfig('edit-tool-icons', toolIconsJsonPath)}
+                    secondaryAction={{
+                      label: t('appSettings.editFile'),
+                      filePath: toolIconsJsonPath,
+                    }}
+                  />
+                ) : undefined
+              }
+            >
+              <SettingsCard>
+                <Info_DataTable
+                  columns={toolIconColumns}
+                  data={toolIcons}
+                  searchable={{ placeholder: t('appSettings.searchTools') }}
+                  maxHeight={480}
+                  emptyContent={t('appSettings.noToolIconMappings')}
                 />
               </SettingsCard>
             </SettingsSection>

@@ -488,3 +488,19 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+
+// =============================================================================
+// Tool Icons Types
+// =============================================================================
+
+/**
+ * Tool icon mapping entry from tool-icons.json (with icon resolved to data URL)
+ * Used in Appearance settings to show CLI tool icons configuration
+ */
+export interface ToolIconMapping {
+  id: string
+  displayName: string
+  /** Data URL of the icon (e.g., data:image/png;base64,...) */
+  iconDataUrl: string
+  commands: string[]
+}

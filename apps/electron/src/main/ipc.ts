@@ -2182,6 +2182,35 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return result
   })
 
+  // Tool icon mappings (for Appearance settings page)
+  ipcMain.handle(IPC_CHANNELS.TOOL_ICONS_GET_MAPPINGS, async () => {
+    const { getToolIconsDir } = await import('@agent-operator/shared/config/storage')
+    const { loadToolIconConfig } = await import('@agent-operator/shared/utils/cli-icon-resolver')
+    const { encodeIconToDataUrl } = await import('@agent-operator/shared/utils/icon-encoder')
+    const { join } = await import('path')
+
+    const toolIconsDir = getToolIconsDir()
+    const config = loadToolIconConfig(toolIconsDir)
+    if (!config) {
+      return []
+    }
+
+    // Map each tool to ToolIconMapping with resolved icon data URL
+    return config.tools
+      .map(tool => {
+        const iconPath = join(toolIconsDir, tool.icon)
+        const iconDataUrl = encodeIconToDataUrl(iconPath)
+        if (!iconDataUrl) return null
+        return {
+          id: tool.id,
+          displayName: tool.displayName,
+          iconDataUrl,
+          commands: tool.commands,
+        }
+      })
+      .filter(Boolean)
+  })
+
   // ============================================================
   // Notifications and Badge
   // ============================================================

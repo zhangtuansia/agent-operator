@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, copyFileSync, readdirSync as readdirSyncFs } from 'fs';
 import { join, dirname } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
@@ -10,7 +10,7 @@ import {
 } from '../workspaces/storage.ts';
 import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
-import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@agent-operator/core/types';
 import type { Plan } from '../agent/plan-types.ts';
@@ -151,6 +151,9 @@ export function ensureConfigDir(bundledResourcesDir?: string): void {
     ? join(bundledResourcesDir, 'config-defaults.json')
     : undefined;
   ensureConfigDefaults(bundledDefaultsPath);
+
+  // Initialize tool icons (CLI tool icons for turn card display)
+  ensureToolIcons();
 }
 
 export function loadStoredConfig(): StoredConfig | null {
@@ -1350,4 +1353,53 @@ export function clearPendingUpdate(): void {
   if (!config) return;
   delete config.pendingUpdate;
   saveConfig(config);
+}
+
+// ============================================
+// Tool Icons (CLI tool icons for turn card display)
+// ============================================
+
+const TOOL_ICONS_DIR_NAME = 'tool-icons';
+
+/**
+ * Returns the path to the tool-icons directory: ~/.agent-operator/tool-icons/
+ */
+export function getToolIconsDir(): string {
+  return join(CONFIG_DIR, TOOL_ICONS_DIR_NAME);
+}
+
+/**
+ * Ensure tool-icons directory exists and has bundled defaults.
+ * Resolves bundled path automatically via getBundledAssetsDir('tool-icons').
+ * Copies bundled tool-icons.json and icon files on first run.
+ * Only copies files that don't already exist (preserves user customizations).
+ */
+export function ensureToolIcons(): void {
+  const toolIconsDir = getToolIconsDir();
+
+  // Create tool-icons directory if it doesn't exist
+  if (!existsSync(toolIconsDir)) {
+    mkdirSync(toolIconsDir, { recursive: true });
+  }
+
+  // Resolve bundled tool-icons directory via shared asset resolver
+  const bundledToolIconsDir = getBundledAssetsDir('tool-icons');
+  if (!bundledToolIconsDir) {
+    return;
+  }
+
+  // Copy each bundled file if it doesn't exist in the target dir
+  // This includes tool-icons.json and all icon files (png, ico, svg, jpg)
+  try {
+    const bundledFiles = readdirSyncFs(bundledToolIconsDir);
+    for (const file of bundledFiles) {
+      const destPath = join(toolIconsDir, file);
+      if (!existsSync(destPath)) {
+        const srcPath = join(bundledToolIconsDir, file);
+        copyFileSync(srcPath, destPath);
+      }
+    }
+  } catch {
+    // Ignore errors — tool icons are optional enhancement
+  }
 }

@@ -130,6 +130,13 @@ export const zh: TranslationKeys = {
     permissionGranted: '已授权',
     authorize: '授权',
     permissionWarning: '部分功能需要这些权限才能正常工作。授权后可能需要重启应用。',
+
+    // Tool Icons
+    toolIcons: '工具图标',
+    toolIconsDescription: '显示在聊天活动中 CLI 命令旁边的图标。存储在 ~/.agent-operator/tool-icons/。',
+    searchTools: '搜索工具...',
+    noToolIconMappings: '未找到工具图标映射',
+    editFile: '编辑文件',
   },
 
   // Input Settings
