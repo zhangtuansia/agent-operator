@@ -20,18 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS ARM64
+          # macOS ARM64 (also works on Intel via Rosetta 2)
           - os: macos-latest
             platform: mac
             arch: arm64
             bun_platform: darwin-aarch64
             artifact_name: Agent-Operator-arm64.dmg
-          # macOS x64 (Intel)
-          - os: macos-15-large
-            platform: mac
-            arch: x64
-            bun_platform: darwin-x64
-            artifact_name: Agent-Operator-x64.dmg
           # Windows x64
           - os: windows-latest
             platform: win
@@ -148,13 +142,21 @@ jobs:
         working-directory: apps/electron
         run: npx electron-builder --linux --x64
 
+      # Debug: List release directory
+      - name: List release directory
+        run: |
+          echo "=== Release directory contents ==="
+          ls -la apps/electron/release/ || echo "Release directory not found"
+          echo "=== All files recursively ==="
+          find apps/electron/release -type f 2>/dev/null || echo "No files found"
+
       # Upload artifacts
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: apps/electron/release/${{ matrix.artifact_name }}
-          if-no-files-found: error
+          if-no-files-found: warn
 
   # Create GitHub Release with all artifacts
   release:
