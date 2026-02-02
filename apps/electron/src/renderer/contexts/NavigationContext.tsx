@@ -536,10 +536,13 @@ export function NavigationProvider({
     }
   }, [isReady, workspaceId, navigate, applyNavigationState])
 
-  // Listen for deep link navigation events from main process
-  useEffect(() => {
-    if (!workspaceId) return
+  // Pending deep link navigation - used when message arrives before workspaceId is ready
+  const pendingDeepLinkRef = useRef<DeepLinkNavigation | null>(null)
 
+  // Listen for deep link navigation events from main process
+  // IMPORTANT: Register listener immediately (not gated on workspaceId) to avoid
+  // missing messages that arrive before initialization completes.
+  useEffect(() => {
     const cleanup = window.electronAPI.onDeepLinkNavigate((nav: DeepLinkNavigation) => {
       // Convert DeepLinkNavigation to route string and navigate
       let route: string | null = null
@@ -571,11 +574,50 @@ export function NavigationProvider({
           })
           return
         }
+
+        // If workspaceId is not ready yet, queue the navigation for later
+        // This handles the race condition where deep link arrives before initialization
+        if (!workspaceId) {
+          console.log('[Navigation] Queuing deep link (workspaceId not ready):', nav)
+          pendingDeepLinkRef.current = nav
+          return
+        }
+
         navigate(route as Route)
       }
     })
 
     return cleanup
+  }, [workspaceId, navigate, t])
+
+  // Process pending deep link when workspaceId becomes available
+  useEffect(() => {
+    if (!workspaceId || !pendingDeepLinkRef.current) return
+
+    const nav = pendingDeepLinkRef.current
+    pendingDeepLinkRef.current = null
+    console.log('[Navigation] Processing queued deep link:', nav)
+
+    // Rebuild route from stored navigation
+    let route: string | null = null
+    if (nav.view) {
+      route = nav.view
+    } else if (nav.action) {
+      route = `action/${nav.action}`
+      if (nav.actionParams?.id) {
+        route += `/${nav.actionParams.id}`
+      }
+      const otherParams = { ...nav.actionParams }
+      delete otherParams.id
+      if (Object.keys(otherParams).length > 0) {
+        const params = new URLSearchParams(otherParams)
+        route += `?${params.toString()}`
+      }
+    }
+
+    if (route) {
+      navigate(route as Route)
+    }
   }, [workspaceId, navigate])
 
   // Listen for internal navigation events (from navigate() calls)
