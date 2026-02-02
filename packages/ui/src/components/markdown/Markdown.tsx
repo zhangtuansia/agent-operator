@@ -4,6 +4,8 @@ import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { cn } from '../../lib/utils'
 import { CodeBlock, InlineCode } from './CodeBlock'
+import { MarkdownDiffBlock } from './MarkdownDiffBlock'
+import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
@@ -51,6 +53,12 @@ export interface MarkdownProps {
    * @default false
    */
   collapsible?: boolean
+  /**
+   * Hide expand button on first mermaid block (when message starts with mermaid)
+   * Used in chat to avoid overlap with TurnCard's fullscreen button
+   * @default true
+   */
+  hideFirstMermaidExpand?: boolean
 }
 
 /** Context for collapsible sections */
@@ -63,13 +71,24 @@ interface CollapsibleContext {
 const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma)$/i
 
 /**
- * Create custom components based on render mode
+ * Create custom components based on render mode.
+ *
+ * @param firstMermaidCodeRef - Ref holding the code of the first mermaid block
+ *   when the markdown message starts with a mermaid fence. Used to hide the
+ *   inline expand button on that block (TurnCard's own fullscreen button
+ *   occupies the same top-right position). A ref is used so the closure can
+ *   read the latest value without adding content to the memo deps — that would
+ *   cause component re-mounting on every streaming update.
+ * @param hideFirstMermaidExpand - Whether to hide the expand button on the first
+ *   mermaid block when the message starts with a mermaid fence. Defaults to true.
  */
 function createComponents(
   mode: RenderMode,
   onUrlClick?: (url: string) => void,
   onFileClick?: (path: string) => void,
-  collapsibleContext?: CollapsibleContext | null
+  collapsibleContext?: CollapsibleContext | null,
+  firstMermaidCodeRef?: React.RefObject<string | null>,
+  hideFirstMermaidExpand: boolean = true
 ): Partial<Components> {
   const baseComponents: Partial<Components> = {
     // Section wrapper for collapsible headings
@@ -155,17 +174,30 @@ function createComponents(
         const match = /language-(\w+)/.exec(className || '')
         const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
-        // Block code - use CodeBlock with full mode
+        // Block code
         if (match || isBlock) {
           const code = String(children).replace(/\n$/, '')
-          const language = match?.[1]?.toLowerCase()
-
-          // Mermaid diagrams - render as SVG
-          if (language === 'mermaid') {
-            return <MarkdownMermaidBlock code={code} className="my-2" />
+          // Diff code blocks → pierre/diffs for a proper diff viewer
+          if (match?.[1] === 'diff') {
+            return <MarkdownDiffBlock code={code} className="my-1" />
           }
-
-          return <CodeBlock code={code} language={language} mode="full" className="my-1" />
+          // JSON code blocks → interactive tree viewer
+          if (match?.[1] === 'json') {
+            return <MarkdownJsonBlock code={code} className="my-1" />
+          }
+          // Mermaid code blocks → zinc-styled SVG diagram.
+          // Hide the inline expand button when the mermaid block is the first
+          // content in the message — TurnCard's own fullscreen button occupies
+          // the same top-right spot. Detection uses firstMermaidCodeRef (content
+          // match) rather than AST line positions which are unreliable after
+          // preprocessLinks transforms the markdown.
+          if (match?.[1] === 'mermaid') {
+            const isFirstBlock = hideFirstMermaidExpand &&
+                                firstMermaidCodeRef?.current != null &&
+                                code === firstMermaidCodeRef.current
+            return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+          }
+          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
         }
 
         // Inline code
@@ -225,14 +257,23 @@ function createComponents(
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
-        const language = match?.[1]?.toLowerCase()
-
-        // Mermaid diagrams - render as SVG
-        if (language === 'mermaid') {
-          return <MarkdownMermaidBlock code={code} className="my-2" />
+        // Diff code blocks → pierre/diffs for a proper diff viewer
+        if (match?.[1] === 'diff') {
+          return <MarkdownDiffBlock code={code} className="my-1" />
         }
-
-        return <CodeBlock code={code} language={language} mode="full" className="my-1" />
+        // JSON code blocks → interactive tree viewer
+        if (match?.[1] === 'json') {
+          return <MarkdownJsonBlock code={code} className="my-1" />
+        }
+        // Mermaid code blocks → zinc-styled SVG diagram.
+        // (Same first-block detection as minimal mode — see comment above.)
+        if (match?.[1] === 'mermaid') {
+          const isFirstBlock = hideFirstMermaidExpand &&
+                              firstMermaidCodeRef?.current != null &&
+                              code === firstMermaidCodeRef.current
+          return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+        }
+        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
       }
 
       return <InlineCode>{children}</InlineCode>
@@ -306,6 +347,8 @@ function createComponents(
     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
     em: ({ children }) => <em className="italic">{children}</em>,
     del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
+    // Handle unknown <markdown> tags that may come through rehype-raw
+    markdown: ({ children }) => <>{children}</>,
   }
 }
 
@@ -327,13 +370,27 @@ export function Markdown({
   onUrlClick,
   onFileClick,
   collapsible = false,
+  hideFirstMermaidExpand = true,
 }: MarkdownProps) {
   // Get collapsible context if enabled
   const collapsibleContext = useCollapsibleMarkdown()
 
+  // Extract the first mermaid code block's content when the message starts
+  // with a mermaid fence. Stored in a ref so createComponents can read it
+  // without adding `children` to the memo deps (which would remount all
+  // components on every streaming update, breaking internal state).
+  const firstMermaidCodeRef = React.useRef<string | null>(null)
+  const trimmed = children.trimStart()
+  if (trimmed.startsWith('```mermaid')) {
+    const m = trimmed.match(/^```mermaid\n([\s\S]*?)```/)
+    firstMermaidCodeRef.current = m?.[1] ? m[1].replace(/\n$/, '') : null
+  } else {
+    firstMermaidCodeRef.current = null
+  }
+
   const components = React.useMemo(
-    () => createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null),
-    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext]
+    () => createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand),
+    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
   )
 
   // Preprocess to convert raw URLs and file paths to markdown links
