@@ -16,11 +16,14 @@ import {
   Maximize2,
   CircleCheck,
   ListTodo,
+  Pencil,
+  FilePenLine,
 } from 'lucide-react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { Spinner } from '../ui/LoadingIndicator'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
@@ -36,9 +39,9 @@ import { AcceptPlanDropdown } from './AcceptPlanDropdown'
  */
 function stripMarkdown(text: string): string {
   return text
-    // Remove code blocks
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]*`/g, '')
+    // Extract code block content (preserve the code, remove fences)
+    .replace(/```(?:\w+)?\n?([\s\S]*?)```/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
     // Remove headers
     .replace(/^#{1,6}\s+/gm, '')
     // Remove bold/italic
@@ -453,8 +456,8 @@ function getPreviewText(
 // Sub-Components
 // ============================================================================
 
-/** Status icon for an activity */
-function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
+/** Status icon for an activity - shows tool-specific icons for Edit/Write when completed */
+export function ActivityStatusIcon({ status, toolName }: { status: ActivityStatus; toolName?: string }) {
   switch (status) {
     case 'pending':
       return <Circle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
@@ -471,6 +474,13 @@ function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
         </div>
       )
     case 'completed':
+      // Show tool-specific icons for Edit/Write
+      if (toolName === 'Edit') {
+        return <Pencil className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
+      }
+      if (toolName === 'Write') {
+        return <FilePenLine className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
+      }
       return <CheckCircle2 className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
     case 'error':
       return <XCircle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-destructive")} />
@@ -618,7 +628,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
         )}
         onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
       >
-        <ActivityStatusIcon status={activity.status} />
+        <ActivityStatusIcon status={activity.status} toolName={activity.toolName} />
         {/* Tool name (always shown, darker) - underlined when clickable */}
         <span className={cn("shrink-0", onOpenDetails && isComplete && "group-hover/row:underline")}>{toolName}</span>
         {/* Background task info (task/shell ID + elapsed time) */}
@@ -639,10 +649,20 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
         {!isBackgrounded && inputSummary && (
           <span className="opacity-50 truncate min-w-0">{inputSummary}</span>
         )}
+        {/* Error message with tooltip for full text on hover */}
         {activity.status === 'error' && activity.error && (
           <>
             <span className="text-destructive/60 shrink-0">·</span>
-            <span className="text-destructive truncate min-w-[120px] max-w-[300px]">{activity.error}</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-destructive truncate min-w-[120px] max-w-[300px] cursor-help">{activity.error}</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[400px] break-words">
+                  {activity.error}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </>
         )}
         {/* Spacer to push details button to right */}
@@ -746,7 +766,7 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
         </motion.div>
 
         {/* Status icon - aligned with tool call icons */}
-        <ActivityStatusIcon status={group.parent.status} />
+        <ActivityStatusIcon status={group.parent.status} toolName={group.parent.toolName} />
 
         {/* Subagent type badge */}
         <span className="shrink-0 px-1.5 py-0.5 rounded-[4px] bg-background shadow-minimal text-[10px] font-medium">
