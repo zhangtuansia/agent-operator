@@ -9,7 +9,7 @@ import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, getBedrockModel } from '../config/models.ts';
+import { DEFAULT_MODEL, getBedrockModel, getDefaultModelForProvider } from '../config/models.ts';
 import { isBedrockMode } from '../auth/state.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
@@ -423,8 +423,13 @@ export class OperatorAgent {
   public onSourceActivationRequest: ((sourceSlug: string) => Promise<boolean>) | null = null;
 
   constructor(config: OperatorAgentConfig) {
-    // Resolve model: prioritize session model > config model > global config > DEFAULT_MODEL
-    const resolvedModel = config.session?.model ?? config.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL;
+    // Resolve model: prioritize session model > config model > global config > provider default
+    // This ensures that when using non-Anthropic providers (DeepSeek, GLM, etc.),
+    // the default model is appropriate for that provider instead of Claude Sonnet
+    const storedConfig = loadStoredConfig();
+    const currentProvider = storedConfig?.providerConfig?.provider;
+    const providerDefaultModel = getDefaultModelForProvider(currentProvider);
+    const resolvedModel = config.session?.model ?? config.model ?? storedConfig?.model ?? providerDefaultModel;
     this.config = { ...config, model: resolvedModel };
     this.isHeadless = config.isHeadless ?? false;
 

@@ -48,7 +48,7 @@ import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { OperatorMcpClient } from '@agent-operator/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
 import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@agent-operator/shared/utils'
-import { DEFAULT_MODEL } from '@agent-operator/shared/config'
+import { DEFAULT_MODEL, getDefaultModelForProvider } from '@agent-operator/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shared/agent/thinking-levels'
 
 /**
@@ -2040,7 +2040,10 @@ export class SessionManager {
       updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
-        const effectiveModel = model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL
+        const storedConfig = loadStoredConfig()
+        const currentProvider = storedConfig?.providerConfig?.provider
+        const providerDefaultModel = getDefaultModelForProvider(currentProvider)
+        const effectiveModel = model ?? storedConfig?.model ?? providerDefaultModel
         managed.agent.setModel(effectiveModel)
       }
       // Notify renderer of the model change
