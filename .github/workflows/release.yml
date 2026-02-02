@@ -21,13 +21,13 @@ jobs:
       matrix:
         include:
           # macOS ARM64
-          - os: macos-14
+          - os: macos-latest
             platform: mac
             arch: arm64
             bun_platform: darwin-aarch64
             artifact_name: Agent-Operator-arm64.dmg
-          # macOS x64
-          - os: macos-13
+          # macOS x64 (Intel)
+          - os: macos-15-large
             platform: mac
             arch: x64
             bun_platform: darwin-x64
