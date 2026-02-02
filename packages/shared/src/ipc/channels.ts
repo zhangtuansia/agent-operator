@@ -90,6 +90,8 @@ export const IPC_CHANNELS = {
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
   // Deep link navigation (main → renderer, for external agentoperator:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
+  // Get pending deep link for this window (renderer → main, pull-based for reliable timing)
+  GET_PENDING_DEEP_LINK: 'deeplink:getPending',
 
   // Auth
   LOGOUT: 'auth:logout',

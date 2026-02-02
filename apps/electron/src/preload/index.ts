@@ -138,6 +138,9 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.DEEP_LINK_NAVIGATE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.DEEP_LINK_NAVIGATE, handler)
   },
+  // Get pending deep link for this window (pull-based for reliable timing)
+  getPendingDeepLink: (): Promise<import('../shared/types').DeepLinkNavigation | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_PENDING_DEEP_LINK),
 
   // Auth
   showLogoutConfirmation: () => ipcRenderer.invoke(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION),

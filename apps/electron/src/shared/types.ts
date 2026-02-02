@@ -228,6 +228,7 @@ export interface ElectronAPI {
 
   // Deep link navigation listener (for external agentoperator:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
+  getPendingDeepLink(): Promise<DeepLinkNavigation | null>
 
   // Auth
   showLogoutConfirmation(): Promise<boolean>

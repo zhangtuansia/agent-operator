@@ -2,18 +2,31 @@
  * EditPopover
  *
  * A popover with title, subtitle, and multiline textarea for editing settings.
- * On submit, opens a new focused window with a chat session containing explicit
- * context for fast execution.
+ * Supports two modes:
+ * - Legacy: Opens a new focused window with a chat session
+ * - Inline: Executes mini agent inline within the popover using compact ChatDisplay
  */
 
 import * as React from 'react'
-import { useState, useRef, useEffect } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { GripHorizontal } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
+import { usePlatform } from '@agent-operator/ui'
+import type { ContentBadge, Session, CreateSessionOptions } from '../../../shared/types'
+import { useActiveWorkspace, useAppShellContext, useSession } from '@/context/AppShellContext'
+import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
+import { ChatDisplay } from '../app-shell/ChatDisplay'
 import { useLanguage } from '@/context/LanguageContext'
-import type { ContentBadge } from '../../../shared/types'
+
+/** Rotating placeholders for compact mode input - short, action-oriented */
+const COMPACT_PLACEHOLDERS = [
+  'Just tell me what to change',
+  'Describe the update',
+  'What should I modify?',
+]
 
 /**
  * Context passed to the new chat session so the agent knows exactly
@@ -62,10 +75,15 @@ export type EditContextKey =
   | 'source-tool-permissions'
   | 'preferences-notes'
   | 'add-source'
+  | 'add-source-api'   // Filter-specific: user is viewing APIs
+  | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
+  | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
+  | 'add-label'
+  | 'edit-views'
   | 'edit-tool-icons'
 
 /**
@@ -79,6 +97,12 @@ export interface EditConfig {
   example: string
   /** Optional custom placeholder text - overrides the default "Describe what you'd like to change" */
   overridePlaceholder?: string
+  /** Optional model for mini agent (e.g., 'haiku', 'sonnet') */
+  model?: string
+  /** Optional system prompt preset for mini agent (e.g., 'mini' for focused edits) */
+  systemPromptPreset?: 'default' | 'mini'
+  /** When true, executes inline within the popover instead of opening a new window */
+  inlineExecution?: boolean
 }
 
 /**
@@ -99,6 +123,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: "Allow running 'make build' in Explore mode",
+    model: 'sonnet',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'default-permissions': (location) => ({
@@ -115,6 +142,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow git fetch command',
+    model: 'sonnet',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Skill editing contexts
@@ -131,6 +161,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add error handling guidelines',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'skill-metadata': (location) => ({
@@ -145,6 +178,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the skill description',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Source editing contexts
@@ -159,6 +195,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add rate limit documentation',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-config': (location) => ({
@@ -173,6 +212,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the display name',
+    model: 'sonnet',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-permissions': (location) => ({
@@ -187,6 +229,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow list operations in Explore mode',
+    model: 'sonnet',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-tool-permissions': (location) => ({
@@ -203,6 +248,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Only allow read operations (list, get, search)',
+    model: 'sonnet',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Preferences editing context
@@ -218,6 +266,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add coding style preferences',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Add new source/skill contexts - use overridePlaceholder for inspiring, contextual prompts
@@ -235,6 +286,59 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to my Craft space',
     overridePlaceholder: 'What would you like to connect?',
+  }),
+
+  // Filter-specific add-source contexts: user is viewing a filtered list and wants to add that type
+  'add-source-api': (location) => ({
+    context: {
+      label: 'Add API',
+      filePath: `${location}/sources/`,
+      context:
+        'The user is viewing API sources and wants to add a new REST API. ' +
+        'Default to creating an API source (type: "api") unless they specify otherwise. ' +
+        'APIs connect to REST endpoints with authentication (bearer, header, basic, or query). ' +
+        'Ask about the API endpoint URL and auth type. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to the OpenAI API',
+    overridePlaceholder: 'What API would you like to connect?',
+  }),
+
+  'add-source-mcp': (location) => ({
+    context: {
+      label: 'Add MCP Server',
+      filePath: `${location}/sources/`,
+      context:
+        'The user is viewing MCP sources and wants to add a new MCP server. ' +
+        'Default to creating an MCP source (type: "mcp") unless they specify otherwise. ' +
+        'MCP servers can use HTTP/SSE transport (remote) or stdio transport (local subprocess). ' +
+        'Ask about the service they want to connect to and whether it\'s a remote URL or local command. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to Linear',
+    overridePlaceholder: 'What MCP server would you like to connect?',
+  }),
+
+  'add-source-local': (location) => ({
+    context: {
+      label: 'Add Local Folder',
+      filePath: `${location}/sources/`,
+      context:
+        'The user wants to add a local folder source. ' +
+        'First, look up the guide: mcp__agent-operator-docs__SearchDocs({ query: "filesystem" }). ' +
+        'Local folders are bookmarks - use type: "local" with a local.path field. ' +
+        'They use existing Read, Write, Glob, Grep tools - no MCP server needed. ' +
+        'If unclear, ask about the folder path they want to connect. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to my Obsidian vault',
+    overridePlaceholder: 'What folder would you like to connect?',
   }),
 
   'add-skill': (location) => ({
@@ -268,36 +372,92 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Blocked" status',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
-  // Labels configuration context
+  // Label configuration context
   'edit-labels': (location) => ({
     context: {
       label: 'Label Configuration',
       filePath: `${location}/labels/config.json`,
       context:
-        'The user wants to customize session labels (tags for categorization). ' +
-        'Labels are stored in labels/config.json with a nested tree structure. ' +
-        'Each label has: id, name, color (EntityColor with light/dark values), optional children array, and optional valueType. ' +
-        'Labels can be nested to form groups (e.g., Development > Code, Bug). ' +
+        'The user wants to customize session labels (tagging/categorization). ' +
+        'Labels are stored in labels/config.json as a hierarchical tree. ' +
+        'Each label has: id (slug, globally unique), name (display), color (optional EntityColor), children (sub-labels array). ' +
+        'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
+        'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
+        'Children form a recursive tree structure — array position determines display order. ' +
+        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
         'Confirm clearly when done.',
     },
-    example: 'Add a "Bug" label under Development',
+    example: 'Add a "Bug" label with red color',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
-  // Auto-apply rules configuration context
+  // Auto-label rules context (focused on regex patterns within labels)
   'edit-auto-rules': (location) => ({
     context: {
       label: 'Auto-Apply Rules',
       filePath: `${location}/labels/config.json`,
       context:
-        'The user wants to configure auto-apply rules for labels. ' +
-        'Auto-apply rules are stored in the labels config and use regex patterns to automatically apply labels when matched. ' +
-        'Each label can have an autoApply array with regex patterns. ' +
-        'When a user message matches a pattern, the label is automatically applied to the session. ' +
+        'The user wants to edit auto-apply rules (regex patterns that auto-tag sessions). ' +
+        'Rules live inside the autoRules array on individual labels in labels/config.json. ' +
+        'Each rule has: pattern (regex with capture groups), flags (default "gi"), valueTemplate ($1/$2 substitution), description. ' +
+        'Multiple rules on the same label = multiple ways to trigger. The "g" flag is always enforced. ' +
+        'Avoid catastrophic backtracking patterns (e.g., (a+)+). ' +
+        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
         'Confirm clearly when done.',
     },
-    example: 'Add an auto-rule to detect GitHub issue URLs',
+    example: 'Add a rule to detect GitHub issue URLs',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
+  }),
+
+  // Add new label context (triggered from the # menu when no labels match)
+  'add-label': (location) => ({
+    context: {
+      label: 'Add Label',
+      filePath: `${location}/labels/config.json`,
+      context:
+        'The user wants to create a new label from the # inline menu. ' +
+        'Labels are stored in labels/config.json as a hierarchical tree. ' +
+        'Each label has: id (slug, globally unique), name (display), color (optional EntityColor), children (sub-labels array). ' +
+        'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
+        'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
+        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'A red "Bug" label',
+    overridePlaceholder: 'What label would you like to create?',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
+  }),
+
+  // Views configuration context
+  'edit-views': (location) => ({
+    context: {
+      label: 'Views Configuration',
+      filePath: `${location}/views.json`,
+      context:
+        'The user wants to edit views (dynamic, expression-based filters). ' +
+        'Views are stored in views.json at the workspace root under a "views" array. ' +
+        'Each view has: id (unique slug), name (display text), description (optional), color (optional EntityColor), expression (Filtrex string). ' +
+        'Expressions are evaluated against session context fields: name, preview, todoState, permissionMode, model, lastMessageRole, ' +
+        'lastUsedAt, createdAt, messageCount, labelCount, isFlagged, hasUnread, isProcessing, hasPendingPlan, tokenUsage.*, labels. ' +
+        'Available functions: daysSince(timestamp), contains(array, value). ' +
+        'Colors use EntityColor format: string shorthand (e.g. "orange") or { light, dark } object. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a "Stale" view for sessions inactive > 7 days',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Tool icons configuration context
@@ -306,12 +466,19 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       label: 'Tool Icons',
       filePath: location, // location is the full path to tool-icons.json
       context:
-        'The user wants to customize CLI tool icons shown in chat activity. ' +
-        'The tool-icons.json file maps CLI commands to icons. Each entry has: id, displayName, icon (filename), commands (array of CLI names). ' +
-        'Icon files should be placed in the same directory (PNG, SVG, ICO supported). ' +
+        'The user wants to edit CLI tool icon mappings. ' +
+        'The file is tool-icons.json in ~/.agent-operator/tool-icons/. Icon image files live in the same directory. ' +
+        'Schema: { version: 1, tools: [{ id, displayName, icon, commands }] }. ' +
+        'Each tool has: id (unique slug), displayName (shown in UI), icon (filename like "git.ico"), commands (array of CLI command names). ' +
+        'Supported icon formats: .png, .ico, .svg, .jpg. Icons display at 20x20px. ' +
+        'Read ~/.agent-operator/docs/tool-icons.md for full format reference. ' +
+        'After editing, call config_validate with target "tool-icons" to verify the changes are valid. ' +
         'Confirm clearly when done.',
     },
-    example: 'Add an icon for kubectl',
+    example: 'Add an icon for my custom CLI tool "deploy"',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 }
 
@@ -347,10 +514,15 @@ const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; examp
   'source-tool-permissions': { labelKey: 'editPopover.toolPermissions', exampleKey: 'editPopover.exampleToolPermission' },
   'preferences-notes': { labelKey: 'editPopover.preferencesNotes', exampleKey: 'editPopover.examplePreference' },
   'add-source': { labelKey: 'editPopover.addSource', exampleKey: 'editPopover.exampleAddSource', placeholderKey: 'editPopover.placeholderAddSource' },
+  'add-source-api': { labelKey: 'editPopover.addApi', exampleKey: 'editPopover.exampleAddApi', placeholderKey: 'editPopover.placeholderAddApi' },
+  'add-source-mcp': { labelKey: 'editPopover.addMcp', exampleKey: 'editPopover.exampleAddMcp', placeholderKey: 'editPopover.placeholderAddMcp' },
+  'add-source-local': { labelKey: 'editPopover.addLocalFolder', exampleKey: 'editPopover.exampleAddLocal', placeholderKey: 'editPopover.placeholderAddLocal' },
   'add-skill': { labelKey: 'editPopover.addSkill', exampleKey: 'editPopover.exampleAddSkill', placeholderKey: 'editPopover.placeholderAddSkill' },
   'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
   'edit-labels': { labelKey: 'editPopover.labelConfiguration', exampleKey: 'editPopover.exampleLabel' },
   'edit-auto-rules': { labelKey: 'editPopover.autoApplyRules', exampleKey: 'editPopover.exampleAutoRule' },
+  'add-label': { labelKey: 'editPopover.addLabel', exampleKey: 'editPopover.exampleAddLabel', placeholderKey: 'editPopover.placeholderAddLabel' },
+  'edit-views': { labelKey: 'editPopover.viewsConfiguration', exampleKey: 'editPopover.exampleViews' },
   'edit-tool-icons': { labelKey: 'editPopover.toolIcons', exampleKey: 'editPopover.exampleToolIcon' },
 }
 
@@ -383,8 +555,8 @@ export function useTranslatedEditConfig(key: EditContextKey, location: string): 
 export interface SecondaryAction {
   /** Button label (e.g., "Edit File") */
   label: string
-  /** Click handler - typically opens a file for manual editing */
-  onClick: () => void
+  /** File path to open directly in the system editor (bypasses link interceptor) */
+  filePath: string
 }
 
 export interface EditPopoverProps {
@@ -403,6 +575,10 @@ export interface EditPopoverProps {
    * - Absolute path string: Use this specific path
    */
   workingDirectory?: string | 'user_default' | 'none'
+  /** Model override for mini agent (e.g., 'haiku', 'sonnet') */
+  model?: string
+  /** System prompt preset for mini agent (e.g., 'mini' for focused edits) */
+  systemPromptPreset?: 'default' | 'mini'
   /** Width of the popover (default: 320) */
   width?: number
   /** Additional className for the trigger */
@@ -427,6 +603,17 @@ export interface EditPopoverProps {
    * Useful for context menu triggered popovers where focus management is tricky.
    */
   modal?: boolean
+  /**
+   * Default value to pre-fill the input with.
+   * Useful when the user types something (e.g., "#Test") and clicks "Add new label" -
+   * the input can be pre-filled with "Add new label Test".
+   */
+  defaultValue?: string
+  /**
+   * When true, executes the mini agent inline within the popover instead of
+   * opening a new window. Best for quick config edits with mini agents.
+   */
+  inlineExecution?: boolean
 }
 
 /**
@@ -492,7 +679,9 @@ export function EditPopover({
   context,
   permissionMode = 'allow-all',
   workingDirectory = 'none', // Default to session folder for config edits
-  width = 320,
+  model,
+  systemPromptPreset,
+  width = 400, // Default 400px for compact chat embedding
   triggerClassName,
   side = 'bottom',
   align = 'end',
@@ -501,15 +690,24 @@ export function EditPopover({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   modal = false,
+  defaultValue = '',
+  inlineExecution = false,
 }: EditPopoverProps) {
+  const { onOpenFile, onOpenUrl } = usePlatform()
+  const workspace = useActiveWorkspace()
   const { t } = useLanguage()
 
-  // Build placeholder: use override if provided, otherwise default to "change" wording
+  // Build placeholder: for inline execution use rotating array, otherwise build descriptive string
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
-  const basePlaceholder = overridePlaceholder ?? t('editPopover.describePlaceholder')
-  const placeholder = example
-    ? `${basePlaceholder.replace(/\.{3}$/, '')}${t('editPopover.examplePrefix')}"${example}"`
-    : basePlaceholder
+  const placeholder = inlineExecution
+    ? COMPACT_PLACEHOLDERS
+    : (() => {
+        const basePlaceholder = overridePlaceholder ?? t('editPopover.describePlaceholder')
+        return example
+          ? `${basePlaceholder.replace(/\.{3}$/, '')}${t('editPopover.examplePrefix')}"${example}"`
+          : basePlaceholder
+      })()
+
   // Support both controlled and uncontrolled modes:
   // - Uncontrolled (default): internal state manages open/close
   // - Controlled: parent manages state via open/onOpenChange props
@@ -523,125 +721,300 @@ export function EditPopover({
       setInternalOpen(value)
     }
   }
-  const [input, setInput] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-focus textarea when popover opens
+  // Use App context for session management (same code path as main chat)
+  const { onCreateSession, onSendMessage } = useAppShellContext()
+
+  // Session ID for inline execution (created on first message)
+  const [inlineSessionId, setInlineSessionId] = useState<string | null>(null)
+
+  // Get session data from Jotai atom (same as main chat - includes optimistic updates)
+  // Pass empty string when no session yet - atom returns null for unknown IDs
+  const inlineSession = useSession(inlineSessionId || '')
+
+  // Model state for ChatDisplay (starts with prop value, can be changed by user)
+  const [currentModel, setCurrentModel] = useState(model || 'haiku')
+
+  // Create a stub session for ChatDisplay when no real session exists yet
+  // This allows showing the input before the first message is sent
+  const stubSession = useMemo((): Session => ({
+    id: 'pending',
+    workspaceId: workspace?.id || '',
+    workspaceName: workspace?.name || '',
+    messages: [],
+    isProcessing: false,
+    lastMessageAt: Date.now(),
+  }), [workspace?.id, workspace?.name])
+
+  // Use real session if available, otherwise stub
+  const displaySession = inlineSession || stubSession
+
+  // Track processing state for close prevention and backdrop
+  const isProcessing = displaySession.isProcessing
+
+  // Use existing escape interrupt context for double-ESC flow
+  // This shows the "Press Esc again to interrupt" overlay in the input field
+  const { handleEscapePress } = useEscapeInterrupt()
+
+  // Reset inline session when popover closes
+  const resetInlineSession = useCallback(() => {
+    setInlineSessionId(null)
+  }, [])
+
+  // Stop/cancel generation for the inline session
+  const handleStopGeneration = useCallback(() => {
+    if (inlineSessionId && isProcessing) {
+      window.electronAPI.cancelProcessing(inlineSessionId, false)
+    }
+  }, [inlineSessionId, isProcessing])
+
+  // Handle ESC key during generation:
+  // Uses EscapeInterruptContext for double-ESC flow (shows overlay, then interrupts)
+  const handleEscapeKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!isProcessing) {
+      // Not processing - allow normal close behavior
+      return
+    }
+
+    // Prevent default close behavior during processing
+    e.preventDefault()
+
+    // Use context's double-ESC handler
+    // Returns true if this is the second press (should interrupt)
+    const shouldInterrupt = handleEscapePress()
+    if (shouldInterrupt) {
+      handleStopGeneration()
+    }
+  }, [isProcessing, handleEscapePress, handleStopGeneration])
+
+  // Handle click outside during generation:
+  // Show the ESC overlay via context, prevent closing
+  const handleInteractOutside = useCallback((e: Event) => {
+    if (isProcessing) {
+      // Prevent close during processing
+      e.preventDefault()
+      // Show the ESC overlay so user knows how to cancel
+      handleEscapePress()
+    }
+  }, [isProcessing, handleEscapePress])
+
+  // Drag state for movable popover
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 })
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Resize state for dynamic sizing
+  const [containerSize, setContainerSize] = useState({ width: width || 400, height: 480 })
+  const [isResizing, setIsResizing] = useState(false)
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 })
+
+  // Reset drag position and size when popover opens
   useEffect(() => {
     if (open) {
-      // Small delay to let the popover render and avoid focus race conditions
-      const timer = setTimeout(() => {
-        textareaRef.current?.focus()
-      }, 0)
-      return () => clearTimeout(timer)
+      setDragOffset({ x: 0, y: 0 })
+      setContainerSize({ width: width || 400, height: 480 })
     }
-  }, [open])
+  }, [open, width])
 
-  // Reset input when popover closes
+  // Handle drag events
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      offsetX: dragOffset.x,
+      offsetY: dragOffset.y,
+    }
+  }, [dragOffset])
+
   useEffect(() => {
-    if (!open) {
-      setInput('')
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragStartRef.current.x
+      const deltaY = e.clientY - dragStartRef.current.y
+      setDragOffset({
+        x: dragStartRef.current.offsetX + deltaX,
+        y: dragStartRef.current.offsetY + deltaY,
+      })
     }
-  }, [open])
 
-  const handleSubmit = async () => {
-    if (!input.trim()) return
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
 
-    const { prompt, badges } = buildEditPrompt(context, input.trim())
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
+
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsResizing(true)
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: containerSize.width,
+      height: containerSize.height,
+    }
+  }, [containerSize])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - resizeStartRef.current.x
+      const deltaY = e.clientY - resizeStartRef.current.y
+      setContainerSize({
+        width: Math.max(300, resizeStartRef.current.width + deltaX),
+        height: Math.max(250, resizeStartRef.current.height + deltaY),
+      })
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizing])
+
+  // Reset state when popover opens
+  useEffect(() => {
+    if (open) {
+      setCurrentModel(model || 'haiku')
+      resetInlineSession()
+    }
+  }, [open, model, resetInlineSession])
+
+  // Handle sending message from ChatDisplay (inline mode)
+  // Creates hidden session on first message, then uses App context for sending
+  const handleInlineSendMessage = useCallback(async (message: string) => {
+    const { prompt, badges } = buildEditPrompt(context, message)
+
+    // Create session on first message
+    let sessionId = inlineSessionId
+    if (!sessionId && workspace?.id) {
+      const createOptions: CreateSessionOptions = {
+        model: model || 'haiku',
+        systemPromptPreset: systemPromptPreset || 'mini',
+        permissionMode,
+        workingDirectory,
+        hidden: true, // Hidden sessions use same App code path but don't appear in list
+      }
+      const newSession = await onCreateSession(workspace.id, createOptions)
+      sessionId = newSession.id
+      setInlineSessionId(sessionId)
+    }
+
+    // Send message via App context (includes optimistic user message update)
+    // Pass badges to hide the <edit_request> XML metadata in the user message bubble
+    if (sessionId) {
+      onSendMessage(sessionId, prompt, undefined, undefined, badges)
+    }
+  }, [context, inlineSessionId, workspace?.id, model, systemPromptPreset, permissionMode, workingDirectory, onCreateSession, onSendMessage])
+
+  // Legacy mode: navigates to chat in the same window
+  const handleLegacySendMessage = useCallback((message: string) => {
+    const { prompt, badges } = buildEditPrompt(context, message)
     const encodedInput = encodeURIComponent(prompt)
-    // Encode badges as JSON for passing through deep link
     const encodedBadges = encodeURIComponent(JSON.stringify(badges))
 
-    // Open new focused window with auto-send
-    // The ?window=focused creates a smaller window (900x700) focused on single session
-    // The &send=true auto-sends the message immediately
-    // The &mode= sets the permission mode for the new session
-    // The &badges= passes badge metadata for hiding the XML context in UI
-    // The &workdir= sets the working directory (user_default, none, or absolute path)
     const workdirParam = workingDirectory ? `&workdir=${encodeURIComponent(workingDirectory)}` : ''
-    const url = `agentoperator://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
+    const modelParam = model ? `&model=${encodeURIComponent(model)}` : ''
+    const systemPromptParam = systemPromptPreset ? `&systemPrompt=${encodeURIComponent(systemPromptPreset)}` : ''
+    // Navigate in same window by omitting window=focused parameter
+    const url = `agentoperator://action/new-chat?input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}${modelParam}${systemPromptParam}`
 
-    try {
-      await window.electronAPI.openUrl(url)
-    } catch (error) {
-      console.error('[EditPopover] Failed to open new chat window:', error)
-    }
-
-    // Close the popover
+    window.electronAPI.openUrl(url)
     setOpen(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter submits, Shift+Enter inserts newline
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-    }
-    // Escape closes the popover
-    if (e.key === 'Escape') {
-      setOpen(false)
-    }
-  }
+  }, [context, workingDirectory, model, systemPromptPreset, permissionMode, setOpen])
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal={modal}>
-      <PopoverTrigger asChild className={triggerClassName}>
-        {trigger}
-      </PopoverTrigger>
-      <PopoverContent
-        side={side}
-        align={align}
-        className="p-4"
-        style={{ width, borderRadius: 16 }}
-      >
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          autoFocus
-          className={cn(
-            'w-full min-h-[100px] resize-none px-0 py-0 text-sm leading-relaxed',
-            'bg-transparent border-none',
-            'placeholder:text-muted-foreground placeholder:leading-relaxed',
-            'focus:outline-none focus-visible:outline-none focus-visible:ring-0',
-            'field-sizing-content'
-          )}
-        />
+    <>
+      {/* Full-screen backdrop - rendered BEHIND the popover during processing */}
+      <AnimatePresence>
+        {open && isProcessing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black/5 z-40"
+          />
+        )}
+      </AnimatePresence>
 
-        {/* Footer row: secondary action on left, send button on right */}
-        <div className="flex items-center justify-between mt-2">
-          {/* Secondary action - plain text link */}
-          {secondaryAction ? (
-            <button
-              type="button"
-              onClick={() => {
-                secondaryAction.onClick()
-                setOpen(false)
-              }}
-              className="text-sm text-muted-foreground hover:underline"
-            >
-              {secondaryAction.label}
-            </button>
-          ) : (
-            <div />
-          )}
-
-          {/* Send button */}
-          <Button
-            type="button"
-            size="icon"
-            className="h-7 w-7 rounded-full shrink-0"
-            onClick={handleSubmit}
-            disabled={!input.trim()}
+      <Popover open={open} onOpenChange={setOpen} modal={modal}>
+        <PopoverTrigger asChild className={triggerClassName}>
+          {trigger}
+        </PopoverTrigger>
+        <PopoverContent
+            side={side}
+            align={align}
+            className="p-0 overflow-visible"
+            style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}
+            onInteractOutside={handleInteractOutside}
+            onEscapeKeyDown={handleEscapeKeyDown}
           >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+            {/* Container */}
+            <div
+              ref={popoverRef}
+              className="relative bg-foreground-2 overflow-hidden"
+              style={{
+                width: containerSize.width,
+                height: containerSize.height,
+                transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+                borderRadius: 16,
+                boxShadow: '0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              {/* Drag handle - floating overlay */}
+              <div
+                onMouseDown={handleDragStart}
+                className={cn(
+                  "absolute top-0 left-1/2 -translate-x-1/2 z-50 px-4 py-2 cursor-grab rounded pointer-events-auto",
+                  isDragging && "cursor-grabbing"
+                )}
+              >
+                <GripHorizontal className="w-4 h-4 text-muted-foreground/30" />
+              </div>
+
+              {/* Content area - always uses compact ChatDisplay */}
+              <div className="flex-1 flex flex-col bg-foreground-2" style={{ height: '100%' }}>
+                <ChatDisplay
+                  session={displaySession}
+                  onSendMessage={inlineExecution ? handleInlineSendMessage : handleLegacySendMessage}
+                  onOpenFile={onOpenFile || (() => {})}
+                  onOpenUrl={onOpenUrl || (() => {})}
+                  currentModel={currentModel}
+                  onModelChange={setCurrentModel}
+                  compactMode={true}
+                  placeholder={placeholder}
+                  emptyStateLabel={context.label}
+                />
+              </div>
+
+              {/* Bottom-right resize handle - invisible hit area */}
+              <div
+                onMouseDown={handleResizeStart}
+                className="absolute -bottom-2 -right-2 w-6 h-6 cursor-nwse-resize pointer-events-auto z-50"
+              />
+            </div>
+          </PopoverContent>
+      </Popover>
+    </>
   )
 }
 

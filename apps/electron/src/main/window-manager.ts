@@ -82,6 +82,7 @@ export interface CreateWindowOptions {
 export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
+  private pendingDeepLinks: Map<number, { view?: string; action?: string; actionParams?: Record<string, string> }> = new Map()  // webContents.id → pending deep link
 
   /**
    * Create a new window for a workspace
@@ -245,31 +246,25 @@ export class WindowManager {
       }
     }
 
-    // If an initial deep link was provided, navigate to it after the window is ready
-    if (initialDeepLink) {
-      window.once('ready-to-show', () => {
-        // Import parseDeepLink dynamically to avoid circular dependency
-        import('./deep-link').then(({ parseDeepLink }) => {
-          const target = parseDeepLink(initialDeepLink)
-          if (target && (target.view || target.action)) {
-            // Wait a bit for React to mount and register IPC listeners
-            setTimeout(() => {
-              if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-                window.webContents.send(IPC_CHANNELS.DEEP_LINK_NAVIGATE, {
-                  view: target.view,
-                  action: target.action,
-                  actionParams: target.actionParams,
-                })
-              }
-            }, 100)
-          }
-        })
-      })
-    }
-
-    // Store the window mapping
+    // Store the window mapping first (before parsing deep link)
     const webContentsId = window.webContents.id
     this.windows.set(webContentsId, { window, workspaceId })
+
+    // If an initial deep link was provided, store it for the renderer to pull when ready
+    // This is more reliable than pushing after a timeout, as the renderer knows when it's ready
+    if (initialDeepLink) {
+      import('./deep-link').then(({ parseDeepLink }) => {
+        const target = parseDeepLink(initialDeepLink)
+        if (target && (target.view || target.action)) {
+          windowLog.info('[WindowManager] Storing pending deep link for window:', target.action || target.view)
+          this.pendingDeepLinks.set(webContentsId, {
+            view: target.view,
+            action: target.action,
+            actionParams: target.actionParams,
+          })
+        }
+      })
+    }
 
     // Track focused mode state for persistence
     if (focused) {
@@ -358,6 +353,20 @@ export class WindowManager {
   getWorkspaceForWindow(webContentsId: number): string | null {
     const managed = this.windows.get(webContentsId)
     return managed?.workspaceId ?? null
+  }
+
+  /**
+   * Get and clear pending deep link for a window (by webContents.id)
+   * Called by renderer when it's ready to handle deep links
+   */
+  getPendingDeepLink(webContentsId: number): { view?: string; action?: string; actionParams?: Record<string, string> } | null {
+    const pending = this.pendingDeepLinks.get(webContentsId)
+    if (pending) {
+      windowLog.info('[WindowManager] Returning pending deep link for window:', pending.action || pending.view)
+      this.pendingDeepLinks.delete(webContentsId)
+      return pending
+    }
+    return null
   }
 
   /**

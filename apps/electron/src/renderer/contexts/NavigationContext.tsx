@@ -191,10 +191,15 @@ export function NavigationProvider({
   // Handle action navigation (side effects that don't change navigation state)
   const handleActionNavigation = useCallback(
     async (parsed: ParsedRoute) => {
-      if (!workspaceId) return
+      console.log('[Navigation] handleActionNavigation called:', { action: parsed.name, workspaceId, params: parsed.params })
+      if (!workspaceId) {
+        console.warn('[Navigation] handleActionNavigation: workspaceId is null, returning early')
+        return
+      }
 
       switch (parsed.name) {
         case 'new-chat': {
+          console.log('[Navigation] Creating new chat session...')
           // Create session with optional permission mode and working directory from params
           const createOptions: import('../../shared/types').CreateSessionOptions = {}
           if (parsed.params.mode && ['safe', 'ask', 'allow-all'].includes(parsed.params.mode)) {
@@ -205,6 +210,7 @@ export function NavigationProvider({
             createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
           }
           const session = await onCreateSession(workspaceId, createOptions)
+          console.log('[Navigation] Session created:', session.id)
 
           // Rename session if name provided
           if (parsed.params.name) {
@@ -397,11 +403,12 @@ export function NavigationProvider({
       }
 
       if (!isReady) {
+        console.log('[Navigation] Queuing navigation (not ready yet):', { route, parsed })
         pendingNavigationRef.current = parsed
         return
       }
 
-      console.log('[Navigation] Navigating:', parsed)
+      console.log('[Navigation] Navigating (isReady=true):', parsed)
 
       // Handle actions (side effects)
       if (parsed.type === 'action') {
@@ -496,12 +503,15 @@ export function NavigationProvider({
 
   // Process pending navigation when ready
   useEffect(() => {
+    console.log('[Navigation] Pending navigation check:', { isReady, hasPending: !!pendingNavigationRef.current })
     if (isReady && pendingNavigationRef.current) {
       const pending = pendingNavigationRef.current
       pendingNavigationRef.current = null
+      console.log('[Navigation] Processing pending navigation:', pending)
 
       // Handle actions
       if (pending.type === 'action') {
+        console.log('[Navigation] Calling handleActionNavigation for pending action:', pending.name)
         handleActionNavigation(pending)
         return
       }
@@ -536,14 +546,12 @@ export function NavigationProvider({
     }
   }, [isReady, workspaceId, navigate, applyNavigationState])
 
-  // Pending deep link navigation - used when message arrives before workspaceId is ready
-  const pendingDeepLinkRef = useRef<DeepLinkNavigation | null>(null)
-
   // Listen for deep link navigation events from main process
-  // IMPORTANT: Register listener immediately (not gated on workspaceId) to avoid
-  // missing messages that arrive before initialization completes.
   useEffect(() => {
-    const cleanup = window.electronAPI.onDeepLinkNavigate((nav: DeepLinkNavigation) => {
+    if (!workspaceId) return
+
+    // Helper to process a deep link navigation
+    const processDeepLink = (nav: DeepLinkNavigation) => {
       // Convert DeepLinkNavigation to route string and navigate
       let route: string | null = null
 
@@ -574,51 +582,27 @@ export function NavigationProvider({
           })
           return
         }
-
-        // If workspaceId is not ready yet, queue the navigation for later
-        // This handles the race condition where deep link arrives before initialization
-        if (!workspaceId) {
-          console.log('[Navigation] Queuing deep link (workspaceId not ready):', nav)
-          pendingDeepLinkRef.current = nav
-          return
-        }
-
         navigate(route as Route)
       }
+    }
+
+    // Pull any pending deep link that was stored before this listener was ready
+    // This handles the race condition where the deep link is sent before React mounts
+    window.electronAPI.getPendingDeepLink().then((nav) => {
+      if (nav) {
+        console.log('[Navigation] Got pending deep link:', nav.action || nav.view)
+        processDeepLink(nav)
+      }
+    })
+
+    // Listen for any future deep links
+    const cleanup = window.electronAPI.onDeepLinkNavigate((nav: DeepLinkNavigation) => {
+      console.log('[Navigation] Deep link received:', nav.action || nav.view)
+      processDeepLink(nav)
     })
 
     return cleanup
   }, [workspaceId, navigate, t])
-
-  // Process pending deep link when workspaceId becomes available
-  useEffect(() => {
-    if (!workspaceId || !pendingDeepLinkRef.current) return
-
-    const nav = pendingDeepLinkRef.current
-    pendingDeepLinkRef.current = null
-    console.log('[Navigation] Processing queued deep link:', nav)
-
-    // Rebuild route from stored navigation
-    let route: string | null = null
-    if (nav.view) {
-      route = nav.view
-    } else if (nav.action) {
-      route = `action/${nav.action}`
-      if (nav.actionParams?.id) {
-        route += `/${nav.actionParams.id}`
-      }
-      const otherParams = { ...nav.actionParams }
-      delete otherParams.id
-      if (Object.keys(otherParams).length > 0) {
-        const params = new URLSearchParams(otherParams)
-        route += `?${params.toString()}`
-      }
-    }
-
-    if (route) {
-      navigate(route as Route)
-    }
-  }, [workspaceId, navigate])
 
   // Listen for internal navigation events (from navigate() calls)
   useEffect(() => {

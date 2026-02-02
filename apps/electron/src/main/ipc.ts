@@ -320,6 +320,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return workspaceId
   })
 
+  // Get pending deep link for this window (pull-based for reliable timing)
+  ipcMain.handle(IPC_CHANNELS.GET_PENDING_DEEP_LINK, (event) => {
+    return windowManager.getPendingDeepLink(event.sender.id)
+  })
+
   // Open workspace in new window (or focus existing)
   ipcMain.handle(IPC_CHANNELS.OPEN_WORKSPACE, async (_event, workspaceId: string) => {
     windowManager.focusOrCreateWindow(workspaceId)

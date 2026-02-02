@@ -17,6 +17,9 @@ import { initializeSourceGuides } from './source-guides.ts';
 const CONFIG_DIR = join(homedir(), '.agent-operator');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
+/** App root directory constant for use in prompts and documentation */
+export const APP_ROOT = '~/.agent-operator';
+
 // Track if docs have been initialized this session (prevents re-init on hot reload)
 let docsInitialized = false;
 
@@ -39,13 +42,17 @@ export function getDocPath(filename: string): string {
  * Use these constants instead of hardcoding paths to keep references in sync.
  */
 export const DOC_REFS = {
-  sources: '~/.agent-operator/docs/sources.md',
-  permissions: '~/.agent-operator/docs/permissions.md',
-  skills: '~/.agent-operator/docs/skills.md',
-  themes: '~/.agent-operator/docs/themes.md',
-  statuses: '~/.agent-operator/docs/statuses.md',
-  sourceGuides: '~/.agent-operator/docs/source-guides/',
-  docsDir: '~/.agent-operator/docs/',
+  appRoot: APP_ROOT,
+  sources: `${APP_ROOT}/docs/sources.md`,
+  permissions: `${APP_ROOT}/docs/permissions.md`,
+  skills: `${APP_ROOT}/docs/skills.md`,
+  themes: `${APP_ROOT}/docs/themes.md`,
+  statuses: `${APP_ROOT}/docs/statuses.md`,
+  labels: `${APP_ROOT}/docs/labels.md`,
+  toolIcons: `${APP_ROOT}/docs/tool-icons.md`,
+  mermaid: `${APP_ROOT}/docs/mermaid.md`,
+  sourceGuides: `${APP_ROOT}/docs/source-guides/`,
+  docsDir: `${APP_ROOT}/docs/`,
 } as const;
 
 /**
