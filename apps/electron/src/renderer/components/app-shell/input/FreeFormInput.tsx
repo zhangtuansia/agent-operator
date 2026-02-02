@@ -251,6 +251,9 @@ export function FreeFormInput({
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
 
+  // Input settings (loaded from config)
+  const [sendMessageKey, setSendMessageKey] = React.useState<'enter' | 'cmd-enter'>('enter')
+
   // Provider state for showing correct model options
   const [currentProvider, setCurrentProvider] = React.useState<string | undefined>(undefined)
   // Custom models for 'custom' provider
@@ -306,6 +309,20 @@ export function FreeFormInput({
     window.addEventListener('cowork:provider-changed', handleProviderChange)
     return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)
   }, [loadProvider])
+
+  // Load input settings (sendMessageKey) on mount
+  React.useEffect(() => {
+    const loadInputSettings = async () => {
+      if (!window.electronAPI) return
+      try {
+        const sendKey = await window.electronAPI.getSendMessageKey()
+        setSendMessageKey(sendKey)
+      } catch (error) {
+        console.error('Failed to load input settings:', error)
+      }
+    }
+    loadInputSettings()
+  }, [])
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -904,11 +921,27 @@ export function FreeFormInput({
       }
     }
 
-    // Only Cmd/Ctrl+Enter sends message (plain Enter is for new line)
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      // Submit message - backend handles interruption if processing
-      submitMessage()
+    // Handle send key based on user preference:
+    // - 'enter': Enter sends (Shift+Enter for newline)
+    // - 'cmd-enter': ⌘/Ctrl+Enter sends (Enter for newline)
+    if (sendMessageKey === 'enter') {
+      // Enter sends, Shift+Enter adds newline
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault()
+        submitMessage()
+      }
+      // Also allow Cmd/Ctrl+Enter to send (power user shortcut)
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+        e.preventDefault()
+        submitMessage()
+      }
+    } else {
+      // cmd-enter mode: ⌘/Ctrl+Enter sends, plain Enter adds newline
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+        e.preventDefault()
+        submitMessage()
+      }
+      // Plain Enter is allowed to pass through (adds newline)
     }
     if (e.key === 'Escape') {
       richInputRef.current?.blur()
