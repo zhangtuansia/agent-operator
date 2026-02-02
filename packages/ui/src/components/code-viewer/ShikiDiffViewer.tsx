@@ -47,6 +47,20 @@ export interface ShikiDiffViewerProps {
   className?: string
 }
 
+/**
+ * Calculate addition/deletion stats from a FileDiffMetadata
+ * Useful for displaying change counts in headers
+ */
+export function getDiffStats(fileDiff: FileDiffMetadata): { additions: number; deletions: number } {
+  let additions = 0
+  let deletions = 0
+  for (const hunk of fileDiff.hunks) {
+    additions += hunk.additionCount
+    deletions += hunk.deletionCount
+  }
+  return { additions, deletions }
+}
+
 function getLanguageFromPath(filePath: string, explicit?: string): string {
   if (explicit) return explicit
   const ext = filePath.split('.').pop()?.toLowerCase() || ''
