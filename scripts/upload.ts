@@ -20,8 +20,9 @@
  */
 
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { createHash } from 'crypto';
-import { readFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, existsSync, statSync, createReadStream } from 'fs';
 import { join, basename } from 'path';
 
 // Parse arguments
@@ -50,7 +51,7 @@ if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
   process.exit(1);
 }
 
-// Initialize S3 client for R2
+// Initialize S3 client for R2 with retry configuration
 const s3Client = new S3Client({
   region: 'auto',
   endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -58,6 +59,14 @@ const s3Client = new S3Client({
     accessKeyId,
     secretAccessKey,
   },
+  maxAttempts: 10,
+  requestHandler: {
+    requestTimeout: 300000, // 5 minutes per request
+    httpsAgent: {
+      maxSockets: 50,
+      keepAlive: true,
+    },
+  } as any,
 });
 
 // Paths
@@ -83,23 +92,58 @@ function getFileSize(filePath: string): number {
   return statSync(filePath).size;
 }
 
-// Upload a file to R2
+// Upload a file to R2 using multipart upload for large files
 async function uploadFile(localPath: string, remotePath: string, contentType?: string): Promise<void> {
-  const content = readFileSync(localPath);
   const fileName = basename(localPath);
+  const fileSize = getFileSize(localPath);
+  const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
 
-  console.log(`Uploading ${fileName} to ${remotePath}...`);
+  console.log(`Uploading ${fileName} to ${remotePath} (${fileSizeMB} MB)...`);
 
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: bucketName,
-      Key: remotePath,
-      Body: content,
-      ContentType: contentType || 'application/octet-stream',
-    })
-  );
+  // Use multipart upload for files > 10MB
+  if (fileSize > 10 * 1024 * 1024) {
+    const upload = new Upload({
+      client: s3Client,
+      params: {
+        Bucket: bucketName,
+        Key: remotePath,
+        Body: createReadStream(localPath),
+        ContentType: contentType || 'application/octet-stream',
+      },
+      // 10MB part size
+      partSize: 10 * 1024 * 1024,
+      // Max 4 concurrent uploads
+      queueSize: 4,
+      leavePartsOnError: false,
+    });
 
-  console.log(`  ✓ Uploaded ${fileName} (${(content.length / 1024 / 1024).toFixed(2)} MB)`);
+    // Progress tracking
+    let lastProgress = 0;
+    upload.on('httpUploadProgress', (progress) => {
+      if (progress.loaded && progress.total) {
+        const percent = Math.round((progress.loaded / progress.total) * 100);
+        if (percent >= lastProgress + 10) {
+          console.log(`  ... ${percent}% uploaded`);
+          lastProgress = percent;
+        }
+      }
+    });
+
+    await upload.done();
+  } else {
+    // Small files use simple upload
+    const content = readFileSync(localPath);
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: remotePath,
+        Body: content,
+        ContentType: contentType || 'application/octet-stream',
+      })
+    );
+  }
+
+  console.log(`  ✓ Uploaded ${fileName} (${fileSizeMB} MB)`);
 }
 
 // Upload JSON content to R2
