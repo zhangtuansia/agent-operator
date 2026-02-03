@@ -10,7 +10,7 @@
  * Examples:
  *   - anthropic_api_key::global
  *   - claude_oauth::global
- *   - craft_oauth::global (for Craft API, not MCP)
+ *   - operator_oauth::global (for Operator API, not MCP)
  *   - source_oauth::{workspaceId}::{sourceId}
  *   - source_bearer::{workspaceId}::{sourceId}
  *
@@ -21,6 +21,8 @@
 export type CredentialType =
   | 'anthropic_api_key'
   | 'claude_oauth'
+  | 'operator_oauth'
+  // Legacy key kept for backward compatibility with older local credential stores.
   | 'craft_oauth'
   | 'workspace_oauth'
   | 'workspace_bearer'
@@ -36,6 +38,7 @@ export type CredentialType =
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'anthropic_api_key',
   'claude_oauth',
+  'operator_oauth',
   'craft_oauth',
   'workspace_oauth',
   'workspace_bearer',

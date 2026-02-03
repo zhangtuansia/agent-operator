@@ -917,8 +917,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // External URLs - open in default browser
-      if (!['http:', 'https:', 'mailto:', 'craftdocs:'].includes(parsed.protocol)) {
-        throw new Error('Only http, https, mailto, craftdocs URLs are allowed')
+      if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        throw new Error('Only http, https, mailto URLs are allowed')
       }
       await shell.openExternal(url)
     } catch (error) {

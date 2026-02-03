@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
+const VIEWER_API_PROXY_TARGET = process.env.VITE_VIEWER_API_PROXY_TARGET || 'https://www.aicowork.chat'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -32,7 +34,7 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to production R2 during local dev
       '/s/api': {
-        target: 'https://agents.craft.do',
+        target: VIEWER_API_PROXY_TARGET,
         changeOrigin: true,
         secure: true,
       },

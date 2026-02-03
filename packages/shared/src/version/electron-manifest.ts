@@ -3,8 +3,8 @@
  *
  * Uses the /electron/ path prefix for Electron app updates.
  * Endpoints:
- * - https://agents.craft.do/electron/latest
- * - https://agents.craft.do/electron/{version}/manifest.json
+ * - https://download.aicowork.chat/electron/latest
+ * - https://download.aicowork.chat/electron/{version}/manifest.json
  */
 
 import semver from 'semver';

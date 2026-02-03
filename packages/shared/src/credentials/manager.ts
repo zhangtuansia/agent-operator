@@ -230,14 +230,22 @@ export class CredentialManager {
     });
   }
 
-  /** Get Craft OAuth token */
+  /** Get Operator OAuth token */
   async getOperatorOAuth(): Promise<string | null> {
-    const cred = await this.get({ type: 'craft_oauth' });
-    return cred?.value || null;
+    const operatorCred = await this.get({ type: 'operator_oauth' });
+    if (operatorCred?.value) {
+      return operatorCred.value;
+    }
+
+    // Backward compatibility for older stores.
+    const legacyCred = await this.get({ type: 'craft_oauth' });
+    return legacyCred?.value || null;
   }
 
-  /** Set Craft OAuth token */
+  /** Set Operator OAuth token */
   async setOperatorOAuth(token: string): Promise<void> {
+    await this.set({ type: 'operator_oauth' }, { value: token });
+    // Keep legacy credential in sync during migration window.
     await this.set({ type: 'craft_oauth' }, { value: token });
   }
 

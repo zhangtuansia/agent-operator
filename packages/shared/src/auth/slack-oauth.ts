@@ -28,6 +28,8 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_OAUTH_CLIENT_SECRET || '';
 // Slack OAuth endpoints
 const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
+const SLACK_OAUTH_RELAY_BASE_URL =
+  (process.env.SLACK_OAUTH_RELAY_BASE_URL || 'https://www.aicowork.chat').replace(/\/+$/, '');
 
 /**
  * Predefined USER scope sets for common Slack services
@@ -277,9 +279,9 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     const localUrl = new URL(callbackServer.url);
     const port = localUrl.port;
 
-    // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
-    // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
+    // Use HTTPS relay for Slack OAuth (Slack requires HTTPS).
+    // The relay redirects: {relay}/auth/slack/callback → http://localhost:{port}/callback
+    const redirectUri = `${SLACK_OAUTH_RELAY_BASE_URL}/auth/slack/callback?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token

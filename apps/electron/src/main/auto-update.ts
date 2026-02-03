@@ -300,7 +300,7 @@ async function doDownloadUpdate(): Promise<void> {
     const extension = process.platform === 'darwin' ? 'dmg' :
                       process.platform === 'win32' ? 'exe' :
                       'AppImage'
-    installerPath = join(tempDir, `Craft-Agent-${latestVersion}.${extension}`)
+    installerPath = join(tempDir, `Agent-Operator-${latestVersion}.${extension}`)
 
     // Remove existing file if present
     if (existsSync(installerPath)) {
