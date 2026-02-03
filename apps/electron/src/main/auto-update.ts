@@ -504,6 +504,10 @@ async function installMacOS(): Promise<void> {
   clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for macOS update...')
+
+  // Give the child process time to start before quitting
+  await new Promise(resolve => setTimeout(resolve, 500))
+
   app.quit()
 }
 
@@ -544,6 +548,10 @@ async function installWindows(): Promise<void> {
   clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for Windows update...')
+
+  // Give the child process time to start before quitting
+  await new Promise(resolve => setTimeout(resolve, 500))
+
   app.quit()
 }
 
@@ -594,6 +602,10 @@ async function installLinux(): Promise<void> {
   clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for Linux update...')
+
+  // Give the child process time to start before quitting
+  await new Promise(resolve => setTimeout(resolve, 500))
+
   app.quit()
 }
 

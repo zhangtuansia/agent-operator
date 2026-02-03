@@ -847,6 +847,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return !app.isPackaged
   })
 
+  // Get app version and system info
+  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
+    return {
+      app: app.getVersion(),
+      os: process.platform,
+      osVersion: process.getSystemVersion?.() || '',
+      arch: process.arch,
+    }
+  })
+
   // Auto-update handlers
   // Manual check from UI - auto-download so user can install immediately
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {

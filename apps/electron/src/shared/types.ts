@@ -204,6 +204,7 @@ export interface ElectronAPI {
 
   // System
   getVersions(): { node: string; chrome: string; electron: string }
+  getAppVersion(): Promise<{ app: string; os: string; osVersion: string; arch: string }>
   getHomeDir(): Promise<string>
   isDebugMode(): Promise<boolean>
 

@@ -8,7 +8,7 @@
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",
-    "permissionMode": "safe",
+    "permissionMode": "ask",
     "cyclablePermissionModes": ["safe", "ask", "allow-all"],
     "localMcpServers": {
       "enabled": true

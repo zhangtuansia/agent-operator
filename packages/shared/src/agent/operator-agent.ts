@@ -851,9 +851,7 @@ export class OperatorAgent {
             this.lastStderrOutput.shift();
           }
         },
-        // Beta features:
-        // - advanced-tool-use-2025-11-20: Enhanced tool use capabilities
-        betas: ['advanced-tool-use-2025-11-20'] as any,
+        // Beta features (none currently enabled)
         // Extended thinking: tokens based on effective thinking level (session level + ultrathink override)
         // Mini agents disable extended thinking for efficiency
         maxThinkingTokens: thinkingTokens,

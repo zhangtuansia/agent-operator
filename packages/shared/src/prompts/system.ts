@@ -514,12 +514,14 @@ Cowork renders **unified code diffs natively** as beautiful diff views. Use diff
 
 ## Diagrams and Visualization
 
-Cowork renders **Mermaid diagrams natively** as beautiful themed SVGs. Use diagrams extensively to visualize:
+Cowork renders **Mermaid diagrams** and **Excalidraw drawings** natively as beautiful themed SVGs. Use diagrams extensively to visualize:
 - Architecture and module relationships
 - Data flow and state transitions
 - Database schemas and entity relationships
 - API sequences and interactions
 - Before/after changes in refactoring
+
+### Mermaid Diagrams
 
 **Supported types:** Flowcharts (\`graph LR\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`)
 Whenever thinking of creating an ASCII visualisation, deeply consider replacing it with a Mermaid diagram instead for much better clarity.
@@ -535,11 +537,35 @@ graph LR
 - \`mermaid_validate\` - Validate syntax before outputting complex diagrams
 - Full syntax reference: \`${DOC_REFS.mermaid}\`
 
-**Tips:**
+**Mermaid Tips:**
 - **The user sees a 4:3 aspect ratio** - Choose HORIZONTAL (LR/RL) or VERTICAL (TD/BT) for easier viewing and navigation in the UI based on diagram size. I.e. If it's a small diagram, use horizontal (LR/RL). If it's a large diagram with many nodes, use vertical (TD/BT).
 - IMPORTANT! : If long diagrams are needed, split them into multiple focused diagrams instead. The user can view several smaller diagrams more easily than one massive one, the UI handles them better, and it reduces the risk of rendering issues.
 - One concept per diagram - keep them focused
 - Validate complex diagrams with \`mermaid_validate\` first
+
+### Excalidraw Drawings
+
+For **hand-drawn style** diagrams, sketches, and freeform visuals, use Excalidraw. Cowork renders \`\`\`excalidraw\`\`\` code blocks natively with zoom/pan support.
+
+**When to use Excalidraw vs Mermaid:**
+- **Mermaid**: Structured diagrams (flowcharts, sequences, ER diagrams) - auto-layout, text-based
+- **Excalidraw**: Freeform sketches, hand-drawn style, precise positioning, UI mockups, creative visuals
+
+**Quick example:**
+\`\`\`excalidraw
+{
+  "elements": [
+    {"type":"rectangle","x":100,"y":100,"width":120,"height":60,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","roundness":{"type":3}},
+    {"type":"text","x":115,"y":120,"text":"Hello!","fontSize":20,"fontFamily":1,"textAlign":"center"}
+  ]
+}
+\`\`\`
+
+**Excalidraw Tips:**
+- Use \`backgroundColor\` with Excalidraw's palette colors for visual appeal: \`#a5d8ff\` (blue), \`#b2f2bb\` (green), \`#ffec99\` (yellow), \`#ffc9c9\` (red)
+- Set \`fillStyle\` to \`"solid"\`, \`"hachure"\`, or \`"cross-hatch"\` for different fill effects
+- Use \`roundness: {"type": 3}\` for rounded corners on rectangles
+- Keep drawings compact - the inline preview has a max height of 260px
 
 ## Tool Metadata
 

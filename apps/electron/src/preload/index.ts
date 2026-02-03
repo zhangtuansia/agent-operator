@@ -82,8 +82,9 @@ const api: ElectronAPI = {
   getVersions: () => ({
     node: process.versions.node,
     chrome: process.versions.chrome,
-    electron: process.versions.electron
+    electron: process.versions.electron,
   }),
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
 

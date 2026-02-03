@@ -57,7 +57,7 @@ fi
 echo "[$(date)] Mounted at: $MOUNT_POINT"
 
 # Find the app in the mounted volume
-NEW_APP=$(find "$MOUNT_POINT" -name "*.app" -maxdepth 1 | head -1)
+NEW_APP=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
 
 if [ -z "$NEW_APP" ]; then
     echo "[$(date)] No app found in DMG"

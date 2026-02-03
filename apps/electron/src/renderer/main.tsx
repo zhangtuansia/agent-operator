@@ -5,6 +5,7 @@ import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
 import { Toaster } from '@/components/ui/sonner'
+import { initAnalytics, instrumentElectronApi } from './lib/analytics'
 import './index.css'
 
 /**
@@ -14,6 +15,10 @@ import './index.css'
 function Root() {
   return <App />
 }
+
+void initAnalytics(window.electronAPI)
+// Store instrumented API on a different property (electronAPI is read-only from contextBridge)
+;(window as unknown as { __instrumentedAPI: typeof window.electronAPI }).__instrumentedAPI = instrumentElectronApi(window.electronAPI)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
