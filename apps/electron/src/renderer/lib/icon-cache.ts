@@ -250,6 +250,7 @@ export async function loadSourceIcon(
 async function loadWorkspaceIcon(workspaceId: string, relativePath: string): Promise<string | null> {
   try {
     const result = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    if (!result) return null
     // For SVG, theme and convert to data URL
     // This injects foreground color since currentColor doesn't work in background-image
     if (relativePath.endsWith('.svg')) {
@@ -302,6 +303,7 @@ export async function loadSkillIcon(
 
   try {
     const result = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    if (!result) return null
     // For SVG, theme and convert to data URL
     // This injects foreground color since currentColor doesn't work in background-image
     let url = result
@@ -612,6 +614,7 @@ async function loadIconFile(
 ): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
   try {
     const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    if (!content) return null
 
     if (relativePath.endsWith('.svg')) {
       // Detect if SVG uses currentColor (colorable)

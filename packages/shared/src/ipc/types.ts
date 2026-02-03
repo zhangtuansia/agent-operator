@@ -85,6 +85,8 @@ export interface Session {
     /** Model's context window size in tokens (from SDK modelUsage) */
     contextWindow?: number
   }
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean
 }
 
 // CreateSessionOptions is defined in schemas.ts (inferred from Zod schema)

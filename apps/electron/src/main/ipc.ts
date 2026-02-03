@@ -880,6 +880,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.OPEN_URL, async (_event, url: string) => {
     ipcLog.info('[OPEN_URL] Received request:', url)
     try {
+      // Support absolute local file paths passed from renderer.
+      // Some UI paths currently call openUrl() with a filesystem path.
+      if (isAbsolute(url) || url.startsWith('~')) {
+        const absolutePath = url.startsWith('~') ? url : resolve(url)
+        const safePath = await validateFilePath(absolutePath)
+        const result = await shell.openPath(safePath)
+        if (result) {
+          throw new Error(result)
+        }
+        return
+      }
+
       // Validate URL format
       const parsed = new URL(url)
 
@@ -890,6 +902,17 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         const { handleDeepLink } = await import('./deep-link')
         const result = await handleDeepLink(url, windowManager)
         ipcLog.info('[OPEN_URL] Deep link result:', result)
+        return
+      }
+
+      // Local file URL - open in default app
+      if (parsed.protocol === 'file:') {
+        const filePath = decodeURIComponent(parsed.pathname)
+        const safePath = await validateFilePath(filePath)
+        const result = await shell.openPath(safePath)
+        if (result) {
+          throw new Error(result)
+        }
         return
       }
 
@@ -2033,7 +2056,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     if (!existsSync(absolutePath)) {
-      throw new Error(`Image file not found: ${relativePath}`)
+      // Missing icon probes are expected during extension auto-discovery.
+      // Return empty payload to avoid noisy IPC error logs.
+      return ''
     }
 
     // Read file as buffer

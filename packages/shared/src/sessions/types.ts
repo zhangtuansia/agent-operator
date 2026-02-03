@@ -98,6 +98,8 @@ export interface SessionConfig {
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean;
 }
 
 /**
@@ -159,6 +161,8 @@ export interface SessionHeader {
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -207,4 +211,6 @@ export interface SessionMetadata {
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
   agentType?: AgentType;
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean;
 }

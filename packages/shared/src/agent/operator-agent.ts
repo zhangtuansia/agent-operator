@@ -118,6 +118,8 @@ export interface OperatorAgentConfig {
     enabled: boolean;          // Whether debug mode is active
     logFilePath?: string;      // Path to the log file for querying
   };
+  /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
+  systemPromptPreset?: 'default' | 'mini' | string;
 }
 
 // Permission request tracking
@@ -779,6 +781,9 @@ export class OperatorAgent {
         return;
       }
 
+      // Detect mini agent mode early (needed for tool/MCP restrictions)
+      const isMiniAgent = this.config.systemPromptPreset === 'mini';
+
       // Block SDK tools that require UI we don't have:
       // - EnterPlanMode/ExitPlanMode: We use safe mode instead (user-controlled via UI)
       // - AskUserQuestion: Requires interactive UI to show question options to user
@@ -791,15 +796,28 @@ export class OperatorAgent {
       debug('[chat] sourceMcpServers:', sourceMcpResult.servers);
       debug('[chat] sourceApiServers:', this.sourceApiServers);
 
-      const mcpServers: Options['mcpServers'] = {
-        preferences: getPreferencesServer(false),
-        // Session-scoped tools (SubmitPlan, source_test, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceRootPath),
-        // Add user-defined source servers (MCP and API, filtered by local MCP setting)
-        // Note: MCP server is now added via sources system
-        ...sourceMcpResult.servers,
-        ...this.sourceApiServers,
+      const docsMcpServer = {
+        type: 'http' as const,
+        url: 'https://docs.cowork.app/mcp',
       };
+
+      const mcpServers: Options['mcpServers'] = isMiniAgent
+        ? {
+            // Mini agents need session tools (config_validate) and docs for reference
+            session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+            'cowork-docs': docsMcpServer,
+          }
+        : {
+            preferences: getPreferencesServer(false),
+            // Session-scoped tools (SubmitPlan, source_test, etc.)
+            session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+            // Cowork documentation - always available for searching setup guides
+            'cowork-docs': docsMcpServer,
+            // Add user-defined source servers (MCP and API, filtered by local MCP setting)
+            // Note: MCP server is now added via sources system
+            ...sourceMcpResult.servers,
+            ...this.sourceApiServers,
+          };
       
       // Configure SDK options
       // In Bedrock mode, use getBedrockModel to handle ARN formats (Application Inference Profiles)
@@ -809,7 +827,7 @@ export class OperatorAgent {
 
       // Determine effective thinking level: ultrathink override boosts to max for this message
       const effectiveThinkingLevel: ThinkingLevel = this.ultrathinkOverride ? 'max' : this.thinkingLevel;
-      const thinkingTokens = getThinkingTokens(effectiveThinkingLevel, model);
+      const thinkingTokens = isMiniAgent ? 0 : getThinkingTokens(effectiveThinkingLevel, model);
       debug(`[chat] Thinking: level=${this.thinkingLevel}, override=${this.ultrathinkOverride}, effective=${effectiveThinkingLevel}, tokens=${thinkingTokens}`);
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
@@ -837,26 +855,34 @@ export class OperatorAgent {
         // - advanced-tool-use-2025-11-20: Enhanced tool use capabilities
         betas: ['advanced-tool-use-2025-11-20'] as any,
         // Extended thinking: tokens based on effective thinking level (session level + ultrathink override)
+        // Mini agents disable extended thinking for efficiency
         maxThinkingTokens: thinkingTokens,
-        // Option A: Append to Claude Code's system prompt (recommended by docs)
-        // Use pinned values for consistency after compaction (SDK expects stable system prompt)
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: getSystemPrompt(
-            this.pinnedPreferencesPrompt ?? undefined,
-            this.config.debugMode,
-            this.workspaceRootPath
-          ),
-        },
+        // System prompt configuration:
+        // - Mini agents: Use custom (lean) system prompt without Claude Code preset
+        // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
+        systemPrompt: isMiniAgent
+          ? getSystemPrompt(undefined, undefined, this.workspaceRootPath, undefined, 'mini')
+          : {
+              type: 'preset',
+              preset: 'claude_code',
+              append: getSystemPrompt(
+                this.pinnedPreferencesPrompt ?? undefined,
+                this.config.debugMode,
+                this.workspaceRootPath
+              ),
+            },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
         // Note: workingDirectory is still used for context injection and shown to the agent.
         cwd: this.config.session?.sdkCwd ??
           (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
         includePartialMessages: true,
-        // Enable the full Claude Code toolset
-        tools: { type: 'preset', preset: 'claude_code' },
+        // Tools configuration:
+        // - Mini agents: minimal set for quick config edits
+        // - Regular agents: full Claude Code toolset
+        tools: isMiniAgent
+          ? ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash']
+          : { type: 'preset', preset: 'claude_code' },
         // Bypass SDK's built-in permission system - we handle all permissions via PreToolUse hook
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
@@ -956,8 +982,8 @@ export class OperatorAgent {
                 const parts = input.tool_name.split('__');
                 const serverName = parts[1];
                 if (parts.length >= 3 && serverName) {
-                  // Built-in MCP servers that are always available (session-scoped tools)
-                  const builtInMcpServers = new Set(['preferences', 'session']);
+                  // Built-in MCP servers that are always available
+                  const builtInMcpServers = new Set(['preferences', 'session', 'cowork-docs']);
 
                   // Check if this is a source server (not built-in)
                   if (!builtInMcpServers.has(serverName)) {

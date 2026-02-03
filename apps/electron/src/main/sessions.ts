@@ -187,6 +187,8 @@ interface ManagedSession {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
+  // System prompt preset for mini agents ('default' | 'mini')
+  systemPromptPreset?: 'default' | 'mini' | string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
   // Role/type of the last message (for badge display without loading messages)
@@ -212,6 +214,8 @@ interface ManagedSession {
   // Pending auth request tracking (for unified auth flow)
   pendingAuthRequestId?: string
   pendingAuthRequest?: AuthRequest
+  // Whether this session is hidden from session list (e.g., mini edit sessions)
+  hidden?: boolean
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -674,6 +678,7 @@ export class SessionManager {
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
             model: meta.model,
+            hidden: meta.hidden,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
@@ -717,6 +722,10 @@ export class SessionManager {
         enabledSourceSlugs: managed.enabledSourceSlugs,
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
+        sharedUrl: managed.sharedUrl,
+        sharedId: managed.sharedId,
+        model: managed.model,
+        hidden: managed.hidden,
         thinkingLevel: managed.thinkingLevel,
         agentType: managed.agentType,
         messages: persistableMessages.map(messageToStored),
@@ -1038,6 +1047,7 @@ export class SessionManager {
         lastReadMessageId: m.lastReadMessageId,
         workingDirectory: m.workingDirectory,
         model: m.model,
+        hidden: m.hidden,
         enabledSourceSlugs: m.enabledSourceSlugs,
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
@@ -1074,6 +1084,7 @@ export class SessionManager {
       lastReadMessageId: m.lastReadMessageId,
       workingDirectory: m.workingDirectory,
       model: m.model,
+      hidden: m.hidden,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
       sharedUrl: m.sharedUrl,
@@ -1120,6 +1131,7 @@ export class SessionManager {
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
+      managed.hidden = storedSession.hidden
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
@@ -1183,6 +1195,8 @@ export class SessionManager {
     const storedSession = createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
+      model: options?.model,
+      hidden: options?.hidden,
     })
 
     const managed: ManagedSession = {
@@ -1203,6 +1217,8 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
       sdkCwd: storedSession.sdkCwd,
       model: storedSession.model,
+      systemPromptPreset: options?.systemPromptPreset,
+      hidden: options?.hidden,
       thinkingLevel: defaultThinkingLevel,
       messageQueue: [],
       backgroundShellCommands: new Map(),
@@ -1223,6 +1239,7 @@ export class SessionManager {
       todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
+      hidden: managed.hidden,
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
     }
@@ -1278,6 +1295,8 @@ export class SessionManager {
         workspace: managed.workspace,
         // Session model takes priority, fallback to global config
         model: managed.model || config?.model,
+        // System prompt preset for mini agents (focused prompts for quick edits)
+        systemPromptPreset: managed.systemPromptPreset,
         // Initialize thinking level at construction to avoid race conditions
         thinkingLevel: managed.thinkingLevel,
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,

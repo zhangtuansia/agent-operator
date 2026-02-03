@@ -601,7 +601,9 @@ export function SessionList({
   }, [searchActive])
 
   // Sort by most recent activity first
-  const sortedItems = [...items].sort((a, b) =>
+  const sortedItems = items
+    .filter((item) => !item.hidden)
+    .sort((a, b) =>
     (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
   )
 
@@ -898,4 +900,3 @@ export function SessionList({
     </>
   )
 }
-

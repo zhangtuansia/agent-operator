@@ -126,6 +126,13 @@ export const CreateSessionOptionsSchema = z.object({
     z.literal('user_default'),
     z.literal('none'),
   ]).optional(),
+  model: z.string().optional(),
+  systemPromptPreset: z.union([
+    z.literal('default'),
+    z.literal('mini'),
+    z.string(),
+  ]).optional(),
+  hidden: z.boolean().optional(),
 })
 
 // =============================================================================

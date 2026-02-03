@@ -143,6 +143,7 @@ export function createSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
+    hidden?: boolean;
   }
 ): SessionConfig {
   ensureSessionsDir(workspaceRootPath);
@@ -169,6 +170,7 @@ export function createSession(
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
+    hidden: options?.hidden,
   };
 
   // Save empty session
@@ -369,6 +371,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       workingDirectory: workingDir,
       sdkCwd,
       model: header.model,
+      hidden: header.hidden,
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,

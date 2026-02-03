@@ -55,6 +55,7 @@ export {
   MemoizedMarkdown,
   CodeBlock,
   InlineCode,
+  MarkdownExcalidrawBlock,
   CollapsibleMarkdownProvider,
   useCollapsibleMarkdown,
   type MarkdownProps,

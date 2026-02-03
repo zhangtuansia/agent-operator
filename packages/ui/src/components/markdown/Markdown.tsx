@@ -7,6 +7,7 @@ import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
 import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownExcalidrawBlock } from './MarkdownExcalidrawBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -59,6 +60,12 @@ export interface MarkdownProps {
    * @default true
    */
   hideFirstMermaidExpand?: boolean
+  /**
+   * Hide expand button on first Excalidraw block (when message starts with excalidraw)
+   * Used in chat to avoid overlap with TurnCard's fullscreen button
+   * @default true
+   */
+  hideFirstExcalidrawExpand?: boolean
 }
 
 /** Context for collapsible sections */
@@ -68,7 +75,7 @@ interface CollapsibleContext {
 }
 
 // File path detection regex - matches paths starting with /, ~/, or ./
-const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma)$/i
+const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|excalidraw)$/i
 
 /**
  * Create custom components based on render mode.
@@ -81,6 +88,11 @@ const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md
  *   cause component re-mounting on every streaming update.
  * @param hideFirstMermaidExpand - Whether to hide the expand button on the first
  *   mermaid block when the message starts with a mermaid fence. Defaults to true.
+ * @param firstExcalidrawCodeRef - Ref holding the code of the first excalidraw block
+ *   when the markdown message starts with an excalidraw fence. Used to hide the
+ *   inline expand button on that block.
+ * @param hideFirstExcalidrawExpand - Whether to hide the expand button on the first
+ *   excalidraw block when the message starts with an excalidraw fence. Defaults to true.
  */
 function createComponents(
   mode: RenderMode,
@@ -88,7 +100,9 @@ function createComponents(
   onFileClick?: (path: string) => void,
   collapsibleContext?: CollapsibleContext | null,
   firstMermaidCodeRef?: React.RefObject<string | null>,
-  hideFirstMermaidExpand: boolean = true
+  hideFirstMermaidExpand: boolean = true,
+  firstExcalidrawCodeRef?: React.RefObject<string | null>,
+  hideFirstExcalidrawExpand: boolean = true
 ): Partial<Components> {
   const baseComponents: Partial<Components> = {
     // Section wrapper for collapsible headings
@@ -177,12 +191,14 @@ function createComponents(
         // Block code
         if (match || isBlock) {
           const code = String(children).replace(/\n$/, '')
+          const language = match?.[1]
+          const lower = language?.toLowerCase()
           // Diff code blocks → pierre/diffs for a proper diff viewer
-          if (match?.[1] === 'diff') {
+          if (lower === 'diff') {
             return <MarkdownDiffBlock code={code} className="my-1" />
           }
           // JSON code blocks → interactive tree viewer
-          if (match?.[1] === 'json') {
+          if (lower === 'json') {
             return <MarkdownJsonBlock code={code} className="my-1" />
           }
           // Mermaid code blocks → zinc-styled SVG diagram.
@@ -191,13 +207,20 @@ function createComponents(
           // the same top-right spot. Detection uses firstMermaidCodeRef (content
           // match) rather than AST line positions which are unreliable after
           // preprocessLinks transforms the markdown.
-          if (match?.[1] === 'mermaid') {
+          if (lower === 'mermaid') {
             const isFirstBlock = hideFirstMermaidExpand &&
                                 firstMermaidCodeRef?.current != null &&
                                 code === firstMermaidCodeRef.current
             return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
           }
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+          // Excalidraw code blocks → SVG diagram preview.
+          if (lower === 'excalidraw') {
+            const isFirstBlock = hideFirstExcalidrawExpand &&
+                                firstExcalidrawCodeRef?.current != null &&
+                                code === firstExcalidrawCodeRef.current
+            return <MarkdownExcalidrawBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+          }
+          return <CodeBlock code={code} language={language} mode="full" className="my-1" />
         }
 
         // Inline code
@@ -257,23 +280,32 @@ function createComponents(
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
+        const language = match?.[1]
+        const lower = language?.toLowerCase()
         // Diff code blocks → pierre/diffs for a proper diff viewer
-        if (match?.[1] === 'diff') {
+        if (lower === 'diff') {
           return <MarkdownDiffBlock code={code} className="my-1" />
         }
         // JSON code blocks → interactive tree viewer
-        if (match?.[1] === 'json') {
+        if (lower === 'json') {
           return <MarkdownJsonBlock code={code} className="my-1" />
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)
-        if (match?.[1] === 'mermaid') {
+        if (lower === 'mermaid') {
           const isFirstBlock = hideFirstMermaidExpand &&
                               firstMermaidCodeRef?.current != null &&
                               code === firstMermaidCodeRef.current
           return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
         }
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+        // Excalidraw code blocks → SVG diagram preview.
+        if (lower === 'excalidraw') {
+          const isFirstBlock = hideFirstExcalidrawExpand &&
+                              firstExcalidrawCodeRef?.current != null &&
+                              code === firstExcalidrawCodeRef.current
+          return <MarkdownExcalidrawBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+        }
+        return <CodeBlock code={code} language={language} mode="full" className="my-1" />
       }
 
       return <InlineCode>{children}</InlineCode>
@@ -371,6 +403,7 @@ export function Markdown({
   onFileClick,
   collapsible = false,
   hideFirstMermaidExpand = true,
+  hideFirstExcalidrawExpand = true,
 }: MarkdownProps) {
   // Get collapsible context if enabled
   const collapsibleContext = useCollapsibleMarkdown()
@@ -388,9 +421,36 @@ export function Markdown({
     firstMermaidCodeRef.current = null
   }
 
+  // Extract the first excalidraw code block's content when the message starts
+  // with an excalidraw fence (same rationale as mermaid above).
+  const firstExcalidrawCodeRef = React.useRef<string | null>(null)
+  if (trimmed.startsWith('```excalidraw')) {
+    const m = trimmed.match(/^```excalidraw\n([\s\S]*?)```/)
+    firstExcalidrawCodeRef.current = m?.[1] ? m[1].replace(/\n$/, '') : null
+  } else {
+    firstExcalidrawCodeRef.current = null
+  }
+
   const components = React.useMemo(
-    () => createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand),
-    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
+    () => createComponents(
+      mode,
+      onUrlClick,
+      onFileClick,
+      collapsible ? collapsibleContext : null,
+      firstMermaidCodeRef,
+      hideFirstMermaidExpand,
+      firstExcalidrawCodeRef,
+      hideFirstExcalidrawExpand
+    ),
+    [
+      mode,
+      onUrlClick,
+      onFileClick,
+      collapsible,
+      collapsibleContext,
+      hideFirstMermaidExpand,
+      hideFirstExcalidrawExpand,
+    ]
   )
 
   // Preprocess to convert raw URLs and file paths to markdown links

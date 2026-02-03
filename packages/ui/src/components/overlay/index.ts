@@ -18,5 +18,6 @@ export { JSONPreviewOverlay, type JSONPreviewOverlayProps } from './JSONPreviewO
 export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay'
 export { DocumentFormattedMarkdownOverlay, type DocumentFormattedMarkdownOverlayProps } from './DocumentFormattedMarkdownOverlay'
 export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
+export { ExcalidrawPreviewOverlay, type ExcalidrawPreviewOverlayProps } from './ExcalidrawPreviewOverlay'
 export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
 export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePreviewOverlay'

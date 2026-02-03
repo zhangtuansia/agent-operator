@@ -98,6 +98,10 @@ function useSkillIcon(
     window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
       .then((result) => {
         if (cancelled) return
+        if (!result) {
+          setImageUrl(null)
+          return
+        }
 
         // For SVG, theme and convert to data URL
         // This injects foreground color since currentColor doesn't work in background-image

@@ -54,6 +54,8 @@ export interface SessionMeta {
   hasUnread?: boolean
   /** Labels assigned to the session */
   labels?: string[]
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean
   /** Token usage for the session */
   tokenUsage?: {
     inputTokens?: number
@@ -97,6 +99,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     enabledSourceSlugs: session.enabledSourceSlugs,
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
+    hidden: session.hidden,
     lastFinalMessageId,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,

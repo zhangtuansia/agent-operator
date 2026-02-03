@@ -13,9 +13,9 @@ import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { PanelHeader } from '../app-shell/PanelHeader'
 import { SessionFilesSection } from './SessionFilesSection'
-import { Markdown } from '@/components/markdown'
+import { Markdown, MarkdownExcalidrawBlock } from '@/components/markdown'
 import { Spinner } from '@agent-operator/ui'
-import { ArrowLeft, FileText, Image as ImageIcon, Code, File, ExternalLink, Copy, Check, Eye, FileCode, FolderOpen, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, FileText, Image as ImageIcon, Code, File, ExternalLink, Copy, Check, Eye, FileCode, FolderOpen, MoreHorizontal, PenTool } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ export interface SessionFilesPanelProps {
 }
 
 /** File type detection based on extension */
-type FileType = 'code' | 'markdown' | 'image' | 'text' | 'binary' | 'html'
+type FileType = 'code' | 'markdown' | 'image' | 'text' | 'binary' | 'html' | 'excalidraw'
 
 /** Check if file is HTML */
 function isHtmlFile(filename: string): boolean {
@@ -47,8 +47,18 @@ function isHtmlFile(filename: string): boolean {
   return ['html', 'htm'].includes(ext)
 }
 
+/** Check if file is Excalidraw */
+function isExcalidrawFile(filename: string): boolean {
+  const lower = filename.toLowerCase()
+  return lower.endsWith('.excalidraw') || lower.endsWith('.excalidraw.json')
+}
+
 /** Get file type from extension */
 function getFileType(filename: string): FileType {
+  if (isExcalidrawFile(filename)) {
+    return 'excalidraw'
+  }
+
   const ext = filename.split('.').pop()?.toLowerCase() || ''
 
   // HTML files (can be previewed)
@@ -148,6 +158,8 @@ function getFileTypeIcon(type: FileType) {
       return <Code className="h-4 w-4" />
     case 'html':
       return <FileCode className="h-4 w-4" />
+    case 'excalidraw':
+      return <PenTool className="h-4 w-4" />
     default:
       return <File className="h-4 w-4" />
   }
@@ -333,6 +345,27 @@ function FileViewer({
             alt={filename}
             className="max-w-full max-h-full object-contain rounded-md shadow-sm"
           />
+        </div>
+      </div>
+    )
+  }
+
+  // Render Excalidraw
+  if (fileType === 'excalidraw' && content) {
+    return (
+      <div className="h-full flex flex-col">
+        <FileViewerHeader
+          filename={filename}
+          fileType={fileType}
+          onBack={onBack}
+          onCopy={handleCopy}
+          onOpenWithApp={handleOpenWithApp}
+          onShowInFinder={handleShowInFinder}
+          copied={copied}
+          showActions={true}
+        />
+        <div className="flex-1 overflow-auto px-4 py-3">
+          <MarkdownExcalidrawBlock code={content} className="my-1" />
         </div>
       </div>
     )

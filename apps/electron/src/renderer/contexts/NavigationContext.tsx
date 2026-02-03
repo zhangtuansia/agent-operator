@@ -148,6 +148,7 @@ export function NavigationProvider({
   const filterSessionsByFilter = useCallback(
     (filter: ChatFilter): SessionMeta[] => {
       return sessionMetas.filter((session) => {
+        if (session.hidden) return false
         switch (filter.kind) {
           case 'allChats':
             return true
@@ -208,6 +209,14 @@ export function NavigationProvider({
           // Handle workdir param: 'user_default', 'none', or absolute path
           if (parsed.params.workdir) {
             createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
+          }
+          // Model override for mini agents (e.g., 'haiku', 'sonnet')
+          if (parsed.params.model) {
+            createOptions.model = parsed.params.model
+          }
+          // System prompt preset for mini agents (e.g., 'mini')
+          if (parsed.params.systemPrompt) {
+            createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
           }
           const session = await onCreateSession(workspaceId, createOptions)
           console.log('[Navigation] Session created:', session.id)
@@ -459,7 +468,8 @@ export function NavigationProvider({
     if (!navState) return true // Non-navigation routes are always valid
 
     if (isChatsNavigation(navState) && navState.details) {
-      return sessionMetaMap.has(navState.details.sessionId)
+      const meta = sessionMetaMap.get(navState.details.sessionId)
+      return meta != null && !meta.hidden
     }
 
     if (isSourcesNavigation(navState) && navState.details) {

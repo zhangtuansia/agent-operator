@@ -134,6 +134,9 @@ export default function WorkspaceSettingsPage() {
         for (const ext of ICON_EXTENSIONS) {
           try {
             const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
+            if (!iconData) {
+              continue
+            }
             // For SVG, wrap in data URL
             if (ext === 'svg' && !iconData.startsWith('data:')) {
               setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
