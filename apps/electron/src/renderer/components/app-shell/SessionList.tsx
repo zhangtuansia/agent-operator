@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
 import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
-import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn, isHexColor } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
@@ -47,14 +46,6 @@ import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/sha
 import { useLanguage } from "@/context/LanguageContext"
 import { getDateFnsLocale } from "@/i18n"
 
-// Virtual list constants
-const SESSION_ITEM_HEIGHT = 72  // Estimated height for session items
-const DATE_HEADER_HEIGHT = 32   // Height for date headers
-
-// Virtual item types for mixed list (headers + sessions)
-type VirtualItem =
-  | { type: 'header'; date: Date; label: string }
-  | { type: 'session'; session: SessionMeta; isFirstInGroup: boolean }
 
 /**
  * Format a date for the date header
@@ -625,33 +616,8 @@ export function SessionList({
     })
   }, [sortedItems, searchQuery, newChatFallback])
 
-  // Group sessions by date (all items, virtualization handles rendering)
+  // Group sessions by date
   const dateGroups = useMemo(() => groupSessionsByDate(searchFilteredItems, t), [searchFilteredItems, t])
-
-  // Create flat list of virtual items (headers + sessions) for virtualization
-  const virtualItems = useMemo((): VirtualItem[] => {
-    const items: VirtualItem[] = []
-    for (const group of dateGroups) {
-      // Add date header
-      items.push({ type: 'header', date: group.date, label: group.label })
-      // Add sessions in group
-      group.sessions.forEach((session, indexInGroup) => {
-        items.push({ type: 'session', session, isFirstInGroup: indexInGroup === 0 })
-      })
-    }
-    return items
-  }, [dateGroups])
-
-  // Setup virtualizer for efficient rendering of large lists
-  const virtualizer = useVirtualizer({
-    count: virtualItems.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: (index) => {
-      const item = virtualItems[index]
-      return item.type === 'header' ? DATE_HEADER_HEIGHT : SESSION_ITEM_HEIGHT
-    },
-    overscan: 5,  // Render extra items for smooth scrolling
-  })
 
   // Create flat list for keyboard navigation (maintains order across groups)
   const flatItems = useMemo(() => {
@@ -853,89 +819,65 @@ export function SessionList({
             </button>
           </div>
         ) : (
-          /* Virtual scroll container */
+          /* Scroll container */
           <div
             ref={scrollContainerRef}
             className="flex-1 overflow-auto mask-fade-top-short"
           >
             <div
               ref={zoneRef}
-              className="relative min-w-0"
-              style={{ height: virtualizer.getTotalSize() }}
+              className="min-w-0"
               data-focus-zone="session-list"
               role="listbox"
               aria-label={t('aria.sessions')}
             >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const item = virtualItems[virtualRow.index]
+              {dateGroups.map((group) => (
+                <div key={group.date.toISOString()}>
+                  <DateHeader label={group.label} />
+                  {group.sessions.map((item, indexInGroup) => {
+                    const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                    const itemProps = getItemProps(item, flatIndex)
 
-                if (item.type === 'header') {
-                  return (
-                    <div
-                      key={`header-${item.date.toISOString()}`}
-                      className="absolute top-0 left-0 w-full"
-                      style={{
-                        height: virtualRow.size,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      <DateHeader label={item.label} />
-                    </div>
-                  )
-                }
-
-                // Session item
-                const sessionItem = item.session
-                const flatIndex = sessionIndexMap.get(sessionItem.id) ?? 0
-                const itemProps = getItemProps(sessionItem, flatIndex)
-
-                return (
-                  <div
-                    key={sessionItem.id}
-                    className="absolute top-0 left-0 w-full"
-                    style={{
-                      height: virtualRow.size,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <ErrorBoundary level="component" resetKey={sessionItem.id}>
-                      <SessionItem
-                        item={sessionItem}
-                        index={flatIndex}
-                        itemProps={itemProps}
-                        isSelected={session.selected === sessionItem.id}
-                        isLast={flatIndex === flatItems.length - 1}
-                        isFirstInGroup={item.isFirstInGroup}
-                        onKeyDown={handleKeyDown}
-                        onRenameClick={handleRenameClick}
-                        onTodoStateChange={onTodoStateChange}
-                        onFlag={onFlag ? handleFlagWithToast : undefined}
-                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
-                        onMarkUnread={onMarkUnread}
-                        onDelete={handleDeleteWithToast}
-                        onSelect={() => {
-                          // Navigate to session with filter context (updates URL and selection)
-                          if (!currentFilter || currentFilter.kind === 'allChats') {
-                            navigate(routes.view.allChats(sessionItem.id))
-                          } else if (currentFilter.kind === 'flagged') {
-                            navigate(routes.view.flagged(sessionItem.id))
-                          } else if (currentFilter.kind === 'state') {
-                            navigate(routes.view.state(currentFilter.stateId, sessionItem.id))
-                          }
-                          // Notify parent
-                          onSessionSelect?.(sessionItem)
-                        }}
-                        onOpenInNewWindow={() => onOpenInNewWindow?.(sessionItem)}
-                        permissionMode={sessionOptions?.get(sessionItem.id)?.permissionMode}
-                        searchQuery={searchQuery}
-                        todoStates={todoStates}
-                        t={t}
-                        language={language}
-                      />
-                    </ErrorBoundary>
-                  </div>
-                )
-              })}
+                    return (
+                      <ErrorBoundary key={item.id} level="component" resetKey={item.id}>
+                        <SessionItem
+                          item={item}
+                          index={flatIndex}
+                          itemProps={itemProps}
+                          isSelected={session.selected === item.id}
+                          isLast={flatIndex === flatItems.length - 1}
+                          isFirstInGroup={indexInGroup === 0}
+                          onKeyDown={handleKeyDown}
+                          onRenameClick={handleRenameClick}
+                          onTodoStateChange={onTodoStateChange}
+                          onFlag={onFlag ? handleFlagWithToast : undefined}
+                          onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                          onMarkUnread={onMarkUnread}
+                          onDelete={handleDeleteWithToast}
+                          onSelect={() => {
+                            // Navigate to session with filter context (updates URL and selection)
+                            if (!currentFilter || currentFilter.kind === 'allChats') {
+                              navigate(routes.view.allChats(item.id))
+                            } else if (currentFilter.kind === 'flagged') {
+                              navigate(routes.view.flagged(item.id))
+                            } else if (currentFilter.kind === 'state') {
+                              navigate(routes.view.state(currentFilter.stateId, item.id))
+                            }
+                            // Notify parent
+                            onSessionSelect?.(item)
+                          }}
+                          onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                          permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                          searchQuery={searchQuery}
+                          todoStates={todoStates}
+                          t={t}
+                          language={language}
+                        />
+                      </ErrorBoundary>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
             {/* Bottom padding for scroll */}
             <div className="h-14" />
