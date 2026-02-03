@@ -451,6 +451,9 @@ function renderStateEnd(x: number, y: number, w: number, h: number): string {
 // Node label rendering
 // ============================================================================
 
+/** Line height multiplier for multi-line text */
+const LINE_HEIGHT = 1.4
+
 function renderNodeLabel(node: PositionedNode, font: string): string {
   // State pseudostates have no label
   if (node.shape === 'state-start' || node.shape === 'state-end') {
@@ -463,10 +466,32 @@ function renderNodeLabel(node: PositionedNode, font: string): string {
   // Resolve text color — inline styles can override the CSS variable default
   const textColor = node.inlineStyle?.color ?? 'var(--_text)'
 
+  // Split label by <br/> or <br> tags for multi-line support
+  const lines = node.label.split(/<br\s*\/?>/gi)
+
+  if (lines.length === 1) {
+    // Single line — simple text element
+    return (
+      `<text x="${cx}" y="${cy}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+      `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" ` +
+      `fill="${textColor}">${escapeXml(node.label)}</text>`
+    )
+  }
+
+  // Multi-line — use tspan elements for each line
+  const lineHeightPx = FONT_SIZES.nodeLabel * LINE_HEIGHT
+  const totalHeight = lineHeightPx * (lines.length - 1)
+  const startY = cy - totalHeight / 2
+
+  const tspans = lines.map((line, i) => {
+    const y = startY + i * lineHeightPx
+    return `<tspan x="${cx}" y="${y}" dy="${TEXT_BASELINE_SHIFT}">${escapeXml(line.trim())}</tspan>`
+  }).join('')
+
   return (
-    `<text x="${cx}" y="${cy}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
+    `<text text-anchor="middle" ` +
     `font-size="${FONT_SIZES.nodeLabel}" font-weight="${FONT_WEIGHTS.nodeLabel}" ` +
-    `fill="${textColor}">${escapeXml(node.label)}</text>`
+    `fill="${textColor}">${tspans}</text>`
   )
 }
 

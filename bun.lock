@@ -8,7 +8,7 @@
         "@anthropic-ai/claude-agent-sdk": "^0.2.19",
         "@anthropic-ai/sdk": "^0.71.1",
         "@modelcontextprotocol/sdk": "^1.24.3",
-        "@openai/codex-sdk": "^0.87.0",
+        "@openai/codex-sdk": "^0.94.0",
         "@radix-ui/react-avatar": "^1.1.11",
         "@radix-ui/react-collapsible": "^1.1.12",
         "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -81,7 +81,7 @@
     },
     "apps/electron": {
       "name": "@agent-operator/electron",
-      "version": "0.1.4",
+      "version": "0.1.4-a",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
         "@agent-operator/mermaid": "workspace:*",
@@ -646,7 +646,7 @@
 
     "@npmcli/fs": ["@npmcli/fs@4.0.0", "", { "dependencies": { "semver": "^7.3.5" } }, "sha512-/xGlezI6xfGO9NwuJlnwz/K14qD1kCSAGtacBHnGzeAIuJGazcp45KP5NuyARXoKb7cwulAGWVsbeSxdG/cb0Q=="],
 
-    "@openai/codex-sdk": ["@openai/codex-sdk@0.87.0", "", {}, "sha512-HV9DKSCq1PTc1Ti1XvfXFgwc+WR1sPT2JSyPkFkDV5Ip1lkK4C0WeQ++WE4y0fSIS3x3XtBGmdT4oDfaeqj63g=="],
+    "@openai/codex-sdk": ["@openai/codex-sdk@0.94.0", "", {}, "sha512-qD1Eu8ODN/p4waxopCt1n49C4ay9n3i6QlnKcteYzFm7UBzHqG2pXU+a7jtk86arB1vMvvu8QgBxz9gh4iw4Kg=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
