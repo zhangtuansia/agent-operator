@@ -41,18 +41,82 @@ interface ParsedExcalidraw {
   files: Record<string, unknown>
 }
 
+/** Add default properties required by Excalidraw for each element type */
+function normalizeElement(el: Record<string, unknown>, index: number): Record<string, unknown> {
+  const seed = Math.floor(Math.random() * 2000000000)
+  const base = {
+    version: 1,
+    versionNonce: seed,
+    isDeleted: false,
+    fillStyle: 'solid',
+    strokeWidth: 2,
+    strokeStyle: 'solid',
+    roughness: 1,
+    opacity: 100,
+    angle: 0,
+    groupIds: [],
+    frameId: null,
+    roundness: null,
+    boundElements: null,
+    updated: Date.now(),
+    link: null,
+    locked: false,
+    seed,
+    id: el.id || `element-${index}`,
+    ...el,
+  }
+
+  // Text elements need additional properties
+  if (el.type === 'text') {
+    return {
+      ...base,
+      baseline: 0,
+      textAlign: el.textAlign || 'left',
+      verticalAlign: el.verticalAlign || 'top',
+      containerId: null,
+      originalText: el.text || '',
+      lineHeight: 1.25,
+      ...el,
+    }
+  }
+
+  // Arrow elements need points
+  if (el.type === 'arrow' || el.type === 'line') {
+    const width = (el.width as number) || 100
+    const height = (el.height as number) || 0
+    return {
+      ...base,
+      points: [[0, 0], [width, height]],
+      startBinding: null,
+      endBinding: null,
+      startArrowhead: null,
+      endArrowhead: el.type === 'arrow' ? 'arrow' : null,
+      ...el,
+    }
+  }
+
+  return base
+}
+
 function parseExcalidraw(code: string): ParsedExcalidraw | null {
   try {
     const parsed = JSON.parse(code) as unknown
 
     if (Array.isArray(parsed)) {
-      return { elements: parsed, appState: {}, files: {} }
+      const normalizedElements = parsed.map((el, i) =>
+        normalizeElement(el as Record<string, unknown>, i)
+      )
+      return { elements: normalizedElements, appState: {}, files: {} }
     }
 
     if (parsed && typeof parsed === 'object') {
       const data = parsed as Record<string, unknown>
       const elements = Array.isArray(data.elements) ? data.elements : null
       if (!elements) return null
+
+      const normalizedElements = elements.map((el, i) =>
+        normalizeElement(el as Record<string, unknown>, i)
+      )
 
       const appState = (data.appState && typeof data.appState === 'object')
         ? (data.appState as Record<string, unknown>)
@@ -61,7 +125,7 @@ function parseExcalidraw(code: string): ParsedExcalidraw | null {
         ? (data.files as Record<string, unknown>)
         : {}
 
-      return { elements, appState, files }
+      return { elements: normalizedElements, appState, files }
     }
 
     return null
