@@ -8,6 +8,7 @@ import * as React from 'react'
 import { BookOpen, PenLine } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ShikiCodeViewer } from '../code-viewer/ShikiCodeViewer'
+import { MarkdownExcalidrawBlock } from '../markdown/MarkdownExcalidrawBlock'
 import { truncateFilePath } from '../code-viewer/language-map'
 
 export interface CodePreviewOverlayProps {
@@ -37,6 +38,10 @@ export interface CodePreviewOverlayProps {
   onOpenFile?: (filePath: string) => void
 }
 
+function isExcalidrawPath(filePath: string): boolean {
+  return /\.excalidraw(?:\.json)?$/i.test(filePath)
+}
+
 export function CodePreviewOverlay({
   isOpen,
   onClose,
@@ -52,6 +57,7 @@ export function CodePreviewOverlay({
   onOpenFile,
 }: CodePreviewOverlayProps) {
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
+  const isExcalidraw = isExcalidrawPath(filePath)
 
   // Build subtitle with line info
   const subtitle =
@@ -76,13 +82,19 @@ export function CodePreviewOverlay({
       backgroundColor={backgroundColor}
     >
       <div className="h-full" style={{ backgroundColor }}>
-        <ShikiCodeViewer
-          code={content}
-          filePath={filePath}
-          language={language}
-          startLine={startLine}
-          theme={theme}
-        />
+        {isExcalidraw ? (
+          <div className="h-full overflow-auto p-4">
+            <MarkdownExcalidrawBlock code={content} className="my-0" showExpandButton={false} />
+          </div>
+        ) : (
+          <ShikiCodeViewer
+            code={content}
+            filePath={filePath}
+            language={language}
+            startLine={startLine}
+            theme={theme}
+          />
+        )}
       </div>
     </PreviewOverlay>
   )
