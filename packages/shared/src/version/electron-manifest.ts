@@ -83,15 +83,62 @@ export async function getElectronManifest(version: string): Promise<VersionManif
 }
 
 /**
+ * Parse version string into components for comparison.
+ * Handles versions like "0.1.4", "0.1.4a", "0.1.4b".
+ * Letter suffix is treated as a POST-release increment (0.1.4a > 0.1.4).
+ */
+function parseVersion(version: string): { base: string; suffix: string } | null {
+  // Match versions like "0.1.4" or "0.1.4a"
+  const match = version.match(/^(\d+\.\d+\.\d+)([a-z]*)$/i);
+  if (match) {
+    return { base: match[1], suffix: match[2].toLowerCase() };
+  }
+  return null;
+}
+
+/**
  * Compare two semver version strings
  * Returns true if `latest` is newer than `current`
  *
- * Uses the semver package for reliable version comparison.
- * Handles: standard versions, prerelease, build metadata, v prefix.
+ * Custom comparison that treats letter suffixes as POST-release increments:
+ * - 0.1.4a > 0.1.4 (letter suffix means newer)
+ * - 0.1.4b > 0.1.4a
+ * - 0.1.5 > 0.1.4z
  */
 export function isNewerVersion(current: string, latest: string): boolean {
   try {
-    // semver.coerce handles partial versions like "1" or "1.0" and v prefix
+    const currentParsed = parseVersion(current);
+    const latestParsed = parseVersion(latest);
+
+    // If both can be parsed with our custom format
+    if (currentParsed && latestParsed) {
+      // First compare the base versions using semver
+      const baseComparison = semver.compare(
+        semver.coerce(currentParsed.base)!,
+        semver.coerce(latestParsed.base)!
+      );
+
+      if (baseComparison !== 0) {
+        // Base versions differ - latest is newer if its base is greater
+        return baseComparison < 0;
+      }
+
+      // Base versions are equal, compare suffixes
+      // Empty suffix < any letter (0.1.4 < 0.1.4a)
+      // Letters compare alphabetically (0.1.4a < 0.1.4b)
+      if (currentParsed.suffix === latestParsed.suffix) {
+        return false; // Same version
+      }
+      if (currentParsed.suffix === '') {
+        return latestParsed.suffix !== ''; // 0.1.4 < 0.1.4a
+      }
+      if (latestParsed.suffix === '') {
+        return false; // 0.1.4a > 0.1.4, so latest (0.1.4) is NOT newer
+      }
+      return latestParsed.suffix > currentParsed.suffix;
+    }
+
+    // Fall back to standard semver comparison
     const currentCoerced = semver.coerce(current);
     const latestCoerced = semver.coerce(latest);
 
@@ -100,17 +147,6 @@ export function isNewerVersion(current: string, latest: string): boolean {
       return false;
     }
 
-    // For versions with prerelease tags, we need to use the original strings
-    // semver.coerce strips prerelease info, so check if originals are valid first
-    const currentValid = semver.valid(current);
-    const latestValid = semver.valid(latest);
-
-    if (currentValid && latestValid) {
-      // Both are valid semver strings, compare directly
-      return semver.gt(latestValid, currentValid);
-    }
-
-    // Fall back to coerced versions for partial version strings
     return semver.gt(latestCoerced, currentCoerced);
   } catch (error) {
     debug(`[electron-manifest] Version comparison failed: ${error}. Skipping update.`);

@@ -46,6 +46,9 @@ extraResources:
       - "**/*.woff"
       - "**/*.woff2"
       - "!README.md"
+  # Tool icons for CLI command display in turn cards
+  - from: ../../packages/shared/assets/tool-icons
+    to: assets/tool-icons
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false

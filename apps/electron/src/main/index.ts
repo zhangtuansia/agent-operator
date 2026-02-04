@@ -17,12 +17,19 @@ import { initializeDocs } from '@agent-operator/shared/docs'
 import { ensureDefaultPermissions } from '@agent-operator/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
-import { setPerfEnabled, enableDebug } from '@agent-operator/shared/utils'
+import { setPerfEnabled, enableDebug, setBundledAssetsRoot } from '@agent-operator/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, checkPendingUpdateAndInstall, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 
 // Initialize electron-log for renderer process support
 log.initialize()
+
+// Set bundled assets root for packaged app (tool-icons, docs, etc.)
+// In packaged app: process.resourcesPath points to Resources/ folder
+// In dev mode: assets are resolved from cwd() in getBundledAssetsDir()
+if (app.isPackaged) {
+  setBundledAssetsRoot(process.resourcesPath)
+}
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
