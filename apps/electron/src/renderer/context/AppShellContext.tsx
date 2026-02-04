@@ -90,6 +90,9 @@ export interface AppShellContextType {
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
   onRefreshWorkspaces?: () => void
 
+  // Sessions
+  refreshSessions?: () => Promise<void>
+
   // App actions
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void

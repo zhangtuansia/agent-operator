@@ -19,6 +19,7 @@ import {
   Zap,
   Inbox,
   WifiOff,
+  FolderOpen,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -591,6 +592,10 @@ function AppShellContent({
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
   const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
 
+  // Count imported sessions by source
+  const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
+  const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
+
   // Count sessions by individual todo state (dynamic based on todoStates)
   const todoStateCounts = useMemo(() => {
     const counts: Record<TodoStateId, number> = {}
@@ -627,6 +632,10 @@ function AppShellContent({
       case 'state':
         // Filter by specific todo state
         result = workspaceSessionMetas.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
+        break
+      case 'imported':
+        // Filter by import source
+        result = workspaceSessionMetas.filter(s => s.labels?.includes(`imported:${chatFilter.source}`))
         break
       default:
         result = workspaceSessionMetas
@@ -755,6 +764,15 @@ function AppShellContent({
 
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
+  }, [])
+
+  // Handlers for imported categories
+  const handleOpenAIImportedClick = useCallback(() => {
+    navigate(routes.view.imported('openai'))
+  }, [])
+
+  const handleAnthropicImportedClick = useCallback(() => {
+    navigate(routes.view.imported('anthropic'))
   }, [])
 
   // Handler for individual todo state views
@@ -1171,6 +1189,23 @@ function AppShellContent({
                           acceptsDrop: true,
                           onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
                         },
+                        // Imported categories (only show if there are imported sessions)
+                        ...(openaiCount > 0 ? [{
+                          id: "nav:imported-openai",
+                          title: "OpenAI",
+                          label: String(openaiCount),
+                          icon: <FolderOpen className="h-3.5 w-3.5" />,
+                          variant: (chatFilter?.kind === 'imported' && chatFilter.source === 'openai' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleOpenAIImportedClick,
+                        }] : []),
+                        ...(anthropicCount > 0 ? [{
+                          id: "nav:imported-anthropic",
+                          title: "Anthropic",
+                          label: String(anthropicCount),
+                          icon: <FolderOpen className="h-3.5 w-3.5" />,
+                          variant: (chatFilter?.kind === 'imported' && chatFilter.source === 'anthropic' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleAnthropicImportedClick,
+                        }] : []),
                       ],
                     },
                     {

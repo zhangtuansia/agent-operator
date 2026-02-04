@@ -162,6 +162,7 @@ export interface ElectronAPI {
   getSessionMessages(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
+  importSessions(workspaceId: string, source: 'openai' | 'anthropic', filePath: string): Promise<{ imported: number; failed: number; errors: string[] }>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: CoreStoredAttachment[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
@@ -198,7 +199,7 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
-  openFileDialog(): Promise<string[]>
+  openFileDialog(options?: { filters?: { name: string; extensions: string[] }[] }): Promise<string[]>
   readFileAttachment(path: string): Promise<FileAttachment | null>
   storeAttachment(sessionId: string, attachment: FileAttachment): Promise<CoreStoredAttachment>
   generateThumbnail(base64: string, mimeType: string): Promise<string | null>

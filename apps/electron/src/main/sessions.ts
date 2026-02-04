@@ -216,6 +216,8 @@ interface ManagedSession {
   pendingAuthRequest?: AuthRequest
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic')
+  labels?: string[]
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -687,6 +689,8 @@ export class SessionManager {
             // Shared viewer state - loaded from metadata for persistence across restarts
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
+            // Labels for import categorization
+            labels: meta.labels,
           }
 
           this.sessions.set(meta.id, managed)
@@ -1052,6 +1056,7 @@ export class SessionManager {
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
         lastMessageRole: m.lastMessageRole,
+        labels: m.labels,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -1091,6 +1096,7 @@ export class SessionManager {
       sharedId: m.sharedId,
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
+      labels: m.labels,
     }
   }
 

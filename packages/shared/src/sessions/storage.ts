@@ -191,6 +191,69 @@ export function createSession(
 }
 
 /**
+ * Create an imported session with pre-existing messages
+ * Used for importing conversations from external platforms (OpenAI, Anthropic)
+ */
+export function createImportedSession(
+  workspaceRootPath: string,
+  options: {
+    name?: string;
+    labels: string[];
+    createdAt: number;
+    updatedAt: number;
+    messages: Array<{
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp?: number;
+    }>;
+  }
+): SessionConfig {
+  ensureSessionsDir(workspaceRootPath);
+
+  const sessionId = generateSessionId(workspaceRootPath);
+
+  // Create session directory with all subdirectories (plans, attachments)
+  ensureSessionDir(workspaceRootPath, sessionId);
+
+  const sdkCwd = getSessionPath(workspaceRootPath, sessionId);
+
+  const session: SessionConfig = {
+    id: sessionId,
+    workspaceRootPath,
+    name: options.name,
+    createdAt: options.createdAt,
+    lastUsedAt: options.updatedAt,
+    sdkCwd,
+    labels: options.labels,
+  };
+
+  // Convert imported messages to stored format
+  const storedMessages = options.messages.map((msg, idx) => ({
+    id: `imported-${idx}`,
+    type: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    timestamp: msg.timestamp ?? options.createdAt + idx,
+  }));
+
+  // Save session with messages
+  const storedSession: StoredSession = {
+    ...session,
+    messages: storedMessages,
+    tokenUsage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      contextTokens: 0,
+      costUsd: 0,
+    },
+  };
+  // Preserve original timestamps for imported sessions
+  saveSession(storedSession, { preserveTimestamps: true });
+
+  return session;
+}
+
+/**
  * Get or create a session with a specific ID
  * Used for --session <id> flag to allow user-defined session IDs
  */
@@ -252,7 +315,7 @@ export function getOrCreateSessionById(
  *
  * Writes in JSONL format: line 1 = header, lines 2+ = messages
  */
-export function saveSession(session: StoredSession): void {
+export function saveSession(session: StoredSession, options?: { preserveTimestamps?: boolean }): void {
   ensureSessionsDir(session.workspaceRootPath);
   // Ensure session directory exists (creates plans/attachments subdirs too)
   ensureSessionDir(session.workspaceRootPath, session.id);
@@ -264,7 +327,8 @@ export function saveSession(session: StoredSession): void {
     workspaceRootPath: toPortablePath(session.workspaceRootPath),
     // Also make workingDirectory portable if set
     workingDirectory: session.workingDirectory ? toPortablePath(session.workingDirectory) : undefined,
-    lastUsedAt: Date.now(),
+    // For imported sessions, preserve original timestamps; otherwise update to now
+    lastUsedAt: options?.preserveTimestamps ? session.lastUsedAt : Date.now(),
   };
 
   // Write in JSONL format
@@ -375,6 +439,8 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
+      // Labels for import categorization and other tagging
+      labels: header.labels,
     };
   } catch {
     return null;

@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   GET_SESSIONS: 'sessions:get',
   CREATE_SESSION: 'sessions:create',
   DELETE_SESSION: 'sessions:delete',
+  IMPORT_SESSIONS: 'sessions:import',
   GET_SESSION_MESSAGES: 'sessions:getMessages',
   SEND_MESSAGE: 'sessions:sendMessage',
   CANCEL_PROCESSING: 'sessions:cancel',

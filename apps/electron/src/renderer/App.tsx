@@ -809,6 +809,26 @@ export default function App() {
     }
   }, [onboarding, initializeSessions])
 
+  // Refresh sessions from disk (after import, etc.)
+  const refreshSessions = useCallback(async () => {
+    const loadedSessions = await window.electronAPI.getSessions()
+    initializeSessions(loadedSessions)
+    // Update sessionOptions
+    const optionsMap = new Map<string, SessionOptions>()
+    for (const s of loadedSessions) {
+      const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
+      const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'think'
+      if (hasNonDefaultMode || hasNonDefaultThinking) {
+        optionsMap.set(s.id, {
+          ultrathinkEnabled: false,
+          permissionMode: s.permissionMode ?? 'ask',
+          thinkingLevel: s.thinkingLevel ?? 'think',
+        })
+      }
+    }
+    setSessionOptions(optionsMap)
+  }, [initializeSessions])
+
   // Handle workspace selection
   // - Default: switch workspace in same window (in-window switching)
   // - With openInNewWindow=true: open in new window (or focus existing)
@@ -889,6 +909,8 @@ export default function App() {
     // Workspace
     onSelectWorkspace: handleSelectWorkspace,
     onRefreshWorkspaces: handleRefreshWorkspaces,
+    // Sessions
+    refreshSessions,
     // App actions
     onOpenSettings: handleOpenSettings,
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
@@ -924,6 +946,7 @@ export default function App() {
     handleModelChange,
     handleSelectWorkspace,
     handleRefreshWorkspaces,
+    refreshSessions,
     handleOpenSettings,
     handleOpenKeyboardShortcuts,
     handleOpenStoredUserPreferences,

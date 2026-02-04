@@ -106,6 +106,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle
     isAsyncOperationOngoing: session.isAsyncOperationOngoing ?? session.isRegeneratingTitle,
     isRegeneratingTitle: session.isRegeneratingTitle,
+    labels: session.labels,
   }
 }
 

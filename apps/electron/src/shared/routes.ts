@@ -101,6 +101,12 @@ export const routes = {
         ? `state/${stateId}/chat/${sessionId}` as const
         : `state/${stateId}` as const,
 
+    /** Imported sessions view (chats navigator, imported filter) */
+    imported: (source: 'openai' | 'anthropic', sessionId?: string) =>
+      sessionId
+        ? `imported/${source}/chat/${sessionId}` as const
+        : `imported/${source}` as const,
+
     /** Sources view (sources navigator) */
     sources: (params?: { sourceSlug?: string }) => {
       const { sourceSlug } = params ?? {}
@@ -117,7 +123,7 @@ export const routes = {
         : 'skills' as const,
 
     /** Settings view (settings navigator) */
-    settings: (subpage?: 'app' | 'workspace' | 'api' | 'labels' | 'permissions' | 'shortcuts' | 'preferences') =>
+    settings: (subpage?: 'app' | 'workspace' | 'api' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import') =>
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,

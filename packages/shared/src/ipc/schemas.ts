@@ -242,9 +242,30 @@ export const OnboardingConfigSchema = z.object({
 })
 
 // =============================================================================
+// Import Sessions Schema
+// =============================================================================
+
+export const ImportSourceSchema = z.enum(['openai', 'anthropic'])
+
+export const ImportSessionsArgsSchema = z.object({
+  workspaceId: WorkspaceIdSchema,
+  source: ImportSourceSchema,
+  filePath: FilePathSchema,
+})
+
+export const ImportSessionsResultSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  errors: z.array(z.string()),
+})
+
+// =============================================================================
 // Type Exports (inferred from schemas)
 // =============================================================================
 
+export type ImportSource = z.infer<typeof ImportSourceSchema>
+export type ImportSessionsArgs = z.infer<typeof ImportSessionsArgsSchema>
+export type ImportSessionsResult = z.infer<typeof ImportSessionsResultSchema>
 export type FileAttachment = z.infer<typeof FileAttachmentSchema>
 export type StoredAttachment = z.infer<typeof StoredAttachmentSchema>
 export type SendMessageArgs = z.infer<typeof SendMessageArgsSchema>

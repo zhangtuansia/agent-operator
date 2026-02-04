@@ -404,6 +404,75 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessionManager.deleteSession(sessionId)
   })
 
+  // Import sessions from external platforms (OpenAI, Anthropic)
+  ipcMain.handle(IPC_CHANNELS.IMPORT_SESSIONS, async (_event, args: unknown) => {
+    const { ImportSessionsArgsSchema } = await import('@agent-operator/shared/ipc/schemas')
+    const validated = validateIpcArgs(ImportSessionsArgsSchema, args, 'IMPORT_SESSIONS')
+
+    const workspace = getWorkspaceOrThrow(validated.workspaceId)
+    const { parseOpenAIExport, parseAnthropicExport } = await import('@agent-operator/shared/importers')
+    const { createImportedSession } = await import('@agent-operator/shared/sessions')
+
+    let fileContent: string
+
+    // Check if the file is a zip file
+    if (validated.filePath.toLowerCase().endsWith('.zip')) {
+      // Extract JSON from zip file
+      const AdmZip = (await import('adm-zip')).default
+      const zip = new AdmZip(validated.filePath)
+      const entries = zip.getEntries()
+
+      // Find the relevant JSON file based on source
+      let jsonEntry = null
+      if (validated.source === 'openai') {
+        // OpenAI exports have conversations.json
+        jsonEntry = entries.find(e => e.entryName === 'conversations.json' || e.entryName.endsWith('/conversations.json'))
+      } else {
+        // Anthropic exports may have different structures, look for any JSON file with conversations
+        jsonEntry = entries.find(e =>
+          e.entryName.endsWith('.json') &&
+          !e.entryName.startsWith('__MACOSX') &&
+          !e.entryName.includes('/.') // Skip hidden files
+        )
+      }
+
+      if (!jsonEntry) {
+        throw new Error(`No valid JSON file found in zip archive. Expected ${validated.source === 'openai' ? 'conversations.json' : 'a JSON file'}.`)
+      }
+
+      fileContent = jsonEntry.getData().toString('utf-8')
+    } else {
+      // Read the JSON file directly
+      fileContent = await readFile(validated.filePath, 'utf-8')
+    }
+
+    // Parse based on source
+    const parseResult = validated.source === 'openai'
+      ? parseOpenAIExport(fileContent)
+      : parseAnthropicExport(fileContent)
+
+    // Create sessions for each parsed conversation
+    const label = `imported:${validated.source}`
+    for (const conv of parseResult.conversations) {
+      createImportedSession(workspace.rootPath, {
+        name: conv.title,
+        labels: [label],
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+        messages: conv.messages,
+      })
+    }
+
+    // Reload sessions so they appear in the list
+    sessionManager.reloadSessions()
+
+    return {
+      imported: parseResult.imported,
+      failed: parseResult.failed,
+      errors: parseResult.errors,
+    }
+  })
+
   // Send a message to a session (with optional file attachments)
   // Note: We intentionally don't await here - the response is streamed via events.
   // The IPC handler returns immediately, and results come through SESSION_EVENT channel.
@@ -575,15 +644,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Open native file dialog for selecting files to attach
-  ipcMain.handle(IPC_CHANNELS.OPEN_FILE_DIALOG, async () => {
+  ipcMain.handle(IPC_CHANNELS.OPEN_FILE_DIALOG, async (_event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+    const defaultFilters = [
+      { name: 'All Supported', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'txt', 'md', 'json', 'js', 'ts', 'tsx', 'jsx', 'py', 'css', 'html', 'xml', 'yaml', 'yml'] },
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'txt', 'md'] },
+      { name: 'Code', extensions: ['js', 'ts', 'tsx', 'jsx', 'py', 'json', 'css', 'html', 'xml', 'yaml', 'yml'] },
+    ]
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'All Supported', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'txt', 'md', 'json', 'js', 'ts', 'tsx', 'jsx', 'py', 'css', 'html', 'xml', 'yaml', 'yml'] },
-        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-        { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'txt', 'md'] },
-        { name: 'Code', extensions: ['js', 'ts', 'tsx', 'jsx', 'py', 'json', 'css', 'html', 'xml', 'yaml', 'yml'] },
-      ]
+      filters: options?.filters ?? defaultFilters,
     })
     return result.canceled ? [] : result.filePaths
   })

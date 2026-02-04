@@ -156,6 +156,8 @@ export function NavigationProvider({
             return session.isFlagged === true
           case 'state':
             return session.todoState === filter.stateId
+          case 'imported':
+            return session.labels?.includes(`imported:${filter.source}`) ?? false
           default:
             return false
         }

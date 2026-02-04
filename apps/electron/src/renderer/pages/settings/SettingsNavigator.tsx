@@ -131,6 +131,23 @@ const InputIcon = ({ className }: { className?: string }) => (
     />
   </svg>
 )
+
+/** Import/download icon for chat import settings */
+const ImportIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM13 7C13 6.44772 12.5523 6 12 6C11.4477 6 11 6.44772 11 7V12.5858L9.70711 11.2929C9.31658 10.9024 8.68342 10.9024 8.29289 11.2929C7.90237 11.6834 7.90237 12.3166 8.29289 12.7071L11.2929 15.7071C11.6834 16.0976 12.3166 16.0976 12.7071 15.7071L15.7071 12.7071C16.0976 12.3166 16.0976 11.6834 15.7071 11.2929C15.3166 10.9024 14.6834 10.9024 14.2929 11.2929L13 12.5858V7ZM8 17C7.44772 17 7 17.4477 7 18C7 18.5523 7.44772 19 8 19H16C16.5523 19 17 18.5523 17 18C17 17.4477 16.5523 17 16 17H8Z"
+      fill="currentColor"
+    />
+  </svg>
+)
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -198,6 +215,12 @@ const settingsItems: SettingsItem[] = [
     labelKey: 'preferences',
     icon: PreferencesIcon,
     descriptionKey: 'preferencesDescription',
+  },
+  {
+    id: 'import',
+    labelKey: 'import',
+    icon: ImportIcon,
+    descriptionKey: 'importDescription',
   },
 ]
 

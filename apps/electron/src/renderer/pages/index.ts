@@ -17,4 +17,5 @@ export {
   PermissionsSettingsPage,
   ShortcutsPage,
   PreferencesPage,
+  ImportSettingsPage,
 } from './settings'

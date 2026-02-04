@@ -87,6 +87,8 @@ export interface Session {
   }
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
+  labels?: string[]
 }
 
 // CreateSessionOptions is defined in schemas.ts (inferred from Zod schema)
@@ -432,16 +434,18 @@ export type RightSidebarPanel =
  * - 'allChats': All sessions regardless of status
  * - 'flagged': Only flagged sessions
  * - 'state': Sessions with specific status ID
+ * - 'imported': Imported sessions from external platforms
  */
 export type ChatFilter =
   | { kind: 'allChats' }
   | { kind: 'flagged' }
   | { kind: 'state'; stateId: string }
+  | { kind: 'imported'; source: 'openai' | 'anthropic' }
 
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'permissions' | 'shortcuts' | 'preferences'
+export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'permissions' | 'shortcuts' | 'preferences' | 'import'
 
 /**
  * Chats navigation state - shows SessionList in navigator

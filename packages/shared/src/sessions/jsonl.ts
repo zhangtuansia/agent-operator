@@ -71,6 +71,7 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
       sharedId: header.sharedId,
       model: header.model,
       hidden: header.hidden,
+      labels: header.labels,
       messages,
       tokenUsage: header.tokenUsage,
     };
@@ -105,7 +106,7 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     id: session.id,
     workspaceRootPath: toPortablePath(session.workspaceRootPath),
     createdAt: session.createdAt,
-    lastUsedAt: Date.now(),
+    lastUsedAt: session.lastUsedAt,
     name: session.name,
     sdkSessionId: session.sdkSessionId,
     isFlagged: session.isFlagged,
@@ -119,6 +120,7 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     sharedId: session.sharedId,
     model: session.model,
     hidden: session.hidden,
+    labels: session.labels,
     // Pre-computed fields
     messageCount: session.messages.length,
     lastMessageRole: extractLastMessageRole(session.messages),

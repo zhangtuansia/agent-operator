@@ -12,6 +12,7 @@ export { default as InputSettingsPage, meta as InputSettingsMeta } from './Input
 export { default as PermissionsSettingsPage, meta as PermissionsMeta } from './PermissionsSettingsPage'
 export { default as ShortcutsPage, meta as ShortcutsMeta } from './ShortcutsPage'
 export { default as PreferencesPage, meta as PreferencesMeta } from './PreferencesPage'
+export { default as ImportSettingsPage, meta as ImportSettingsMeta } from './ImportSettingsPage'
 
 // Re-export types
 export type { DetailsPageMeta } from '@/lib/navigation-registry'

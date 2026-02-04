@@ -160,9 +160,11 @@ export const NavigationRegistry = {
       app: PlaceholderComponent, // AppSettingsPage
       workspace: PlaceholderComponent, // WorkspaceSettingsPage
       api: PlaceholderComponent, // ApiSettingsPage
+      input: PlaceholderComponent, // InputSettingsPage
       permissions: PlaceholderComponent, // PermissionsSettingsPage
       shortcuts: PlaceholderComponent, // ShortcutsPage
       preferences: PlaceholderComponent, // PreferencesPage
+      import: PlaceholderComponent, // ImportSettingsPage
     },
     defaultDetails: 'app', // Always has a default
     getFirstItem: () => 'app',

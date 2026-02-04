@@ -55,7 +55,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'imported', 'sources', 'skills', 'settings'
 ]
 
 /**
@@ -87,7 +87,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Settings navigator
   if (first === 'settings') {
     const subpage = (segments[1] || 'app') as SettingsSubpage
-    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'api', 'input', 'permissions', 'shortcuts', 'preferences']
+    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'api', 'input', 'permissions', 'shortcuts', 'preferences', 'import']
     if (!validSubpages.includes(subpage)) return null
     return {
       navigator: 'settings',
@@ -148,6 +148,13 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       chatFilter = { kind: 'state', stateId: segments[1] as ChatFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
       detailsStartIndex = 2
       break
+    case 'imported':
+      if (!segments[1]) return null
+      const source = segments[1] as 'openai' | 'anthropic'
+      if (source !== 'openai' && source !== 'anthropic') return null
+      chatFilter = { kind: 'imported', source }
+      detailsStartIndex = 2
+      break
     default:
       return null
   }
@@ -205,6 +212,9 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       break
     case 'state':
       base = `state/${filter.stateId}`
+      break
+    case 'imported':
+      base = `imported/${filter.source}`
       break
     default:
       base = 'allChats'
@@ -447,6 +457,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'shortcuts' }
     case 'preferences':
       return { navigator: 'settings', subpage: 'preferences' }
+    case 'import':
+      return { navigator: 'settings', subpage: 'import' }
     case 'sources':
       return { navigator: 'sources', details: null }
     case 'source-info':
@@ -550,6 +562,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       break
     case 'state':
       base = `state/${filter.stateId}`
+      break
+    case 'imported':
+      base = `imported/${filter.source}`
       break
   }
 
