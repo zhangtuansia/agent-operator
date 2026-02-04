@@ -330,6 +330,17 @@ export interface SessionFilesResult {
   workspaceFiles: SessionFile[]
 }
 
+/** Which tree changed in session files panel */
+export type SessionFileScope = 'session' | 'workspace'
+
+/** File watcher change payload from main -> renderer */
+export interface SessionFilesChangedEvent {
+  sessionId: string
+  scope: SessionFileScope
+  /** Absolute path when available */
+  changedPath?: string
+}
+
 // =============================================================================
 // Plan Types
 // =============================================================================

@@ -1446,8 +1446,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.GET_SESSION_FILES, async (_event, sessionId: string) => {
     const sessionPath = sessionManager.getSessionPath(sessionId)
     const workspacePath = sessionManager.getSessionWorkspacePath(sessionId)
+    const WORKSPACE_EXCLUDED_DIRS = ['sessions', 'sources', 'skills', 'statuses', 'labels']
 
-    const result: { sessionFiles: import('../shared/types').SessionFile[], workspaceFiles: import('../shared/types').SessionFile[] } = {
+    const result: { sessionFiles: import('../shared/types').SessionFile[]; workspaceFiles: import('../shared/types').SessionFile[] } = {
       sessionFiles: [],
       workspaceFiles: [],
     }
@@ -1461,17 +1462,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
     }
 
-    // Scan workspace directory (excluding system directories)
+    // Scan workspace directory (excluding managed system directories)
     if (workspacePath) {
       try {
-        // Exclude sessions, sources, skills, statuses, labels directories (managed separately)
-        result.workspaceFiles = await scanDirectory(workspacePath, [
-          'sessions',
-          'sources',
-          'skills',
-          'statuses',
-          'labels',
-        ])
+        result.workspaceFiles = await scanDirectory(workspacePath, WORKSPACE_EXCLUDED_DIRS)
       } catch (error) {
         ipcLog.error('Failed to get workspace files:', error)
       }
@@ -1480,69 +1474,230 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return result
   })
 
-  // Session file watcher state - only one session watched at a time
-  let sessionFileWatcher: import('fs').FSWatcher | null = null
-  let watchedSessionId: string | null = null
-  let fileChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  // Get one section only (session/workspace) for incremental refreshes
+  ipcMain.handle(
+    IPC_CHANNELS.GET_SESSION_FILES_BY_SCOPE,
+    async (_event, sessionId: string, scope: 'session' | 'workspace') => {
+      const WORKSPACE_EXCLUDED_DIRS = ['sessions', 'sources', 'skills', 'statuses', 'labels']
+      const path =
+        scope === 'session'
+          ? sessionManager.getSessionPath(sessionId)
+          : sessionManager.getSessionWorkspacePath(sessionId)
+      if (!path) return []
 
-  // Start watching a session directory for file changes
-  ipcMain.handle(IPC_CHANNELS.WATCH_SESSION_FILES, async (_event, sessionId: string) => {
-    const sessionPath = sessionManager.getSessionPath(sessionId)
-    if (!sessionPath) return
+      try {
+        return await scanDirectory(path, scope === 'workspace' ? WORKSPACE_EXCLUDED_DIRS : [])
+      } catch (error) {
+        ipcLog.error(`Failed to get ${scope} files:`, error)
+        return []
+      }
+    },
+  )
 
-    // Close existing watcher if watching a different session
-    if (sessionFileWatcher) {
-      sessionFileWatcher.close()
-      sessionFileWatcher = null
+  type SessionFileScope = 'session' | 'workspace'
+  type SessionFilesChangedEvent = {
+    sessionId: string
+    scope: SessionFileScope
+    changedPath?: string
+  }
+
+  type SessionWatchEntry = {
+    sessionId: string
+    sessionPath: string
+    workspacePath: string | null
+    sessionWatcher: import('fs').FSWatcher | null
+    workspaceWatcher: import('fs').FSWatcher | null
+    subscribers: Set<number> // webContents.id
+    pendingChanges: Map<SessionFileScope, string | undefined>
+    debounceTimer: ReturnType<typeof setTimeout> | null
+  }
+
+  const WORKSPACE_EXCLUDED_DIRS = ['sessions', 'sources', 'skills', 'statuses', 'labels']
+  const sessionWatchers = new Map<string, SessionWatchEntry>()
+  const senderSubscriptions = new Map<number, Set<string>>()
+  const senderDestroyHookRegistered = new Set<number>()
+
+  const isInternalPath = (scope: SessionFileScope, relativePath: string | null): boolean => {
+    if (!relativePath) return false
+    const normalized = relativePath.replace(/\\/g, '/')
+    const basename = normalized.split('/').pop() || ''
+    if (basename.startsWith('.')) return true
+    if (basename === 'session.jsonl' || normalized.includes('/session.jsonl')) return true
+
+    if (scope === 'workspace') {
+      for (const excluded of WORKSPACE_EXCLUDED_DIRS) {
+        if (normalized === excluded || normalized.startsWith(`${excluded}/`)) {
+          return true
+        }
+      }
     }
-    if (fileChangeDebounceTimer) {
-      clearTimeout(fileChangeDebounceTimer)
-      fileChangeDebounceTimer = null
+
+    return false
+  }
+
+  const closeWatchEntry = (entry: SessionWatchEntry): void => {
+    if (entry.sessionWatcher) {
+      entry.sessionWatcher.close()
+      entry.sessionWatcher = null
+    }
+    if (entry.workspaceWatcher) {
+      entry.workspaceWatcher.close()
+      entry.workspaceWatcher = null
+    }
+    if (entry.debounceTimer) {
+      clearTimeout(entry.debounceTimer)
+      entry.debounceTimer = null
+    }
+  }
+
+  const removeSenderFromSession = (senderId: number, sessionId: string): void => {
+    const entry = sessionWatchers.get(sessionId)
+    if (!entry) return
+
+    entry.subscribers.delete(senderId)
+    if (entry.subscribers.size === 0) {
+      closeWatchEntry(entry)
+      sessionWatchers.delete(sessionId)
+      ipcLog.info(`Stopped watching session files: ${sessionId}`)
     }
 
-    watchedSessionId = sessionId
+    const subscriptions = senderSubscriptions.get(senderId)
+    if (!subscriptions) return
+    subscriptions.delete(sessionId)
+    if (subscriptions.size === 0) {
+      senderSubscriptions.delete(senderId)
+    }
+  }
+
+  const removeSenderSubscriptions = (senderId: number, sessionId?: string): void => {
+    if (sessionId) {
+      removeSenderFromSession(senderId, sessionId)
+      return
+    }
+
+    const subscriptions = senderSubscriptions.get(senderId)
+    if (!subscriptions || subscriptions.size === 0) return
+
+    for (const watchedSessionId of [...subscriptions]) {
+      removeSenderFromSession(senderId, watchedSessionId)
+    }
+  }
+
+  const flushPendingChanges = (entry: SessionWatchEntry): void => {
+    if (entry.pendingChanges.size === 0) return
+
+    const events: SessionFilesChangedEvent[] = [...entry.pendingChanges.entries()].map(
+      ([scope, changedPath]) => ({
+        sessionId: entry.sessionId,
+        scope,
+        changedPath,
+      }),
+    )
+    entry.pendingChanges.clear()
+
+    // Notify only subscribed renderers
+    for (const senderId of entry.subscribers) {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.id === senderId)
+      if (!win || win.isDestroyed()) continue
+      for (const payload of events) {
+        win.webContents.send(IPC_CHANNELS.SESSION_FILES_CHANGED, payload)
+      }
+    }
+  }
+
+  const queueFileChange = (
+    entry: SessionWatchEntry,
+    scope: SessionFileScope,
+    rootPath: string,
+    filename: string | Buffer | null,
+  ): void => {
+    const relativePath = filename ? filename.toString() : null
+    if (isInternalPath(scope, relativePath)) return
+    const changedPath = relativePath ? join(rootPath, relativePath) : undefined
+
+    // Keep latest changed path per scope and debounce bursts
+    entry.pendingChanges.set(scope, changedPath)
+    if (entry.debounceTimer) {
+      clearTimeout(entry.debounceTimer)
+    }
+    entry.debounceTimer = setTimeout(() => flushPendingChanges(entry), 120)
+  }
+
+  const createWatcher = async (
+    pathToWatch: string,
+    onChange: (filename: string | Buffer | null) => void,
+  ): Promise<import('fs').FSWatcher | null> => {
+    if (!existsSync(pathToWatch)) return null
+    const { watch } = await import('fs')
 
     try {
-      const { watch } = await import('fs')
-      sessionFileWatcher = watch(sessionPath, { recursive: true }, (eventType, filename) => {
-        // Ignore internal files and hidden files
-        if (filename && (filename.includes('session.jsonl') || filename.startsWith('.'))) {
-          return
-        }
-
-        // Debounce: wait 100ms before notifying to batch rapid changes
-        if (fileChangeDebounceTimer) {
-          clearTimeout(fileChangeDebounceTimer)
-        }
-        fileChangeDebounceTimer = setTimeout(() => {
-          // Notify all windows that session files changed
-          const { BrowserWindow } = require('electron')
-          for (const win of BrowserWindow.getAllWindows()) {
-            win.webContents.send(IPC_CHANNELS.SESSION_FILES_CHANGED, watchedSessionId)
-          }
-        }, 100)
-      })
-
-      ipcLog.info(`Watching session files: ${sessionId}`)
+      return watch(pathToWatch, { recursive: true }, (_eventType, filename) => onChange(filename))
     } catch (error) {
-      ipcLog.error('Failed to start session file watcher:', error)
+      // Fallback for platforms/filesystems that don't support recursive watch.
+      ipcLog.warn(`Recursive watch unavailable for ${pathToWatch}, falling back to non-recursive`, error)
+      return watch(pathToWatch, { recursive: false }, (_eventType, filename) => onChange(filename))
     }
+  }
+
+  // Start watching session/workspace directories for file changes
+  ipcMain.handle(IPC_CHANNELS.WATCH_SESSION_FILES, async (event, sessionId: string) => {
+    const senderId = event.sender.id
+    const sessionPath = sessionManager.getSessionPath(sessionId)
+    if (!sessionPath) return
+    const workspacePath = sessionManager.getSessionWorkspacePath(sessionId)
+
+    // A renderer should only watch one session at a time.
+    removeSenderSubscriptions(senderId)
+
+    let entry = sessionWatchers.get(sessionId)
+    if (!entry) {
+      entry = {
+        sessionId,
+        sessionPath,
+        workspacePath,
+        sessionWatcher: null,
+        workspaceWatcher: null,
+        subscribers: new Set<number>(),
+        pendingChanges: new Map<SessionFileScope, string | undefined>(),
+        debounceTimer: null,
+      }
+
+      try {
+        entry.sessionWatcher = await createWatcher(sessionPath, (filename) =>
+          queueFileChange(entry!, 'session', sessionPath, filename),
+        )
+        if (workspacePath) {
+          entry.workspaceWatcher = await createWatcher(workspacePath, (filename) =>
+            queueFileChange(entry!, 'workspace', workspacePath, filename),
+          )
+        }
+      } catch (error) {
+        ipcLog.error('Failed to start session/workspace watchers:', error)
+        closeWatchEntry(entry)
+        return
+      }
+
+      sessionWatchers.set(sessionId, entry)
+      ipcLog.info(`Watching session files: ${sessionId}`)
+    }
+
+    entry.subscribers.add(senderId)
+    if (!senderSubscriptions.has(senderId)) {
+      senderSubscriptions.set(senderId, new Set())
+    }
+    if (!senderDestroyHookRegistered.has(senderId)) {
+      senderDestroyHookRegistered.add(senderId)
+      event.sender.once('destroyed', () => {
+        removeSenderSubscriptions(senderId)
+        senderDestroyHookRegistered.delete(senderId)
+      })
+    }
+    senderSubscriptions.get(senderId)!.add(sessionId)
   })
 
-  // Stop watching session files
-  ipcMain.handle(IPC_CHANNELS.UNWATCH_SESSION_FILES, async () => {
-    if (sessionFileWatcher) {
-      sessionFileWatcher.close()
-      sessionFileWatcher = null
-    }
-    if (fileChangeDebounceTimer) {
-      clearTimeout(fileChangeDebounceTimer)
-      fileChangeDebounceTimer = null
-    }
-    if (watchedSessionId) {
-      ipcLog.info(`Stopped watching session files: ${watchedSessionId}`)
-      watchedSessionId = null
-    }
+  // Stop watching session files (optionally one session; default all for this renderer)
+  ipcMain.handle(IPC_CHANNELS.UNWATCH_SESSION_FILES, async (event, sessionId?: string) => {
+    removeSenderSubscriptions(event.sender.id, sessionId)
   })
 
   // Get session notes (reads notes.md from session directory)

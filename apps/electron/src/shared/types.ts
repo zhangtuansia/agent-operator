@@ -77,6 +77,8 @@ export type {
   SkillFile,
   SessionFile,
   SessionFilesResult,
+  SessionFileScope,
+  SessionFilesChangedEvent,
   // Plan types
   Plan,
   PlanStep,
@@ -134,7 +136,10 @@ import type {
   SessionCommand,
   FileAttachment,
   SkillFile,
+  SessionFile,
   SessionFilesResult,
+  SessionFileScope,
+  SessionFilesChangedEvent,
   ShareResult,
   RefreshTitleResult,
   OAuthResult,
@@ -313,11 +318,12 @@ export interface ElectronAPI {
 
   // Session Info Panel
   getSessionFiles(sessionId: string): Promise<SessionFilesResult>
+  getSessionFilesByScope(sessionId: string, scope: SessionFileScope): Promise<SessionFile[]>
   getSessionNotes(sessionId: string): Promise<string>
   setSessionNotes(sessionId: string, content: string): Promise<void>
   watchSessionFiles(sessionId: string): Promise<void>
-  unwatchSessionFiles(): Promise<void>
-  onSessionFilesChanged(callback: (sessionId: string) => void): () => void
+  unwatchSessionFiles(sessionId?: string): Promise<void>
+  onSessionFilesChanged(callback: (event: SessionFilesChangedEvent) => void): () => void
 
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>

@@ -54,6 +54,7 @@ export const IPC_CHANNELS = {
 
   // Session info panel
   GET_SESSION_FILES: 'sessions:getFiles',
+  GET_SESSION_FILES_BY_SCOPE: 'sessions:getFilesByScope',
   GET_SESSION_NOTES: 'sessions:getNotes',
   SET_SESSION_NOTES: 'sessions:setNotes',
   WATCH_SESSION_FILES: 'sessions:watchFiles',      // Start watching session directory

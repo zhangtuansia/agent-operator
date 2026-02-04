@@ -234,12 +234,14 @@ const api: ElectronAPI = {
 
   // Session Info Panel
   getSessionFiles: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_FILES, sessionId),
+  getSessionFilesByScope: (sessionId: string, scope: 'session' | 'workspace') =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_FILES_BY_SCOPE, sessionId, scope),
   getSessionNotes: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_NOTES, sessionId),
   setSessionNotes: (sessionId: string, content: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_SESSION_NOTES, sessionId, content),
   watchSessionFiles: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.WATCH_SESSION_FILES, sessionId),
-  unwatchSessionFiles: () => ipcRenderer.invoke(IPC_CHANNELS.UNWATCH_SESSION_FILES),
-  onSessionFilesChanged: (callback: (sessionId: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
+  unwatchSessionFiles: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.UNWATCH_SESSION_FILES, sessionId),
+  onSessionFilesChanged: (callback: (event: { sessionId: string; scope: 'session' | 'workspace'; changedPath?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; scope: 'session' | 'workspace'; changedPath?: string }) => callback(payload)
     ipcRenderer.on(IPC_CHANNELS.SESSION_FILES_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_FILES_CHANGED, handler)
   },

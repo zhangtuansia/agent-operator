@@ -172,9 +172,11 @@ type ViewMode = 'code' | 'preview'
  * File content viewer component
  */
 function FileViewer({
+  sessionId,
   filePath,
   onBack,
 }: {
+  sessionId?: string
   filePath: string
   onBack: () => void
 }) {
@@ -184,47 +186,89 @@ function FileViewer({
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('preview') // Default to preview for HTML
+  const contentScrollRef = React.useRef<HTMLDivElement | null>(null)
 
   const filename = filePath.split('/').pop() || filePath
   const fileType = getFileType(filename)
 
-  // Load file content
-  useEffect(() => {
-    let mounted = true
+  const loadFile = useCallback(
+    async (options?: { showLoading?: boolean; preserveScroll?: boolean }) => {
+      const { showLoading = true, preserveScroll = false } = options ?? {}
+      const previousScroll = preserveScroll && contentScrollRef.current
+        ? {
+            top: contentScrollRef.current.scrollTop,
+            left: contentScrollRef.current.scrollLeft,
+          }
+        : null
 
-    async function loadFile() {
-      setIsLoading(true)
+      if (showLoading) {
+        setIsLoading(true)
+      }
       setError(null)
 
       try {
         if (fileType === 'binary') {
           // Don't try to load binary files
           setContent(null)
-          setIsLoading(false)
           return
         }
 
         const result = await window.electronAPI.readFile(filePath)
-        if (mounted) {
-          setContent(result)
+        setContent(result)
+
+        if (previousScroll) {
+          requestAnimationFrame(() => {
+            if (!contentScrollRef.current) return
+            contentScrollRef.current.scrollTop = previousScroll.top
+            contentScrollRef.current.scrollLeft = previousScroll.left
+          })
         }
       } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : t('fileViewer.failedToLoad'))
-        }
+        setError(err instanceof Error ? err.message : t('fileViewer.failedToLoad'))
       } finally {
-        if (mounted) {
+        if (showLoading) {
           setIsLoading(false)
         }
       }
-    }
+    },
+    [filePath, fileType, t],
+  )
 
-    loadFile()
+  // Load file content
+  useEffect(() => {
+    void loadFile()
+  }, [loadFile])
+
+  // Hot refresh currently opened file when it changes on disk
+  useEffect(() => {
+    if (!sessionId) return
+
+    const normalizePath = (path: string) => path.replace(/\\/g, '/')
+    const currentPath = normalizePath(filePath)
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const unsubscribe = window.electronAPI.onSessionFilesChanged((event) => {
+      if (event.sessionId !== sessionId) return
+      if (!event.changedPath) return
+      if (normalizePath(event.changedPath) !== currentPath) return
+
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+
+      // Debounce bursts from editors that save via temp files/rename.
+      debounceTimer = setTimeout(() => {
+        void loadFile({ showLoading: false, preserveScroll: true })
+      }, 200)
+    })
 
     return () => {
-      mounted = false
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+      unsubscribe()
     }
-  }, [filePath, fileType, t])
+  }, [sessionId, filePath, loadFile])
 
   // Handle copy content
   const handleCopy = useCallback(async () => {
@@ -339,7 +383,7 @@ function FileViewer({
           copied={copied}
           showActions={true}
         />
-        <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-foreground/[0.02]">
+        <div ref={contentScrollRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-foreground/[0.02]">
           <img
             src={`file://${filePath}`}
             alt={filename}
@@ -364,7 +408,7 @@ function FileViewer({
           copied={copied}
           showActions={true}
         />
-        <div className="flex-1 overflow-auto px-4 py-3">
+        <div ref={contentScrollRef} className="flex-1 overflow-auto px-4 py-3">
           <MarkdownExcalidrawBlock code={content} className="my-1" />
         </div>
       </div>
@@ -385,7 +429,7 @@ function FileViewer({
           copied={copied}
           showActions={true}
         />
-        <div className="flex-1 overflow-auto px-4 py-3">
+        <div ref={contentScrollRef} className="flex-1 overflow-auto px-4 py-3">
           <Markdown mode="full">{content}</Markdown>
         </div>
       </div>
@@ -421,7 +465,7 @@ function FileViewer({
           </div>
         ) : (
           // Code view with syntax highlighting
-          <div className="flex-1 overflow-auto text-sm">
+          <div ref={contentScrollRef} className="flex-1 overflow-auto text-sm">
             <Markdown mode="full">{`\`\`\`html\n${content}\n\`\`\``}</Markdown>
           </div>
         )}
@@ -446,7 +490,7 @@ function FileViewer({
           copied={copied}
           showActions={true}
         />
-        <div className="flex-1 overflow-auto text-sm">
+        <div ref={contentScrollRef} className="flex-1 overflow-auto text-sm">
           <Markdown mode="full">{codeBlock}</Markdown>
         </div>
       </div>
@@ -466,7 +510,7 @@ function FileViewer({
         copied={copied}
         showActions={true}
       />
-      <div className="flex-1 overflow-auto p-4">
+      <div ref={contentScrollRef} className="flex-1 overflow-auto p-4">
         <pre className="text-sm font-mono whitespace-pre-wrap break-words text-foreground/80">
           {content}
         </pre>
@@ -647,7 +691,7 @@ export function SessionFilesPanel({
       <div className="h-full flex flex-col">
         {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <FileViewer filePath={selectedPath} onBack={handleBack} />
+          <FileViewer sessionId={sessionId} filePath={selectedPath} onBack={handleBack} />
         </div>
       </div>
     )

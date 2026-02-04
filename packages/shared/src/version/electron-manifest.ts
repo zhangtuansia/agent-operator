@@ -91,7 +91,12 @@ function parseVersion(version: string): { base: string; suffix: string } | null 
   // Match versions like "0.1.4" or "0.1.4a"
   const match = version.match(/^(\d+\.\d+\.\d+)([a-z]*)$/i);
   if (match) {
-    return { base: match[1], suffix: match[2].toLowerCase() };
+    const base = match[1];
+    if (!base) {
+      return null;
+    }
+    const suffix = (match[2] ?? '').toLowerCase();
+    return { base, suffix };
   }
   return null;
 }

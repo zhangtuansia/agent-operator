@@ -17,7 +17,7 @@ import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight } from 'lucide-react'
-import type { SessionFile } from '../../../shared/types'
+import type { SessionFile, SessionFileScope, SessionFilesChangedEvent } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { useLanguage } from '@/context/LanguageContext'
@@ -287,29 +287,48 @@ export function SessionFilesSection({ sessionId, className, onFileClick: externa
     }
   }, [sessionId])
 
-  // Load files
-  const loadFiles = useCallback(async () => {
+  // Load files (full or scoped incremental refresh)
+  const loadFiles = useCallback(async (scope?: SessionFileScope, showLoading: boolean = true) => {
     if (!sessionId) {
       setSessionFiles([])
       setWorkspaceFiles([])
       return
     }
 
-    setIsLoading(true)
+    if (showLoading) {
+      setIsLoading(true)
+    }
     try {
-      const result = await window.electronAPI.getSessionFiles(sessionId)
-      if (mountedRef.current) {
-        setSessionFiles(result.sessionFiles)
-        setWorkspaceFiles(result.workspaceFiles)
+      if (scope) {
+        const files = await window.electronAPI.getSessionFilesByScope(sessionId, scope)
+        if (mountedRef.current) {
+          if (scope === 'session') {
+            setSessionFiles(files)
+          } else {
+            setWorkspaceFiles(files)
+          }
+        }
+      } else {
+        const result = await window.electronAPI.getSessionFiles(sessionId)
+        if (mountedRef.current) {
+          setSessionFiles(result.sessionFiles)
+          setWorkspaceFiles(result.workspaceFiles)
+        }
       }
     } catch (error) {
       console.error('Failed to load session files:', error)
       if (mountedRef.current) {
-        setSessionFiles([])
-        setWorkspaceFiles([])
+        if (scope === 'session') {
+          setSessionFiles([])
+        } else if (scope === 'workspace') {
+          setWorkspaceFiles([])
+        } else {
+          setSessionFiles([])
+          setWorkspaceFiles([])
+        }
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && showLoading) {
         setIsLoading(false)
       }
     }
@@ -325,16 +344,17 @@ export function SessionFilesSection({ sessionId, className, onFileClick: externa
       window.electronAPI.watchSessionFiles(sessionId)
 
       // Listen for file change events
-      const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
-        if (changedSessionId === sessionId && mountedRef.current) {
-          loadFiles()
+      const unsubscribe = window.electronAPI.onSessionFilesChanged((event: SessionFilesChangedEvent) => {
+        if (event.sessionId === sessionId && mountedRef.current) {
+          // Incremental refresh: update only the changed tree.
+          loadFiles(event.scope, false)
         }
       })
 
       return () => {
         mountedRef.current = false
         unsubscribe()
-        window.electronAPI.unwatchSessionFiles()
+        window.electronAPI.unwatchSessionFiles(sessionId)
       }
     }
 
