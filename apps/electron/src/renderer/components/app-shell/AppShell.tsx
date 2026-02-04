@@ -18,6 +18,7 @@ import {
   DatabaseZap,
   Zap,
   Inbox,
+  WifiOff,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -65,6 +66,7 @@ import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useLayoutState } from "@/hooks/useLayoutState"
+import { useNetworkStatus } from "@/hooks/useNetworkStatus"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useTranslation } from "@/i18n"
@@ -253,6 +255,7 @@ function AppShellContent({
   const [session, setSession] = useSession()
   const { resolvedMode } = useTheme()
   const { t } = useTranslation()
+  const { isOnline } = useNetworkStatus()
   const { canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
@@ -1020,6 +1023,24 @@ function AppShellContent({
             2. relative z-panel: ensures elements render above this drag overlay
         */}
         <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
+
+        {/* Offline indicator banner */}
+        <AnimatePresence>
+          {!isOnline && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="fixed top-[50px] left-0 right-0 z-overlay bg-destructive/90 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm shadow-md"
+            >
+              <WifiOff className="h-4 w-4" />
+              <span className="font-medium">{t('network.offline')}</span>
+              <span className="text-white/80">—</span>
+              <span className="text-white/80">{t('network.offlineDesc')}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       {/* App Menu - fixed position, always visible (hidden in focused mode) */}
       {!isFocusedMode && (

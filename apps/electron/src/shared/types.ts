@@ -208,7 +208,7 @@ export interface ElectronAPI {
   onSystemThemeChange(callback: (isDark: boolean) => void): () => void
 
   // System
-  getVersions(): { node: string; chrome: string; electron: string }
+  getVersions(): Promise<{ node: string; chrome: string; electron: string }>
   getAppVersion(): Promise<{ app: string; os: string; osVersion: string; arch: string }>
   getHomeDir(): Promise<string>
   isDebugMode(): Promise<boolean>
@@ -380,7 +380,7 @@ export interface ElectronAPI {
   setColorTheme(themeId: string): Promise<void>
 
   // Fonts (local font files)
-  getFontsPath(): string
+  getFontsPath(): Promise<string>
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void

@@ -590,6 +590,11 @@ export function SessionList({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  // Pagination: limit initial render for performance with large session lists
+  const INITIAL_VISIBLE_COUNT = 50
+  const LOAD_MORE_COUNT = 50
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT)
+
   // Focus search input when search becomes active (with delay to let dropdown close)
   useEffect(() => {
     if (searchActive) {
@@ -618,8 +623,23 @@ export function SessionList({
     })
   }, [sortedItems, searchQuery, newChatFallback])
 
-  // Group sessions by date
-  const dateGroups = useMemo(() => groupSessionsByDate(searchFilteredItems, t), [searchFilteredItems, t])
+  // Reset visible count when search changes
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT)
+  }, [searchQuery])
+
+  // Apply pagination to limit rendered items
+  const visibleSessions = useMemo(() =>
+    searchFilteredItems.slice(0, visibleCount),
+    [searchFilteredItems, visibleCount]
+  )
+
+  // Track remaining sessions count for "Load More" button
+  const remainingCount = searchFilteredItems.length - visibleCount
+  const hasMoreSessions = remainingCount > 0
+
+  // Group sessions by date (using visible sessions for performance)
+  const dateGroups = useMemo(() => groupSessionsByDate(visibleSessions, t), [visibleSessions, t])
 
   // Create flat list for keyboard navigation (maintains order across groups)
   const flatItems = useMemo(() => {
@@ -881,6 +901,17 @@ export function SessionList({
                 </div>
               ))}
             </div>
+            {/* Load More button - shown when there are more sessions to display */}
+            {hasMoreSessions && (
+              <div className="px-4 py-3">
+                <button
+                  onClick={() => setVisibleCount(c => c + LOAD_MORE_COUNT)}
+                  className="w-full py-2 px-4 text-sm text-foreground/70 hover:text-foreground bg-foreground/5 hover:bg-foreground/10 rounded-lg transition-colors"
+                >
+                  {t('sessionList.loadMore', { count: remainingCount })}
+                </button>
+              </div>
+            )}
             {/* Bottom padding for scroll */}
             <div className="h-14" />
           </div>

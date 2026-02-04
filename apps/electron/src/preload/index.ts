@@ -79,11 +79,7 @@ const api: ElectronAPI = {
   },
 
   // System
-  getVersions: () => ({
-    node: process.versions.node,
-    chrome: process.versions.chrome,
-    electron: process.versions.electron,
-  }),
+  getVersions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_VERSIONS),
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
@@ -362,17 +358,7 @@ const api: ElectronAPI = {
   // Fonts (local font files path)
   // In development: relative to app root
   // In production: uses Electron's resourcesPath
-  getFontsPath: () => {
-    // Check if we're in development (running via Vite)
-    const isDev = process.env.NODE_ENV === 'development' || location.protocol === 'http:'
-    if (isDev) {
-      // In development, fonts are served from the app root
-      return './resources/fonts'
-    }
-    // In production, use file:// protocol with resourcesPath
-    // Note: process.resourcesPath is available in preload with nodeIntegration
-    return `file://${process.resourcesPath}/fonts`
-  },
+  getFontsPath: () => ipcRenderer.invoke(IPC_CHANNELS.GET_FONTS_PATH),
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl: (serviceUrl: string, provider?: string) =>

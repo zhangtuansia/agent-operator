@@ -857,6 +857,27 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Get Node/Chrome/Electron versions (for sandbox-enabled preload)
+  ipcMain.handle(IPC_CHANNELS.GET_VERSIONS, () => {
+    return {
+      node: process.versions.node,
+      chrome: process.versions.chrome,
+      electron: process.versions.electron,
+    }
+  })
+
+  // Get fonts path (for sandbox-enabled preload)
+  ipcMain.handle(IPC_CHANNELS.GET_FONTS_PATH, () => {
+    // Check if we're in development (running via Vite)
+    const isDev = !app.isPackaged
+    if (isDev) {
+      // In development, fonts are served from the app root
+      return './resources/fonts'
+    }
+    // In production, use file:// protocol with resourcesPath
+    return `file://${process.resourcesPath}/fonts`
+  })
+
   // Auto-update handlers
   // Manual check from UI - auto-download so user can install immediately
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {

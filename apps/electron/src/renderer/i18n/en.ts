@@ -41,6 +41,13 @@ export const en = {
     configure: 'Configure',
   },
 
+  // Network status
+  network: {
+    offline: 'You are offline',
+    offlineDesc: 'Check your internet connection',
+    cannotSendOffline: 'Cannot send message while offline',
+  },
+
   // Settings
   settings: {
     title: 'Settings',
@@ -363,6 +370,7 @@ export const en = {
     searchConversations: 'Search conversations...',
     clearSearch: 'Clear search',
     closeSearch: 'Close search',
+    loadMore: 'Load more ({count} remaining)',
   },
 
   // Chat Info (Right Sidebar)

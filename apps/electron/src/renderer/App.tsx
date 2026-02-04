@@ -38,11 +38,13 @@ import {
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
+import { toast } from 'sonner'
 import { ShikiThemeProvider, PlatformProvider } from '@agent-operator/ui'
 import { useSessionDrafts } from '@/hooks/useSessionDrafts'
 import { useSessionEvents } from '@/hooks/useSessionEvents'
 import { useMenuEvents } from '@/hooks/useMenuEvents'
 import { useSplashScreen } from '@/hooks/useSplashScreen'
+import { networkStatusAtom } from '@/hooks/useNetworkStatus'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -69,6 +71,7 @@ export default function App() {
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
   const store = useStore()
+  const isOnline = useAtomValue(networkStatusAtom)
   const { t } = useTranslation()
 
   // Helper to update a session by ID with partial fields
@@ -444,6 +447,12 @@ export default function App() {
   }, [updateSessionById])
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+    // Check network status before sending
+    if (!isOnline) {
+      toast.error(t('network.cannotSendOffline'))
+      return
+    }
+
     try {
       // Step 1: Store attachments and get persistent metadata
       let storedAttachments: StoredAttachment[] | undefined
@@ -601,7 +610,7 @@ export default function App() {
         ]
       }))
     }
-  }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
+  }, [isOnline, t, sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 
   const handleModelChange = useCallback((model: string) => {
     setCurrentModel(model)

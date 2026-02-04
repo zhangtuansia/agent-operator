@@ -43,6 +43,13 @@ export const zh: TranslationKeys = {
     configure: '配置',
   },
 
+  // Network status
+  network: {
+    offline: '您当前处于离线状态',
+    offlineDesc: '请检查网络连接',
+    cannotSendOffline: '离线时无法发送消息',
+  },
+
   // Settings
   settings: {
     title: '设置',
@@ -365,6 +372,7 @@ export const zh: TranslationKeys = {
     searchConversations: '搜索对话...',
     clearSearch: '清除搜索',
     closeSearch: '关闭搜索',
+    loadMore: '加载更多（剩余 {count} 个）',
   },
 
   // Chat Info (Right Sidebar)

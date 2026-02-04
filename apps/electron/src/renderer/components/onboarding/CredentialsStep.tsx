@@ -36,7 +36,7 @@ export const PROVIDER_DEFAULTS: Record<string, {
   },
   minimax: {
     name: 'MiniMax',
-    baseURL: 'https://api.minimax.chat/v1',
+    baseURL: 'https://api.minimaxi.com/anthropic',
     docsUrl: 'platform.minimaxi.com',
     apiFormat: 'anthropic',
     placeholder: 'eyJhbG...',

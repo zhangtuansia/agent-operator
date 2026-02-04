@@ -184,26 +184,31 @@ export function ThemeProvider({
         if (fontConfig.localFiles && fontConfig.localFiles.length > 0) {
           const styleId = `local-font-${font}`
           if (!document.getElementById(styleId)) {
-            // Get fonts directory path from Electron
-            const fontsPath = window.electronAPI?.getFontsPath?.() || './resources/fonts'
+            // Get fonts directory path from Electron (async)
+            const loadLocalFonts = async () => {
+              const fontsPath = await window.electronAPI?.getFontsPath?.() || './resources/fonts'
 
-            // Generate @font-face rules
-            const fontFaces = fontConfig.localFiles.map(file => {
-              const fontUrl = `${fontsPath}/${file.src}`
-              return `@font-face {
+              // Generate @font-face rules
+              const fontFaces = fontConfig.localFiles!.map(file => {
+                const fontUrl = `${fontsPath}/${file.src}`
+                return `@font-face {
   font-family: ${fontConfig.fontFamily.split(',')[0].trim()};
   src: url("${fontUrl}") format("${file.format}");
   font-weight: ${file.weight || 'normal'};
   font-style: ${file.style || 'normal'};
   font-display: swap;
 }`
-            }).join('\n\n')
+              }).join('\n\n')
 
-            // Inject @font-face styles
-            const style = document.createElement('style')
-            style.id = styleId
-            style.textContent = fontFaces
-            document.head.appendChild(style)
+              // Inject @font-face styles (check again in case of race)
+              if (!document.getElementById(styleId)) {
+                const style = document.createElement('style')
+                style.id = styleId
+                style.textContent = fontFaces
+                document.head.appendChild(style)
+              }
+            }
+            loadLocalFonts()
           }
         }
 

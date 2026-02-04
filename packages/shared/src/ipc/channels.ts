@@ -67,6 +67,7 @@ export const IPC_CHANNELS = {
 
   // System
   GET_VERSIONS: 'system:versions',
+  GET_FONTS_PATH: 'system:fontsPath',
   GET_APP_VERSION: 'system:appVersion',
   GET_HOME_DIR: 'system:homeDir',
   IS_DEBUG_MODE: 'system:isDebugMode',

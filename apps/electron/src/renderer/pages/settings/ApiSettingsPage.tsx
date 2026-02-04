@@ -99,7 +99,7 @@ const PROVIDERS = [
   {
     id: 'minimax',
     name: 'MiniMax',
-    baseURL: 'https://api.minimax.chat/v1',
+    baseURL: 'https://api.minimaxi.com/anthropic',
     apiFormat: 'anthropic' as const,
     description: 'MiniMax AI models',
   },
