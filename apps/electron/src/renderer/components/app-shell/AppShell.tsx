@@ -145,6 +145,27 @@ interface AppShellProps {
 const PANEL_WINDOW_EDGE_SPACING = 6 // Padding between panels and window edge
 const PANEL_PANEL_SPACING = 5 // Gap between adjacent panels
 
+function normalizeFilePath(rawPath: string): string {
+  const trimmed = rawPath.trim()
+  let decoded = trimmed
+  try {
+    decoded = decodeURIComponent(trimmed)
+  } catch {
+    // Keep original string if percent-decoding fails.
+  }
+  const withoutFileScheme = decoded.replace(/^file:\/\//i, '')
+  const [pathOnly] = withoutFileScheme.split(/[?#]/)
+  return pathOnly ?? withoutFileScheme
+}
+
+function isAbsoluteOrHomePath(path: string): boolean {
+  return /^(\/|~\/|[a-zA-Z]:[\\/])/.test(path)
+}
+
+function isExcalidrawPath(path: string): boolean {
+  return /\.excalidraw(?:\.json)?$/i.test(path)
+}
+
 /**
  * AppShell - Main 3-panel layout container
  *
@@ -193,6 +214,7 @@ function AppShellContent({
     onMarkSessionUnread,
     onTodoStateChange,
     onRenameSession,
+    onOpenFile,
     onOpenSettings,
     onOpenKeyboardShortcuts,
     onOpenStoredUserPreferences,
@@ -632,6 +654,24 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
+  // Route Excalidraw links into the in-app files panel, keep other files unchanged.
+  const handleOpenFile = useCallback((rawPath: string) => {
+    const normalizedPath = normalizeFilePath(rawPath)
+    const shouldOpenInline =
+      isExcalidrawPath(normalizedPath) &&
+      isAbsoluteOrHomePath(normalizedPath) &&
+      isChatsNavigation(navState) &&
+      !!navState.details
+
+    if (shouldOpenInline) {
+      setIsRightSidebarVisible(true)
+      updateRightSidebar({ type: 'files', path: normalizedPath })
+      return
+    }
+
+    onOpenFile(rawPath)
+  }, [navState, onOpenFile, setIsRightSidebarVisible, updateRightSidebar])
+
   // Right sidebar OPEN button (fades out when sidebar is open, hidden in focused mode or non-chat views)
   const rightSidebarOpenButton = React.useMemo(() => {
     if (isFocusedMode || !isChatsNavigation(navState) || !navState.details) return null
@@ -671,6 +711,7 @@ function AppShellContent({
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
+    onOpenFile: handleOpenFile,
     textareaRef: chatInputRef,
     enabledSources: sources,
     skills,
@@ -678,7 +719,7 @@ function AppShellContent({
     todoStates,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
-  }), [contextValue, handleDeleteSession, sources, skills, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
+  }), [contextValue, handleDeleteSession, handleOpenFile, sources, skills, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
 
   // Persist expanded folders to localStorage
   React.useEffect(() => {

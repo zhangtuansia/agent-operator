@@ -74,8 +74,87 @@ interface CollapsibleContext {
   toggleSection: (id: string) => void
 }
 
-// File path detection regex - matches paths starting with /, ~/, or ./
-const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|excalidraw)$/i
+const FILE_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+  'md', 'markdown', 'mdx',
+  'json', 'jsonc', 'yaml', 'yml',
+  'py', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'java',
+  'c', 'cpp', 'h', 'hpp',
+  'css', 'scss', 'less',
+  'html', 'htm', 'xml',
+  'toml', 'ini', 'cfg', 'conf', 'env',
+  'sql', 'graphql', 'vue', 'svelte', 'astro', 'prisma',
+  'txt', 'log',
+  'sh', 'bash', 'zsh',
+  'mermaid',
+  'excalidraw',
+])
+
+function getPathWithoutQueryOrHash(value: string): string {
+  const questionMark = value.indexOf('?')
+  const hash = value.indexOf('#')
+  const cutAt =
+    questionMark === -1
+      ? hash
+      : hash === -1
+        ? questionMark
+        : Math.min(questionMark, hash)
+  return cutAt === -1 ? value : value.slice(0, cutAt)
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function getExtension(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  const fileName = normalized.split('/').pop() ?? normalized
+  const dotIndex = fileName.lastIndexOf('.')
+  if (dotIndex <= 0) return ''
+  return fileName.slice(dotIndex + 1).toLowerCase()
+}
+
+function isLikelyFilePath(href: string): boolean {
+  const decoded = safeDecode(href.trim())
+  if (!decoded) return false
+
+  const lower = decoded.toLowerCase()
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('agentoperator:')
+  ) {
+    return false
+  }
+
+  const pathCandidate = getPathWithoutQueryOrHash(decoded.replace(/^file:\/\//i, ''))
+  const ext = getExtension(pathCandidate)
+  if (!ext || !FILE_EXTENSIONS.has(ext)) return false
+
+  if (/^(\/|~\/|\.\/|\.\.\/|[a-zA-Z]:[\\/])/.test(pathCandidate)) return true
+
+  // Bare filename links (e.g. "diagram.excalidraw")
+  return !decoded.includes('://')
+}
+
+function normalizeHrefToPath(href: string): string {
+  const decoded = safeDecode(href.trim())
+  if (!decoded.toLowerCase().startsWith('file://')) return decoded
+
+  try {
+    const parsed = new URL(decoded)
+    const pathname = safeDecode(parsed.pathname)
+    // Windows file URL: /C:/path -> C:/path
+    return pathname.replace(/^\/([a-zA-Z]:[\\/])/, '$1')
+  } catch {
+    return decoded.replace(/^file:\/\//i, '')
+  }
+}
 
 /**
  * Create custom components based on render mode.
@@ -133,8 +212,8 @@ function createComponents(
         e.preventDefault()
         if (href) {
           // Check if it's a file path
-          if (FILE_PATH_REGEX.test(href) && onFileClick) {
-            onFileClick(href)
+          if (isLikelyFilePath(href) && onFileClick) {
+            onFileClick(normalizeHrefToPath(href))
           } else if (onUrlClick) {
             onUrlClick(href)
           }
