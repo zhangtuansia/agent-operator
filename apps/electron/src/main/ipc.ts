@@ -890,10 +890,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.OPEN_URL, async (_event, url: string) => {
     ipcLog.info('[OPEN_URL] Received request:', url)
     try {
+      const trimmedUrl = url.trim()
+
       // Support absolute local file paths passed from renderer.
       // Some UI paths currently call openUrl() with a filesystem path.
-      if (isAbsolute(url) || url.startsWith('~')) {
-        const absolutePath = url.startsWith('~') ? url : resolve(url)
+      if (isAbsolute(trimmedUrl) || trimmedUrl.startsWith('~')) {
+        const absolutePath = trimmedUrl.startsWith('~') ? trimmedUrl : resolve(trimmedUrl)
         const safePath = await validateFilePath(absolutePath)
         const result = await shell.openPath(safePath)
         if (result) {
@@ -902,15 +904,33 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return
       }
 
+      // Support relative/bare file links in markdown (e.g. "diagram.excalidraw").
+      // If the path exists on disk, treat it as a file instead of URL.
+      const mayBeRelativeFilePath =
+        trimmedUrl.startsWith('./') ||
+        trimmedUrl.startsWith('../') ||
+        (!trimmedUrl.includes('://') && !trimmedUrl.startsWith('mailto:'))
+      if (mayBeRelativeFilePath) {
+        const candidatePath = resolve(trimmedUrl)
+        if (existsSync(candidatePath)) {
+          const safePath = await validateFilePath(candidatePath)
+          const result = await shell.openPath(safePath)
+          if (result) {
+            throw new Error(result)
+          }
+          return
+        }
+      }
+
       // Validate URL format
-      const parsed = new URL(url)
+      const parsed = new URL(trimmedUrl)
 
       // Handle agentoperator:// URLs internally via deep link handler
       // This ensures ?window= params work correctly for "Open in New Window"
       if (parsed.protocol === 'agentoperator:') {
         ipcLog.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('./deep-link')
-        const result = await handleDeepLink(url, windowManager)
+        const result = await handleDeepLink(trimmedUrl, windowManager)
         ipcLog.info('[OPEN_URL] Deep link result:', result)
         return
       }
@@ -930,7 +950,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
         throw new Error('Only http, https, mailto URLs are allowed')
       }
-      await shell.openExternal(url)
+      await shell.openExternal(trimmedUrl)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       ipcLog.error('openUrl error:', message)
