@@ -211,14 +211,15 @@ app.whenReady().then(async () => {
     // Initialize notification service
     initNotificationService(windowManager)
 
+    // Initialize session manager (load sessions from disk BEFORE window creation)
+    // This prevents race condition where renderer requests sessions before they're loaded
+    await sessionManager.initialize()
+
     // Register IPC handlers (must happen before window creation)
     registerIpcHandlers(sessionManager, windowManager)
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()
-
-    // Initialize auth (must happen after window creation for error reporting)
-    await sessionManager.initialize()
 
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
