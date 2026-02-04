@@ -7,6 +7,60 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
 
+function normalizeTitle(raw: string): string {
+  // Keep first line and collapse whitespace so we don't reject otherwise good output.
+  const singleLine = raw.split('\n')[0]?.trim() ?? '';
+  const collapsed = singleLine.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '');
+  if (!collapsed) return '';
+  return collapsed.length <= 100 ? collapsed : `${collapsed.slice(0, 97).trimEnd()}...`;
+}
+
+async function queryTitle(prompt: string): Promise<string> {
+  const defaultOptions = getDefaultOptions();
+  const options = {
+    ...defaultOptions,
+    model: SUMMARIZATION_MODEL,
+    maxTurns: 1,
+  };
+
+  let title = '';
+  let lastResultText = '';
+
+  for await (const message of query({ prompt, options })) {
+    if (message.type === 'assistant') {
+      for (const block of message.message.content) {
+        if (block.type === 'text') {
+          title += block.text;
+        }
+      }
+      continue;
+    }
+
+    // Some SDK failures arrive as `result` without throwing.
+    if (message.type === 'result') {
+      const resultPayload = (
+        message.subtype === 'success'
+          ? message.result
+          : message.errors.length > 0
+            ? message.errors.join('; ')
+            : message.subtype
+      ).trim();
+      if (resultPayload) {
+        lastResultText = resultPayload;
+      }
+    }
+  }
+
+  const normalized = normalizeTitle(title);
+  if (normalized) return normalized;
+
+  if (lastResultText) {
+    throw new Error(`title generator returned no assistant text (result=${lastResultText})`);
+  }
+
+  throw new Error('title generator returned empty assistant text');
+}
+
 /**
  * Generate a task-focused title (2-5 words) from the user's first message.
  * Extracts what the user is trying to accomplish, framing conversations as tasks.
@@ -31,36 +85,10 @@ export async function generateSessionTitle(
       'Task:',
     ].join('\n');
 
-    const defaultOptions = getDefaultOptions();
-    const options = {
-      ...defaultOptions,
-      model: SUMMARIZATION_MODEL,
-      maxTurns: 1,
-    };
-
-    let title = '';
-
-    for await (const message of query({ prompt, options })) {
-      if (message.type === 'assistant') {
-        for (const block of message.message.content) {
-          if (block.type === 'text') {
-            title += block.text;
-          }
-        }
-      }
-    }
-
-    const trimmed = title.trim();
-
-    // Validate: reasonable length, not empty
-    if (trimmed && trimmed.length > 0 && trimmed.length < 100) {
-      return trimmed;
-    }
-
-    return null;
+    return await queryTitle(prompt);
   } catch (error) {
     console.error('[title-generator] Failed to generate title:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -99,34 +127,9 @@ export async function regenerateSessionTitle(
       'Current focus:',
     ].join('\n');
 
-    const defaultOptions = getDefaultOptions();
-    const options = {
-      ...defaultOptions,
-      model: SUMMARIZATION_MODEL,
-      maxTurns: 1,
-    };
-
-    let title = '';
-
-    for await (const message of query({ prompt, options })) {
-      if (message.type === 'assistant') {
-        for (const block of message.message.content) {
-          if (block.type === 'text') {
-            title += block.text;
-          }
-        }
-      }
-    }
-
-    const trimmed = title.trim();
-
-    if (trimmed && trimmed.length > 0 && trimmed.length < 100) {
-      return trimmed;
-    }
-
-    return null;
+    return await queryTitle(prompt);
   } catch (error) {
     console.error('[title-generator] Failed to regenerate title:', error);
-    return null;
+    throw error;
   }
 }
