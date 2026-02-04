@@ -334,32 +334,21 @@ export function SessionFilesSection({ sessionId, className, onFileClick: externa
     }
   }, [sessionId])
 
-  // Initial load and file watcher setup
+  // Initial load + session file change subscription (watch lifecycle is managed in AppShell).
   useEffect(() => {
     mountedRef.current = true
     loadFiles()
 
-    if (sessionId) {
-      // Start watching for file changes
-      window.electronAPI.watchSessionFiles(sessionId)
-
-      // Listen for file change events
-      const unsubscribe = window.electronAPI.onSessionFilesChanged((event: SessionFilesChangedEvent) => {
-        if (event.sessionId === sessionId && mountedRef.current) {
-          // Incremental refresh: update only the changed tree.
-          loadFiles(event.scope, false)
-        }
-      })
-
-      return () => {
-        mountedRef.current = false
-        unsubscribe()
-        window.electronAPI.unwatchSessionFiles(sessionId)
-      }
-    }
+    const unsubscribe = window.electronAPI.onSessionFilesChanged((event: SessionFilesChangedEvent) => {
+      if (!sessionId) return
+      if (event.sessionId !== sessionId || !mountedRef.current) return
+      // Incremental refresh: update only the changed tree.
+      loadFiles(event.scope, false)
+    })
 
     return () => {
       mountedRef.current = false
+      unsubscribe()
     }
   }, [sessionId, loadFiles])
 

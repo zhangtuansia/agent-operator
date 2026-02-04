@@ -268,6 +268,9 @@ function AppShellContent({
 
   // Derive chat filter from navigation state (only when in chats navigator)
   const chatFilter = isChatsNavigation(navState) ? navState.filter : null
+  const activeChatSessionId = isChatsNavigation(navState) && navState.details
+    ? navState.details.sessionId
+    : null
 
   // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
   const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
@@ -276,6 +279,28 @@ function AppShellContent({
   const handleSwitchPanel = useCallback((panel: RightSidebarPanel) => {
     updateRightSidebar(panel)
   }, [updateRightSidebar])
+
+  // Keep session file watching tied to the active chat session lifecycle.
+  // This avoids watcher churn when right sidebar subcomponents remount.
+  const watchedSessionIdRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (watchedSessionIdRef.current === activeChatSessionId) return
+
+    if (activeChatSessionId) {
+      window.electronAPI.watchSessionFiles(activeChatSessionId)
+    } else {
+      window.electronAPI.unwatchSessionFiles()
+    }
+
+    watchedSessionIdRef.current = activeChatSessionId
+  }, [activeChatSessionId])
+
+  React.useEffect(() => {
+    return () => {
+      window.electronAPI.unwatchSessionFiles()
+      watchedSessionIdRef.current = null
+    }
+  }, [])
 
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
   const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {

@@ -7,12 +7,76 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
 
+const FALLBACK_MIN_LENGTH = 8;
+const FALLBACK_MAX_LENGTH = 20;
+const FALLBACK_DEFAULT_TITLE = '处理当前任务内容';
+
 function normalizeTitle(raw: string): string {
   // Keep first line and collapse whitespace so we don't reject otherwise good output.
   const singleLine = raw.split('\n')[0]?.trim() ?? '';
   const collapsed = singleLine.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '');
   if (!collapsed) return '';
   return collapsed.length <= 100 ? collapsed : `${collapsed.slice(0, 97).trimEnd()}...`;
+}
+
+function trimToFallbackMaxLength(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= FALLBACK_MAX_LENGTH) return normalized;
+  return `${normalized.slice(0, FALLBACK_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+function isLikelyCJK(value: string): boolean {
+  return /[\u3400-\u9fff]/.test(value);
+}
+
+function sanitizeFallbackCandidate(raw: string): string {
+  const withoutCodeFence = raw.replace(/```[\s\S]*?```/g, ' ');
+  const withoutInlineCode = withoutCodeFence.replace(/`([^`]+)`/g, '$1');
+  const withoutMarkdownLinks = withoutInlineCode.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+  const withoutUrls = withoutMarkdownLinks.replace(/https?:\/\/\S+/g, ' ');
+
+  const collapsed = withoutUrls.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return '';
+
+  const firstClause = collapsed.split(/[\n。！？!?]/).find((part) => part.trim().length > 0)?.trim() ?? collapsed;
+  const strippedPrefix = firstClause
+    .replace(/^[-*•>\d.)\s]+/, '')
+    .replace(/^(请|请你|帮我|帮忙|麻烦|可以|能否|我想|我要|我需要)\s*/i, '')
+    .replace(/^(please|can you|could you|would you|help me|i want to|i need to)\s+/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+
+  return strippedPrefix;
+}
+
+function padFallbackTitle(value: string): string {
+  if (value.length >= FALLBACK_MIN_LENGTH) return value;
+  const suffix = isLikelyCJK(value) ? '相关任务' : ' task';
+  const padded = trimToFallbackMaxLength(`${value}${suffix}`.trim());
+  if (padded.length >= FALLBACK_MIN_LENGTH) return padded;
+  return FALLBACK_DEFAULT_TITLE;
+}
+
+function buildFallbackTitleFromMessages(candidates: string[]): string {
+  let shortCandidate = '';
+
+  for (const rawCandidate of [...candidates].reverse()) {
+    const sanitized = sanitizeFallbackCandidate(rawCandidate);
+    if (!sanitized) continue;
+
+    const clamped = trimToFallbackMaxLength(sanitized);
+    if (clamped.length >= FALLBACK_MIN_LENGTH) return clamped;
+
+    if (!shortCandidate) {
+      shortCandidate = clamped;
+    }
+  }
+
+  if (shortCandidate) {
+    return padFallbackTitle(shortCandidate);
+  }
+
+  return FALLBACK_DEFAULT_TITLE;
 }
 
 async function queryTitle(prompt: string): Promise<string> {
@@ -88,7 +152,9 @@ export async function generateSessionTitle(
     return await queryTitle(prompt);
   } catch (error) {
     console.error('[title-generator] Failed to generate title:', error);
-    throw error;
+    const fallbackTitle = buildFallbackTitleFromMessages([userMessage]);
+    console.warn('[title-generator] Using fallback title:', fallbackTitle);
+    return fallbackTitle;
   }
 }
 
@@ -130,6 +196,11 @@ export async function regenerateSessionTitle(
     return await queryTitle(prompt);
   } catch (error) {
     console.error('[title-generator] Failed to regenerate title:', error);
-    throw error;
+    const fallbackCandidates = recentUserMessages.length > 0
+      ? recentUserMessages
+      : [lastAssistantResponse];
+    const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates);
+    console.warn('[title-generator] Using fallback regenerated title:', fallbackTitle);
+    return fallbackTitle;
   }
 }

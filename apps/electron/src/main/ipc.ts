@@ -1757,6 +1757,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     if (!sessionPath) return
     const workspacePath = sessionManager.getSessionWorkspacePath(sessionId)
 
+    const existingSubscriptions = senderSubscriptions.get(senderId)
+    if (existingSubscriptions?.size === 1 && existingSubscriptions.has(sessionId)) {
+      // Already watching this exact session for this renderer; avoid churn.
+      return
+    }
+
     // A renderer should only watch one session at a time.
     removeSenderSubscriptions(senderId)
 
