@@ -249,8 +249,9 @@ function FileViewer({
 
     const unsubscribe = window.electronAPI.onSessionFilesChanged((event) => {
       if (event.sessionId !== sessionId) return
-      if (!event.changedPath) return
-      if (normalizePath(event.changedPath) !== currentPath) return
+      // fs.watch may occasionally emit null filename; treat that as a generic
+      // change and refresh the currently opened file.
+      if (event.changedPath && normalizePath(event.changedPath) !== currentPath) return
 
       if (debounceTimer) {
         clearTimeout(debounceTimer)

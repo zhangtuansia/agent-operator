@@ -177,7 +177,7 @@ function renderEdgeLabel(edge: PositionedEdge, font: string): string {
 
   return (
     `<rect x="${mid.x - bgWidth / 2}" y="${mid.y - bgHeight / 2}" ` +
-    `width="${bgWidth}" height="${bgHeight}" rx="4" ry="4" ` +
+    `width="${bgWidth}" height="${bgHeight}" rx="2" ry="2" ` +
     `fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />\n` +
     `<text x="${mid.x}" y="${mid.y}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
     `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +

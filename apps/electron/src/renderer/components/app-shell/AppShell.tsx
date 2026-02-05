@@ -283,20 +283,36 @@ function AppShellContent({
   // Keep session file watching tied to the active chat session lifecycle.
   // This avoids watcher churn when right sidebar subcomponents remount.
   const watchedSessionIdRef = React.useRef<string | null>(null)
+  const pendingUnwatchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   React.useEffect(() => {
+    if (pendingUnwatchTimerRef.current) {
+      clearTimeout(pendingUnwatchTimerRef.current)
+      pendingUnwatchTimerRef.current = null
+    }
+
     if (watchedSessionIdRef.current === activeChatSessionId) return
 
     if (activeChatSessionId) {
       window.electronAPI.watchSessionFiles(activeChatSessionId)
-    } else {
-      window.electronAPI.unwatchSessionFiles()
+      watchedSessionIdRef.current = activeChatSessionId
+      return
     }
 
-    watchedSessionIdRef.current = activeChatSessionId
+    // Navigation can briefly clear active session during transitions.
+    // Delay unwatch to avoid stop/start churn when returning quickly.
+    pendingUnwatchTimerRef.current = setTimeout(() => {
+      window.electronAPI.unwatchSessionFiles()
+      watchedSessionIdRef.current = null
+      pendingUnwatchTimerRef.current = null
+    }, 250)
   }, [activeChatSessionId])
 
   React.useEffect(() => {
     return () => {
+      if (pendingUnwatchTimerRef.current) {
+        clearTimeout(pendingUnwatchTimerRef.current)
+        pendingUnwatchTimerRef.current = null
+      }
       window.electronAPI.unwatchSessionFiles()
       watchedSessionIdRef.current = null
     }

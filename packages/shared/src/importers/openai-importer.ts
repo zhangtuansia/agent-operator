@@ -159,8 +159,8 @@ function extractMessagesFromMapping(mapping: Record<string, OpenAINode>): OpenAI
 function processResponseMessages(messages: OpenAIMessage[]): string {
   const textParts: string[] = []
 
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i]
+  for (const [i, message] of messages.entries()) {
+    if (!message) continue
 
     // Handle tool messages or messages not meant for "all" recipients
     if (message.author.role === 'tool' || (message.recipient && message.recipient !== 'all')) {
@@ -230,6 +230,10 @@ function parseConversation(conversation: OpenAIConversation): ImportedConversati
   let i = 0
   while (i < allMessages.length) {
     const userMessage = allMessages[i]
+    if (!userMessage) {
+      i++
+      continue
+    }
 
     // Skip if not a user message
     if (userMessage.author.role !== 'user') {
@@ -250,8 +254,11 @@ function parseConversation(conversation: OpenAIConversation): ImportedConversati
     // Look for the corresponding assistant/tool message(s)
     const responseMessages: OpenAIMessage[] = []
     let j = i + 1
-    while (j < allMessages.length && (allMessages[j].author.role === 'assistant' || allMessages[j].author.role === 'tool')) {
-      responseMessages.push(allMessages[j])
+    while (j < allMessages.length) {
+      const candidate = allMessages[j]
+      if (!candidate) break
+      if (candidate.author.role !== 'assistant' && candidate.author.role !== 'tool') break
+      responseMessages.push(candidate)
       j++
     }
 
@@ -261,6 +268,10 @@ function parseConversation(conversation: OpenAIConversation): ImportedConversati
       if (assistantText) {
         // Get timestamp from first response message
         const firstResponse = responseMessages[0]
+        if (!firstResponse) {
+          i = j
+          continue
+        }
         importedMessages.push({
           role: 'assistant',
           content: assistantText,

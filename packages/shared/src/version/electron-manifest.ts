@@ -83,15 +83,20 @@ export async function getElectronManifest(version: string): Promise<VersionManif
 }
 
 /**
- * Parse version string into components for comparison.
- * Handles versions like "0.1.4", "0.1.4a", "0.1.4b".
+ * Parse custom post-release versions into base + letter suffix.
+ * Handles versions like "0.1.4a", "0.1.4b" (without a hyphen).
  * Letter suffix is treated as a POST-release increment (0.1.4a > 0.1.4).
  */
-function parseVersion(version: string): { base: string; suffix: string } | null {
-  // Match versions like "0.1.4" or "0.1.4a"
-  const match = version.match(/^(\d+\.\d+\.\d+)([a-z]*)$/i);
+interface PostReleaseVersion {
+  base: semver.SemVer;
+  suffix: string;
+}
+
+function parsePostReleaseVersion(version: string): PostReleaseVersion | null {
+  // Match versions like "0.1.4a" (optionally with v prefix)
+  const match = version.trim().match(/^v?(\d+\.\d+\.\d+)([a-z]+)$/i);
   if (match) {
-    const base = match[1];
+    const base = semver.parse(match[1]);
     if (!base) {
       return null;
     }
@@ -99,6 +104,13 @@ function parseVersion(version: string): { base: string; suffix: string } | null 
     return { base, suffix };
   }
   return null;
+}
+
+/**
+ * Parse strict semver (supports prerelease/build metadata).
+ */
+function parseStrictSemver(version: string): semver.SemVer | null {
+  return semver.parse(version.trim(), { loose: true }) ?? null;
 }
 
 /**
@@ -112,16 +124,12 @@ function parseVersion(version: string): { base: string; suffix: string } | null 
  */
 export function isNewerVersion(current: string, latest: string): boolean {
   try {
-    const currentParsed = parseVersion(current);
-    const latestParsed = parseVersion(latest);
+    const currentPost = parsePostReleaseVersion(current);
+    const latestPost = parsePostReleaseVersion(latest);
 
-    // If both can be parsed with our custom format
-    if (currentParsed && latestParsed) {
-      // First compare the base versions using semver
-      const baseComparison = semver.compare(
-        semver.coerce(currentParsed.base)!,
-        semver.coerce(latestParsed.base)!
-      );
+    // Both are custom post-release versions (e.g. 0.1.5a, 0.1.5b)
+    if (currentPost && latestPost) {
+      const baseComparison = semver.compare(currentPost.base, latestPost.base);
 
       if (baseComparison !== 0) {
         // Base versions differ - latest is newer if its base is greater
@@ -131,19 +139,40 @@ export function isNewerVersion(current: string, latest: string): boolean {
       // Base versions are equal, compare suffixes
       // Empty suffix < any letter (0.1.4 < 0.1.4a)
       // Letters compare alphabetically (0.1.4a < 0.1.4b)
-      if (currentParsed.suffix === latestParsed.suffix) {
+      if (currentPost.suffix === latestPost.suffix) {
         return false; // Same version
       }
-      if (currentParsed.suffix === '') {
-        return latestParsed.suffix !== ''; // 0.1.4 < 0.1.4a
-      }
-      if (latestParsed.suffix === '') {
-        return false; // 0.1.4a > 0.1.4, so latest (0.1.4) is NOT newer
-      }
-      return latestParsed.suffix > currentParsed.suffix;
+      return latestPost.suffix > currentPost.suffix;
     }
 
-    // Fall back to standard semver comparison
+    const currentSemver = parseStrictSemver(current);
+    const latestSemver = parseStrictSemver(latest);
+
+    // Custom post-release vs strict semver
+    if (currentPost && latestSemver) {
+      const baseComparison = semver.compare(currentPost.base, latestSemver);
+      if (baseComparison !== 0) {
+        return baseComparison < 0;
+      }
+      // Same numeric base: post-release > release/prerelease
+      return false;
+    }
+
+    if (currentSemver && latestPost) {
+      const baseComparison = semver.compare(currentSemver, latestPost.base);
+      if (baseComparison !== 0) {
+        return baseComparison < 0;
+      }
+      // Same numeric base: post-release > release/prerelease
+      return true;
+    }
+
+    // Standard semver comparison (supports prerelease/build metadata)
+    if (currentSemver && latestSemver) {
+      return semver.gt(latestSemver, currentSemver);
+    }
+
+    // Final fallback for partial/non-strict versions (e.g. "1.0", "1")
     const currentCoerced = semver.coerce(current);
     const latestCoerced = semver.coerce(latest);
 

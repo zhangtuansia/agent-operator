@@ -57,7 +57,7 @@ function padFallbackTitle(value: string): string {
   return FALLBACK_DEFAULT_TITLE;
 }
 
-function buildFallbackTitleFromMessages(candidates: string[]): string {
+export function buildFallbackTitleFromMessages(candidates: string[]): string {
   let shortCandidate = '';
 
   for (const rawCandidate of [...candidates].reverse()) {

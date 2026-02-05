@@ -13,7 +13,7 @@
 
 import { z } from 'zod';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join, relative, resolve } from 'path';
 import { CONFIG_DIR } from './paths.ts';
 
 // ============================================================
@@ -1070,6 +1070,356 @@ export function validateAllPermissions(workspaceRoot: string): ValidationResult 
     errors,
     warnings,
   };
+}
+
+// ============================================================
+// Content Validators (Pre-write Validation)
+// ============================================================
+
+export type ConfigFileDetection =
+  | { type: 'source'; slug: string; displayFile: string }
+  | { type: 'skill'; slug: string; displayFile: string }
+  | { type: 'statuses'; displayFile: string }
+  | { type: 'permissions'; slug?: string; displayFile: string };
+
+/**
+ * Validate source config.json content before writing to disk.
+ */
+export function validateSourceConfigContent(
+  content: string,
+  displayFile: string = 'config.json'
+): ValidationResult {
+  let parsedContent: unknown;
+  try {
+    parsedContent = JSON.parse(content);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  const result = validateSourceConfig(parsedContent);
+  return {
+    valid: result.valid,
+    errors: result.errors.map((issue) => ({ ...issue, file: displayFile })),
+    warnings: result.warnings.map((issue) => ({ ...issue, file: displayFile })),
+  };
+}
+
+/**
+ * Validate SKILL.md content before writing to disk.
+ */
+export function validateSkillContent(
+  content: string,
+  slug: string,
+  displayFile: string = `skills/${slug}/SKILL.md`
+): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    errors.push({
+      file: `skills/${slug}`,
+      path: 'slug',
+      message: 'Slug must be lowercase alphanumeric with hyphens',
+      severity: 'error',
+      suggestion: 'Rename folder to use lowercase letters, numbers, and hyphens only',
+    });
+  }
+
+  let frontmatter: unknown;
+  let body: string;
+  try {
+    const parsed = matter(content);
+    frontmatter = parsed.data;
+    body = parsed.content;
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: 'frontmatter',
+        message: `Invalid YAML frontmatter: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  const metaResult = SkillMetadataSchema.safeParse(frontmatter);
+  if (!metaResult.success) {
+    errors.push(...zodErrorToIssues(metaResult.error, displayFile));
+  }
+
+  if (!body || body.trim().length === 0) {
+    errors.push({
+      file: displayFile,
+      path: 'content',
+      message: 'Skill content is empty (nothing after frontmatter)',
+      severity: 'error',
+      suggestion: 'Add skill instructions after the YAML frontmatter',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * Validate statuses/config.json content before writing to disk.
+ */
+export function validateStatusesContent(
+  content: string,
+  displayFile: string = STATUS_CONFIG_FILE
+): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  let parsedContent: unknown;
+  try {
+    parsedContent = JSON.parse(content);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  const schemaResult = WorkspaceStatusConfigSchema.safeParse(parsedContent);
+  if (!schemaResult.success) {
+    errors.push(...zodErrorToIssues(schemaResult.error, displayFile));
+    return { valid: false, errors, warnings };
+  }
+
+  const config = schemaResult.data as WorkspaceStatusConfig;
+
+  const statusIds = new Set(config.statuses.map((status) => status.id));
+  for (const requiredId of REQUIRED_FIXED_STATUS_IDS) {
+    if (!statusIds.has(requiredId)) {
+      errors.push({
+        file: displayFile,
+        path: 'statuses',
+        message: `Required fixed status '${requiredId}' is missing`,
+        severity: 'error',
+      });
+    }
+  }
+
+  const seenIds = new Set<string>();
+  for (const status of config.statuses) {
+    if (seenIds.has(status.id)) {
+      errors.push({
+        file: displayFile,
+        path: `statuses[id=${status.id}]`,
+        message: `Duplicate status ID '${status.id}'`,
+        severity: 'error',
+      });
+    }
+    seenIds.add(status.id);
+  }
+
+  if (!statusIds.has(config.defaultStatusId)) {
+    errors.push({
+      file: displayFile,
+      path: 'defaultStatusId',
+      message: `Default status '${config.defaultStatusId}' does not exist in statuses array`,
+      severity: 'error',
+    });
+  }
+
+  for (const status of config.statuses) {
+    const shouldBeFixed = (REQUIRED_FIXED_STATUS_IDS as readonly string[]).includes(status.id);
+    if (shouldBeFixed && !status.isFixed) {
+      warnings.push({
+        file: displayFile,
+        path: `statuses[id=${status.id}].isFixed`,
+        message: `Status '${status.id}' should have isFixed: true`,
+        severity: 'warning',
+      });
+    }
+  }
+
+  const hasOpen = config.statuses.some((status) => status.category === 'open');
+  const hasClosed = config.statuses.some((status) => status.category === 'closed');
+  if (!hasOpen) {
+    errors.push({
+      file: displayFile,
+      path: 'statuses',
+      message: 'No status with category "open" - sessions will not appear in inbox',
+      severity: 'error',
+    });
+  }
+  if (!hasClosed) {
+    warnings.push({
+      file: displayFile,
+      path: 'statuses',
+      message: 'No status with category "closed" - sessions cannot be archived',
+      severity: 'warning',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * Validate permissions.json content before writing to disk.
+ */
+export function validatePermissionsContent(
+  content: string,
+  displayFile: string = 'permissions.json'
+): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  let parsedContent: unknown;
+  try {
+    parsedContent = JSON.parse(content);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  const schemaResult = PermissionsConfigSchema.safeParse(parsedContent);
+  if (!schemaResult.success) {
+    errors.push(...zodErrorToIssues(schemaResult.error, displayFile));
+    return { valid: false, errors, warnings };
+  }
+
+  const regexErrors = validatePermissionsConfig(schemaResult.data);
+  for (const regexError of regexErrors) {
+    errors.push({
+      file: displayFile,
+      path: regexError.split(':')[0] || '',
+      message: regexError,
+      severity: 'error',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * Detect whether a file path is one of the workspace config files we can validate in-memory.
+ */
+export function detectConfigFileType(filePath: string, workspaceRoot: string): ConfigFileDetection | null {
+  const absoluteWorkspaceRoot = resolve(workspaceRoot);
+  const absoluteFilePath = resolve(filePath);
+  const relativePath = relative(absoluteWorkspaceRoot, absoluteFilePath);
+
+  if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    return null;
+  }
+
+  const segments = relativePath.split(/[\\/]+/).filter(Boolean);
+
+  if (segments.length === 3 && segments[0] === 'sources' && segments[2] === 'config.json') {
+    const slug = segments[1];
+    if (!slug) {
+      return null;
+    }
+    return {
+      type: 'source',
+      slug,
+      displayFile: `sources/${slug}/config.json`,
+    };
+  }
+
+  if (segments.length === 3 && segments[0] === 'skills' && segments[2] === 'SKILL.md') {
+    const slug = segments[1];
+    if (!slug) {
+      return null;
+    }
+    return {
+      type: 'skill',
+      slug,
+      displayFile: `skills/${slug}/SKILL.md`,
+    };
+  }
+
+  if (segments.length === 2 && segments[0] === 'statuses' && segments[1] === 'config.json') {
+    return {
+      type: 'statuses',
+      displayFile: 'statuses/config.json',
+    };
+  }
+
+  if (segments.length === 1 && segments[0] === 'permissions.json') {
+    return {
+      type: 'permissions',
+      displayFile: 'permissions.json',
+    };
+  }
+
+  if (segments.length === 3 && segments[0] === 'sources' && segments[2] === 'permissions.json') {
+    const slug = segments[1];
+    if (!slug) {
+      return null;
+    }
+    return {
+      type: 'permissions',
+      slug,
+      displayFile: `sources/${slug}/permissions.json`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Dispatch content validation based on detected config file type.
+ */
+export function validateConfigFileContent(
+  detection: ConfigFileDetection | null,
+  content: string
+): ValidationResult | null {
+  if (!detection) {
+    return null;
+  }
+
+  switch (detection.type) {
+    case 'source':
+      return validateSourceConfigContent(content, detection.displayFile);
+    case 'skill':
+      return validateSkillContent(content, detection.slug, detection.displayFile);
+    case 'statuses':
+      return validateStatusesContent(content, detection.displayFile);
+    case 'permissions':
+      return validatePermissionsContent(content, detection.displayFile);
+    default:
+      return null;
+  }
 }
 
 // ============================================================

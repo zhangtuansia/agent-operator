@@ -1,8 +1,7 @@
 /**
  * Auto-update module for Electron app
  *
- * NOTE: Auto-update is currently DISABLED for Cowork.
- * All functions return early without performing any update operations.
+ * NOTE: Auto-update can be toggled by AUTO_UPDATE_DISABLED below.
  *
  * Original functionality:
  * - Handles checking for updates, downloading, and triggering installation.
@@ -10,7 +9,7 @@
  * - Supports macOS, Windows, and Linux (AppImage only).
  */
 
-// Auto-update disabled flag
+// Auto-update disabled flag (set to true to fully disable updater logic).
 const AUTO_UPDATE_DISABLED = false;
 
 import { app } from 'electron'
