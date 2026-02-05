@@ -46,9 +46,12 @@ done
 # Mount the DMG
 echo "[$(date)] Mounting DMG..."
 MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse 2>&1)
-MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep "/Volumes" | awk '{print $3}')
+ATTACH_LINE=$(echo "$MOUNT_OUTPUT" | grep "/Volumes/" | tail -1)
+MOUNT_DEVICE=$(echo "$ATTACH_LINE" | awk '{print $1}')
+# Keep everything after the first two columns (/dev/* and fs type) to preserve spaces in volume names.
+MOUNT_POINT=$(echo "$ATTACH_LINE" | sed -E 's/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+//' | sed -E 's/[[:space:]]+$//')
 
-if [ -z "$MOUNT_POINT" ]; then
+if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
     echo "[$(date)] Failed to mount DMG"
     echo "[$(date)] hdiutil output: $MOUNT_OUTPUT"
     exit 1
@@ -56,12 +59,23 @@ fi
 
 echo "[$(date)] Mounted at: $MOUNT_POINT"
 
+cleanup_mount() {
+    if [ -n "$MOUNT_DEVICE" ]; then
+        hdiutil detach "$MOUNT_DEVICE" 2>/dev/null || hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+    elif [ -n "$MOUNT_POINT" ]; then
+        hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+    fi
+}
+
+trap cleanup_mount EXIT
+
 # Find the app in the mounted volume
 NEW_APP=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
 
 if [ -z "$NEW_APP" ]; then
     echo "[$(date)] No app found in DMG"
-    hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+    echo "[$(date)] Contents:"
+    ls -la "$MOUNT_POINT" || true
     exit 1
 fi
 
@@ -81,7 +95,7 @@ fi
 
 # Copy new app
 echo "[$(date)] Installing new app to: $APP_PATH"
-if cp -R "$NEW_APP" "$APP_PATH"; then
+if ditto "$NEW_APP" "$APP_PATH"; then
     echo "[$(date)] Copy successful"
     # Remove backup on success
     rm -rf "$BACKUP_PATH" 2>/dev/null || true
@@ -90,13 +104,13 @@ else
     if [ -d "$BACKUP_PATH" ]; then
         mv "$BACKUP_PATH" "$APP_PATH"
     fi
-    hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
     exit 1
 fi
 
 # Unmount DMG
 echo "[$(date)] Unmounting DMG..."
-hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+cleanup_mount
+trap - EXIT
 
 # Cleanup downloaded DMG
 echo "[$(date)] Cleaning up DMG..."

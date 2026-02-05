@@ -61,6 +61,53 @@ let downloadPromise: Promise<void> | null = null
 let isInstalling = false
 
 /**
+ * Wait for detached child process to at least spawn before parent quits.
+ * Prevents false-success paths where spawn fails asynchronously.
+ */
+async function waitForDetachedSpawn(
+  child: import('child_process').ChildProcess,
+  label: string
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      child.removeListener('spawn', onSpawn)
+      child.removeListener('error', onError)
+    }
+
+    const onSpawn = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve()
+    }
+
+    const onError = (err: Error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error(`${label} failed to start: ${err.message}`))
+    }
+
+    child.once('spawn', onSpawn)
+    child.once('error', onError)
+
+    // Safety timeout: on some platforms/events order, neither event may arrive promptly.
+    setTimeout(() => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (child.pid) {
+        resolve()
+      } else {
+        reject(new Error(`${label} failed to start`))
+      }
+    }, 500)
+  })
+}
+
+/**
  * Set the window manager for broadcasting updates
  */
 export function setWindowManager(wm: WindowManager): void {
@@ -477,7 +524,7 @@ async function installMacOS(): Promise<void> {
     mainLog.warn('[auto-update] Self-update script not found, opening DMG manually')
     const { shell } = await import('electron')
     await shell.openPath(downloadedInstallerPath)
-    return
+    throw new Error('Self-update script not found. Opened DMG for manual install.')
   }
 
   // Get the .app bundle path from the executable path
@@ -498,10 +545,8 @@ async function installMacOS(): Promise<void> {
     },
   })
 
+  await waitForDetachedSpawn(child, 'macOS update script')
   child.unref()
-
-  // Clear pending update since install script is now running
-  clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for macOS update...')
 
@@ -529,7 +574,7 @@ async function installWindows(): Promise<void> {
     mainLog.warn('[auto-update] Self-update script not found, opening installer manually')
     const { shell } = await import('electron')
     await shell.openPath(downloadedInstallerPath)
-    return
+    throw new Error('Self-update script not found. Opened installer for manual install.')
   }
 
   const child = spawn('powershell.exe', [
@@ -542,10 +587,8 @@ async function installWindows(): Promise<void> {
     stdio: 'ignore',
   })
 
+  await waitForDetachedSpawn(child, 'Windows update script')
   child.unref()
-
-  // Clear pending update since install script is now running
-  clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for Windows update...')
 
@@ -579,7 +622,7 @@ async function installLinux(): Promise<void> {
     mainLog.warn('[auto-update] Self-update script not found, opening file location')
     const { shell } = await import('electron')
     await shell.showItemInFolder(downloadedInstallerPath)
-    return
+    throw new Error('Self-update script not found. Opened downloaded file location.')
   }
 
   const child = spawn('bash', [
@@ -596,10 +639,8 @@ async function installLinux(): Promise<void> {
     },
   })
 
+  await waitForDetachedSpawn(child, 'Linux update script')
   child.unref()
-
-  // Clear pending update since install script is now running
-  clearPendingUpdate()
 
   mainLog.info('[auto-update] Quitting app for Linux update...')
 
@@ -642,6 +683,17 @@ export async function checkPendingUpdateAndInstall(): Promise<boolean> {
     return false
   }
 
+  const currentVersion = app.getVersion()
+  // If current app version is already at-or-newer than pending version,
+  // clear stale pending state to avoid install loops.
+  if (!isNewerVersion(currentVersion, pending.version)) {
+    mainLog.info(
+      `[auto-update] Clearing stale pending update ${pending.version} (current: ${currentVersion})`
+    )
+    clearPendingUpdate()
+    return false
+  }
+
   mainLog.info(`[auto-update] Found pending update: v${pending.version} at ${pending.installerPath}`)
 
   // Check if installer file still exists
@@ -678,16 +730,14 @@ export async function checkPendingUpdateAndInstall(): Promise<boolean> {
     downloadState: 'ready',
   }
 
-  // NOTE: Pending update is cleared inside the platform-specific install functions
-  // right before app.quit(). This ensures we only clear after successful script spawn.
-  // If install throws before spawning the script, we preserve the pending state
-  // to allow retry on next launch.
+  // NOTE: We intentionally keep pending update state until next launch validation.
+  // If install succeeds, stale pending state is cleared by version check or missing installer.
+  // If install fails, pending state remains for retry.
 
   // Trigger installation
   try {
     await installUpdate()
-    // Note: If we reach here, app.quit() was called and this line won't execute.
-    // The clearPendingUpdate() is done inside installMacOS/Windows/Linux before quit.
+    // Note: app.quit() is expected shortly after handing off to installer script.
     return true
   } catch (error) {
     mainLog.error('[auto-update] Auto-install failed:', error)
