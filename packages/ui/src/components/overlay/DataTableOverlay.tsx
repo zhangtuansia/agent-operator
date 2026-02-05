@@ -38,7 +38,7 @@ export function DataTableOverlay({
     <PreviewOverlay
       isOpen={isOpen}
       onClose={onClose}
-      badge={{
+      typeBadge={{
         icon: Table2,
         label: 'Table',
         variant: badgeVariant,

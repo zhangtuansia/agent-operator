@@ -9,6 +9,7 @@ import { PencilLine } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ShikiDiffViewer } from '../code-viewer/ShikiDiffViewer'
 import { truncateFilePath } from '../code-viewer/language-map'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface DiffPreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -31,6 +32,8 @@ export interface DiffPreviewOverlayProps {
   error?: string
   /** Callback to open file in external editor */
   onOpenFile?: (filePath: string) => void
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 export function DiffPreviewOverlay({
@@ -44,6 +47,7 @@ export function DiffPreviewOverlay({
   theme = 'light',
   error,
   onOpenFile,
+  headerTranslations,
 }: DiffPreviewOverlayProps) {
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
 
@@ -52,7 +56,7 @@ export function DiffPreviewOverlay({
       isOpen={isOpen}
       onClose={onClose}
       theme={theme}
-      badge={{
+      typeBadge={{
         icon: PencilLine,
         label: 'Edit',
         variant: 'orange',
@@ -60,7 +64,7 @@ export function DiffPreviewOverlay({
       title={truncateFilePath(filePath)}
       onTitleClick={onOpenFile ? () => onOpenFile(filePath) : undefined}
       error={error ? { label: 'Edit Failed', message: error } : undefined}
-      backgroundColor={backgroundColor}
+      headerTranslations={headerTranslations}
     >
       <div className="h-full" style={{ backgroundColor }}>
         <ShikiDiffViewer

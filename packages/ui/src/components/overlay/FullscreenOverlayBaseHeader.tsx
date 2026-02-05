@@ -7,7 +7,7 @@
  * - Right-click → Radix ContextMenu with the same items
  *
  * Both menus share one internal items array, just wrapped differently.
- * onOpenFileExternal and onRevealInFinder come from PlatformContext — no per-overlay callbacks.
+ * onOpenFile and onRevealInFinder come from PlatformContext — no per-overlay callbacks.
  */
 
 import { useState, useCallback, type ReactNode } from 'react'
@@ -42,6 +42,16 @@ export interface FullscreenOverlayBaseHeaderProps {
   headerActions?: ReactNode
   /** When provided, renders a built-in copy button (matching close button style) */
   copyContent?: string
+  /** Optional localized strings for header/menu UI */
+  translations?: FullscreenOverlayBaseHeaderTranslations
+}
+
+export interface FullscreenOverlayBaseHeaderTranslations {
+  open?: string
+  revealInFinder?: string
+  copyAll?: string
+  copied?: string
+  closeTitle?: string
 }
 
 /**
@@ -83,6 +93,7 @@ const menuItemClasses = cn(
 
 interface FilePathBadgeProps {
   filePath: string
+  translations: Required<FullscreenOverlayBaseHeaderTranslations>
 }
 
 /**
@@ -90,37 +101,35 @@ interface FilePathBadgeProps {
  *
  * Implementation: Wraps a Radix DropdownMenu (left-click trigger) inside a
  * Radix ContextMenu (right-click trigger). Both render the same menu items.
- * Uses onOpenFileExternal (not onOpenFile) from PlatformContext — when already
- * viewing a file in an overlay, "Open" should launch the system editor directly,
- * not re-trigger the in-app preview interceptor.
+ * Uses onOpenFile + onRevealInFinder from PlatformContext.
  */
-function FilePathBadge({ filePath }: FilePathBadgeProps) {
-  const { onOpenFileExternal, onRevealInFinder } = usePlatform()
+function FilePathBadge({ filePath, translations }: FilePathBadgeProps) {
+  const { onOpenFile, onRevealInFinder } = usePlatform()
 
   const handleOpen = useCallback(() => {
-    onOpenFileExternal?.(filePath)
-  }, [onOpenFileExternal, filePath])
+    onOpenFile?.(filePath)
+  }, [onOpenFile, filePath])
 
   const handleReveal = useCallback(() => {
     onRevealInFinder?.(filePath)
   }, [onRevealInFinder, filePath])
 
   // Shared menu items — same content rendered by both dropdown and context menu
-  const hasMenuItems = !!onOpenFileExternal || !!onRevealInFinder
+  const hasMenuItems = !!onOpenFile || !!onRevealInFinder
 
   // Menu items rendered inside both DropdownMenu.Content and ContextMenu.Content
   const dropdownItems = (
     <>
-      {onOpenFileExternal && (
+      {onOpenFile && (
         <DropdownMenu.Item className={menuItemClasses} onSelect={handleOpen}>
           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-          Open
+          {translations.open}
         </DropdownMenu.Item>
       )}
       {onRevealInFinder && (
         <DropdownMenu.Item className={menuItemClasses} onSelect={handleReveal}>
           <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-          Reveal in Finder
+          {translations.revealInFinder}
         </DropdownMenu.Item>
       )}
     </>
@@ -128,16 +137,16 @@ function FilePathBadge({ filePath }: FilePathBadgeProps) {
 
   const contextItems = (
     <>
-      {onOpenFileExternal && (
+      {onOpenFile && (
         <ContextMenu.Item className={menuItemClasses} onSelect={handleOpen}>
           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-          Open
+          {translations.open}
         </ContextMenu.Item>
       )}
       {onRevealInFinder && (
         <ContextMenu.Item className={menuItemClasses} onSelect={handleReveal}>
           <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-          Reveal in Finder
+          {translations.revealInFinder}
         </ContextMenu.Item>
       )}
     </>
@@ -198,7 +207,15 @@ export function FullscreenOverlayBaseHeader({
   subtitle,
   headerActions,
   copyContent,
+  translations,
 }: FullscreenOverlayBaseHeaderProps) {
+  const t: Required<FullscreenOverlayBaseHeaderTranslations> = {
+    open: translations?.open ?? 'Open',
+    revealInFinder: translations?.revealInFinder ?? 'Reveal in Finder',
+    copyAll: translations?.copyAll ?? 'Copy all',
+    copied: translations?.copied ?? 'Copied!',
+    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
+  }
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -223,7 +240,7 @@ export function FullscreenOverlayBaseHeader({
             'opacity-70 hover:opacity-100 transition-opacity',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
           )}
-          title={copied ? 'Copied!' : 'Copy all'}
+          title={copied ? t.copied : t.copyAll}
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
@@ -233,7 +250,7 @@ export function FullscreenOverlayBaseHeader({
   )
 
   return (
-    <PreviewHeader onClose={onClose} height={48} rightActions={rightActions}>
+    <PreviewHeader onClose={onClose} height={48} rightActions={rightActions} closeTitle={t.closeTitle}>
       {typeBadge && (
         <PreviewHeaderBadge
           icon={typeBadge.icon}
@@ -242,7 +259,7 @@ export function FullscreenOverlayBaseHeader({
         />
       )}
       {filePath ? (
-        <FilePathBadge filePath={filePath} />
+        <FilePathBadge filePath={filePath} translations={t} />
       ) : title ? (
         <PreviewHeaderBadge label={title} onClick={onTitleClick} shrinkable />
       ) : null}

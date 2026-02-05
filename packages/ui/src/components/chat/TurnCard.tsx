@@ -193,6 +193,14 @@ export interface TurnCardTranslations {
   copied?: string
   viewAsMarkdown?: string
   typeFeedbackOr?: string
+  plan?: string
+  viewFullscreen?: string
+  closeTitle?: string
+  acceptPlan?: string
+  accept?: string
+  acceptDescription?: string
+  acceptCompact?: string
+  acceptCompactDescription?: string
 }
 
 export interface TurnCardProps {
@@ -1008,6 +1016,14 @@ export interface ResponseCardTranslations {
   copied?: string
   viewAsMarkdown?: string
   typeFeedbackOr?: string
+  plan?: string
+  viewFullscreen?: string
+  closeTitle?: string
+  acceptPlan?: string
+  accept?: string
+  acceptDescription?: string
+  acceptCompact?: string
+  acceptCompactDescription?: string
 }
 
 export interface ResponseCardProps {
@@ -1073,6 +1089,14 @@ export function ResponseCard({
     copied: translations?.copied ?? 'Copied!',
     viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
     typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
+    plan: translations?.plan ?? 'Plan',
+    viewFullscreen: translations?.viewFullscreen ?? 'View Fullscreen',
+    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
+    acceptPlan: translations?.acceptPlan ?? 'Accept Plan',
+    accept: translations?.accept ?? 'Accept',
+    acceptDescription: translations?.acceptDescription ?? 'Execute the plan immediately',
+    acceptCompact: translations?.acceptCompact ?? 'Accept & Compact',
+    acceptCompactDescription: translations?.acceptCompactDescription ?? 'Works best for complex, longer plans',
   }
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1165,7 +1189,7 @@ export function ResponseCard({
               "text-muted-foreground/50 hover:text-foreground",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
             )}
-            title="View Fullscreen"
+            title={t.viewFullscreen}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -1179,7 +1203,7 @@ export function ResponseCard({
               )}
             >
               <ListTodo className={cn(SIZE_CONFIG.iconSize, "text-success")} />
-              <span className="font-medium text-success">Plan</span>
+              <span className="font-medium text-success">{t.plan}</span>
             </div>
           )}
 
@@ -1262,6 +1286,13 @@ export function ResponseCard({
                 <AcceptPlanDropdown
                   onAccept={onAccept}
                   onAcceptWithCompact={onAcceptWithCompact}
+                  translations={{
+                    acceptPlan: t.acceptPlan,
+                    accept: t.accept,
+                    acceptDescription: t.acceptDescription,
+                    acceptCompact: t.acceptCompact,
+                    acceptCompactDescription: t.acceptCompactDescription,
+                  }}
                 />
               </div>
             )}
@@ -1276,6 +1307,12 @@ export function ResponseCard({
           variant={isPlan ? 'plan' : undefined}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
+          translations={{
+            copy: t.copy,
+            copied: t.copied,
+            closeTitle: t.closeTitle,
+            plan: t.plan,
+          }}
         />
       </>
     )
@@ -1440,6 +1477,14 @@ export const TurnCard = React.memo(function TurnCard({
     copied: translations?.copied ?? 'Copied!',
     viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
     typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
+    plan: translations?.plan ?? 'Plan',
+    viewFullscreen: translations?.viewFullscreen ?? 'View Fullscreen',
+    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
+    acceptPlan: translations?.acceptPlan ?? 'Accept Plan',
+    accept: translations?.accept ?? 'Accept',
+    acceptDescription: translations?.acceptDescription ?? 'Execute the plan immediately',
+    acceptCompact: translations?.acceptCompact ?? 'Accept & Compact',
+    acceptCompactDescription: translations?.acceptCompactDescription ?? 'Works best for complex, longer plans',
   }
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,

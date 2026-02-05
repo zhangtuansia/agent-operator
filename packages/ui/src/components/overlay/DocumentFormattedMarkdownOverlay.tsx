@@ -32,6 +32,13 @@ export interface DocumentFormattedMarkdownOverlayProps {
   onOpenUrl?: (url: string) => void
   /** Callback for file path clicks */
   onOpenFile?: (path: string) => void
+  /** Optional localized strings */
+  translations?: {
+    copy?: string
+    copied?: string
+    closeTitle?: string
+    plan?: string
+  }
 }
 
 export function DocumentFormattedMarkdownOverlay({
@@ -41,7 +48,14 @@ export function DocumentFormattedMarkdownOverlay({
   variant = 'response',
   onOpenUrl,
   onOpenFile,
+  translations,
 }: DocumentFormattedMarkdownOverlayProps) {
+  const t = {
+    copy: translations?.copy ?? 'Copy',
+    copied: translations?.copied ?? 'Copied!',
+    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
+    plan: translations?.plan ?? 'Plan',
+  }
   // Copy state
   const [copied, setCopied] = useState(false)
 
@@ -76,7 +90,7 @@ export function DocumentFormattedMarkdownOverlay({
             copied ? "text-success" : "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           )}
-          title={copied ? "Copied!" : "Copy all"}
+          title={copied ? t.copied : t.copy}
         >
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>
@@ -90,7 +104,7 @@ export function DocumentFormattedMarkdownOverlay({
             "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           )}
-          title="Close (Esc)"
+          title={t.closeTitle}
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -105,7 +119,7 @@ export function DocumentFormattedMarkdownOverlay({
             {variant === 'plan' && (
               <div className="px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5 rounded-t-[16px]">
                 <ListTodo className="w-3 h-3 text-success" />
-                <span className="text-[13px] font-medium text-success">Plan</span>
+                <span className="text-[13px] font-medium text-success">{t.plan}</span>
               </div>
             )}
 

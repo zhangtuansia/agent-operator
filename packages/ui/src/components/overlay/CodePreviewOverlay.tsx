@@ -10,6 +10,7 @@ import { PreviewOverlay } from './PreviewOverlay'
 import { ShikiCodeViewer } from '../code-viewer/ShikiCodeViewer'
 import { MarkdownExcalidrawBlock } from '../markdown/MarkdownExcalidrawBlock'
 import { truncateFilePath } from '../code-viewer/language-map'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface CodePreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -36,6 +37,8 @@ export interface CodePreviewOverlayProps {
   error?: string
   /** Callback to open file in external editor */
   onOpenFile?: (filePath: string) => void
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 function isExcalidrawPath(filePath: string): boolean {
@@ -55,6 +58,7 @@ export function CodePreviewOverlay({
   theme = 'light',
   error,
   onOpenFile,
+  headerTranslations,
 }: CodePreviewOverlayProps) {
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
   const isExcalidraw = isExcalidrawPath(filePath)
@@ -70,7 +74,7 @@ export function CodePreviewOverlay({
       isOpen={isOpen}
       onClose={onClose}
       theme={theme}
-      badge={{
+      typeBadge={{
         icon: mode === 'write' ? PenLine : BookOpen,
         label: mode === 'write' ? 'Write' : 'Read',
         variant: mode === 'write' ? 'amber' : 'blue',
@@ -79,7 +83,7 @@ export function CodePreviewOverlay({
       onTitleClick={onOpenFile ? () => onOpenFile(filePath) : undefined}
       subtitle={subtitle}
       error={error ? { label: mode === 'write' ? 'Write Failed' : 'Read Failed', message: error } : undefined}
-      backgroundColor={backgroundColor}
+      headerTranslations={headerTranslations}
     >
       <div className="h-full" style={{ backgroundColor }}>
         {isExcalidraw ? (

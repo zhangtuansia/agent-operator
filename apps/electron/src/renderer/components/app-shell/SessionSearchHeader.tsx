@@ -35,6 +35,12 @@ export interface SessionSearchHeaderProps {
   inputRef?: React.RefObject<HTMLInputElement>
   /** Placeholder text */
   placeholder?: string
+  /** Close button title */
+  closeTitle?: string
+  /** Loading label */
+  loadingLabel?: string
+  /** Results suffix label, e.g. "results" */
+  resultsLabel?: string
   /** Whether the input is read-only (for playground demos) */
   readOnly?: boolean
 }
@@ -51,6 +57,9 @@ export function SessionSearchHeader({
   exceededLimit = false,
   inputRef,
   placeholder = 'Search titles and content...',
+  closeTitle = 'Close search',
+  loadingLabel = 'Loading...',
+  resultsLabel = 'results',
   readOnly = false,
 }: SessionSearchHeaderProps) {
   return (
@@ -75,7 +84,7 @@ export function SessionSearchHeader({
           <button
             onClick={onSearchClose}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-            title="Close search"
+            title={closeTitle}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -88,10 +97,10 @@ export function SessionSearchHeader({
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />
-              <span>Loading...</span>
+              <span>{loadingLabel}</span>
             </>
           ) : (
-            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} results</span>
+            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} {resultsLabel}</span>
           )}
         </div>
       )}

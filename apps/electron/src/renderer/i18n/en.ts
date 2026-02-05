@@ -566,6 +566,20 @@ export const en = {
     youreAllSet: 'You\'re all set!',
     savingConfig: 'Saving your configuration...',
     startChatting: 'Just start a chat and get to work.',
+    gitBashWarning: {
+      title: 'Git Bash Required',
+      description: 'Cowork needs Git Bash to run shell commands on Windows. It was not found on your system.',
+      installTitle: 'Install Git for Windows',
+      installDescription: 'The easiest way to get Git Bash. It\'s free and includes everything you need.',
+      downloadButton: 'Download Git for Windows',
+      alreadyInstalledTitle: 'Already have Git installed?',
+      alreadyInstalledDescription: 'If Git is installed in a non-standard location, you can specify the path to bash.exe.',
+      pathPlaceholder: 'C:\\Program Files\\Git\\bin\\bash.exe',
+      usePathButton: 'Use this path',
+      checking: 'Checking...',
+      recheckButton: 'Re-check',
+      browseButton: 'Browse...',
+    },
   },
 
   // Auth / Credentials
@@ -599,6 +613,30 @@ export const en = {
     anthropicCompatible: 'Anthropic Compatible',
     openaiCompatible: 'OpenAI Compatible',
     enterApiEndpoint: 'Enter your API endpoint and key',
+  },
+
+  apiKeyInput: {
+    apiKeyPlaceholder: 'sk-ant-...',
+    baseUrlPlaceholder: 'https://your-api-endpoint.com',
+    modelLabel: 'Model',
+    optional: 'optional',
+    modelPlaceholder: 'e.g. openai/gpt-5, qwen3-coder',
+    presets: {
+      anthropic: 'Anthropic',
+      openrouter: 'OpenRouter',
+      vercel: 'Vercel AI Gateway',
+      ollama: 'Ollama',
+      custom: 'Custom',
+    },
+    modelHint: {
+      keepEmptyForClaude: 'Leave empty for Claude models. Only set for non-Claude models.',
+      formatPrefix: 'Format:',
+      browseModels: 'Browse models',
+      viewSupportedModels: 'View supported models',
+      ollamaPrefix: 'Use any model pulled via',
+      ollamaSuffix: 'No API key required.',
+      customDefault: 'Defaults to Anthropic model names (Opus, Sonnet, Haiku) when empty',
+    },
   },
 
   // Errors
@@ -713,6 +751,39 @@ export const en = {
     copied: 'Copied!',
     viewAsMarkdown: 'View as Markdown',
     typeFeedbackOr: 'Type your feedback in chat or',
+    plan: 'Plan',
+    viewFullscreen: 'View Fullscreen',
+    acceptPlan: 'Accept Plan',
+    accept: 'Accept',
+    acceptDescription: 'Execute the plan immediately',
+    acceptCompact: 'Accept & Compact',
+    acceptCompactDescription: 'Works best for complex, longer plans',
+  },
+
+  terminalOutput: {
+    command: 'Command',
+    output: 'Output',
+    copyCommand: 'Copy command',
+    copyOutput: 'Copy output',
+    noOutput: '(no output)',
+  },
+
+  overlay: {
+    preview: 'Preview',
+    original: 'Original',
+    modified: 'Modified',
+    toolFailed: 'Tool Failed',
+  },
+
+  multiDiff: {
+    changes: 'Changes',
+    snippet: 'Snippet',
+    fullFile: 'Full File',
+    selectFile: 'Select a file to view changes',
+    file: 'file',
+    files: 'files',
+    write: 'Write',
+    edit: 'Edit',
   },
 
   // Todo State Menu

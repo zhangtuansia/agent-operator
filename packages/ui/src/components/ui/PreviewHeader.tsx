@@ -108,6 +108,10 @@ export interface PreviewHeaderProps {
   children?: React.ReactNode
   /** Close handler - when provided, shows X button on right */
   onClose?: () => void
+  /** Right-side actions shown before the close button */
+  rightActions?: React.ReactNode
+  /** Tooltip/title for close button */
+  closeTitle?: string
   /** Height of the header (default: 50px for windows, 44px for overlays) */
   height?: number
   /** Additional className for the header */
@@ -127,6 +131,8 @@ export interface PreviewHeaderProps {
 export function PreviewHeader({
   children,
   onClose,
+  rightActions,
+  closeTitle = 'Close (Esc)',
   height = 50,
   className,
   style,
@@ -150,7 +156,8 @@ export function PreviewHeader({
 
       {/* Right side - close button or spacer */}
       {onClose ? (
-        <div className="w-[76px] shrink-0 flex justify-end">
+        <div className="min-w-[76px] shrink-0 flex items-center justify-end gap-1.5">
+          {rightActions}
           <button
             onClick={onClose}
             className={cn(
@@ -160,13 +167,15 @@ export function PreviewHeader({
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
             )}
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-            title="Close (Esc)"
+            title={closeTitle}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       ) : (
-        <div className="w-[76px] shrink-0" />
+        <div className="min-w-[76px] shrink-0 flex items-center justify-end gap-1.5">
+          {rightActions}
+        </div>
       )}
     </div>
   )

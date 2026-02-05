@@ -568,6 +568,20 @@ export const zh: TranslationKeys = {
     youreAllSet: '一切就绪！',
     savingConfig: '正在保存您的配置...',
     startChatting: '开始聊天，开始工作。',
+    gitBashWarning: {
+      title: '需要 Git Bash',
+      description: 'Cowork 需要 Git Bash 才能在 Windows 上运行 shell 命令。系统中未检测到 Git Bash。',
+      installTitle: '安装 Git for Windows',
+      installDescription: '获取 Git Bash 最简单的方式，免费且包含所需组件。',
+      downloadButton: '下载 Git for Windows',
+      alreadyInstalledTitle: '已经安装 Git？',
+      alreadyInstalledDescription: '如果 Git 安装在非标准位置，可手动指定 bash.exe 路径。',
+      pathPlaceholder: 'C:\\Program Files\\Git\\bin\\bash.exe',
+      usePathButton: '使用此路径',
+      checking: '检查中...',
+      recheckButton: '重新检查',
+      browseButton: '浏览...',
+    },
   },
 
   // Auth / Credentials
@@ -601,6 +615,30 @@ export const zh: TranslationKeys = {
     anthropicCompatible: 'Anthropic 兼容',
     openaiCompatible: 'OpenAI 兼容',
     enterApiEndpoint: '输入您的 API 端点和密钥',
+  },
+
+  apiKeyInput: {
+    apiKeyPlaceholder: 'sk-ant-...',
+    baseUrlPlaceholder: 'https://your-api-endpoint.com',
+    modelLabel: '模型',
+    optional: '可选',
+    modelPlaceholder: '例如：openai/gpt-5、qwen3-coder',
+    presets: {
+      anthropic: 'Anthropic',
+      openrouter: 'OpenRouter',
+      vercel: 'Vercel AI Gateway',
+      ollama: 'Ollama',
+      custom: '自定义',
+    },
+    modelHint: {
+      keepEmptyForClaude: '使用 Claude 模型时可留空，仅在非 Claude 模型时填写。',
+      formatPrefix: '格式：',
+      browseModels: '浏览模型',
+      viewSupportedModels: '查看支持的模型',
+      ollamaPrefix: '可使用通过',
+      ollamaSuffix: '拉取的任意模型，无需 API Key。',
+      customDefault: '留空时默认使用 Anthropic 模型名（Opus、Sonnet、Haiku）',
+    },
   },
 
   // Errors
@@ -715,6 +753,39 @@ export const zh: TranslationKeys = {
     copied: '已复制！',
     viewAsMarkdown: '查看 Markdown',
     typeFeedbackOr: '在聊天中输入反馈或',
+    plan: '计划',
+    viewFullscreen: '全屏查看',
+    acceptPlan: '接受计划',
+    accept: '接受',
+    acceptDescription: '立即执行该计划',
+    acceptCompact: '接受并压缩',
+    acceptCompactDescription: '更适合复杂、较长的计划',
+  },
+
+  terminalOutput: {
+    command: '命令',
+    output: '输出',
+    copyCommand: '复制命令',
+    copyOutput: '复制输出',
+    noOutput: '（无输出）',
+  },
+
+  overlay: {
+    preview: '预览',
+    original: '原始内容',
+    modified: '修改后',
+    toolFailed: '工具执行失败',
+  },
+
+  multiDiff: {
+    changes: '变更',
+    snippet: '片段',
+    fullFile: '完整文件',
+    selectFile: '选择文件以查看变更',
+    file: '个文件',
+    files: '个文件',
+    write: '写入',
+    edit: '编辑',
   },
 
   // Todo State Menu

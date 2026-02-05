@@ -212,6 +212,21 @@ export function ChatDisplay({
 
   // i18n for translations
   const { t } = useLanguage()
+  const overlayHeaderTranslations = useMemo(() => ({
+    open: t('fileViewer.openWithDefaultApp'),
+    revealInFinder: t('fileViewer.showInFinder'),
+    copyAll: t('actions.copy'),
+    copied: t('actions.copied'),
+    closeTitle: `${t('common.close')} (Esc)`,
+  }), [t])
+  const terminalOutputTranslations = useMemo(() => ({
+    command: t('terminalOutput.command'),
+    output: t('terminalOutput.output'),
+    copyCommand: t('terminalOutput.copyCommand'),
+    copyOutput: t('terminalOutput.copyOutput'),
+    copied: t('actions.copied'),
+    noOutput: t('terminalOutput.noOutput'),
+  }), [t])
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -547,6 +562,14 @@ export function ChatDisplay({
                           copied: t('turnCard.copied'),
                           viewAsMarkdown: t('turnCard.viewAsMarkdown'),
                           typeFeedbackOr: t('turnCard.typeFeedbackOr'),
+                          plan: t('turnCard.plan'),
+                          viewFullscreen: t('turnCard.viewFullscreen'),
+                          closeTitle: `${t('common.close')} (Esc)`,
+                          acceptPlan: t('turnCard.acceptPlan'),
+                          accept: t('turnCard.accept'),
+                          acceptDescription: t('turnCard.acceptDescription'),
+                          acceptCompact: t('turnCard.acceptCompact'),
+                          acceptCompactDescription: t('turnCard.acceptCompactDescription'),
                         }}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
@@ -764,6 +787,7 @@ export function ChatDisplay({
           theme={isDark ? 'dark' : 'light'}
           error={overlayData.error}
           onOpenFile={onOpenFile}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
 
@@ -778,6 +802,7 @@ export function ChatDisplay({
           theme={isDark ? 'dark' : 'light'}
           error={overlayData.error}
           onOpenFile={onOpenFile}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
 
@@ -791,6 +816,17 @@ export function ChatDisplay({
           focusedChangeId={overlayState.focusedChangeId}
           theme={isDark ? 'dark' : 'light'}
           onOpenFile={onOpenFile}
+          translations={{
+            changes: t('multiDiff.changes'),
+            snippet: t('multiDiff.snippet'),
+            fullFile: t('multiDiff.fullFile'),
+            selectFile: t('multiDiff.selectFile'),
+            file: t('multiDiff.file'),
+            files: t('multiDiff.files'),
+            write: t('multiDiff.write'),
+            edit: t('multiDiff.edit'),
+            closeTitle: `${t('common.close')} (Esc)`,
+          }}
         />
       )}
 
@@ -805,6 +841,8 @@ export function ChatDisplay({
           toolType={overlayData.toolType}
           description={overlayData.description}
           theme={isDark ? 'dark' : 'light'}
+          translations={terminalOutputTranslations}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
 
@@ -817,6 +855,7 @@ export function ChatDisplay({
           title={overlayData.title}
           theme={isDark ? 'dark' : 'light'}
           error={overlayData.error}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
 
@@ -827,6 +866,13 @@ export function ChatDisplay({
           onClose={handleCloseOverlay}
           content={overlayState.content}
           title={overlayState.title}
+          translations={{
+            preview: t('overlay.preview'),
+            original: t('overlay.original'),
+            modified: t('overlay.modified'),
+            toolFailed: t('overlay.toolFailed'),
+          }}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
 
@@ -837,6 +883,13 @@ export function ChatDisplay({
           onClose={handleCloseOverlay}
           content={overlayData.content}
           title={overlayData.title}
+          translations={{
+            preview: t('overlay.preview'),
+            original: t('overlay.original'),
+            modified: t('overlay.modified'),
+            toolFailed: t('overlay.toolFailed'),
+          }}
+          headerTranslations={overlayHeaderTranslations}
         />
       )}
     </div>

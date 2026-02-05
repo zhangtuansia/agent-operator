@@ -12,6 +12,7 @@ import { FileCode } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
 import { CodeBlock } from '../markdown/CodeBlock'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface GenericOverlayProps {
   /** Content to display (used when not in diff mode) */
@@ -36,6 +37,15 @@ export interface GenericOverlayProps {
   embedded?: boolean
   /** Error message if the tool failed */
   error?: string
+  /** Optional localized strings */
+  translations?: {
+    preview?: string
+    original?: string
+    modified?: string
+    toolFailed?: string
+  }
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 /**
@@ -123,7 +133,15 @@ export function GenericOverlay({
   modifiedContent = '',
   embedded,
   error,
+  translations,
+  headerTranslations,
 }: GenericOverlayProps) {
+  const t = {
+    preview: translations?.preview ?? 'Preview',
+    original: translations?.original ?? 'Original',
+    modified: translations?.modified ?? 'Modified',
+    toolFailed: translations?.toolFailed ?? 'Tool Failed',
+  }
   // Auto-detect language if not provided
   const detectedLanguage = useMemo(() => {
     if (language) return language
@@ -147,22 +165,23 @@ export function GenericOverlay({
       }}
       title={title}
       embedded={embedded}
-      error={error ? { label: 'Tool Failed', message: error } : undefined}
+      error={error ? { label: t.toolFailed, message: error } : undefined}
       className="bg-foreground-3"
+      headerTranslations={headerTranslations}
     >
-      <ContentFrame title="Preview">
+      <ContentFrame title={t.preview}>
         <div className="flex-1 overflow-y-auto min-h-0">
           {diffMode ? (
             // Side-by-side diff view
             <div className="flex gap-4 h-full p-4">
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-muted-foreground mb-2 font-medium">Original</div>
+                <div className="text-xs text-muted-foreground mb-2 font-medium">{t.original}</div>
                 <div className="flex-1 overflow-auto p-4">
                   <CodeBlock code={originalContent} language={detectedLanguage} mode="minimal" forcedTheme={theme} />
                 </div>
               </div>
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-muted-foreground mb-2 font-medium">Modified</div>
+                <div className="text-xs text-muted-foreground mb-2 font-medium">{t.modified}</div>
                 <div className="flex-1 overflow-auto p-4">
                   <CodeBlock code={modifiedContent} language={detectedLanguage} mode="minimal" forcedTheme={theme} />
                 </div>

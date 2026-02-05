@@ -49,7 +49,7 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm text-success">
           <CheckCircle2 className="size-4" />
-          Connected to Claude
+          {t('appSettings.claudeConnected')}
         </div>
       </div>
     )
@@ -69,10 +69,10 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Copy the authorization code from your browser and paste it below.
+          {t('auth.enterAuthCodeDesc')}
         </p>
         <div className="space-y-2">
-          <Label htmlFor="auth-code">Authorization Code</Label>
+          <Label htmlFor="auth-code">{t('auth.authorizationCode')}</Label>
           <div className="relative rounded-md shadow-minimal transition-colors bg-foreground-2 focus-within:bg-background">
             <Input
               id="auth-code"
@@ -96,16 +96,16 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
         </div>
         <div className="flex items-center justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onCancel} disabled={status === 'loading'}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!trimmedCode || status === 'loading'}>
             {status === 'loading' ? (
               <>
                 <Spinner className="mr-1.5" />
-                Connecting...
+                {t('auth.connecting')}
               </>
             ) : (
-              'Connect'
+              t('auth.connect')
             )}
           </Button>
         </div>
@@ -116,7 +116,7 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Use your Claude Pro or Max subscription for unlimited access.
+        {t('appSettings.unlimitedAccess')}
       </p>
       <div className="flex items-center justify-end gap-2 pt-2">
         {existingToken ? (
@@ -124,12 +124,12 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
             {status === 'loading' ? (
               <>
                 <Spinner className="mr-1.5" />
-                Connecting...
+                {t('auth.connecting')}
               </>
             ) : (
               <>
                 <CheckCircle2 className="size-3 mr-1.5" />
-                Use Existing Token
+                {t('auth.useExistingToken')}
               </>
             )}
           </Button>
@@ -138,18 +138,18 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
             {status === 'loading' ? (
               <>
                 <Spinner className="mr-1.5" />
-                Starting...
+                {t('auth.connecting')}
               </>
             ) : (
               <>
                 <ExternalLink className="size-3 mr-1.5" />
-                Sign in with Claude
+                {t('auth.signInWithClaude')}
               </>
             )}
           </Button>
         )}
         <Button variant="ghost" onClick={onCancel} disabled={isLoading}>
-          Cancel
+          {t('common.cancel')}
         </Button>
       </div>
       {existingToken && (
@@ -160,7 +160,7 @@ export function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
             disabled={isLoading}
             className="text-muted-foreground hover:text-foreground"
           >
-            Or sign in with a different account
+            {t('auth.signInDifferentAccount')}
           </Button>
         </div>
       )}

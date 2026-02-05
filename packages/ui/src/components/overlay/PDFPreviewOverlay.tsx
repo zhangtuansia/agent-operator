@@ -16,6 +16,7 @@ import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 // Configure pdf.js worker using Vite's ?url import for cross-platform dev/prod compatibility
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -29,6 +30,17 @@ export interface PDFPreviewOverlayProps {
   /** Async loader that returns PDF data as Uint8Array */
   loadPdfData: (path: string) => Promise<Uint8Array>
   theme?: 'light' | 'dark'
+  /** Optional localized strings */
+  translations?: {
+    previousPage?: string
+    nextPage?: string
+    copyPath?: string
+    loadFailed?: string
+    loading?: string
+    rendering?: string
+  }
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 export function PDFPreviewOverlay({
@@ -37,7 +49,17 @@ export function PDFPreviewOverlay({
   filePath,
   loadPdfData,
   theme = 'light',
+  translations,
+  headerTranslations,
 }: PDFPreviewOverlayProps) {
+  const t = {
+    previousPage: translations?.previousPage ?? 'Previous page',
+    nextPage: translations?.nextPage ?? 'Next page',
+    copyPath: translations?.copyPath ?? 'Copy path',
+    loadFailed: translations?.loadFailed ?? 'Load Failed',
+    loading: translations?.loading ?? 'Loading PDF...',
+    rendering: translations?.rendering ?? 'Rendering...',
+  }
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null)
   const [numPages, setNumPages] = useState<number>(0)
   const [pageNumber, setPageNumber] = useState<number>(1)
@@ -64,7 +86,7 @@ export function PDFPreviewOverlay({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load PDF')
+          setError(err instanceof Error ? err.message : t.loadFailed)
           setIsLoading(false)
         }
       })
@@ -77,8 +99,8 @@ export function PDFPreviewOverlay({
   }, [])
 
   const onDocumentLoadError = useCallback((error: Error) => {
-    setError(`Failed to load PDF: ${error.message}`)
-  }, [])
+    setError(`${t.loadFailed}: ${error.message}`)
+  }, [t.loadFailed])
 
   const goToPrevPage = useCallback(() => {
     setPageNumber((prev) => Math.max(1, prev - 1))
@@ -103,7 +125,7 @@ export function PDFPreviewOverlay({
             onClick={goToPrevPage}
             disabled={pageNumber <= 1}
             className="p-1 rounded hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Previous page"
+            title={t.previousPage}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -114,14 +136,14 @@ export function PDFPreviewOverlay({
             onClick={goToNextPage}
             disabled={pageNumber >= numPages}
             className="p-1 rounded hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Next page"
+            title={t.nextPage}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
           <div className="w-px h-4 bg-foreground/10 mx-1" />
         </>
       )}
-      <CopyButton content={filePath} title="Copy path" />
+      <CopyButton content={filePath} title={t.copyPath} />
     </div>
   )
 
@@ -136,19 +158,20 @@ export function PDFPreviewOverlay({
         variant: 'orange',
       }}
       filePath={filePath}
-      error={error ? { label: 'Load Failed', message: error } : undefined}
+      error={error ? { label: t.loadFailed, message: error } : undefined}
       headerActions={headerActions}
+      headerTranslations={headerTranslations}
     >
       <div className="h-full flex flex-col items-center justify-center overflow-auto">
         {isLoading && (
-          <div className="text-muted-foreground text-sm">Loading PDF...</div>
+          <div className="text-muted-foreground text-sm">{t.loading}</div>
         )}
         {fileObj && (
           <Document
             file={fileObj}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
-            loading={<div className="text-muted-foreground text-sm">Rendering...</div>}
+            loading={<div className="text-muted-foreground text-sm">{t.rendering}</div>}
           >
             <Page
               pageNumber={pageNumber}

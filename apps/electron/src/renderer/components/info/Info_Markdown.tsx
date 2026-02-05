@@ -78,6 +78,12 @@ export function Info_Markdown({
           content={children}
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
+          translations={{
+            copy: t('actions.copy'),
+            copied: t('actions.copied'),
+            closeTitle: `${t('common.close')} (Esc)`,
+            plan: t('turnCard.plan'),
+          }}
         />
       )}
     </>

@@ -8,6 +8,7 @@ import * as React from 'react'
 import { Terminal, Search, FolderSearch } from 'lucide-react'
 import { PreviewOverlay, type BadgeVariant } from './PreviewOverlay'
 import { TerminalOutput, type ToolType } from '../terminal/TerminalOutput'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface TerminalPreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -26,6 +27,17 @@ export interface TerminalPreviewOverlayProps {
   description?: string
   /** Theme mode */
   theme?: 'light' | 'dark'
+  /** Optional localized strings for terminal content */
+  translations?: {
+    command?: string
+    output?: string
+    copyCommand?: string
+    copyOutput?: string
+    copied?: string
+    noOutput?: string
+  }
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 function getToolConfig(toolType: ToolType): {
@@ -52,9 +64,9 @@ export function TerminalPreviewOverlay({
   toolType = 'bash',
   description,
   theme = 'light',
+  translations,
+  headerTranslations,
 }: TerminalPreviewOverlayProps) {
-  const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
-  const textColor = theme === 'dark' ? '#e4e4e4' : '#1a1a1a'
   const config = getToolConfig(toolType)
 
   return (
@@ -62,14 +74,13 @@ export function TerminalPreviewOverlay({
       isOpen={isOpen}
       onClose={onClose}
       theme={theme}
-      badge={{
+      typeBadge={{
         icon: config.icon,
         label: config.label,
         variant: config.variant,
       }}
       title={description || ''}
-      backgroundColor={backgroundColor}
-      textColor={textColor}
+      headerTranslations={headerTranslations}
     >
       <TerminalOutput
         command={command}
@@ -78,6 +89,7 @@ export function TerminalPreviewOverlay({
         toolType={toolType}
         description={description}
         theme={theme}
+        translations={translations}
       />
     </PreviewOverlay>
   )

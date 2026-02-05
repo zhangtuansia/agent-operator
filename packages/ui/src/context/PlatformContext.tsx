@@ -24,6 +24,12 @@ export interface PlatformActions {
   onOpenFile?: (path: string) => void
 
   /**
+   * Reveal file in system file manager (Finder/Explorer)
+   * Optional because web viewer may not support this action.
+   */
+  onRevealInFinder?: (path: string) => void
+
+  /**
    * Open a URL in the default browser (Electron: shell.openExternal)
    * Web: window.open or navigation
    */

@@ -156,6 +156,38 @@ function normalizeHrefToPath(href: string): string {
   }
 }
 
+type ElectronOpenUrl = (url: string) => Promise<void>
+
+function getElectronOpenUrl(): ElectronOpenUrl | null {
+  if (typeof window === 'undefined') return null
+  const electronAPI = (window as typeof window & {
+    electronAPI?: {
+      openUrl?: ElectronOpenUrl
+    }
+  }).electronAPI
+
+  if (typeof electronAPI?.openUrl !== 'function') return null
+  return electronAPI.openUrl
+}
+
+function openUrlFallback(href: string): boolean {
+  const electronOpenUrl = getElectronOpenUrl()
+  if (electronOpenUrl) {
+    void electronOpenUrl(href)
+    return true
+  }
+
+  if (typeof window === 'undefined') return false
+
+  const opened = window.open(href, '_blank', 'noopener,noreferrer')
+  if (opened) {
+    opened.opener = null
+    return true
+  }
+
+  return false
+}
+
 /**
  * Create custom components based on render mode.
  *
@@ -209,14 +241,37 @@ function createComponents(
     // Links: Make clickable with callbacks
     a: ({ href, children }) => {
       const handleClick = (e: React.MouseEvent) => {
-        e.preventDefault()
-        if (href) {
-          // Check if it's a file path
-          if (isLikelyFilePath(href) && onFileClick) {
-            onFileClick(normalizeHrefToPath(href))
-          } else if (onUrlClick) {
-            onUrlClick(href)
+        if (!href) return
+
+        const isFilePath = isLikelyFilePath(href)
+        const normalizedFilePath = isFilePath ? normalizeHrefToPath(href) : null
+
+        // File links: prefer dedicated file handler, then URL handler.
+        if (normalizedFilePath) {
+          e.preventDefault()
+          if (onFileClick) {
+            onFileClick(normalizedFilePath)
+            return
           }
+          if (onUrlClick) {
+            onUrlClick(normalizedFilePath)
+            return
+          }
+          if (openUrlFallback(normalizedFilePath)) {
+            return
+          }
+          return
+        }
+
+        // Regular URLs
+        if (onUrlClick) {
+          e.preventDefault()
+          onUrlClick(href)
+          return
+        }
+
+        if (openUrlFallback(href)) {
+          e.preventDefault()
         }
       }
 

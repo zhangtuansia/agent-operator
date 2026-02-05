@@ -12,6 +12,7 @@ import { vscodeTheme } from '@uiw/react-json-view/vscode'
 import { githubLightTheme } from '@uiw/react-json-view/githubLight'
 import { Braces, Copy, Check } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
+import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface JSONPreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -26,6 +27,8 @@ export interface JSONPreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Optional error message */
   error?: string
+  /** Optional localized strings for overlay header/menu */
+  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 /**
@@ -51,6 +54,7 @@ export function JSONPreviewOverlay({
   title = 'JSON',
   theme = 'dark',
   error,
+  headerTranslations,
 }: JSONPreviewOverlayProps) {
   // Select theme based on mode
   const jsonTheme = useMemo(() => {
@@ -64,7 +68,7 @@ export function JSONPreviewOverlay({
     <PreviewOverlay
       isOpen={isOpen}
       onClose={onClose}
-      badge={{
+      typeBadge={{
         icon: Braces,
         label: 'JSON',
         variant: 'blue',
@@ -72,7 +76,7 @@ export function JSONPreviewOverlay({
       title={title}
       theme={theme}
       error={error ? { label: 'Parse Error', message: error } : undefined}
-      backgroundColor="var(--foreground-2)"
+      headerTranslations={headerTranslations}
     >
       <div className="h-full overflow-auto p-4">
         <div className="rounded-lg bg-background shadow-minimal p-4">

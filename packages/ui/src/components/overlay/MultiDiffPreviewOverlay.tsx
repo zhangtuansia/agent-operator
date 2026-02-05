@@ -51,6 +51,18 @@ export interface MultiDiffPreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Callback to open file in external editor */
   onOpenFile?: (filePath: string) => void
+  /** Optional localized strings */
+  translations?: {
+    changes?: string
+    snippet?: string
+    fullFile?: string
+    selectFile?: string
+    file?: string
+    files?: string
+    write?: string
+    edit?: string
+    closeTitle?: string
+  }
 }
 
 // ============================================
@@ -162,9 +174,10 @@ interface SidebarProps {
   selectedKey: string | null
   onSelect: (key: string) => void
   theme: 'light' | 'dark'
+  changesLabel: string
 }
 
-function Sidebar({ entries, selectedKey, onSelect, theme }: SidebarProps) {
+function Sidebar({ entries, selectedKey, onSelect, theme, changesLabel }: SidebarProps) {
   const isDark = theme === 'dark'
   const mutedColor = isDark ? '#888888' : '#666666'
 
@@ -174,7 +187,7 @@ function Sidebar({ entries, selectedKey, onSelect, theme }: SidebarProps) {
         className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
         style={{ color: mutedColor }}
       >
-        Changes
+        {changesLabel}
       </div>
       {entries.map(entry => (
         <SidebarItem
@@ -198,9 +211,13 @@ interface ViewModeDropdownProps {
   onViewModeChange: (mode: 'snippet' | 'full') => void
   disabled?: boolean
   theme: 'light' | 'dark'
+  labels: {
+    snippet: string
+    fullFile: string
+  }
 }
 
-function ViewModeDropdown({ viewMode, onViewModeChange, disabled, theme }: ViewModeDropdownProps) {
+function ViewModeDropdown({ viewMode, onViewModeChange, disabled, theme, labels }: ViewModeDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const isDark = theme === 'dark'
 
@@ -217,7 +234,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange, disabled, theme }: ViewM
           cursor: disabled ? 'wait' : 'pointer',
         }}
       >
-        {viewMode === 'full' ? 'Full File' : 'Snippet'}
+        {viewMode === 'full' ? labels.fullFile : labels.snippet}
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
 
@@ -248,7 +265,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange, disabled, theme }: ViewM
                 e.currentTarget.style.backgroundColor = 'transparent'
               }}
             >
-              Snippet
+              {labels.snippet}
               <Check className={`w-3.5 h-3.5 ${viewMode !== 'snippet' ? 'opacity-0' : ''}`} />
             </button>
             <button
@@ -262,7 +279,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange, disabled, theme }: ViewM
                 e.currentTarget.style.backgroundColor = 'transparent'
               }}
             >
-              Full File
+              {labels.fullFile}
               <Check className={`w-3.5 h-3.5 ${viewMode !== 'full' ? 'opacity-0' : ''}`} />
             </button>
           </div>
@@ -284,7 +301,19 @@ export function MultiDiffPreviewOverlay({
   focusedChangeId,
   theme = 'light',
   onOpenFile,
+  translations,
 }: MultiDiffPreviewOverlayProps) {
+  const t = {
+    changes: translations?.changes ?? 'Changes',
+    snippet: translations?.snippet ?? 'Snippet',
+    fullFile: translations?.fullFile ?? 'Full File',
+    selectFile: translations?.selectFile ?? 'Select a file to view changes',
+    file: translations?.file ?? 'file',
+    files: translations?.files ?? 'files',
+    write: translations?.write ?? 'Write',
+    edit: translations?.edit ?? 'Edit',
+    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
+  }
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'
   const { onSetTrafficLightsVisible } = usePlatform()
@@ -417,7 +446,7 @@ export function MultiDiffPreviewOverlay({
           {(() => {
             const hasWrite = selectedEntry.changes.some(c => c.toolType === 'Write')
             const IconComponent = hasWrite ? FilePlus : PencilLine
-            const label = hasWrite ? 'Write' : 'Edit'
+            const label = hasWrite ? t.write : t.edit
             const variant = hasWrite ? 'green' : 'orange'
             return (
               <PreviewHeaderBadge
@@ -436,7 +465,7 @@ export function MultiDiffPreviewOverlay({
       )}
       {!selectedEntry && sidebarEntries.length > 0 && (
         <span className="text-sm" style={{ color: isDark ? '#888' : '#666' }}>
-          {sidebarEntries.length} file{sidebarEntries.length !== 1 ? 's' : ''}
+          {sidebarEntries.length} {sidebarEntries.length === 1 ? t.file : t.files}
         </span>
       )}
     </>
@@ -459,6 +488,7 @@ export function MultiDiffPreviewOverlay({
               selectedKey={selectedKey}
               onSelect={handleSelectEntry}
               theme={theme}
+              changesLabel={t.changes}
             />
           </div>
         </div>
@@ -480,7 +510,7 @@ export function MultiDiffPreviewOverlay({
             className="h-full flex items-center justify-center"
             style={{ color: isDark ? '#888' : '#666' }}
           >
-            Select a file to view changes
+            {t.selectFile}
           </div>
         )}
       </div>
@@ -494,7 +524,7 @@ export function MultiDiffPreviewOverlay({
         className="fixed inset-0 z-fullscreen flex flex-col"
         style={{ backgroundColor, color: textColor }}
       >
-        <PreviewHeader onClose={onClose} height={54}>
+        <PreviewHeader onClose={onClose} height={54} closeTitle={t.closeTitle}>
           {headerContent}
         </PreviewHeader>
         <div className="flex-1 min-h-0">
@@ -525,7 +555,7 @@ export function MultiDiffPreviewOverlay({
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         }}
       >
-        <PreviewHeader onClose={onClose} height={48}>
+        <PreviewHeader onClose={onClose} height={48} closeTitle={t.closeTitle}>
           {headerContent}
         </PreviewHeader>
         <div className="flex-1 min-h-0">

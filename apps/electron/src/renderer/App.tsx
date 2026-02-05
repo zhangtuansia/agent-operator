@@ -757,6 +757,14 @@ export default function App() {
     }
   }, [])
 
+  const handleRevealInFinder = useCallback(async (path: string) => {
+    try {
+      await window.electronAPI.showInFolder(path)
+    } catch (error) {
+      console.error('Failed to reveal file in Finder:', error)
+    }
+  }, [])
+
   const handleOpenSettings = useCallback(() => {
     navigate(routes.view.settings())
   }, [])
@@ -962,11 +970,12 @@ export default function App() {
   const platformActions = useMemo(() => ({
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
+    onRevealInFinder: handleRevealInFinder,
     // Hide/show macOS traffic lights when fullscreen overlays are open
     onSetTrafficLightsVisible: (visible: boolean) => {
       window.electronAPI.setTrafficLightsVisible(visible)
     },
-  }), [handleOpenFile, handleOpenUrl])
+  }), [handleOpenFile, handleOpenUrl, handleRevealInFinder])
 
   // Loading state - show splash screen
   if (appState === 'loading') {
