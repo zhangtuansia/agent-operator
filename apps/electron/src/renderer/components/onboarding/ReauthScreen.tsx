@@ -2,7 +2,6 @@ import { useState } from "react"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@agent-operator/ui"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout } from "./primitives"
 import { useLanguage } from "@/context/LanguageContext"
 

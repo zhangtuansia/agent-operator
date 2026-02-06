@@ -88,6 +88,7 @@ function getTranslatedStatusLabel(stateId: string, label: string, t: (key: strin
     : label
 }
 import { useStatuses } from "@/hooks/useStatuses"
+import { useLabels } from "@/hooks/useLabels"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { navigate, routes } from "@/lib/navigate"
@@ -159,6 +160,57 @@ function normalizeFilePath(rawPath: string): string {
   const withoutFileScheme = decoded.replace(/^file:\/\//i, '')
   const [pathOnly] = withoutFileScheme.split(/[?#]/)
   return pathOnly ?? withoutFileScheme
+}
+
+function normalizePathSeparators(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
+function collapsePathSegments(path: string): string {
+  const normalized = normalizePathSeparators(path)
+  const driveMatch = normalized.match(/^([a-zA-Z]:)(\/.*)?$/)
+
+  let prefix = ''
+  let remainder = normalized
+
+  if (driveMatch) {
+    prefix = driveMatch[1]
+    remainder = driveMatch[2] ?? '/'
+  } else if (normalized.startsWith('/')) {
+    prefix = '/'
+    remainder = normalized.slice(1)
+  }
+
+  const segments = remainder.split('/').filter((segment) => segment.length > 0)
+  const resolved: string[] = []
+  for (const segment of segments) {
+    if (segment === '.') continue
+    if (segment === '..') {
+      if (resolved.length > 0) {
+        resolved.pop()
+      }
+      continue
+    }
+    resolved.push(segment)
+  }
+
+  if (prefix === '/') {
+    return resolved.length > 0 ? `/${resolved.join('/')}` : '/'
+  }
+  if (prefix) {
+    return resolved.length > 0 ? `${prefix}/${resolved.join('/')}` : `${prefix}/`
+  }
+  return resolved.join('/')
+}
+
+function resolvePathAgainstBase(rawPath: string, basePath?: string): string {
+  const normalizedPath = normalizePathSeparators(normalizeFilePath(rawPath))
+  if (!basePath || isAbsoluteOrHomePath(normalizedPath)) {
+    return normalizedPath
+  }
+  const normalizedBase = collapsePathSegments(normalizePathSeparators(normalizeFilePath(basePath)))
+  if (!normalizedBase) return normalizedPath
+  return collapsePathSegments(`${normalizedBase}/${normalizedPath}`)
 }
 
 function isAbsoluteOrHomePath(path: string): boolean {
@@ -326,6 +378,9 @@ function AppShellContent({
   // Search state for session list
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
+  const handleChatMatchInfoChange = React.useCallback((_info: { count: number; index: number }) => {
+    // Reserved for search result navigation sync between session list and chat panel.
+  }, [])
 
   // Reset search only when navigator or filter changes (not when selecting sessions)
   const navFilterKey = React.useMemo(() => {
@@ -350,7 +405,7 @@ function AppShellContent({
       // Reset skip flag after state update
       setTimeout(() => setSkipRightSidebarAnimation(false), 0)
     }
-  }, [navState])
+  }, [navState, setIsRightSidebarVisible, setSkipRightSidebarAnimation])
 
   // Cmd+F to activate search
   React.useEffect(() => {
@@ -470,10 +525,22 @@ function AppShellContent({
     }
   }, [])
 
+  // Handle session label changes (add/remove/value edits via # menu or label badges)
+  const handleSessionLabelsChange = React.useCallback(async (sessionId: string, labels: string[]) => {
+    try {
+      await window.electronAPI.sessionCommand(sessionId, { type: 'setLabels', labels })
+      // Session will emit a 'labels_changed' event that updates the session state
+    } catch (err) {
+      console.error('[Chat] Failed to set session labels:', err)
+    }
+  }, [])
+
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
+  // Load labels from workspace config
+  const { labels: labelConfigs } = useLabels(activeWorkspace?.id || null)
   const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
 
   // Convert StatusConfig to TodoState with resolved icons
@@ -493,13 +560,13 @@ function AppShellContent({
   const handleSourceSelect = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.sources({ sourceSlug: source.config.slug }))
-  }, [activeWorkspaceId, navigate])
+  }, [activeWorkspaceId])
 
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.skills(skill.slug))
-  }, [activeWorkspaceId, navigate])
+  }, [activeWorkspaceId])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -709,7 +776,13 @@ function AppShellContent({
 
   // Route Excalidraw links into the in-app files panel, keep other files unchanged.
   const handleOpenFile = useCallback((rawPath: string) => {
-    const normalizedPath = normalizeFilePath(rawPath)
+    const currentSessionMeta = activeChatSessionId
+      ? sessionMetaMap.get(activeChatSessionId)
+      : null
+    const normalizedPath = resolvePathAgainstBase(
+      rawPath,
+      currentSessionMeta?.workingDirectory ?? activeWorkspace?.rootPath,
+    )
     const shouldOpenInline =
       isExcalidrawPath(normalizedPath) &&
       isAbsoluteOrHomePath(normalizedPath) &&
@@ -722,8 +795,16 @@ function AppShellContent({
       return
     }
 
-    onOpenFile(rawPath)
-  }, [navState, onOpenFile, setIsRightSidebarVisible, updateRightSidebar])
+    onOpenFile(normalizedPath)
+  }, [
+    activeChatSessionId,
+    activeWorkspace?.rootPath,
+    navState,
+    onOpenFile,
+    sessionMetaMap,
+    setIsRightSidebarVisible,
+    updateRightSidebar,
+  ])
 
   // Right sidebar OPEN button (fades out when sidebar is open, hidden in focused mode or non-chat views)
   const rightSidebarOpenButton = React.useMemo(() => {
@@ -744,7 +825,7 @@ function AppShellContent({
         />
       </motion.div>
     )
-  }, [isFocusedMode, navState, isRightSidebarVisible])
+  }, [isFocusedMode, navState, isRightSidebarVisible, setIsRightSidebarVisible, t])
 
   // Right sidebar CLOSE button (shown in sidebar header when open)
   const rightSidebarCloseButton = React.useMemo(() => {
@@ -758,7 +839,7 @@ function AppShellContent({
         className="text-foreground"
       />
     )
-  }, [isFocusedMode, isRightSidebarVisible])
+  }, [isFocusedMode, isRightSidebarVisible, setIsRightSidebarVisible, t])
 
   // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, enabledModes, rightSidebarOpenButton, todoStates)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
@@ -768,11 +849,16 @@ function AppShellContent({
     textareaRef: chatInputRef,
     enabledSources: sources,
     skills,
+    labels: labelConfigs,
+    onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
     todoStates,
+    sessionListSearchQuery: searchActive ? searchQuery : undefined,
+    isSearchModeActive: searchActive,
+    onChatMatchInfoChange: handleChatMatchInfoChange,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
-  }), [contextValue, handleDeleteSession, handleOpenFile, sources, skills, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
+  }), [contextValue, handleDeleteSession, handleOpenFile, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, todoStates, searchActive, searchQuery, handleChatMatchInfoChange, handleSessionSourcesChange, rightSidebarOpenButton])
 
   // Persist expanded folders to localStorage
   React.useEffect(() => {

@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LabelIcon } from './label-icon'
 import type { LabelConfig } from '@agent-operator/shared/labels'
-import { flattenLabels } from '@agent-operator/shared/labels'
+import { flattenLabels, extractLabelId } from '@agent-operator/shared/labels'
 import { useTranslation } from '@/i18n'
 
 // ============================================================================
@@ -340,9 +340,10 @@ export function useInlineLabelMenu({
 
   // Build flat menu items from label tree, excluding already-applied labels
   const items = React.useMemo((): LabelMenuItem[] => {
+    const appliedLabelIds = new Set(sessionLabels.map(entry => extractLabelId(entry)))
     const flat = flattenLabels(labels)
     return flat
-      .filter(label => !sessionLabels.includes(label.id))
+      .filter(label => !appliedLabelIds.has(label.id))
       .map(label => {
         // Build parent path breadcrumb for nested labels
         let parentPath: string | undefined
@@ -408,7 +409,7 @@ export function useInlineLabelMenu({
       setFilter('')
       setHashStart(-1)
     }
-  }, [inputRef, items])
+  }, [inputRef])
 
   // Handle label selection: remove #trigger text from input, call onSelect
   const handleSelect = React.useCallback((labelId: string): string => {

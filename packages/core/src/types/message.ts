@@ -308,6 +308,7 @@ export type ErrorCode =
   | 'token_expired'
   | 'rate_limited'
   | 'service_error'
+  | 'provider_error'
   | 'service_unavailable'
   | 'network_error'
   | 'mcp_auth_required'
@@ -316,6 +317,7 @@ export type ErrorCode =
   | 'model_no_tool_support'  // Model doesn't support tool/function calling
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
+  | 'invalid_request'        // API rejected request (e.g. malformed content)
   | 'unknown_error';
 
 /**
@@ -372,8 +374,8 @@ export interface AgentEventUsage {
 export type AgentEvent =
   | { type: 'status'; message: string }
   | { type: 'info'; message: string }
-  | { type: 'text_delta'; text: string; turnId?: string }
-  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
+  | { type: 'text_delta'; text: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
   | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
   | { type: 'tool_result'; toolUseId: string; toolName?: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | { type: 'parent_update'; toolUseId: string; parentToolUseId: string }

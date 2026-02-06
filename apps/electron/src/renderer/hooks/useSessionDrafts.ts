@@ -35,9 +35,10 @@ export function useSessionDrafts(): UseSessionDraftsResult {
 
   // Cleanup draft save timers on unmount to prevent memory leaks
   useEffect(() => {
+    const timeoutMap = draftSaveTimeoutRef.current
     return () => {
-      draftSaveTimeoutRef.current.forEach(clearTimeout)
-      draftSaveTimeoutRef.current.clear()
+      timeoutMap.forEach(clearTimeout)
+      timeoutMap.clear()
     }
   }, [])
 

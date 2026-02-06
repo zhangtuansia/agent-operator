@@ -50,7 +50,7 @@ Cowork **不是**调用 Claude Code CLI，而是直接使用 **Claude Agent SDK*
 ### 2.1 目录结构
 
 ```
-agent-operators-oss/
+agent-operator/
 ├── apps/                          # 应用层
 │   ├── electron/                  # 主桌面应用
 │   │   ├── src/
@@ -651,9 +651,9 @@ PostToolUse: [{
 
 三个层级（从特定到通用）：
 
-1. **源级权限**：`~/.agent-operator/workspaces/{id}/sources/{slug}/permissions.json`
-2. **工作区级权限**：`~/.agent-operator/workspaces/{id}/permissions.json`
-3. **应用级权限**：`~/.agent-operator/permissions/default.json`
+1. **源级权限**：`~/.cowork/workspaces/{id}/sources/{slug}/permissions.json`
+2. **工作区级权限**：`~/.cowork/workspaces/{id}/permissions.json`
+3. **应用级权限**：`~/.cowork/permissions/default.json`
 
 **示例配置**：
 ```json
@@ -679,7 +679,7 @@ PostToolUse: [{
 ### 8.1 存储结构
 
 ```
-~/.agent-operator/
+~/.cowork/
 ├── config.json              # 主配置（工作区、认证类型）
 ├── credentials.enc          # AES-256-GCM 加密凭证
 ├── preferences.json         # 用户偏好设置
@@ -729,7 +729,7 @@ interface StoredMessage {
 ### 8.3 凭证安全
 
 - **加密算法**：AES-256-GCM (authenticated encryption)
-- **存储位置**：`~/.agent-operator/credentials.enc`
+- **存储位置**：`~/.cowork/credentials.enc`
 - **访问方式**：CredentialManager 提供统一 API
 - **子进程隔离**：自动过滤敏感环境变量
 

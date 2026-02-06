@@ -12,6 +12,7 @@ import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
+import { wrapWithSafeProxy } from './safe-components'
 
 /**
  * Render modes for markdown content:
@@ -214,8 +215,8 @@ function createComponents(
   hideFirstMermaidExpand: boolean = true,
   firstExcalidrawCodeRef?: React.RefObject<string | null>,
   hideFirstExcalidrawExpand: boolean = true
-): Partial<Components> {
-  const baseComponents: Partial<Components> = {
+): Components & { markdown?: React.FC<{ children?: React.ReactNode }> } {
+  const baseComponents: Components & { markdown?: React.FC<{ children?: React.ReactNode }> } = {
     // Section wrapper for collapsible headings
     div: ({ node, children, ...props }) => {
       const sectionId = (props as Record<string, unknown>)['data-section-id'] as string | undefined
@@ -566,7 +567,7 @@ export function Markdown({
   }
 
   const components = React.useMemo(
-    () => createComponents(
+    () => wrapWithSafeProxy(createComponents(
       mode,
       onUrlClick,
       onFileClick,
@@ -575,7 +576,7 @@ export function Markdown({
       hideFirstMermaidExpand,
       firstExcalidrawCodeRef,
       hideFirstExcalidrawExpand
-    ),
+    )),
     [
       mode,
       onUrlClick,

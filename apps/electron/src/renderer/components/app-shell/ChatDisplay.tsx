@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useEffect, useState, useMemo, useCallback, useDeferredValue } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -39,11 +39,14 @@ import { useTheme } from "@/hooks/useTheme"
 import { useLanguage } from "@/context/LanguageContext"
 import { useTranslation } from "@/i18n"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
+import type { LabelConfig } from '@agent-operator/shared/labels'
+import { extractLabelId } from '@agent-operator/shared/labels'
 import type { PermissionMode } from "@agent-operator/shared/agent/modes"
 import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@agent-operator/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
+import { LabelBadgeRow } from "@/components/ui/label-badge-row"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
@@ -123,6 +126,11 @@ interface ChatDisplayProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
+  // Label selection (for #labels)
+  /** Available label configs (tree) for label menu and badge display */
+  labels?: LabelConfig[]
+  /** Callback when labels change */
+  onLabelsChange?: (labels: string[]) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   // Working directory (per session)
@@ -138,6 +146,21 @@ interface ChatDisplayProps {
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
+  // Search highlighting (from session list search)
+  /** Search query for highlighting matches */
+  searchQuery?: string
+  /** Whether search mode is active (prevents focus stealing to chat input) */
+  isSearchModeActive?: boolean
+  /** Callback when match count changes */
+  onMatchCountChange?: (count: number) => void
+  /** Callback when match info (count and index) changes */
+  onMatchInfoChange?: (info: { count: number; index: number }) => void
+  /** Optional placeholder override for input */
+  placeholder?: string | string[]
+  /** Optional compact rendering hint for embedded use cases */
+  compactMode?: boolean
+  /** Optional label for embedded empty state contexts */
+  emptyStateLabel?: string
 }
 
 /**
@@ -180,6 +203,9 @@ export function ChatDisplay({
   onSourcesChange,
   // Skills (for @mentions)
   skills,
+  // Labels (for #labels and badge row)
+  labels = [],
+  onLabelsChange,
   workspaceId,
   // Working directory
   workingDirectory,
@@ -189,6 +215,16 @@ export function ChatDisplay({
   messagesLoading = false,
   // Tutorial
   disableSend = false,
+  // Search highlighting
+  searchQuery: externalSearchQuery = '',
+  isSearchModeActive = false,
+  onMatchCountChange,
+  onMatchInfoChange,
+  // Optional input placeholder override (supports rotating placeholder arrays)
+  placeholder: inputPlaceholder,
+  // Compact mode (for EditPopover embedding)
+  compactMode = false,
+  emptyStateLabel,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -241,12 +277,32 @@ export function ChatDisplay({
     sessionId: session?.id ?? ''
   })
 
-  // Focus textarea when session changes (tab switch) or zone gains focus via keyboard
+  // ============================================================================
+  // Search Highlighting (from session list search)
+  // ============================================================================
+
+  const [currentMatchIndex, setCurrentMatchIndex] = React.useState(0)
+  const turnRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
+  const [actualMatchIds, setActualMatchIds] = React.useState<Set<string>>(new Set())
+  const highlightedTurnIdsRef = React.useRef<Set<string>>(new Set())
+  const prevHighlightContextRef = React.useRef<{ searchQuery: string; sessionId: string | null }>({
+    searchQuery: '',
+    sessionId: null,
+  })
+  // Only scroll when explicitly requested (single match or match navigation).
+  const shouldScrollToMatchRef = React.useRef(false)
+  const prevSessionIdForScrollRef = React.useRef<string | null>(null)
+
+  const searchQuery = externalSearchQuery || ''
+  const isSearchActive = Boolean(searchQuery.trim())
+
+  // Focus textarea when zone gains focus via keyboard.
+  // Avoid stealing focus while session list search mode is active.
   useEffect(() => {
-    if (session) {
+    if (session?.id && !isSearchModeActive && isFocused) {
       textareaRef.current?.focus()
     }
-  }, [session?.id, isFocused])
+  }, [session?.id, isFocused, isSearchModeActive, textareaRef])
 
   // ============================================================================
   // Overlay State Management
@@ -418,10 +474,339 @@ export function ChatDisplay({
   }, [pendingPermission, pendingCredential])
 
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
+  const sessionMessages = session?.messages
+  const deferredSessionMessages = useDeferredValue(sessionMessages)
   const allTurns = React.useMemo(() => {
-    if (!session) return []
-    return groupMessagesByTurn(session.messages)
-  }, [session?.messages])
+    if (!deferredSessionMessages) return []
+    return groupMessagesByTurn(deferredSessionMessages)
+  }, [deferredSessionMessages])
+
+  // Helper to count occurrences of a substring.
+  const countOccurrences = useCallback((text: string, query: string): number => {
+    const lowerText = text.toLowerCase()
+    const lowerQuery = query.toLowerCase()
+    let count = 0
+    let pos = 0
+    while ((pos = lowerText.indexOf(lowerQuery, pos)) !== -1) {
+      count++
+      pos += lowerQuery.length
+    }
+    return count
+  }, [])
+
+  // Reset match state when session or search query changes.
+  useEffect(() => {
+    const isSessionSwitch = prevSessionIdForScrollRef.current !== null && prevSessionIdForScrollRef.current !== session?.id
+    prevSessionIdForScrollRef.current = session?.id ?? null
+
+    if (isSessionSwitch && isSearchActive) {
+      shouldScrollToMatchRef.current = true
+    }
+
+    setCurrentMatchIndex(0)
+    setActualMatchIds(new Set())
+    turnRefs.current.clear()
+  }, [session?.id, searchQuery, isSearchActive])
+
+  // Find all individual match occurrences (not just matching turns).
+  const matchingOccurrences = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const query = searchQuery.toLowerCase()
+    const matches: { matchId: string; turnId: string; turnIndex: number }[] = []
+
+    for (let turnIndex = 0; turnIndex < allTurns.length; turnIndex++) {
+      const turn = allTurns[turnIndex]
+      let textContent = ''
+      let turnId = ''
+
+      if (turn.type === 'user') {
+        turnId = `user-${turn.message.id}`
+        const content = turn.message.content as unknown
+        if (typeof content === 'string') {
+          textContent = content
+        } else if (Array.isArray(content)) {
+          textContent = content
+            .filter((block: { type?: string }) => block.type === 'text')
+            .map((block: { text?: string }) => block.text || '')
+            .join('\n')
+        }
+      } else if (turn.type === 'assistant') {
+        turnId = `turn-${turn.turnId}`
+        if (turn.response?.text) {
+          textContent = turn.response.text
+        }
+      } else if (turn.type === 'system') {
+        turnId = `system-${turn.message.id}`
+        textContent = turn.message.content
+      } else {
+        continue
+      }
+
+      const occurrenceCount = countOccurrences(textContent, query)
+      for (let i = 0; i < occurrenceCount; i++) {
+        matches.push({
+          matchId: `${turnId}-match-${i}`,
+          turnId,
+          turnIndex,
+        })
+      }
+    }
+
+    return matches
+  }, [allTurns, searchQuery, countOccurrences])
+
+  // Auto-expand pagination when search is active so match counts are stable.
+  useEffect(() => {
+    if (!isSearchActive || matchingOccurrences.length === 0) return
+    const earliestMatchTurnIndex = Math.min(...matchingOccurrences.map(m => m.turnIndex))
+    const requiredVisibleCount = allTurns.length - earliestMatchTurnIndex + 5
+    if (requiredVisibleCount > visibleTurnCount) {
+      setVisibleTurnCount(requiredVisibleCount)
+    }
+  }, [allTurns.length, isSearchActive, matchingOccurrences, visibleTurnCount])
+
+  const matchingTurnIds = useMemo(() => {
+    return Array.from(new Set(matchingOccurrences.map(m => m.turnId)))
+  }, [matchingOccurrences])
+
+  // Before highlighting runs, use potential matches; after highlighting, use actual DOM matches.
+  const validMatches = useMemo(() => {
+    if (actualMatchIds.size === 0) return matchingOccurrences
+    return matchingOccurrences.filter(m => actualMatchIds.has(m.matchId))
+  }, [matchingOccurrences, actualMatchIds])
+
+  // Auto-scroll to a single match.
+  useEffect(() => {
+    if (validMatches.length === 1 && isSearchActive) {
+      shouldScrollToMatchRef.current = true
+    }
+  }, [validMatches.length, isSearchActive])
+
+  // Scroll to active match when requested.
+  useEffect(() => {
+    if (!shouldScrollToMatchRef.current) return
+    if (validMatches.length === 0 || currentMatchIndex >= validMatches.length) return
+
+    const matchData = validMatches[currentMatchIndex]
+    const { matchId, turnIndex } = matchData
+    const totalTurns = totalTurnCountRef.current
+    const currentStartIndex = Math.max(0, totalTurns - visibleTurnCount)
+
+    if (turnIndex < currentStartIndex) {
+      const newVisibleCount = totalTurns - turnIndex + 5
+      setVisibleTurnCount(newVisibleCount)
+      return
+    }
+
+    let attempts = 0
+    const maxAttempts = 5
+
+    const tryScroll = () => {
+      const matchEl = document.getElementById(matchId) as HTMLElement | null
+      if (matchEl) {
+        const rect = matchEl.getBoundingClientRect()
+        const buffer = 128
+        const isVisible = rect.top >= buffer && rect.bottom <= window.innerHeight - buffer
+        if (!isVisible) {
+          matchEl.scrollIntoView({ behavior: 'instant', block: 'center' })
+        }
+        matchEl.classList.remove('bg-yellow-300/30')
+        matchEl.classList.add('bg-yellow-300', 'shadow-tinted', 'text-black/90', 'ring-1', 'ring-yellow-500')
+        ;(matchEl as HTMLElement).style.setProperty('--shadow-color', '90, 50, 5')
+        document.querySelectorAll('mark.search-highlight.bg-yellow-300').forEach(el => {
+          if (el.id !== matchId) {
+            el.classList.remove('bg-yellow-300', 'shadow-tinted', 'text-black/90', 'ring-1', 'ring-yellow-500')
+            el.classList.add('bg-yellow-300/30')
+            ;(el as HTMLElement).style.removeProperty('--shadow-color')
+          }
+        })
+        shouldScrollToMatchRef.current = false
+      } else if (attempts < maxAttempts) {
+        attempts++
+        setTimeout(tryScroll, 50)
+      } else {
+        shouldScrollToMatchRef.current = false
+      }
+    }
+
+    const rafId = requestAnimationFrame(tryScroll)
+    return () => cancelAnimationFrame(rafId)
+  }, [validMatches, currentMatchIndex, visibleTurnCount])
+
+  // Text highlighting within message content using DOM marks.
+  useEffect(() => {
+    const clearHighlights = () => {
+      const existingMarks = document.querySelectorAll('mark.search-highlight')
+      existingMarks.forEach(mark => {
+        const parent = mark.parentNode
+        if (parent) {
+          parent.replaceChild(document.createTextNode(mark.textContent || ''), mark)
+          parent.normalize()
+        }
+      })
+    }
+
+    const prevContext = prevHighlightContextRef.current
+    const contextChanged = prevContext.searchQuery !== searchQuery || prevContext.sessionId !== session?.id
+    prevHighlightContextRef.current = { searchQuery, sessionId: session?.id ?? null }
+
+    if (contextChanged) {
+      clearHighlights()
+      setActualMatchIds(new Set())
+      highlightedTurnIdsRef.current = new Set()
+    }
+
+    if (!searchQuery.trim() || !isSearchActive) return
+
+    const query = searchQuery.toLowerCase()
+    const createdMatchIds: string[] = []
+
+    const applyHighlights = () => {
+      const matchingTurnIdSet = new Set(matchingTurnIds)
+
+      turnRefs.current.forEach((container, turnId) => {
+        if (!matchingTurnIdSet.has(turnId)) return
+        if (highlightedTurnIdsRef.current.has(turnId)) return
+        highlightedTurnIdsRef.current.add(turnId)
+
+        const walker = document.createTreeWalker(
+          container,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) => {
+              const parent = node.parentElement
+              if (!parent) return NodeFilter.FILTER_REJECT
+              const tagName = parent.tagName.toLowerCase()
+              if (tagName === 'script' || tagName === 'style' || tagName === 'mark') {
+                return NodeFilter.FILTER_REJECT
+              }
+              if (parent.closest('[data-search-exclude="true"]')) {
+                return NodeFilter.FILTER_REJECT
+              }
+              if (node.textContent?.toLowerCase().includes(query)) {
+                return NodeFilter.FILTER_ACCEPT
+              }
+              return NodeFilter.FILTER_REJECT
+            }
+          }
+        )
+
+        const textNodes: Text[] = []
+        let currentNode: Node | null
+        while ((currentNode = walker.nextNode())) {
+          textNodes.push(currentNode as Text)
+        }
+
+        const allMatches: { textNode: Text; start: number; end: number }[] = []
+        for (const textNode of textNodes) {
+          const text = textNode.textContent || ''
+          const lowerText = text.toLowerCase()
+          let pos = 0
+          let matchPos = lowerText.indexOf(query, pos)
+          while (matchPos !== -1) {
+            allMatches.push({ textNode, start: matchPos, end: matchPos + query.length })
+            pos = matchPos + query.length
+            matchPos = lowerText.indexOf(query, pos)
+          }
+        }
+
+        let reverseCounter = allMatches.length - 1
+        for (let i = textNodes.length - 1; i >= 0; i--) {
+          const textNode = textNodes[i]
+          const text = textNode.textContent || ''
+          const lowerText = text.toLowerCase()
+          const nodeMatches: number[] = []
+
+          let pos = 0
+          let matchPos = lowerText.indexOf(query, pos)
+          while (matchPos !== -1) {
+            nodeMatches.push(matchPos)
+            pos = matchPos + query.length
+            matchPos = lowerText.indexOf(query, pos)
+          }
+
+          if (nodeMatches.length === 0) continue
+
+          let lastIndex = text.length
+          const fragments: (string | HTMLElement)[] = []
+
+          for (let j = nodeMatches.length - 1; j >= 0; j--) {
+            const matchStart = nodeMatches[j]
+            const matchEnd = matchStart + query.length
+
+            if (matchEnd < lastIndex) {
+              fragments.unshift(text.slice(matchEnd, lastIndex))
+            }
+
+            const mark = document.createElement('mark')
+            const matchIdIndex = reverseCounter - (nodeMatches.length - 1 - j)
+            const markId = `${turnId}-match-${matchIdIndex}`
+            mark.id = markId
+            mark.className = 'search-highlight bg-yellow-300/30 rounded-[2px]'
+            mark.textContent = text.slice(matchStart, matchEnd)
+            fragments.unshift(mark)
+            createdMatchIds.push(markId)
+
+            lastIndex = matchStart
+          }
+
+          reverseCounter -= nodeMatches.length
+
+          if (lastIndex > 0) {
+            fragments.unshift(text.slice(0, lastIndex))
+          }
+
+          if (fragments.length > 0 && textNode.parentNode) {
+            const parent = textNode.parentNode
+            fragments.forEach(frag => {
+              if (typeof frag === 'string') {
+                parent.insertBefore(document.createTextNode(frag), textNode)
+              } else {
+                parent.insertBefore(frag, textNode)
+              }
+            })
+            parent.removeChild(textNode)
+          }
+        }
+      })
+    }
+
+    let attempts = 0
+    const maxAttempts = 5
+    let highlightTimeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const tryHighlight = () => {
+      if (matchingTurnIds.length === 0) return
+      const unhighlightedMatchingInRefs = matchingTurnIds.filter(id =>
+        turnRefs.current.has(id) && !highlightedTurnIdsRef.current.has(id)
+      ).length
+      if (unhighlightedMatchingInRefs > 0) {
+        applyHighlights()
+        setActualMatchIds(prev => {
+          const merged = new Set(prev)
+          createdMatchIds.forEach(id => merged.add(id))
+          return merged
+        })
+      } else if (attempts < maxAttempts) {
+        attempts++
+        highlightTimeoutId = setTimeout(tryHighlight, 100)
+      }
+    }
+
+    const timeoutId = setTimeout(tryHighlight, 50)
+    return () => {
+      clearTimeout(timeoutId)
+      if (highlightTimeoutId) clearTimeout(highlightTimeoutId)
+    }
+  }, [searchQuery, isSearchActive, matchingTurnIds, session?.id, visibleTurnCount])
+
+  useEffect(() => {
+    onMatchCountChange?.(validMatches.length)
+  }, [validMatches.length, onMatchCountChange])
+
+  useEffect(() => {
+    onMatchInfoChange?.({ count: validMatches.length, index: currentMatchIndex })
+  }, [validMatches.length, currentMatchIndex, onMatchInfoChange])
 
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
@@ -495,12 +880,25 @@ export function ChatDisplay({
                       ↑ Scroll up for earlier messages ({startIndex} more)
                     </div>
                   )}
+                  {compactMode && turns.length === 0 && emptyStateLabel && (
+                    <div className="px-3 py-3 text-sm text-muted-foreground">
+                      {emptyStateLabel}
+                    </div>
+                  )}
                   {turns.map((turn, index) => {
                     // User turns - render with MemoizedMessageBubble
                     // Extra padding creates visual separation from AI responses
                     if (turn.type === 'user') {
+                      const turnRefId = `user-${turn.message.id}`
                       return (
-                        <div key={`user-${turn.message.id}`} className={CHAT_LAYOUT.userMessagePadding}>
+                        <div
+                          key={turnRefId}
+                          ref={(el) => {
+                            if (el) turnRefs.current.set(turnRefId, el)
+                            else turnRefs.current.delete(turnRefId)
+                          }}
+                          className={CHAT_LAYOUT.userMessagePadding}
+                        >
                           <MemoizedMessageBubble
                             message={turn.message}
                             onOpenFile={onOpenFile}
@@ -512,13 +910,21 @@ export function ChatDisplay({
 
                     // System turns (error, status, info, warning) - render with MemoizedMessageBubble
                     if (turn.type === 'system') {
+                      const turnRefId = `system-${turn.message.id}`
                       return (
-                        <MemoizedMessageBubble
-                          key={`system-${turn.message.id}`}
-                          message={turn.message}
-                          onOpenFile={onOpenFile}
-                          onOpenUrl={onOpenUrl}
-                        />
+                        <div
+                          key={turnRefId}
+                          ref={(el) => {
+                            if (el) turnRefs.current.set(turnRefId, el)
+                            else turnRefs.current.delete(turnRefId)
+                          }}
+                        >
+                          <MemoizedMessageBubble
+                            message={turn.message}
+                            onOpenFile={onOpenFile}
+                            onOpenUrl={onOpenUrl}
+                          />
+                        </div>
                       )
                     }
 
@@ -543,70 +949,78 @@ export function ChatDisplay({
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
+                    const turnRefId = `turn-${turn.turnId}`
                     return (
-                      <ErrorBoundary key={`turn-${turn.turnId}`} level="component" resetKey={turn.turnId}>
-                      <TurnCard
-                        sessionId={session.id}
-                        turnId={turn.turnId}
-                        activities={turn.activities}
-                        response={turn.response}
-                        intent={turn.intent}
-                        isStreaming={turn.isStreaming}
-                        isComplete={turn.isComplete}
-                        todos={turn.todos}
-                        onOpenFile={onOpenFile}
-                        onOpenUrl={onOpenUrl}
-                        isLastResponse={isLastResponse}
-                        translations={{
-                          copy: t('turnCard.copy'),
-                          copied: t('turnCard.copied'),
-                          viewAsMarkdown: t('turnCard.viewAsMarkdown'),
-                          typeFeedbackOr: t('turnCard.typeFeedbackOr'),
-                          plan: t('turnCard.plan'),
-                          viewFullscreen: t('turnCard.viewFullscreen'),
-                          closeTitle: `${t('common.close')} (Esc)`,
-                          acceptPlan: t('turnCard.acceptPlan'),
-                          accept: t('turnCard.accept'),
-                          acceptDescription: t('turnCard.acceptDescription'),
-                          acceptCompact: t('turnCard.acceptCompact'),
-                          acceptCompactDescription: t('turnCard.acceptCompactDescription'),
+                      <div
+                        key={turnRefId}
+                        ref={(el) => {
+                          if (el) turnRefs.current.set(turnRefId, el)
+                          else turnRefs.current.delete(turnRefId)
                         }}
-                        onAcceptPlan={() => {
-                          window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
-                            detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
-                          }))
-                        }}
-                        onAcceptPlanWithCompact={() => {
-                          // Find the most recent plan message to get its path
-                          // After compaction, Claude needs to know which plan file to read
-                          const planMessage = session?.messages.findLast(m => m.role === 'plan')
-                          const planPath = planMessage?.planPath
+                      >
+                        <ErrorBoundary level="component" resetKey={turn.turnId}>
+                        <TurnCard
+                          sessionId={session.id}
+                          turnId={turn.turnId}
+                          activities={turn.activities}
+                          response={turn.response}
+                          intent={turn.intent}
+                          isStreaming={turn.isStreaming}
+                          isComplete={turn.isComplete}
+                          todos={turn.todos}
+                          onOpenFile={onOpenFile}
+                          onOpenUrl={onOpenUrl}
+                          isLastResponse={isLastResponse}
+                          translations={{
+                            copy: t('turnCard.copy'),
+                            copied: t('turnCard.copied'),
+                            viewAsMarkdown: t('turnCard.viewAsMarkdown'),
+                            typeFeedbackOr: t('turnCard.typeFeedbackOr'),
+                            plan: t('turnCard.plan'),
+                            viewFullscreen: t('turnCard.viewFullscreen'),
+                            closeTitle: `${t('common.close')} (Esc)`,
+                            acceptPlan: t('turnCard.acceptPlan'),
+                            accept: t('turnCard.accept'),
+                            acceptDescription: t('turnCard.acceptDescription'),
+                            acceptCompact: t('turnCard.acceptCompact'),
+                            acceptCompactDescription: t('turnCard.acceptCompactDescription'),
+                          }}
+                          onAcceptPlan={() => {
+                            window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
+                              detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
+                            }))
+                          }}
+                          onAcceptPlanWithCompact={() => {
+                            // Find the most recent plan message to get its path
+                            // After compaction, Claude needs to know which plan file to read
+                            const planMessage = session?.messages.findLast(m => m.role === 'plan')
+                            const planPath = planMessage?.planPath
 
-                          // Dispatch event to compact conversation first, then execute plan
-                          // FreeFormInput handles this by sending /compact, waiting for completion,
-                          // then sending a message with the plan path for Claude to read and execute
-                          window.dispatchEvent(new CustomEvent('cowork:approve-plan-with-compact', {
-                            detail: { sessionId: session?.id, planPath }
-                          }))
-                        }}
-                        onPopOut={(text) => {
-                          // Open response text in markdown overlay
-                          setOverlayState({
-                            type: 'markdown',
-                            content: text,
-                            title: t('chatDisplay.responsePreview'),
-                          })
-                        }}
-                        onOpenDetails={() => {
-                          // Open turn details in markdown overlay
-                          const markdown = formatTurnAsMarkdown(turn)
-                          setOverlayState({
-                            type: 'markdown',
-                            content: markdown,
-                            title: t('chatDisplay.turnDetails'),
-                          })
-                        }}
-                        onOpenActivityDetails={(activity) => {
+                            // Dispatch event to compact conversation first, then execute plan
+                            // FreeFormInput handles this by sending /compact, waiting for completion,
+                            // then sending a message with the plan path for Claude to read and execute
+                            window.dispatchEvent(new CustomEvent('cowork:approve-plan-with-compact', {
+                              detail: { sessionId: session?.id, planPath }
+                            }))
+                          }}
+                          onPopOut={(text) => {
+                            // Open response text in markdown overlay
+                            setOverlayState({
+                              type: 'markdown',
+                              content: text,
+                              title: t('chatDisplay.responsePreview'),
+                            })
+                          }}
+                          onOpenDetails={() => {
+                            // Open turn details in markdown overlay
+                            const markdown = formatTurnAsMarkdown(turn)
+                            setOverlayState({
+                              type: 'markdown',
+                              content: markdown,
+                              title: t('chatDisplay.turnDetails'),
+                            })
+                          }}
+                          onOpenActivityDetails={(activity) => {
                           // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
                           if (activity.toolName === 'Edit' || activity.toolName === 'Write') {
                             // Collect all Edit/Write activities from this turn for context
@@ -646,11 +1060,11 @@ export function ChatDisplay({
                             // All other tools → Use extractOverlayData for appropriate overlay
                             setOverlayState({ type: 'activity', activity })
                           }
-                        }}
-                        hasEditOrWriteActivities={turn.activities.some(a =>
-                          a.toolName === 'Edit' || a.toolName === 'Write'
-                        )}
-                        onOpenMultiFileDiff={() => {
+                          }}
+                          hasEditOrWriteActivities={turn.activities.some(a =>
+                            a.toolName === 'Edit' || a.toolName === 'Write'
+                          )}
+                          onOpenMultiFileDiff={() => {
                           // Collect all Edit/Write activities from this turn
                           const changes: FileChange[] = []
                           for (const a of turn.activities) {
@@ -683,9 +1097,10 @@ export function ChatDisplay({
                               consolidated: true, // Consolidated mode - group by file
                             })
                           }
-                        }}
-                      />
-                      </ErrorBoundary>
+                          }}
+                        />
+                        </ErrorBoundary>
+                      </div>
                     )
                   })}
                     </motion.div>
@@ -714,21 +1129,32 @@ export function ChatDisplay({
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
           <div className={cn(
             CHAT_LAYOUT.maxWidth,
-            "mx-auto w-full px-4 pb-4 mt-1"
+            compactMode ? "mx-auto w-full px-4 pb-2 mt-1" : "mx-auto w-full px-4 pb-4 mt-1"
           )}>
             {/* Active option badges and tasks - positioned above input */}
-            <ActiveOptionBadges
-              ultrathinkEnabled={ultrathinkEnabled}
-              onUltrathinkChange={onUltrathinkChange}
-              permissionMode={permissionMode}
-              onPermissionModeChange={onPermissionModeChange}
-              tasks={backgroundTasks}
-              sessionId={session.id}
-              onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
-              onInsertMessage={onInputChange}
-            />
+            {!compactMode && (
+              <ActiveOptionBadges
+                ultrathinkEnabled={ultrathinkEnabled}
+                onUltrathinkChange={onUltrathinkChange}
+                permissionMode={permissionMode}
+                onPermissionModeChange={onPermissionModeChange}
+                tasks={backgroundTasks}
+                sessionId={session.id}
+                onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+                onInsertMessage={onInputChange}
+              />
+            )}
+            {!compactMode && session.labels && session.labels.length > 0 && (
+              <LabelBadgeRow
+                sessionLabels={session.labels}
+                labels={labels}
+                onLabelsChange={onLabelsChange}
+                className="px-0 pt-0 pb-2"
+              />
+            )}
             <InputContainer
-              placeholder={t('input.placeholder')}
+              placeholder={inputPlaceholder}
+              compactMode={compactMode}
               disabled={isInputDisabled}
               isProcessing={session.isProcessing}
               onSubmit={handleSubmit}
@@ -751,6 +1177,14 @@ export function ChatDisplay({
               enabledSourceSlugs={session.enabledSourceSlugs}
               onSourcesChange={onSourcesChange}
               skills={skills}
+              labels={labels}
+              sessionLabels={session.labels}
+              onLabelAdd={(labelId) => {
+                const current = session.labels || []
+                if (!current.some(entry => extractLabelId(entry) === labelId)) {
+                  onLabelsChange?.([...current, labelId])
+                }
+              }}
               workspaceId={workspaceId}
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}

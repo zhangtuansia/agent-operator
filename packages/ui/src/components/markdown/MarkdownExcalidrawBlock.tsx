@@ -1,9 +1,17 @@
 import * as React from 'react'
-import { exportToSvg } from '@excalidraw/excalidraw'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 import { ExcalidrawPreviewOverlay } from '../overlay/ExcalidrawPreviewOverlay'
+
+let excalidrawModulePromise: Promise<typeof import('@excalidraw/excalidraw')> | null = null
+
+async function loadExcalidrawModule() {
+  if (!excalidrawModulePromise) {
+    excalidrawModulePromise = import('@excalidraw/excalidraw')
+  }
+  return excalidrawModulePromise
+}
 
 // ============================================================================
 // MarkdownExcalidrawBlock — renders Excalidraw JSON code fences as SVG diagrams.
@@ -171,8 +179,9 @@ export function MarkdownExcalidrawBlock({
 
     ;(async () => {
       try {
+        const excalidraw = await loadExcalidrawModule()
         const files = Object.keys(parsed.files).length > 0 ? parsed.files : null
-        const svgElement = await exportToSvg({
+        const svgElement = await excalidraw.exportToSvg({
           elements: parsed.elements as any,
           appState: parsed.appState as any,
           files: files as any,

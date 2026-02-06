@@ -130,6 +130,15 @@ export interface SourcesChangedEvent {
 }
 
 /**
+ * Labels changed event
+ */
+export interface LabelsChangedEvent {
+  type: 'labels_changed'
+  sessionId: string
+  labels: string[]
+}
+
+/**
  * Plan submitted event
  */
 export interface PlanSubmittedEvent {
@@ -371,6 +380,7 @@ export type AgentEvent =
   | PermissionRequestEvent
   | CredentialRequestEvent
   | SourcesChangedEvent
+  | LabelsChangedEvent
   | PlanSubmittedEvent
   | StatusEvent
   | InfoEvent

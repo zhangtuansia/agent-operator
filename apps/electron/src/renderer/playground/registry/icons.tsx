@@ -1,16 +1,16 @@
 import type { ComponentEntry } from './types'
-import { CraftAgentsLogo } from '@/components/icons/CraftAgentsLogo'
-import { CraftAgentsSymbol } from '@/components/icons/CraftAgentsSymbol'
+import { CoworkLogo } from '@/components/icons/CoworkLogo'
+import { CoworkSymbol } from '@/components/icons/CoworkSymbol'
 import { PanelLeftRounded } from '@/components/icons/PanelLeftRounded'
 import { SquarePenRounded } from '@/components/icons/SquarePenRounded'
 
 export const iconComponents: ComponentEntry[] = [
   {
-    id: 'agent-operators-logo',
-    name: 'CraftAgentsLogo',
+    id: 'cowork-logo',
+    name: 'CoworkLogo',
     category: 'Icons',
     description: 'Full Cowork branding logo with text',
-    component: CraftAgentsLogo,
+    component: CoworkLogo,
     props: [
       {
         name: 'className',
@@ -26,11 +26,11 @@ export const iconComponents: ComponentEntry[] = [
     ],
   },
   {
-    id: 'agent-operators-symbol',
-    name: 'CraftAgentsSymbol',
+    id: 'cowork-symbol',
+    name: 'CoworkSymbol',
     category: 'Icons',
     description: 'Cowork "E" pixel art symbol icon (brand color: #9570BE)',
-    component: CraftAgentsSymbol,
+    component: CoworkSymbol,
     props: [
       {
         name: 'className',

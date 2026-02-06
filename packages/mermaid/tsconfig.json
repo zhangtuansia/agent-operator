@@ -21,8 +21,8 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/mermaid": ["./src/index.ts"],
-      "@craft-agent/mermaid/*": ["./src/*"]
+      "@agent-operator/mermaid": ["./src/index.ts"],
+      "@agent-operator/mermaid/*": ["./src/*"]
     },
     "rootDir": "src",
     "outDir": "dist",

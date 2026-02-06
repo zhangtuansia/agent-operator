@@ -539,8 +539,8 @@ async function installMacOS(): Promise<void> {
     stdio: 'ignore',
     env: {
       ...process.env,
-      CRAFT_UPDATE_DMG: downloadedInstallerPath,
-      CRAFT_APP_PATH: appBundlePath,
+      COWORK_UPDATE_DMG: downloadedInstallerPath,
+      COWORK_APP_PATH: appBundlePath,
     },
   })
 
@@ -633,8 +633,8 @@ async function installLinux(): Promise<void> {
     stdio: 'ignore',
     env: {
       ...process.env,
-      CRAFT_UPDATE_APPIMAGE: downloadedInstallerPath,
-      CRAFT_CURRENT_APPIMAGE: currentAppImage,
+      COWORK_UPDATE_APPIMAGE: downloadedInstallerPath,
+      COWORK_CURRENT_APPIMAGE: currentAppImage,
     },
   })
 

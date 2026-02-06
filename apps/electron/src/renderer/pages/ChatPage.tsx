@@ -46,8 +46,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onInputChange,
     enabledSources,
     skills,
+    labels,
+    onSessionLabelsChange,
     enabledModes,
     todoStates,
+    sessionListSearchQuery,
+    isSearchModeActive,
+    onChatMatchInfoChange,
     onSessionSourcesChange,
     onRenameSession,
     onFlagSession,
@@ -91,11 +96,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [sessionId, session])
 
   // Mark session as read when displayed (not processing)
+  const currentSessionId = session?.id
+  const currentSessionProcessing = session?.isProcessing ?? false
   React.useEffect(() => {
-    if (session && !session.isProcessing) {
-      onMarkSessionRead(session.id)
+    if (currentSessionId && !currentSessionProcessing) {
+      onMarkSessionRead(currentSessionId)
     }
-  }, [session?.id, session?.isProcessing, onMarkSessionRead])
+  }, [currentSessionId, currentSessionProcessing, onMarkSessionRead])
 
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(sessionId)
@@ -236,6 +243,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onTodoStateChange(sessionId, state)
   }, [sessionId, onTodoStateChange])
 
+  const handleLabelsChange = React.useCallback((newLabels: string[]) => {
+    onSessionLabelsChange?.(sessionId, newLabels)
+  }, [sessionId, onSessionLabelsChange])
+
   const handleDelete = React.useCallback(async () => {
     await onDeleteSession(sessionId)
   }, [sessionId, onDeleteSession])
@@ -334,11 +345,16 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onInputChange={handleInputChange}
                 sources={enabledSources}
                 skills={skills}
+                labels={labels}
+                onLabelsChange={handleLabelsChange}
                 workspaceId={activeWorkspaceId || undefined}
                 onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
                 workingDirectory={sessionMeta.workingDirectory}
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
                 messagesLoading={true}
+                searchQuery={sessionListSearchQuery}
+                isSearchModeActive={isSearchModeActive}
+                onMatchInfoChange={onChatMatchInfoChange}
               />
             </div>
           </div>
@@ -399,12 +415,17 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onInputChange={handleInputChange}
             sources={enabledSources}
             skills={skills}
+            labels={labels}
+            onLabelsChange={handleLabelsChange}
             workspaceId={activeWorkspaceId || undefined}
             onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
             workingDirectory={workingDirectory}
             onWorkingDirectoryChange={handleWorkingDirectoryChange}
             sessionFolderPath={session?.sessionFolderPath}
             messagesLoading={!messagesLoaded}
+            searchQuery={sessionListSearchQuery}
+            isSearchModeActive={isSearchModeActive}
+            onMatchInfoChange={onChatMatchInfoChange}
           />
         </div>
       </div>

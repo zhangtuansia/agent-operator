@@ -1,6 +1,6 @@
 # Cowork Electron App
 
-The primary desktop interface for Cowork, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
+The primary desktop interface for Cowork, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Cowork workspaces.
 
 ## Quick Start
 
@@ -156,7 +156,7 @@ bun run sync-secrets
 **That's it!** Now `bun run electron:dev` and `bun run electron:start` work without prompts.
 
 **How it works:**
-- `.env.1password` contains `op://` references to the `Dev_Craft_Agents` vault
+- `.env.1password` contains `op://` references to the `Dev_Cowork` vault
 - `bun run sync-secrets` resolves references → writes `.env` (gitignored)
 - Secrets are baked into the build at compile time via esbuild `--define` flags
 
@@ -194,7 +194,7 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 - **Session persistence** - Sessions, messages, and names are saved to disk
 - **File attachments** - Attach images, PDFs, and code files to messages
 - **AI-generated titles** - Sessions get automatic titles after first exchange
-- **Subagent support** - Load and apply agent definitions from Craft documents
+- **Subagent support** - Load and apply agent definitions from workspace documents
 - **Shell integration** - Open URLs in browser, open files in default apps
 - **Permission modes** - Three-level permission system (Explore, Ask to Edit, Auto)
 - **Background tasks** - Run long-running tasks in background with progress tracking

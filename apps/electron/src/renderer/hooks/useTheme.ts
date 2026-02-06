@@ -10,7 +10,7 @@ import { useTheme as useThemeContext } from '@/context/ThemeContext'
 
 interface UseThemeOptions {
   /**
-   * App-level theme override (from ~/.agent-operator/theme.json)
+   * App-level theme override (from ~/.cowork/theme.json)
    * When provided, merges with the preset theme from context.
    */
   appTheme?: ThemeOverrides | null

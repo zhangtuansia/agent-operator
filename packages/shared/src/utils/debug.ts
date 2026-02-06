@@ -1,5 +1,7 @@
-// Check CRAFT_DEBUG env var at module load (for SDK subprocess)
-let debugEnabled = process.env.CRAFT_DEBUG === '1';
+// Check COWORK_DEBUG env var at module load (for SDK subprocess)
+let debugEnabled =
+  process.env.COWORK_DEBUG === '1' ||
+  process.env.OPERATOR_DEBUG === '1';
 
 /**
  * Runtime environment detection

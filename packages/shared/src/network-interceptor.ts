@@ -10,16 +10,19 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { CONFIG_DIR } from './config/paths';
 
 // Type alias for fetch's HeadersInit (not in ESNext lib, but available at runtime via Bun)
 type HeadersInitType = Headers | Record<string, string> | [string, string][];
 
-const DEBUG = process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1';
+const DEBUG =
+  process.argv.includes('--debug') ||
+  process.env.COWORK_DEBUG === '1' ||
+  process.env.OPERATOR_DEBUG === '1';
 
 // Log file for debug output (avoids console spam)
-const LOG_DIR = join(homedir(), '.agent-operator', 'logs');
+const LOG_DIR = join(CONFIG_DIR, 'logs');
 const LOG_FILE = join(LOG_DIR, 'interceptor.log');
 
 // Ensure log directory exists at module load
@@ -47,7 +50,7 @@ export interface LastApiError {
 }
 
 // File-based storage for cross-process sharing
-const ERROR_FILE = join(homedir(), '.agent-operator', 'api-error.json');
+const ERROR_FILE = join(CONFIG_DIR, 'api-error.json');
 const MAX_ERROR_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
 function getStoredError(): LastApiError | null {

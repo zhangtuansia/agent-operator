@@ -21,6 +21,10 @@ import {
   type MentionItem,
   type MentionItemType,
 } from '@/components/ui/mention-menu'
+import {
+  InlineLabelMenu,
+  useInlineLabelMenu,
+} from '@/components/ui/label-menu'
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -39,6 +43,7 @@ import {
 } from '@/components/ui/styled-dropdown'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { isMac } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { getModelShortName, getModelsForProvider } from '@config/models'
@@ -46,6 +51,7 @@ import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { WorkingDirectoryBadge, getRecentDirs, addRecentDir } from './WorkingDirectoryBadge'
 import { SourceSelectorBadge } from './SourceSelectorBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
+import type { LabelConfig } from '@agent-operator/shared/labels'
 import type { PermissionMode } from '@agent-operator/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@agent-operator/shared/agent/thinking-levels'
@@ -66,9 +72,19 @@ function formatTokenCount(tokens: number): string {
   return tokens.toString()
 }
 
+/** Fisher-Yates shuffle - returns a new array in random order */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
 export interface FreeFormInputProps {
-  /** Placeholder text for the textarea */
-  placeholder?: string
+  /** Placeholder text(s) for the textarea - can be array for rotation */
+  placeholder?: string | string[]
   /** Whether input is disabled */
   disabled?: boolean
   /** Whether the session is currently processing */
@@ -116,6 +132,13 @@ export interface FreeFormInputProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
+  // Label selection (for #labels)
+  /** Available labels for #label autocomplete */
+  labels?: LabelConfig[]
+  /** Currently applied session labels */
+  sessionLabels?: string[]
+  /** Callback when a label is added via # menu */
+  onLabelAdd?: (labelId: string) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   /** Current working directory path */
@@ -139,6 +162,8 @@ export interface FreeFormInputProps {
     /** Model's context window size in tokens */
     contextWindow?: number
   }
+  /** Enable compact mode for embedded chat input (e.g. EditPopover) */
+  compactMode?: boolean
 }
 
 /**
@@ -152,7 +177,7 @@ export interface FreeFormInputProps {
  * - Active option badges
  */
 export function FreeFormInput({
-  placeholder = 'Message...',
+  placeholder,
   disabled = false,
   isProcessing = false,
   onSubmit,
@@ -176,6 +201,9 @@ export function FreeFormInput({
   enabledSourceSlugs = [],
   onSourcesChange,
   skills = [],
+  labels = [],
+  sessionLabels = [],
+  onLabelAdd,
   workspaceId,
   workingDirectory,
   onWorkingDirectoryChange,
@@ -184,8 +212,27 @@ export function FreeFormInput({
   disableSend = false,
   isEmptySession = false,
   contextStatus,
+  compactMode = false,
 }: FreeFormInputProps) {
   const { t } = useTranslation()
+  const modKey = isMac ? '⌘' : 'Ctrl'
+  const defaultPlaceholders = React.useMemo(
+    () => [
+      t('input.placeholderHint1'),
+      t('input.placeholderHint2'),
+      t('input.placeholderHint3'),
+      t('input.placeholderHint4'),
+      t('input.placeholderHint5'),
+      t('input.placeholderHint6', { modKey }),
+      t('input.placeholderHint7', { modKey }),
+    ],
+    [modKey, t]
+  )
+  const resolvedPlaceholder = placeholder ?? defaultPlaceholders
+  const shuffledPlaceholder = React.useMemo(
+    () => Array.isArray(resolvedPlaceholder) ? shuffleArray(resolvedPlaceholder) : resolvedPlaceholder,
+    [resolvedPlaceholder]
+  )
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
   // Sync TO parent on blur/submit (debounced persistence)
@@ -348,6 +395,60 @@ export function FreeFormInput({
   // Track last caret position for focus restoration (e.g., after permission mode popover closes)
   const lastCaretPositionRef = React.useRef<number | null>(null)
 
+  // Check if running in Electron environment (has electronAPI)
+  const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
+
+  // Helper to read a File using FileReader API
+  const readFileAsAttachment = React.useCallback(async (file: File, overrideName?: string): Promise<FileAttachment | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const result = reader.result as ArrayBuffer
+        const base64 = btoa(
+          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        )
+
+        let type: FileAttachment['type'] = 'unknown'
+        const fileName = overrideName || file.name
+        if (file.type.startsWith('image/')) type = 'image'
+        else if (file.type === 'application/pdf') type = 'pdf'
+        else if (file.type.includes('text') || fileName.match(/\.(txt|md|json|js|ts|tsx|py|css|html)$/i)) type = 'text'
+        else if (file.type.includes('officedocument') || fileName.match(/\.(docx?|xlsx?|pptx?)$/i)) type = 'office'
+
+        const mimeType = file.type || 'application/octet-stream'
+
+        // For text files, decode the ArrayBuffer as UTF-8 text
+        let text: string | undefined
+        if (type === 'text') {
+          text = new TextDecoder('utf-8').decode(new Uint8Array(result))
+        }
+
+        let thumbnailBase64: string | undefined
+        if (hasElectronAPI) {
+          try {
+            const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
+            if (thumb) thumbnailBase64 = thumb
+          } catch (err) {
+            console.log('[FreeFormInput] Thumbnail generation failed:', err)
+          }
+        }
+
+        resolve({
+          type,
+          path: fileName,
+          name: fileName,
+          mimeType,
+          base64,
+          text,
+          size: file.size,
+          thumbnailBase64,
+        })
+      }
+      reader.onerror = () => resolve(null)
+      reader.readAsArrayBuffer(file)
+    })
+  }, [hasElectronAPI])
+
   // Listen for cowork:insert-text events (generic mechanism for inserting text into input)
   // Used by components that want to pre-fill the input with text
   React.useEffect(() => {
@@ -392,7 +493,7 @@ export function FreeFormInput({
 
     window.addEventListener('cowork:approve-plan', handleApprovePlan as EventListener)
     return () => window.removeEventListener('cowork:approve-plan', handleApprovePlan as EventListener)
-  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit])
+  }, [sessionId, permissionMode, onPermissionModeChange, onSubmit, t])
 
   // Listen for cowork:approve-plan-with-compact events (Accept & Compact option)
   // This compacts the conversation first, then executes the plan.
@@ -554,7 +655,7 @@ export function FreeFormInput({
 
     window.addEventListener('cowork:paste-files', handlePasteFiles as unknown as EventListener)
     return () => window.removeEventListener('cowork:paste-files', handlePasteFiles as unknown as EventListener)
-  }, [disabled, richInputRef])
+  }, [disabled, readFileAsAttachment, richInputRef])
 
   // Build active commands list for slash command menu
   const activeCommands = React.useMemo(() => {
@@ -573,7 +674,7 @@ export function FreeFormInput({
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
     else if (commandId === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
-  }, [permissionMode, ultrathinkEnabled, onPermissionModeChange, onUltrathinkChange])
+  }, [ultrathinkEnabled, onPermissionModeChange, onUltrathinkChange])
 
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {
@@ -628,6 +729,19 @@ export function FreeFormInput({
     onSelect: handleMentionSelect,
   })
 
+  // Handle label selection from # menu
+  const handleLabelSelect = React.useCallback((labelId: string) => {
+    onLabelAdd?.(labelId)
+  }, [onLabelAdd])
+
+  // Inline label hook (for #labels)
+  const inlineLabel = useInlineLabelMenu({
+    inputRef: richInputRef,
+    labels,
+    sessionLabels,
+    onSelect: handleLabelSelect,
+  })
+
   // NOTE: Mentions are now rendered inline in RichTextInput, no separate badge row needed
 
   // Report height changes to parent (for external animation sync)
@@ -644,8 +758,13 @@ export function FreeFormInput({
     return () => observer.disconnect()
   }, [onHeightChange])
 
-  // Check if running in Electron environment (has electronAPI)
-  const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
+  // In compact mode, report collapsed height while processing for smooth popover layout.
+  React.useEffect(() => {
+    if (!onHeightChange || !compactMode) return
+    if (isProcessing) {
+      onHeightChange(44)
+    }
+  }, [compactMode, isProcessing, onHeightChange])
 
   // File attachment handlers
   const handleAttachClick = async () => {
@@ -689,57 +808,6 @@ export function FreeFormInput({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-  }
-
-  // Helper to read a File using FileReader API
-  const readFileAsAttachment = async (file: File, overrideName?: string): Promise<FileAttachment | null> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const result = reader.result as ArrayBuffer
-        const base64 = btoa(
-          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
-
-        let type: FileAttachment['type'] = 'unknown'
-        const fileName = overrideName || file.name
-        if (file.type.startsWith('image/')) type = 'image'
-        else if (file.type === 'application/pdf') type = 'pdf'
-        else if (file.type.includes('text') || fileName.match(/\.(txt|md|json|js|ts|tsx|py|css|html)$/i)) type = 'text'
-        else if (file.type.includes('officedocument') || fileName.match(/\.(docx?|xlsx?|pptx?)$/i)) type = 'office'
-
-        const mimeType = file.type || 'application/octet-stream'
-
-        // For text files, decode the ArrayBuffer as UTF-8 text
-        let text: string | undefined
-        if (type === 'text') {
-          text = new TextDecoder('utf-8').decode(new Uint8Array(result))
-        }
-
-        let thumbnailBase64: string | undefined
-        if (hasElectronAPI) {
-          try {
-            const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
-            if (thumb) thumbnailBase64 = thumb
-          } catch (err) {
-            console.log('[FreeFormInput] Thumbnail generation failed:', err)
-          }
-        }
-
-        resolve({
-          type,
-          path: fileName,
-          name: fileName,
-          mimeType,
-          base64,
-          text,
-          size: file.size,
-          thumbnailBase64,
-        })
-      }
-      reader.onerror = () => resolve(null)
-      reader.readAsArrayBuffer(file)
-    })
   }
 
   // Clipboard paste handler for files/images
@@ -790,7 +858,7 @@ export function FreeFormInput({
     setAttachments(prev => [...prev, attachment])
     // Focus input after adding attachment
     richInputRef.current?.focus()
-  }, [])
+  }, [richInputRef])
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -869,7 +937,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, richInputRef])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -904,6 +972,18 @@ export function FreeFormInput({
       if (e.key === 'Escape') {
         e.preventDefault()
         inlineMention.close()
+        return
+      }
+    }
+
+    // Don't submit when label menu is open - let it handle Enter/Tab navigation
+    if (inlineLabel.isOpen) {
+      if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        inlineLabel.close()
         return
       }
     }
@@ -982,9 +1062,12 @@ export function FreeFormInput({
     // Update inline mention state (for @mentions - skills, sources, folders)
     inlineMention.handleInputChange(value, cursorPosition)
 
-    // Auto-capitalize first letter (but not for slash commands or @mentions)
+    // Update inline label state (for #labels)
+    inlineLabel.handleInputChange(value, cursorPosition)
+
+    // Auto-capitalize first letter (but not for slash commands, @mentions, or #labels)
     let newValue = value
-    if (value.length > 0 && value.charAt(0) !== '/' && value.charAt(0) !== '@') {
+    if (value.length > 0 && value.charAt(0) !== '/' && value.charAt(0) !== '@' && value.charAt(0) !== '#') {
       const capitalizedFirst = value.charAt(0).toUpperCase()
       if (capitalizedFirst !== value.charAt(0)) {
         newValue = capitalizedFirst + value.slice(1)
@@ -1005,7 +1088,7 @@ export function FreeFormInput({
         richInputRef.current?.setSelectionRange(typography.cursor, typography.cursor)
       })
     }
-  }, [inlineSlash, inlineMention, syncToParent])
+  }, [inlineSlash, inlineMention, inlineLabel, syncToParent, richInputRef])
 
   // Handle inline slash command selection (removes the /command text)
   const handleInlineSlashCommandSelect = React.useCallback((commandId: SlashCommandId) => {
@@ -1013,7 +1096,7 @@ export function FreeFormInput({
     setInput(newValue)
     syncToParent(newValue)
     richInputRef.current?.focus()
-  }, [inlineSlash, syncToParent])
+  }, [inlineSlash, syncToParent, richInputRef])
 
   // Handle inline slash folder selection (inserts [dir:/path] badge)
   const handleInlineSlashFolderSelect = React.useCallback((path: string) => {
@@ -1021,7 +1104,7 @@ export function FreeFormInput({
     setInput(newValue)
     syncToParent(newValue)
     richInputRef.current?.focus()
-  }, [inlineSlash, syncToParent])
+  }, [inlineSlash, syncToParent, richInputRef])
 
   // Handle inline mention selection (inserts appropriate mention text)
   const handleInlineMentionSelect = React.useCallback((item: MentionItem) => {
@@ -1033,7 +1116,15 @@ export function FreeFormInput({
       richInputRef.current?.focus()
       richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
     }, 0)
-  }, [inlineMention, syncToParent])
+  }, [inlineMention, syncToParent, richInputRef])
+
+  // Handle inline label selection (removes #label text from input)
+  const handleInlineLabelSelect = React.useCallback((labelId: string) => {
+    const newValue = inlineLabel.handleSelect(labelId)
+    setInput(newValue)
+    syncToParent(newValue)
+    richInputRef.current?.focus()
+  }, [inlineLabel, syncToParent, richInputRef])
 
   const hasContent = input.trim() || attachments.length > 0
 
@@ -1077,6 +1168,16 @@ export function FreeFormInput({
           maxWidth={280}
         />
 
+        {/* Inline Label Autocomplete (#labels) */}
+        <InlineLabelMenu
+          open={inlineLabel.isOpen}
+          onOpenChange={(open) => !open && inlineLabel.close()}
+          items={inlineLabel.items}
+          onSelect={handleInlineLabelSelect}
+          filter={inlineLabel.filter}
+          position={inlineLabel.position}
+        />
+
         {/* Attachment Preview */}
         <AttachmentPreview
           attachments={attachments}
@@ -1086,78 +1187,84 @@ export function FreeFormInput({
         />
 
         {/* Rich Text Input with inline mention badges */}
-        <RichTextInput
-          ref={richInputRef}
-          value={input}
-          onChange={handleInputChange}
-          onInput={handleRichInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onLongTextPaste={handleLongTextPaste}
-          onFocus={() => { setIsFocused(true); onFocusChange?.(true) }}
-          onBlur={() => {
-            // Save caret position before losing focus (for restoration via cowork:focus-input)
-            lastCaretPositionRef.current = richInputRef.current?.selectionStart ?? null
-            setIsFocused(false)
-            onFocusChange?.(false)
-          }}
-          placeholder={placeholder}
-          disabled={disabled}
-          skills={skills}
-          sources={sources}
-          workspaceId={workspaceId}
-          className="min-h-[88px] pl-5 pr-4 pt-4 pb-3 overflow-y-auto"
-          style={{ maxHeight: inputMaxHeight }}
-          data-tutorial="chat-input"
-        />
+        {!(compactMode && isProcessing) && (
+          <RichTextInput
+            ref={richInputRef}
+            value={input}
+            onChange={handleInputChange}
+            onInput={handleRichInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onLongTextPaste={handleLongTextPaste}
+            onFocus={() => { setIsFocused(true); onFocusChange?.(true) }}
+            onBlur={() => {
+              // Save caret position before losing focus (for restoration via cowork:focus-input)
+              lastCaretPositionRef.current = richInputRef.current?.selectionStart ?? null
+              setIsFocused(false)
+              onFocusChange?.(false)
+            }}
+            placeholder={shuffledPlaceholder}
+            disabled={disabled}
+            skills={skills}
+            sources={sources}
+            workspaceId={workspaceId}
+            className="min-h-[88px] pl-5 pr-4 pt-4 pb-3 overflow-y-auto"
+            style={{ maxHeight: inputMaxHeight }}
+            data-tutorial="chat-input"
+          />
+        )}
 
         {/* Bottom Row: Controls - wrapped in relative container for escape overlay */}
         <div className="relative">
           {/* Escape interrupt overlay - shown on first Esc press during processing */}
           <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
 
-          <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
-          {/* Context Badges - Files, Sources, Folder */}
-          {/* 1. Attach Files Badge */}
-          <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
-            // Show count ("1 file" / "X files") instead of filename for cleaner UI
-            label={attachments.length > 0
-              ? attachments.length === 1
-                ? t('input.oneFile')
-                : t('input.nFiles').replace('{n}', String(attachments.length))
-              : t('input.attachFiles')
-            }
-            isExpanded={isEmptySession}
-            hasSelection={attachments.length > 0}
-            showChevron={false}
-            onClick={handleAttachClick}
-            tooltip={t('input.attachFile')}
-            disabled={disabled}
-          />
+          <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
+          {/* Context Badges - hidden in compact mode */}
+          {!compactMode && (
+            <>
+              {/* 1. Attach Files Badge */}
+              <FreeFormInputContextBadge
+                icon={<Paperclip className="h-4 w-4" />}
+                // Show count ("1 file" / "X files") instead of filename for cleaner UI
+                label={attachments.length > 0
+                  ? attachments.length === 1
+                    ? t('input.oneFile')
+                    : t('input.nFiles').replace('{n}', String(attachments.length))
+                  : t('input.attachFiles')
+                }
+                isExpanded={isEmptySession}
+                hasSelection={attachments.length > 0}
+                showChevron={false}
+                onClick={handleAttachClick}
+                tooltip={t('input.attachFile')}
+                disabled={disabled}
+              />
 
-          {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
-          {onSourcesChange && (
-            <SourceSelectorBadge
-              sources={sources}
-              enabledSourceSlugs={optimisticSourceSlugs}
-              onSourcesChange={(newSlugs) => {
-                setOptimisticSourceSlugs(newSlugs)
-                onSourcesChange(newSlugs)
-              }}
-              isEmptySession={isEmptySession}
-              disabled={disabled}
-            />
-          )}
+              {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
+              {onSourcesChange && (
+                <SourceSelectorBadge
+                  sources={sources}
+                  enabledSourceSlugs={optimisticSourceSlugs}
+                  onSourcesChange={(newSlugs) => {
+                    setOptimisticSourceSlugs(newSlugs)
+                    onSourcesChange(newSlugs)
+                  }}
+                  isEmptySession={isEmptySession}
+                  disabled={disabled}
+                />
+              )}
 
-          {/* 3. Working Directory Selector Badge */}
-          {onWorkingDirectoryChange && (
-            <WorkingDirectoryBadge
-              workingDirectory={workingDirectory}
-              onWorkingDirectoryChange={onWorkingDirectoryChange}
-              sessionFolderPath={sessionFolderPath}
-              isEmptySession={isEmptySession}
-            />
+              {/* 3. Working Directory Selector Badge */}
+              {onWorkingDirectoryChange && (
+                <WorkingDirectoryBadge
+                  workingDirectory={workingDirectory}
+                  onWorkingDirectoryChange={onWorkingDirectoryChange}
+                  sessionFolderPath={sessionFolderPath}
+                  isEmptySession={isEmptySession}
+                />
+              )}
+            </>
           )}
 
           {/* Spacer */}

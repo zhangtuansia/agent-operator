@@ -116,7 +116,7 @@ function computeEditWriteDiffStats(
  * Global size configuration for TurnCard components.
  * Adjust these values to scale the entire component uniformly.
  */
-const SIZE_CONFIG = {
+export const SIZE_CONFIG = {
   /** Base font size class for all text */
   fontSize: 'text-[13px]',
   /** Icon size class (width and height) */
@@ -716,6 +716,10 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
   const intentOrDescription = activity.intent || (activity.toolInput?.description as string | undefined)
   const inputSummary = formatToolInput(activity.toolInput)
   const diffStats = computeEditWriteDiffStats(activity.toolName, activity.toolInput)
+  const filePath =
+    typeof activity.toolInput?.file_path === 'string'
+      ? activity.toolInput.file_path
+      : undefined
 
   const isComplete = activity.status === 'completed' || activity.status === 'error'
   const isBackgrounded = activity.status === 'backgrounded'
@@ -758,18 +762,18 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
               >+{diffStats.additions}</span>
             )}
             {/* Filename badge */}
-            {activity.toolInput?.file_path && (
+            {filePath && (
               <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[11px] text-foreground/70">
-                {(activity.toolInput.file_path as string).split('/').pop()}
+                {filePath.split('/').pop()}
               </span>
             )}
           </span>
         )}
         {/* Filename badge for Read tool (no diff stats) */}
-        {!isBackgrounded && !diffStats && activity.toolName === 'Read' && activity.toolInput?.file_path && (
+        {!isBackgrounded && !diffStats && activity.toolName === 'Read' && filePath && (
           <span className="flex items-center gap-1.5 text-[10px] shrink-0">
             <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[11px] text-foreground/70">
-              {(activity.toolInput.file_path as string).split('/').pop()}
+              {filePath.split('/').pop()}
             </span>
           </span>
         )}

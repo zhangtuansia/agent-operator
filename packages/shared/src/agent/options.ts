@@ -4,7 +4,15 @@ import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { debug } from "../utils/debug";
 
-declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
+const COWORK_AGENT_CLI_VERSION = process.env.COWORK_AGENT_CLI_VERSION;
+
+function resolveDebugFlag(): '1' | '0' {
+    return (process.argv.includes('--debug') ||
+        process.env.COWORK_DEBUG === '1' ||
+        process.env.OPERATOR_DEBUG === '1')
+        ? '1'
+        : '0';
+}
 
 let optionsEnv: Record<string, string> = {};
 let customPathToClaudeCodeExecutable: string | null = null;
@@ -208,13 +216,13 @@ export function getDefaultOptions(): Partial<Options> {
                 ...process.env,
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                COWORK_DEBUG: resolveDebugFlag(),
             }
         };
     }
 
-    if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
-        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', CRAFT_AGENT_CLI_VERSION);
+    if (COWORK_AGENT_CLI_VERSION) {
+        const baseDir = join(homedir(), '.local', 'share', 'cowork', 'versions', COWORK_AGENT_CLI_VERSION);
         return {
             pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', 'cli.js'),
             // Use the compiled binary itself as the runtime via BUN_BE_BUN=1
@@ -228,7 +236,7 @@ export function getDefaultOptions(): Partial<Options> {
                 BUN_BE_BUN: '1',
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                COWORK_DEBUG: resolveDebugFlag(),
             }
         }
     }
@@ -238,7 +246,7 @@ export function getDefaultOptions(): Partial<Options> {
             ... process.env,
             ... optionsEnv,
             // Propagate debug mode from argv flag OR existing env var
-            CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+            COWORK_DEBUG: resolveDebugFlag(),
         }
     };
 }

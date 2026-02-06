@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { mainLog } from './logger'
 import { join } from 'path'
-import { homedir } from 'os'
+import { CONFIG_DIR } from '@agent-operator/shared/config'
 
 export interface WindowBounds {
   x: number
@@ -23,7 +23,6 @@ export interface WindowState {
   lastFocusedWorkspaceId?: string
 }
 
-const CONFIG_DIR = join(homedir(), '.agent-operator')
 const WINDOW_STATE_FILE = join(CONFIG_DIR, 'window-state.json')
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Generates index.html showcasing all @craft-agent/mermaid rendering capabilities.
+ * Generates index.html showcasing all @agent-operator/mermaid rendering capabilities.
  *
  * Usage: bun run packages/mermaid/index.ts
  *
@@ -599,7 +599,7 @@ async function generateHtml(): Promise<string> {
         display: none !important;
       }
     }
-    /* -- Craft shadow + radius utilities -- */
+    /* -- Cowork shadow + radius utilities -- */
     .rounded-6px { border-radius: 6px; }
     .shadow-minimal {
       box-shadow:
@@ -1113,15 +1113,15 @@ async function generateHtml(): Promise<string> {
   <!-- Navigation + theme bar -->
   <div class="theme-bar" id="theme-bar">
     <div class="brand-badge-wrapper">
-      <button class="brand-badge shadow-minimal" id="brand-badge-btn"><svg class="brand-logo" viewBox="0 0 299 300" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M137.879,300.001 L137.875,300.001 C62.3239,300.001 0.966154,239.232 0.0117188,163.908 L2.56478e-10,162.126 L137.879,162.126 L137.879,300.001 Z" fill="#06367A"/><path d="M137.879,0 L137.875,0 C61.729,0 0,61.729 0,137.875 L0,137.878 L137.879,137.878 L137.879,0 Z" fill="#FF51FF"/><path d="M160.558,137.883 L160.561,137.883 C236.707,137.883 298.436,76.1537 298.436,0.00758561 L298.436,0.00562043 L160.558,0.00562043 L160.558,137.883 Z" fill="#007CFF"/><path d="M160.558,162.123 L160.561,162.123 C236.112,162.123 297.471,222.891 298.426,298.216 L298.436,299.998 L160.558,299.998 L160.558,162.123 Z" fill="#0A377B"/></svg><span><strong>Beautiful Mermaid</strong> by Craft</span></button>
+      <button class="brand-badge shadow-minimal" id="brand-badge-btn"><svg class="brand-logo" viewBox="0 0 299 300" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M137.879,300.001 L137.875,300.001 C62.3239,300.001 0.966154,239.232 0.0117188,163.908 L2.56478e-10,162.126 L137.879,162.126 L137.879,300.001 Z" fill="#06367A"/><path d="M137.879,0 L137.875,0 C61.729,0 0,61.729 0,137.875 L0,137.878 L137.879,137.878 L137.879,0 Z" fill="#FF51FF"/><path d="M160.558,137.883 L160.561,137.883 C236.707,137.883 298.436,76.1537 298.436,0.00758561 L298.436,0.00562043 L160.558,0.00562043 L160.558,137.883 Z" fill="#007CFF"/><path d="M160.558,162.123 L160.561,162.123 C236.112,162.123 297.471,222.891 298.426,298.216 L298.436,299.998 L160.558,299.998 L160.558,162.123 Z" fill="#0A377B"/></svg><span><strong>Beautiful Mermaid</strong> by Cowork</span></button>
       <div class="brand-dropdown shadow-modal-small" id="brand-dropdown">
         <a href="https://agents.craft.do" class="brand-dropdown-item" target="_blank" rel="noopener">
           <svg width="18" height="18" class="brand-dropdown-logo" style="margin-left: -4px;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="translate(3.4502, 3)" fill="#9570BE"><path d="M3.17890888,3.6 L3.17890888,0 L16,0 L16,3.6 L3.17890888,3.6 Z M9.642,7.2 L9.64218223,10.8 L0,10.8 L0,3.6 L16,3.6 L16,7.2 L9.642,7.2 Z M3.17890888,18 L3.178,14.4 L0,14.4 L0,10.8 L16,10.8 L16,18 L3.17890888,18 Z" fill-rule="nonzero"></path></g></svg>
-          <span style="margin-left: -2px;">Craft Agents<span class="tagline">Simply mind-blowing</span></span>
+          <span style="margin-left: -2px;">Cowork<span class="tagline">Simply mind-blowing</span></span>
         </a>
-        <a href="https://craft.do" class="brand-dropdown-item" target="_blank" rel="noopener">
+        <a href="https://www.aicowork.chat" class="brand-dropdown-item" target="_blank" rel="noopener">
           <svg width="12" height="12" class="brand-dropdown-logo" viewBox="0 0 299 300" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M137.879 300L137.875 300.001C62.3239 300.001 0.966154 239.232 0.0117188 163.908L2.56478e-10 162.126H137.879V300Z" fill="currentColor"/><path d="M137.879 0.000976562L137.875 0C61.729 6.6569e-06 0.000194275 61.729 0 137.875L2.56478e-10 137.878L137.879 137.878L137.879 0.000976562Z" fill="currentColor"/><path d="M160.558 137.882L160.561 137.883C236.707 137.882 298.436 76.1537 298.436 0.00758561V0.00563248L160.558 0.00562043L160.558 137.882Z" fill="currentColor"/><path d="M160.558 162.124L160.561 162.123C236.112 162.123 297.471 222.891 298.426 298.216L298.436 299.998H160.558V162.124Z" fill="currentColor"/></svg>
-          <span>Craft Docs<span class="tagline">Amazing Notes &amp; Docs</span></span>
+          <span>Cowork Docs<span class="tagline">Amazing Notes &amp; Docs</span></span>
         </a>
       </div>
     </div>
@@ -1143,12 +1143,12 @@ async function generateHtml(): Promise<string> {
     <p class="hero-description">
       An open source library for rendering diagrams, designed for the age of AI: <a href="https://www.npmjs.com/package/beautiful-mermaid" target="_blank" rel="noopener"><code>beautiful-mermaid</code></a>.
       Ultra-fast, fully themeable, and outputs to both SVG and ASCII.<br>
-      Built by the team at <a href="https://craft.do" target="_blank" rel="noopener">Craft</a> — because diagrams deserve great design too.
+      Built by the team at <a href="https://www.aicowork.chat" target="_blank" rel="noopener">Cowork</a> — because diagrams deserve great design too.
     </p>
     <div class="hero-buttons">
       <a href="https://agents.craft.do" target="_blank" rel="noopener" class="hero-btn hero-btn-primary">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="translate(3.4502, 3)" fill="currentColor"><path d="M3.17890888,3.6 L3.17890888,0 L16,0 L16,3.6 L3.17890888,3.6 Z M9.642,7.2 L9.64218223,10.8 L0,10.8 L0,3.6 L16,3.6 L16,7.2 L9.642,7.2 Z M3.17890888,18 L3.178,14.4 L0,14.4 L0,10.8 L16,10.8 L16,18 L3.17890888,18 Z" fill-rule="nonzero"></path></g></svg>
-        Use in Craft Agents
+        Use in Cowork
       </a>
       <a href="https://github.com/lukilabs/beautiful-mermaid" target="_blank" rel="noopener" class="hero-btn hero-btn-secondary">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
@@ -1554,7 +1554,7 @@ ${bundleJs}
   </div><!-- .content-wrapper -->
 
   <footer class="site-footer">
-    <span>&copy; 2026 Craft Docs Limited, Inc. All rights reserved.</span>
+    <span>&copy; 2026 Cowork Docs Limited, Inc. All rights reserved.</span>
     <div class="footer-links">
       <a href="mailto:agents@craft.do">Contact</a>
       <a href="https://github.com/lukilabs/beautiful-mermaid" target="_blank" rel="noopener noreferrer">

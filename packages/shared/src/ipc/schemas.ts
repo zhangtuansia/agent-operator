@@ -103,6 +103,7 @@ export const SessionCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('setThinkingLevel'), level: ThinkingLevelSchema }),
   z.object({ type: z.literal('updateWorkingDirectory'), dir: z.string() }),
   z.object({ type: z.literal('setSources'), sourceSlugs: z.array(z.string()) }),
+  z.object({ type: z.literal('setLabels'), labels: z.array(z.string()) }),
   z.object({ type: z.literal('showInFinder') }),
   z.object({ type: z.literal('copyPath') }),
   z.object({ type: z.literal('shareToViewer') }),

@@ -43,15 +43,14 @@ for i in {1..10}; do
     sleep 1
 done
 
-# Mount the DMG
+# Mount the DMG to a deterministic temp directory.
+# Parsing hdiutil output is brittle across macOS versions/locales.
 echo "[$(date)] Mounting DMG..."
-MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse 2>&1)
-ATTACH_LINE=$(echo "$MOUNT_OUTPUT" | grep "/Volumes/" | tail -1)
-MOUNT_DEVICE=$(echo "$ATTACH_LINE" | awk '{print $1}')
-# Keep everything after the first two columns (/dev/* and fs type) to preserve spaces in volume names.
-MOUNT_POINT=$(echo "$ATTACH_LINE" | sed -E 's/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+//' | sed -E 's/[[:space:]]+$//')
+MOUNT_POINT=$(mktemp -d /tmp/cowork-update-mount.XXXXXX)
+MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNT_POINT" 2>&1)
+MOUNT_DEVICE=$(echo "$MOUNT_OUTPUT" | awk '/^\/dev\// {print $1; exit}')
 
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
+if [ ! -d "$MOUNT_POINT" ]; then
     echo "[$(date)] Failed to mount DMG"
     echo "[$(date)] hdiutil output: $MOUNT_OUTPUT"
     exit 1
@@ -64,6 +63,9 @@ cleanup_mount() {
         hdiutil detach "$MOUNT_DEVICE" 2>/dev/null || hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
     elif [ -n "$MOUNT_POINT" ]; then
         hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
+    fi
+    if [ -n "$MOUNT_POINT" ]; then
+        rmdir "$MOUNT_POINT" 2>/dev/null || true
     fi
 }
 

@@ -11,7 +11,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@agent-operator/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getAgentType, setAgentType, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace, type AgentType } from '@agent-operator/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getAgentType, setAgentType, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace, type AgentType, CONFIG_DIR } from '@agent-operator/shared/config'
 import { isCodexAuthenticated, startCodexOAuth } from '@agent-operator/shared/auth'
 import { getSessionAttachmentsPath } from '@agent-operator/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@agent-operator/shared/sources'
@@ -297,7 +297,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Check if a workspace slug already exists (for validation before creation)
   ipcMain.handle(IPC_CHANNELS.CHECK_WORKSPACE_SLUG, async (_event, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.agent-operator', 'workspaces')
+    const defaultWorkspacesDir = join(CONFIG_DIR, 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -578,6 +578,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return sessionManager.updateWorkingDirectory(validatedSessionId, validatedCommand.dir)
       case 'setSources':
         return sessionManager.setSessionSources(validatedSessionId, validatedCommand.sourceSlugs)
+      case 'setLabels':
+        return sessionManager.setSessionLabels(validatedSessionId, validatedCommand.labels)
       case 'showInFinder': {
         const sessionPath = sessionManager.getSessionPath(validatedSessionId)
         if (sessionPath) {
@@ -1052,8 +1054,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Shell operations - open file in default application
   ipcMain.handle(IPC_CHANNELS.OPEN_FILE, async (_event, path: string) => {
     try {
-      // Resolve relative paths to absolute before validation
-      const absolutePath = resolve(path)
+      const trimmedPath = path.trim()
+      const absolutePath = trimmedPath.startsWith('~') || isAbsolute(trimmedPath)
+        ? trimmedPath
+        : resolve(trimmedPath)
       // Validate path is within allowed directories
       const safePath = await validateFilePath(absolutePath)
       // openPath opens file with default application (e.g., VS Code for .ts files)
@@ -1072,8 +1076,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Shell operations - show file in folder (opens Finder/Explorer with file selected)
   ipcMain.handle(IPC_CHANNELS.SHOW_IN_FOLDER, async (_event, path: string) => {
     try {
-      // Resolve relative paths to absolute before validation
-      const absolutePath = resolve(path)
+      const trimmedPath = path.trim()
+      const absolutePath = trimmedPath.startsWith('~') || isAbsolute(trimmedPath)
+        ? trimmedPath
+        : resolve(trimmedPath)
       // Validate path is within allowed directories
       const safePath = await validateFilePath(absolutePath)
       shell.showItemInFolder(safePath)
@@ -1136,7 +1142,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.agent-operator', 'config.json')
+      const configPath = join(CONFIG_DIR, 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })
@@ -1989,7 +1995,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Get default permissions from ~/.agent-operator/permissions/default.json
+  // Get default permissions from ~/.cowork/permissions/default.json
   // Returns raw JSON for UI display (patterns with comments), plus the file path
   ipcMain.handle(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET, async () => {
     const { existsSync, readFileSync } = await import('fs')

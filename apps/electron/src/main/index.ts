@@ -33,14 +33,17 @@ if (app.isPackaged) {
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
-  process.env.CRAFT_DEBUG = '1'
+  process.env.COWORK_DEBUG = '1'
   enableDebug()
   setPerfEnabled(true)
 }
 
 // Custom URL scheme for deeplinks (e.g., agentoperator://auth-complete)
-// Supports multi-instance dev: OPERATOR_DEEPLINK_SCHEME env var (agentoperator1, agentoperator2, etc.)
-const DEEPLINK_SCHEME = process.env.OPERATOR_DEEPLINK_SCHEME || 'agentoperator'
+// Supports multi-instance dev: COWORK_DEEPLINK_SCHEME env var (agentoperator1, agentoperator2, etc.)
+const DEEPLINK_SCHEME =
+  process.env.COWORK_DEEPLINK_SCHEME ||
+  process.env.OPERATOR_DEEPLINK_SCHEME ||
+  'agentoperator'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -49,8 +52,8 @@ let sessionManager: SessionManager | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: OPERATOR_APP_NAME env var (e.g., "Cowork [1]")
-app.setName(process.env.OPERATOR_APP_NAME || 'Cowork')
+// Supports multi-instance dev: COWORK_APP_NAME env var (e.g., "Cowork [1]")
+app.setName(process.env.COWORK_APP_NAME || process.env.OPERATOR_APP_NAME || 'Cowork')
 
 // Register as default protocol client for agentoperator:// URLs
 // This must be done before app.whenReady() on some platforms

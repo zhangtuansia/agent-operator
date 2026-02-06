@@ -14,7 +14,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Editor from 'react-simple-code-editor'
-import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
+import type { BundledLanguage } from 'shiki'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 
@@ -42,9 +42,20 @@ const LANGUAGE_ALIASES: Record<string, BundledLanguage> = {
   'ts': 'typescript',
 }
 
-function isValidLanguage(lang: string): lang is BundledLanguage {
+type ShikiModule = typeof import('shiki')
+
+let shikiPromise: Promise<ShikiModule> | null = null
+
+function loadShiki(): Promise<ShikiModule> {
+  if (!shikiPromise) {
+    shikiPromise = import('shiki')
+  }
+  return shikiPromise
+}
+
+function isValidLanguage(lang: string, shiki: ShikiModule): lang is BundledLanguage {
   const normalized = LANGUAGE_ALIASES[lang] || lang
-  return normalized in bundledLanguages
+  return normalized in shiki.bundledLanguages
 }
 
 // Simple cache for highlighted code
@@ -90,8 +101,9 @@ export function ShikiCodeEditor({
     if (cached) return cached
 
     try {
-      const lang = isValidLanguage(resolvedLang) ? resolvedLang : 'text'
-      const html = await codeToHtml(code, { lang, theme })
+      const shiki = await loadShiki()
+      const lang = isValidLanguage(resolvedLang, shiki) ? resolvedLang : 'text'
+      const html = await shiki.codeToHtml(code, { lang, theme })
 
       // Extract just the content inside <pre><code>...</code></pre>
       // Shiki returns: <pre class="..." style="..."><code>...</code></pre>

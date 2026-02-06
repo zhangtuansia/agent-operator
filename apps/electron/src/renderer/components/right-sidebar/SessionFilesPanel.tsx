@@ -243,15 +243,34 @@ function FileViewer({
   useEffect(() => {
     if (!sessionId) return
 
-    const normalizePath = (path: string) => path.replace(/\\/g, '/')
+    const normalizePath = (path: string) => {
+      const decoded = (() => {
+        try {
+          return decodeURIComponent(path)
+        } catch {
+          return path
+        }
+      })()
+      const withoutScheme = decoded.replace(/^file:\/\//i, '')
+      const [pathOnly] = withoutScheme.split(/[?#]/)
+      const normalized = (pathOnly ?? withoutScheme).replace(/\\/g, '/').replace(/\/+/g, '/')
+      return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized
+    }
     const currentPath = normalizePath(filePath)
+    const currentFilename = currentPath.split('/').pop() || currentPath
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const unsubscribe = window.electronAPI.onSessionFilesChanged((event) => {
       if (event.sessionId !== sessionId) return
       // fs.watch may occasionally emit null filename; treat that as a generic
       // change and refresh the currently opened file.
-      if (event.changedPath && normalizePath(event.changedPath) !== currentPath) return
+      if (event.changedPath) {
+        const changedPath = normalizePath(event.changedPath)
+        const changedFilename = changedPath.split('/').pop() || changedPath
+        const isExactMatch = changedPath === currentPath
+        const isFilenameOnlyMatch = changedFilename === currentFilename && !changedPath.includes('/')
+        if (!isExactMatch && !isFilenameOnlyMatch) return
+      }
 
       if (debounceTimer) {
         clearTimeout(debounceTimer)

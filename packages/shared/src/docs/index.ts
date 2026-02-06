@@ -4,21 +4,20 @@
  * Provides access to built-in documentation that Claude can reference
  * when performing configuration tasks (sources, agents, permissions, etc.).
  *
- * Docs are stored at ~/.agent-operator/docs/ and copied on first run.
+ * Docs are stored at ~/.cowork/docs/ and copied on first run.
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
 import { isDebugEnabled, debug } from '../utils/debug.ts';
 import { getAppVersion } from '../version/app-version.ts';
 import { initializeSourceGuides } from './source-guides.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 
-const CONFIG_DIR = join(homedir(), '.agent-operator');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
 /** App root directory constant for use in prompts and documentation */
-export const APP_ROOT = '~/.agent-operator';
+export const APP_ROOT = '~/.cowork';
 
 // Track if docs have been initialized this session (prevents re-init on hot reload)
 let docsInitialized = false;
@@ -173,7 +172,7 @@ When a user wants to add a new source, follow this conversational setup process 
 **Before doing anything else**, check if a specialized guide exists for this service:
 
 \`\`\`
-~/.agent-operator/docs/source-guides/
+~/.cowork/docs/source-guides/
 ├── github.com.md      # GitHub - CRITICAL: check for gh CLI first!
 ├── gmail.com.md       # Gmail
 ├── google-calendar.md # Google Calendar
@@ -358,7 +357,7 @@ Would you like me to show you what issues are currently open?
 ## Overview
 
 Sources are stored as folders under:
-- \`~/.agent-operator/workspaces/{workspaceId}/sources/{sourceSlug}/\`
+- \`~/.cowork/workspaces/{workspaceId}/sources/{sourceSlug}/\`
 
 Each source folder contains:
 - \`config.json\` - Source configuration (required)
@@ -709,7 +708,7 @@ When using URLs or domains, \`source_test\` will download and cache the icon loc
 ## Provider Domain Cache
 
 For favicon resolution, a cache maps provider names to their canonical domains at:
-\`~/.agent-operator/provider-domains.json\`
+\`~/.cowork/provider-domains.json\`
 
 **Format:**
 \`\`\`json
@@ -776,7 +775,7 @@ Technical steps:
 
 1. Create the source folder:
    \`\`\`bash
-   mkdir -p ~/.agent-operator/workspaces/{ws}/sources/my-source
+   mkdir -p ~/.cowork/workspaces/{ws}/sources/my-source
    \`\`\`
 
 2. Write \`config.json\` with appropriate settings (see schemas above)
@@ -850,7 +849,7 @@ Cowork uses **the identical SKILL.md format** as the Claude Code SDK. This means
 
 When a skill is invoked (e.g., \`/commit\`):
 
-1. **Workspace skill checked first** - If \`~/.agent-operator/workspaces/{id}/skills/commit/SKILL.md\` exists, it's used
+1. **Workspace skill checked first** - If \`~/.cowork/workspaces/{id}/skills/commit/SKILL.md\` exists, it's used
 2. **SDK skill as fallback** - If no workspace skill exists, the built-in SDK skill is used
 
 This allows you to:
@@ -862,7 +861,7 @@ This allows you to:
 
 Skills are stored as folders:
 \`\`\`
-~/.agent-operator/workspaces/{workspaceId}/skills/{slug}/
+~/.cowork/workspaces/{workspaceId}/skills/{slug}/
 ├── SKILL.md          # Required: Skill definition (same format as Claude Code SDK)
 ├── icon.svg          # Recommended: Skill icon for UI display
 ├── icon.png          # Alternative: PNG icon
@@ -931,7 +930,7 @@ alwaysAllow:
 ### 1. Create the skill directory
 
 \`\`\`bash
-mkdir -p ~/.agent-operator/workspaces/{ws}/skills/my-skill
+mkdir -p ~/.cowork/workspaces/{ws}/skills/my-skill
 \`\`\`
 
 ### 2. Write SKILL.md
@@ -1073,7 +1072,7 @@ globs: ["src/**/*.ts", "src/**/*.tsx"]
 
 To customize a built-in SDK skill like \`/commit\`:
 
-1. Create \`~/.agent-operator/workspaces/{ws}/skills/commit/SKILL.md\`
+1. Create \`~/.cowork/workspaces/{ws}/skills/commit/SKILL.md\`
 2. Write your custom instructions
 3. Add an icon
 4. Run \`skill_validate({ skillSlug: "commit" })\`
@@ -1122,8 +1121,8 @@ Explore mode is a read-only mode that blocks potentially destructive operations.
 Custom permission rules let you allow specific operations that would otherwise be blocked.
 
 Permission files are located at:
-- Workspace: \`~/.agent-operator/workspaces/{slug}/permissions.json\`
-- Source: \`~/.agent-operator/workspaces/{slug}/sources/{source}/permissions.json\`
+- Workspace: \`~/.cowork/workspaces/{slug}/permissions.json\`
+- Source: \`~/.cowork/workspaces/{slug}/sources/{source}/permissions.json\`
 
 ## Auto-Scoping for Source Permissions
 
@@ -1160,7 +1159,7 @@ The system converts it to \`mcp__<sourceSlug>__.*list\` internally. This means:
   ],
   "allowedWritePaths": [
     "/tmp/**",
-    "~/.agent-operator/**"
+    "~/.cowork/**"
   ]
 }
 \`\`\`
@@ -1237,7 +1236,7 @@ Glob patterns for directories where writes are allowed.
 {
   "allowedWritePaths": [
     "/tmp/**",
-    "~/.agent-operator/**",
+    "~/.cowork/**",
     "/path/to/project/output/**"
   ]
 }
@@ -1311,8 +1310,8 @@ This guide explains how to customize the visual theme of Cowork.
 ## Overview
 
 Cowork uses a 6-color theme system with cascading configuration:
-- **App-level theme**: \`~/.agent-operator/theme.json\` - Global defaults
-- **Workspace-level theme**: \`~/.agent-operator/workspaces/{id}/theme.json\` - Per-workspace overrides
+- **App-level theme**: \`~/.cowork/theme.json\` - Global defaults
+- **Workspace-level theme**: \`~/.cowork/workspaces/{id}/theme.json\` - Per-workspace overrides
 
 Workspace themes override app-level themes. Both are optional - the app has sensible defaults.
 
@@ -1420,7 +1419,7 @@ The built-in default theme uses OKLCH colors optimized for accessibility:
 \`\`\`
 
 ### Workspace-specific theme
-Create \`~/.agent-operator/workspaces/{id}/theme.json\`:
+Create \`~/.cowork/workspaces/{id}/theme.json\`:
 \`\`\`json
 {
   "accent": "oklch(0.60 0.20 150)"
@@ -1430,7 +1429,7 @@ This workspace will use green accent while others use the app default.
 
 ## Cascading Behavior
 
-1. **App theme** (\`~/.agent-operator/theme.json\`) sets global defaults
+1. **App theme** (\`~/.cowork/theme.json\`) sets global defaults
 2. **Workspace theme** overrides app theme for that workspace only
 3. **Built-in defaults** fill any unspecified colors
 
@@ -1457,7 +1456,7 @@ Theme changes are applied immediately - no restart needed. Edit theme.json and t
 
 ### Creating an App Theme
 \`\`\`bash
-# Create or edit ~/.agent-operator/theme.json
+# Create or edit ~/.cowork/theme.json
 \`\`\`
 
 \`\`\`json
@@ -1469,7 +1468,7 @@ Theme changes are applied immediately - no restart needed. Edit theme.json and t
 ### Creating a Workspace Theme
 \`\`\`bash
 # Create theme in workspace folder
-# ~/.agent-operator/workspaces/{workspaceId}/theme.json
+# ~/.cowork/workspaces/{workspaceId}/theme.json
 \`\`\`
 
 \`\`\`json
@@ -1520,8 +1519,8 @@ Session statuses represent workflow states. Each workspace has its own status co
 
 ## Storage Locations
 
-- Config: \`~/.agent-operator/workspaces/{id}/statuses/config.json\`
-- Icons: \`~/.agent-operator/workspaces/{id}/statuses/icons/\`
+- Config: \`~/.cowork/workspaces/{id}/statuses/config.json\`
+- Icons: \`~/.cowork/workspaces/{id}/statuses/icons/\`
 
 ## Default Statuses
 

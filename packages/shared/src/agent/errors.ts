@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'token_expired'          // Workspace token expired (from diagnostics)
   | 'rate_limited'
   | 'service_error'
+  | 'provider_error'         // Upstream model provider temporary issue
   | 'service_unavailable'    // Service unavailable (from diagnostics)
   | 'network_error'
   | 'mcp_auth_required'
@@ -20,6 +21,7 @@ export type ErrorCode =
   | 'model_no_tool_support'  // Model doesn't support tool/function calling
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
+  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -107,6 +109,16 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     canRetry: true,
     retryDelayMs: 2000,
   },
+  provider_error: {
+    title: 'AI Provider Error',
+    message: 'The model provider is experiencing issues. Please retry in a few minutes.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+      { key: 's', label: 'Check settings', command: '/settings', action: 'settings' },
+    ],
+    canRetry: true,
+    retryDelayMs: 5000,
+  },
   service_unavailable: {
     title: 'Service Unavailable',
     message: 'The AI service is experiencing issues. All credentials appear valid. Try again in a moment.',
@@ -174,6 +186,14 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: false,
   },
+  invalid_request: {
+    title: 'Invalid Request',
+    message: 'The API rejected this request.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+  },
   unknown_error: {
     title: 'Error',
     message: 'An unexpected error occurred.',
@@ -222,8 +242,28 @@ export function parseError(error: unknown): AgentError {
   // Detect error type from message/status
   let code: ErrorCode = 'unknown_error';
 
+  // Check for OpenRouter data policy errors first (these contain "no endpoints" which could confuse other checks)
+  if (lowerMessage.includes('data policy') || lowerMessage.includes('privacy')) {
+    code = 'data_policy_error';
+  // Check for model-specific errors (OpenRouter, etc.)
+  // Tool support errors must be checked BEFORE model errors since tool errors often contain "model"
+  } else if (
+    lowerMessage.includes('no endpoints found that support tool use') ||
+    lowerMessage.includes('does not support tool') ||
+    lowerMessage.includes('tool_use is not supported') ||
+    lowerMessage.includes('function calling not available') ||
+    lowerMessage.includes('tools are not supported') ||
+    lowerMessage.includes('doesn\'t support tool') ||
+    lowerMessage.includes('tool use is not supported') ||
+    (lowerMessage.includes('invalid_request_error') && lowerMessage.includes('tool')) ||
+    // Generic pattern: "tool" + "not" + "support" anywhere in message
+    (lowerMessage.includes('tool') && lowerMessage.includes('not') && lowerMessage.includes('support'))
+  ) {
+    code = 'model_no_tool_support';
+  } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model')) {
+    code = 'invalid_model';
   // Check for specific HTTP status codes or patterns
-  if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
+  } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
     code = 'billing_error';
   } else if (lowerMessage.includes('401') || lowerMessage.includes('unauthorized') || lowerMessage.includes('invalid api key') || lowerMessage.includes('invalid x-api-key') || lowerMessage.includes('authentication failed')) {
     // Distinguish between API key and OAuth errors
@@ -240,6 +280,8 @@ export function parseError(error: unknown): AgentError {
     code = 'network_error';
   } else if (lowerMessage.includes('mcp') && (lowerMessage.includes('auth') || lowerMessage.includes('401'))) {
     code = 'mcp_auth_required';
+  } else if (lowerMessage.includes('invalid request') || lowerMessage.includes('invalid_request_error')) {
+    code = 'invalid_request';
   } else if (lowerMessage.includes('exited with code') || lowerMessage.includes('process exited')) {
     // SDK subprocess crashed - likely auth/setup issue
     // Check if the error contains more specific info
@@ -251,6 +293,22 @@ export function parseError(error: unknown): AgentError {
   }
 
   const definition = ERROR_DEFINITIONS[code];
+
+  // For model_no_tool_support errors, try to extract the model name for a more helpful message
+  if (code === 'model_no_tool_support') {
+    // Try to extract model name from various error message formats
+    // Common patterns: "model: xxx", "model 'xxx'", "model \"xxx\"", "model xxx does not"
+    const modelMatch = fullErrorText.match(/model[:\s]+["']?([a-zA-Z0-9\-_/:.]+)["']?/i) ||
+                       fullErrorText.match(/["']([a-zA-Z0-9\-_/:.]+)["']\s+does not support/i);
+    if (modelMatch?.[1]) {
+      return {
+        code,
+        ...definition,
+        message: `Model "${modelMatch[1]}" does not support tool/function calling, which is required for this app. Please choose a different model with tool support in Settings.`,
+        originalError: errorMessage,
+      };
+    }
+  }
 
   return {
     code,

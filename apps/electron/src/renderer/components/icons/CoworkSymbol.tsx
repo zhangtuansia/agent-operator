@@ -24,4 +24,3 @@ export function CoworkSymbol({ className }: CoworkSymbolProps) {
 }
 
 // Legacy export for backward compatibility
-export { CoworkSymbol as CraftAgentsSymbol }

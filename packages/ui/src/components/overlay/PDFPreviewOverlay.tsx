@@ -10,7 +10,6 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Document, Page, pdfjs } from 'react-pdf'
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
@@ -18,9 +17,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
-// Configure pdf.js worker using Vite's ?url import for cross-platform dev/prod compatibility
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker
+type PdfModule = typeof import('react-pdf')
 
 export interface PDFPreviewOverlayProps {
   isOpen: boolean
@@ -65,6 +62,38 @@ export function PDFPreviewOverlay({
   const [pageNumber, setPageNumber] = useState<number>(1)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [pdfModule, setPdfModule] = useState<PdfModule | null>(null)
+  const [isModuleLoading, setIsModuleLoading] = useState(false)
+  const Document = pdfModule?.Document
+  const Page = pdfModule?.Page
+
+  // Lazy-load react-pdf + worker when overlay opens
+  useEffect(() => {
+    if (!isOpen || pdfModule) return
+
+    let cancelled = false
+    setIsModuleLoading(true)
+
+    Promise.all([
+      import('react-pdf'),
+      import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+    ])
+      .then(([reactPdf, worker]) => {
+        if (cancelled) return
+        const workerUrl = (worker as { default: string }).default
+        reactPdf.pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+        setPdfModule(reactPdf)
+        setIsModuleLoading(false)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : t.loadFailed)
+          setIsModuleLoading(false)
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [isOpen, pdfModule, t.loadFailed])
 
   // Load PDF data when overlay opens
   useEffect(() => {
@@ -163,10 +192,10 @@ export function PDFPreviewOverlay({
       headerTranslations={headerTranslations}
     >
       <div className="h-full flex flex-col items-center justify-center overflow-auto">
-        {isLoading && (
+        {(isModuleLoading || isLoading) && (
           <div className="text-muted-foreground text-sm">{t.loading}</div>
         )}
-        {fileObj && (
+        {fileObj && Document && Page && (
           <Document
             file={fileObj}
             onLoadSuccess={onDocumentLoadSuccess}

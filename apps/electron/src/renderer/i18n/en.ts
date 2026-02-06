@@ -166,7 +166,7 @@ export const en = {
 
     // Tool Icons
     toolIcons: 'Tool Icons',
-    toolIconsDescription: 'Icons shown next to CLI commands in chat activity. Stored in ~/.agent-operator/tool-icons/.',
+    toolIconsDescription: 'Icons shown next to CLI commands in chat activity. Stored in ~/.cowork/tool-icons/.',
     searchTools: 'Search tools...',
     noToolIconMappings: 'No tool icon mappings found',
     editFile: 'Edit File',
@@ -722,6 +722,13 @@ export const en = {
   // Input
   input: {
     placeholder: 'Ask Cowork anything...',
+    placeholderHint1: 'What would you like to work on?',
+    placeholderHint2: 'Use Shift + Tab to switch between Explore and Auto',
+    placeholderHint3: 'Type @ to mention files, folders, or skills',
+    placeholderHint4: 'Type # to apply labels to this conversation',
+    placeholderHint5: 'Press Shift + Enter to add a new line',
+    placeholderHint6: 'Press {modKey} + B to toggle the sidebar',
+    placeholderHint7: 'Press {modKey} + . for focus mode',
     attachFile: 'Attach file',
     attachFiles: 'Attach Files',
     attachImage: 'Attach image',
@@ -885,7 +892,7 @@ export const en = {
     workspaceName: 'Workspace name',
     workspaceNamePlaceholder: 'My Workspace',
     defaultLocation: 'Default location',
-    underAgentOperatorFolder: 'under .agent-operator folder',
+    underAgentOperatorFolder: 'under .cowork folder',
     chooseLocation: 'Choose a location',
     pickAPlace: 'Pick a place to put your new workspace.',
     browse: 'Browse',
@@ -1023,6 +1030,7 @@ export const en = {
     restart: 'Restart',
     appWillRestart: 'The app will restart automatically.',
     downloadingUpdate: 'Downloading update...',
+    updateFailed: 'Update failed',
     updateAvailable: 'Update available',
     newVersionAvailable: 'A new version is available.',
   },
@@ -1140,6 +1148,7 @@ export const en = {
   // Processing indicators
   processing: {
     thinking: 'Thinking…',
+    analyzing: 'Analyzing…',
     pondering: 'Pondering…',
     contemplating: 'Contemplating…',
     reasoning: 'Reasoning…',
@@ -1169,6 +1178,26 @@ export const en = {
     almost: 'Almost…',
     working: 'Working…',
     busyBusy: 'Busy busy…',
+    whirring: 'Whirring…',
+    churning: 'Churning…',
+    percolating: 'Percolating…',
+    simmering: 'Simmering…',
+    cooking: 'Cooking…',
+    baking: 'Baking…',
+    stirring: 'Stirring…',
+    spinningUp: 'Spinning up…',
+    warmingUp: 'Warming up…',
+    revving: 'Revving…',
+    buzzing: 'Buzzing…',
+    humming: 'Humming…',
+    ticking: 'Ticking…',
+    clicking: 'Clicking…',
+    whizzing: 'Whizzing…',
+    zooming: 'Zooming…',
+    zipping: 'Zipping…',
+    chugging: 'Chugging…',
+    trucking: 'Trucking…',
+    rolling: 'Rolling…',
   },
 
   // Playground (development)
@@ -1265,6 +1294,9 @@ export const en = {
   // Edit popover labels and examples
   editPopover: {
     describePlaceholder: "Describe what you'd like to change...",
+    compactPlaceholder1: 'Just tell me what to change',
+    compactPlaceholder2: 'Describe the update',
+    compactPlaceholder3: 'What should I modify?',
     examplePrefix: ', e.g., ',
     permissionSettings: 'Permission Settings',
     defaultPermissions: 'Default Permissions',

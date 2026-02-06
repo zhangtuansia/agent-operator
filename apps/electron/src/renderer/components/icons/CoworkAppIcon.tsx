@@ -21,4 +21,3 @@ export function CoworkAppIcon({ className, size = 64 }: CoworkAppIconProps) {
 }
 
 // Legacy export for backward compatibility
-export { CoworkAppIcon as CraftAppIcon }

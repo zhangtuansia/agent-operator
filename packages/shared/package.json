@@ -1,6 +1,6 @@
 {
   "name": "@agent-operator/shared",
-  "version": "0.0.1",
+  "version": "0.1.5a",
   "license": "Apache-2.0",
   "description": "Shared business logic for Cowork - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -63,6 +63,7 @@
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",
+    "@agent-operator/mermaid": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",

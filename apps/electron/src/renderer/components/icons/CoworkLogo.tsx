@@ -24,4 +24,3 @@ export function CoworkLogo({ className }: CoworkLogoProps) {
 }
 
 // Legacy export for backward compatibility
-export { CoworkLogo as CraftAgentsLogo }

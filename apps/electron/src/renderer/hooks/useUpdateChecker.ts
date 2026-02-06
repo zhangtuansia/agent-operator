@@ -41,6 +41,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   // Track if we've shown the toast for this version to avoid duplicates
   const shownToastVersionRef = useRef<string | null>(null)
+  // Track surfaced error signatures so repeated update broadcasts don't spam.
+  const shownErrorSignatureRef = useRef<string | null>(null)
 
   // Show toast notification when update is ready
   const showUpdateToast = useCallback((version: string, onInstall: () => void) => {
@@ -86,6 +88,21 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   // Load initial state and check if update ready
   useEffect(() => {
     const checkAndNotify = async (info: UpdateInfo) => {
+      if (info.downloadState === 'error') {
+        const errorMessage = info.error?.trim() || t('appSettings.downloadFailed')
+        const signature = `${info.latestVersion ?? 'unknown'}:${errorMessage}`
+        if (shownErrorSignatureRef.current !== signature) {
+          shownErrorSignatureRef.current = signature
+          toast.error(t('updates.updateFailed'), {
+            description: errorMessage,
+          })
+        }
+        return
+      }
+
+      // Reset when updater moves out of error state.
+      shownErrorSignatureRef.current = null
+
       if (!info.available || !info.latestVersion) return
       if (info.downloadState !== 'ready') return
 
@@ -121,7 +138,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       cleanupAvailable()
       cleanupProgress()
     }
-  }, [showUpdateToast, installUpdate])
+  }, [showUpdateToast, installUpdate, t])
 
   // Check for updates manually
   const checkForUpdates = useCallback(async () => {

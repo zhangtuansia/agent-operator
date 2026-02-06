@@ -1,12 +1,12 @@
 import { getLatestVersion } from "./manifest";
+import { APP_VERSION } from "./app-version";
 
-declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
+const ENV_VERSION =
+  process.env.COWORK_APP_VERSION ||
+  process.env.COWORK_AGENT_CLI_VERSION;
 
 export function getCurrentVersion(): string {
-  if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
-    return CRAFT_AGENT_CLI_VERSION;
-  }
-  return "0.0.1";
+  return ENV_VERSION ?? APP_VERSION;
 }
 
 export async function isUpToDate(): Promise<boolean> {

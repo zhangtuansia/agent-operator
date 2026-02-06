@@ -405,7 +405,7 @@ function getCoworkAssistantPrompt(workspaceRootPath?: string): string {
   const workspacePath = workspaceRootPath || `${APP_ROOT}/workspaces/{id}`;
 
   // Extract workspaceId from path (last component of the path)
-  // Path format: ~/.agent-operator/workspaces/{workspaceId}
+  // Path format: ~/.cowork/workspaces/{workspaceId}
   const pathParts = workspacePath.split('/');
   const workspaceId = pathParts[pathParts.length - 1] || '{workspaceId}';
 

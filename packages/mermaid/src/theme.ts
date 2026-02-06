@@ -192,7 +192,7 @@ interface ShikiThemeLike {
  * @example
  * ```ts
  * import { getSingletonHighlighter } from 'shiki'
- * import { fromShikiTheme } from '@craft-agent/mermaid'
+ * import { fromShikiTheme } from '@agent-operator/mermaid'
  *
  * const hl = await getSingletonHighlighter({ themes: ['tokyo-night'] })
  * const colors = fromShikiTheme(hl.getTheme('tokyo-night'))

@@ -16,7 +16,7 @@
  * Available modules:
  *   - agent: OperatorAgent SDK wrapper, plan tools
  *   - auth: OAuth, token management, auth state
- *   - clients: Craft API client
+ *   - clients: API clients (internal)
  *   - colors: Entity color system (system colors + custom colors with light/dark variants)
  *   - config: Storage, models, preferences
  *   - credentials: Encrypted credential storage

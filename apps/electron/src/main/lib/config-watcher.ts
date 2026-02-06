@@ -5,11 +5,11 @@
  * Uses recursive directory watching for simplicity and reliability.
  *
  * Watched paths:
- * - ~/.agent-operator/config.json - Main app configuration
- * - ~/.agent-operator/preferences.json - User preferences
- * - ~/.agent-operator/theme.json - App-level theme overrides
- * - ~/.agent-operator/themes/*.json - Preset theme files (app-level)
- * - ~/.agent-operator/workspaces/{slug}/ - Workspace directory (recursive)
+ * - ~/.cowork/config.json - Main app configuration
+ * - ~/.cowork/preferences.json - User preferences
+ * - ~/.cowork/theme.json - App-level theme overrides
+ * - ~/.cowork/themes/*.json - Preset theme files (app-level)
+ * - ~/.cowork/workspaces/{slug}/ - Workspace directory (recursive)
  *   - sources/{slug}/config.json, guide.md, permissions.json
  *   - skills/{slug}/SKILL.md, icon.*
  *   - permissions.json
@@ -17,7 +17,6 @@
 
 import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename, relative } from 'path';
-import { homedir } from 'os';
 import type { FSWatcher } from 'fs';
 import { debug, perf } from '@agent-operator/shared/utils';
 import { loadStoredConfig, type StoredConfig } from '@agent-operator/shared/config';
@@ -46,12 +45,12 @@ import {
 } from '@agent-operator/shared/statuses';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from '@agent-operator/shared/config';
 import type { ThemeOverrides, PresetTheme } from '@agent-operator/shared/config';
+import { CONFIG_DIR } from '@agent-operator/shared/config';
 
 // ============================================================
 // Constants
 // ============================================================
 
-const CONFIG_DIR = join(homedir(), '.agent-operator');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
@@ -102,7 +101,7 @@ export interface ConfigWatcherCallbacks {
   onSkillsListChange?: (skills: LoadedSkill[]) => void;
 
   // Permissions callbacks
-  /** Called when app-level default permissions change (~/.agent-operator/permissions/default.json) */
+  /** Called when app-level default permissions change (~/.cowork/permissions/default.json) */
   onDefaultPermissionsChange?: () => void;
   /** Called when workspace permissions.json changes */
   onWorkspacePermissionsChange?: (workspaceId: string) => void;
@@ -863,7 +862,7 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch app-level themes directory (~/.agent-operator/themes/)
+   * Watch app-level themes directory (~/.cowork/themes/)
    */
   private watchAppThemesDir(): void {
     const themesDir = getAppThemesDir();
@@ -892,7 +891,7 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch app-level permissions directory (~/.agent-operator/permissions/)
+   * Watch app-level permissions directory (~/.cowork/permissions/)
    * Watches for changes to default.json which contains the default read-only patterns
    */
   private watchAppPermissionsDir(): void {

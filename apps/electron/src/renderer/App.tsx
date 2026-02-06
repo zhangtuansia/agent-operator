@@ -319,7 +319,7 @@ export default function App() {
     })
     // Load app-level theme
     window.electronAPI.getAppTheme().then(setAppTheme)
-  }, [appState, initialSessionId, windowWorkspaceId, setSession, initializeSessions])
+  }, [appState, initialSessionId, windowWorkspaceId, setSession, initializeSessions, initDrafts])
 
   // Subscribe to theme change events (live updates when theme.json changes)
   useEffect(() => {
@@ -408,7 +408,7 @@ export default function App() {
     // Remove from per-session atom and metadata map (no sessionsAtom)
     removeSession(sessionId)
     return true
-  }, [store, removeSession])
+  }, [store, removeSession, t])
 
   const handleFlagSession = useCallback((sessionId: string) => {
     updateSessionById(sessionId, { isFlagged: true })
@@ -591,9 +591,14 @@ export default function App() {
         badges: badges.length > 0 ? badges : undefined,
       })
 
-      // Auto-disable ultrathink after sending (single-shot activation)
+      // Auto-disable ultrathink after sending (single-shot activation, UI-only state)
       if (isUltrathink) {
-        handleSessionOptionsChange(sessionId, { ultrathinkEnabled: false })
+        setSessionOptions(prev => {
+          const next = new Map(prev)
+          const current = next.get(sessionId) ?? defaultSessionOptions
+          next.set(sessionId, mergeSessionOptions(current, { ultrathinkEnabled: false }))
+          return next
+        })
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -640,7 +645,7 @@ export default function App() {
       window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingLevel', level: updates.thinkingLevel })
     }
     // ultrathinkEnabled is UI-only (single-shot), no backend persistence needed
-  }, [sessionOptions])
+  }, [])
 
   // Open new chat - creates session and selects it
   // Used by components via AppShellContext and for programmatic navigation

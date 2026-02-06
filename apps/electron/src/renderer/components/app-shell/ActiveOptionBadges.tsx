@@ -117,23 +117,23 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
   const { t } = useLanguage()
 
   // Map permission modes to translation keys
-  const getModeDisplayName = (mode: PermissionMode): string => {
+  const getModeDisplayName = React.useCallback((mode: PermissionMode): string => {
     const modeTranslationMap: Record<PermissionMode, string> = {
       'safe': t('permissionModes.safe'),
       'ask': t('permissionModes.ask'),
       'allow-all': t('permissionModes.allowAll'),
     }
     return modeTranslationMap[mode]
-  }
+  }, [t])
 
-  const getModeDescription = (mode: PermissionMode): string => {
+  const getModeDescription = React.useCallback((mode: PermissionMode): string => {
     const modeDescriptionMap: Record<PermissionMode, string> = {
       'safe': t('permissionModes.safeDescription'),
       'ask': t('permissionModes.askDescription'),
       'allow-all': t('permissionModes.allowAllDescription'),
     }
     return modeDescriptionMap[mode]
-  }
+  }, [t])
 
   // Create translated command groups
   const MENU_ICON_SIZE = 'h-3.5 w-3.5'
@@ -171,7 +171,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
       { id: 'modes', commands: permissionModeCommands },
       { id: 'features', commands: [ultrathinkCommand] },
     ]
-  }, [t])
+  }, [t, getModeDescription, getModeDisplayName])
 
   // Sync optimistic state when prop changes (confirmation from backend)
   React.useEffect(() => {
@@ -257,4 +257,3 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     </Popover>
   )
 }
-

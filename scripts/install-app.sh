@@ -2,8 +2,8 @@
 
 set -e
 
-VERSIONS_URL="https://agents.craft.do/electron"
-DOWNLOAD_DIR="$HOME/.agent-operator/downloads"
+VERSIONS_URL="https://download.aicowork.chat/electron"
+DOWNLOAD_DIR="$HOME/.cowork/downloads"
 
 # Colors for output
 RED='\033[0;31m'
@@ -118,7 +118,7 @@ esac
 # Set platform-specific variables
 if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
-    APP_NAME="Agent Operator.app"
+    APP_NAME="Cowork.app"
     INSTALL_DIR="/Applications"
     ext="dmg"
 else
@@ -127,7 +127,7 @@ else
         error "Linux currently only supports x64 architecture. Your architecture: $arch"
     fi
     platform="linux-${arch}"
-    APP_NAME="Craft-Agent-x64.AppImage"
+    APP_NAME="Cowork-x64.AppImage"
     INSTALL_DIR="$HOME/.local/bin"
     ext="AppImage"
 fi
@@ -164,7 +164,7 @@ if [ "$HAS_JQ" = true ]; then
 else
     checksum=$(get_checksum_from_manifest "$manifest_json" "$platform")
     # Fallback filename if not using jq
-    filename="Craft-Agent-${arch}.${ext}"
+    filename="Cowork-${arch}.${ext}"
 fi
 
 # Validate checksum format (SHA256 = 64 hex characters)
@@ -174,7 +174,7 @@ fi
 
 # Use default filename if not in manifest
 if [ -z "$filename" ]; then
-    filename="Craft-Agent-${arch}.${ext}"
+    filename="Cowork-${arch}.${ext}"
 fi
 
 info "Expected checksum: ${checksum:0:16}..."
@@ -212,23 +212,23 @@ if [ "$OS_TYPE" = "darwin" ]; then
     dmg_path="$installer_path"
 
     # Quit the app if it's running (use bundle ID for reliability)
-    APP_BUNDLE_ID="com.lukilabs.agent-operator"
-    if pgrep -x "Agent Operator" >/dev/null 2>&1; then
-        info "Quitting Agent Operator..."
+    APP_BUNDLE_ID="com.cowork.app"
+    if pgrep -x "Cowork" >/dev/null 2>&1; then
+        info "Quitting Cowork..."
         osascript -e "tell application id \"$APP_BUNDLE_ID\" to quit" 2>/dev/null || true
         # Wait for app to quit (max 5 seconds) - POSIX compatible loop
         i=0
         while [ $i -lt 10 ]; do
-            if ! pgrep -x "Agent Operator" >/dev/null 2>&1; then
+            if ! pgrep -x "Cowork" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.5
             i=$((i + 1))
         done
         # Force kill if still running
-        if pgrep -x "Agent Operator" >/dev/null 2>&1; then
+        if pgrep -x "Cowork" >/dev/null 2>&1; then
             warn "App didn't quit gracefully. Force quitting (unsaved data may be lost)..."
-            pkill -9 -x "Agent Operator" 2>/dev/null || true
+            pkill -9 -x "Cowork" 2>/dev/null || true
             # Wait longer for macOS to release file handles
             sleep 3
         fi
@@ -275,10 +275,10 @@ if [ "$OS_TYPE" = "darwin" ]; then
     echo ""
     success "Installation complete!"
     echo ""
-    printf "%b\n" "  Agent Operator has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
+    printf "%b\n" "  Cowork has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
     echo ""
     printf "%b\n" "  You can launch it from ${BOLD}Applications${NC} or by running:"
-    printf "%b\n" "    ${BOLD}open -a 'Agent Operator'${NC}"
+    printf "%b\n" "    ${BOLD}open -a 'Cowork'${NC}"
     echo ""
 
 else
@@ -286,14 +286,15 @@ else
     appimage_path="$installer_path"
 
     # New paths
-    APP_DIR="$HOME/.agent-operator/app"
-    WRAPPER_PATH="$INSTALL_DIR/agent-operators"
-    APPIMAGE_INSTALL_PATH="$APP_DIR/Craft-Agent-x64.AppImage"
+    APP_DIR="$HOME/.cowork/app"
+    WRAPPER_PATH="$INSTALL_DIR/cowork"
+    LEGACY_WRAPPER_PATH="$INSTALL_DIR/agent-operators"
+    APPIMAGE_INSTALL_PATH="$APP_DIR/Cowork-x64.AppImage"
 
     # Kill the app if it's running
-    if pgrep -f "Craft-Agent.*AppImage" >/dev/null 2>&1; then
-        info "Stopping Agent Operator..."
-        pkill -f "Craft-Agent.*AppImage" 2>/dev/null || true
+    if pgrep -f "Cowork.*AppImage" >/dev/null 2>&1; then
+        info "Stopping Cowork..."
+        pkill -f "Cowork.*AppImage" 2>/dev/null || true
         sleep 2
     fi
 
@@ -313,16 +314,16 @@ else
     info "Creating launcher at $WRAPPER_PATH..."
     cat > "$WRAPPER_PATH" << 'WRAPPER_EOF'
 #!/bin/bash
-# Agent Operator launcher - handles Linux-specific AppImage issues
+# Cowork launcher - handles Linux-specific AppImage issues
 
-APPIMAGE_PATH="$HOME/.agent-operator/app/Craft-Agent-x64.AppImage"
-ELECTRON_CACHE="$HOME/.config/@agent-operator"
-ELECTRON_CACHE_ALT="$HOME/.cache/@agent-operator"
+APPIMAGE_PATH="$HOME/.cowork/app/Cowork-x64.AppImage"
+ELECTRON_CACHE="$HOME/.config/@cowork"
+ELECTRON_CACHE_ALT="$HOME/.cache/@cowork"
 
 # Verify AppImage exists
 if [ ! -f "$APPIMAGE_PATH" ]; then
-    echo "Error: Agent Operator not found at $APPIMAGE_PATH"
-    echo "Reinstall: curl -fsSL https://agents.craft.do/install-app.sh | bash"
+    echo "Error: Cowork not found at $APPIMAGE_PATH"
+    echo "Reinstall: curl -fsSL https://download.aicowork.chat/install-app.sh | bash"
     exit 1
 fi
 
@@ -332,9 +333,9 @@ if [ -z "$DISPLAY" ]; then
 fi
 
 # Clear stale cache referencing AppImage mount paths
-# AppImage creates a new /tmp/.mount_Craft-XXXX each launch, so any cached path is stale
+# AppImage creates a new /tmp/.mount_Cowork-XXXX each launch, so any cached path is stale
 for cache_dir in "$ELECTRON_CACHE" "$ELECTRON_CACHE_ALT"; do
-    if [ -d "$cache_dir" ] && grep -rq '/tmp/\.mount_Craft' "$cache_dir" 2>/dev/null; then
+    if [ -d "$cache_dir" ] && grep -rq '/tmp/\.mount_Cowork' "$cache_dir" 2>/dev/null; then
         rm -rf "$cache_dir"
     fi
 done
@@ -349,8 +350,7 @@ WRAPPER_EOF
     chmod +x "$WRAPPER_PATH"
 
     # Migrate old installation
-    OLD_APPIMAGE="$INSTALL_DIR/Craft-Agent-x64.AppImage"
-    [ -f "$OLD_APPIMAGE" ] && rm -f "$OLD_APPIMAGE"
+    [ -n "$LEGACY_WRAPPER_PATH" ] && ln -sf "$WRAPPER_PATH" "$LEGACY_WRAPPER_PATH"
 
     echo ""
     echo "─────────────────────────────────────────────────────────────────────────"
@@ -360,7 +360,8 @@ WRAPPER_EOF
     printf "%b\n" "  AppImage: ${BOLD}$APPIMAGE_INSTALL_PATH${NC}"
     printf "%b\n" "  Launcher: ${BOLD}$WRAPPER_PATH${NC}"
     echo ""
-    printf "%b\n" "  Run with: ${BOLD}agent-operators${NC}"
+    printf "%b\n" "  Run with: ${BOLD}cowork${NC}"
+    printf "%b\n" "  Legacy: ${BOLD}agent-operators${NC}"
     echo ""
     printf "%b\n" "  Add to PATH if needed:"
     printf "%b\n" "    ${BOLD}echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc${NC}"

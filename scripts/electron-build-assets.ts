@@ -4,10 +4,9 @@
  * Copies shared documentation files (packages/shared/assets/docs/)
  * into the Electron dist directory so they are bundled with the app.
  * At runtime, packages/shared/src/docs/index.ts reads these files
- * and installs them to ~/.craft-agent/docs/.
+ * and installs them to the app config docs directory.
  *
  * Without this step, the packaged app falls back to placeholder content.
- * See: https://github.com/lukilabs/craft-agents-oss/issues/71
  */
 
 import { existsSync, cpSync, mkdirSync } from "fs";

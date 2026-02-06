@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Cowork! This document provides gu
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/anthropics/agent-operators.git
-   cd agent-operators
+   git clone https://github.com/zhangtuansia/agent-operator.git
+   cd agent-operator
    ```
 
 2. Install dependencies:
@@ -93,7 +93,7 @@ How you tested these changes
 ## Project Structure
 
 ```
-agent-operators/
+agent-operator/
 ├── apps/
 │   ├── electron/    # Desktop GUI (primary interface)
 │   └── tui/         # Terminal CLI (deprecated)

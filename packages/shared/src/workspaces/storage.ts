@@ -3,7 +3,7 @@
  *
  * CRUD operations for workspaces.
  * Workspaces can be stored anywhere on disk via rootPath.
- * Default location: ~/.agent-operator/workspaces/
+ * Default location: ~/.cowork/workspaces/
  */
 
 import {
@@ -16,7 +16,7 @@ import {
   statSync,
 } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { CONFIG_DIR } from '../config/paths.ts';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
@@ -29,7 +29,6 @@ import type {
   WorkspaceSummary,
 } from './types.ts';
 
-const CONFIG_DIR = join(homedir(), '.agent-operator');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 
 // ============================================================
@@ -37,7 +36,7 @@ const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 // ============================================================
 
 /**
- * Get the default workspaces directory (~/.agent-operator/workspaces/)
+ * Get the default workspaces directory (~/.cowork/workspaces/)
  */
 export function getDefaultWorkspacesDir(): string {
   return DEFAULT_WORKSPACES_DIR;
@@ -330,7 +329,7 @@ export function renameWorkspaceFolder(rootPath: string, newName: string): boolea
 
 /**
  * Discover workspace folders in the default location that have valid config.json
- * Returns paths to valid workspaces found in ~/.agent-operator/workspaces/
+ * Returns paths to valid workspaces found in ~/.cowork/workspaces/
  */
 export function discoverWorkspacesInDefaultLocation(): string[] {
   const discovered: string[] = [];
@@ -362,14 +361,14 @@ export function discoverWorkspacesInDefaultLocation(): string[] {
 
 /**
  * Check if local (stdio) MCP servers are enabled for a workspace.
- * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
+ * Resolution order: ENV (COWORK_LOCAL_MCP_ENABLED) > workspace config > default (true)
  *
  * @param rootPath - Absolute path to workspace root folder
  * @returns true if local MCP servers should be enabled
  */
 export function isLocalMcpEnabled(rootPath: string): boolean {
   // 1. Environment variable override (highest priority)
-  const envValue = process.env.CRAFT_LOCAL_MCP_ENABLED;
+  const envValue = process.env.COWORK_LOCAL_MCP_ENABLED;
   if (envValue !== undefined) {
     return envValue.toLowerCase() === 'true';
   }

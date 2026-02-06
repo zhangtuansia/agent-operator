@@ -21,13 +21,6 @@ import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { ChatDisplay } from '../app-shell/ChatDisplay'
 import { useLanguage } from '@/context/LanguageContext'
 
-/** Rotating placeholders for compact mode input - short, action-oriented */
-const COMPACT_PLACEHOLDERS = [
-  'Just tell me what to change',
-  'Describe the update',
-  'What should I modify?',
-]
-
 /**
  * Context passed to the new chat session so the agent knows exactly
  * what is being edited and can execute quickly.
@@ -133,7 +126,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       label: 'Default Permissions',
       filePath: location, // location is the full path for default permissions
       context:
-        'The user is editing app-level default permissions (~/.agent-operator/permissions/default.json). ' +
+        'The user is editing app-level default permissions (~/.cowork/permissions/default.json). ' +
         'This file configures Explore mode rules that apply to ALL workspaces. ' +
         'It can contain: allowedBashPatterns, allowedMcpPatterns, allowedApiEndpoints, blockedTools, and allowedWritePaths. ' +
         'Each pattern can be a string or an object with pattern and comment fields. ' +
@@ -259,7 +252,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       label: 'Preferences Notes',
       filePath: location, // location is the full path for preferences
       context:
-        'The user is editing the notes field in their preferences (~/.agent-operator/preferences.json). ' +
+        'The user is editing the notes field in their preferences (~/.cowork/preferences.json). ' +
         'This is a JSON file. Only modify the "notes" field unless explicitly asked otherwise. ' +
         'The notes field is free-form text that provides context about the user to the AI. ' +
         'After editing, call config_validate with target "preferences" to verify the changes. ' +
@@ -281,7 +274,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Sources can be MCP servers (HTTP/SSE or stdio), REST APIs, or local filesystems. ' +
         'Ask clarifying questions if needed: What service? MCP or API? Auth type? ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'Follow the patterns in ~/.cowork/docs/sources.md. ' +
         'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to my Craft space',
@@ -299,7 +292,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'APIs connect to REST endpoints with authentication (bearer, header, basic, or query). ' +
         'Ask about the API endpoint URL and auth type. ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'Follow the patterns in ~/.cowork/docs/sources.md. ' +
         'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to the OpenAI API',
@@ -316,7 +309,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'MCP servers can use HTTP/SSE transport (remote) or stdio transport (local subprocess). ' +
         'Ask about the service they want to connect to and whether it\'s a remote URL or local command. ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'Follow the patterns in ~/.cowork/docs/sources.md. ' +
         'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to Linear',
@@ -334,7 +327,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'They use existing Read, Write, Glob, Grep tools - no MCP server needed. ' +
         'If unclear, ask about the folder path they want to connect. ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.agent-operator/docs/sources.md. ' +
+        'Follow the patterns in ~/.cowork/docs/sources.md. ' +
         'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to my Obsidian vault',
@@ -350,7 +343,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Skills are specialized instructions with a SKILL.md file containing YAML frontmatter (name, description) and markdown instructions. ' +
         'Ask clarifying questions if needed: What should the skill do? When should it trigger? ' +
         'Create the skill folder and SKILL.md in the workspace skills directory. ' +
-        'Follow the patterns in ~/.agent-operator/docs/skills.md. ' +
+        'Follow the patterns in ~/.cowork/docs/skills.md. ' +
         'After creating the skill, call skill_validate with the skill slug to verify the SKILL.md file.',
     },
     example: 'Review PRs following our code standards',
@@ -389,7 +382,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
         'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
         'Children form a recursive tree structure — array position determines display order. ' +
-        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
+        'Read ~/.cowork/docs/labels.md for full format reference. ' +
         'Confirm clearly when done.',
     },
     example: 'Add a "Bug" label with red color',
@@ -409,7 +402,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Each rule has: pattern (regex with capture groups), flags (default "gi"), valueTemplate ($1/$2 substitution), description. ' +
         'Multiple rules on the same label = multiple ways to trigger. The "g" flag is always enforced. ' +
         'Avoid catastrophic backtracking patterns (e.g., (a+)+). ' +
-        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
+        'Read ~/.cowork/docs/labels.md for full format reference. ' +
         'Confirm clearly when done.',
     },
     example: 'Add a rule to detect GitHub issue URLs',
@@ -429,7 +422,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Each label has: id (slug, globally unique), name (display), color (optional EntityColor), children (sub-labels array). ' +
         'Colors use EntityColor format: string shorthand (e.g. "blue") or { light, dark } object for theme-aware colors. ' +
         'Labels are color-only (no icons) — rendered as colored circles in the UI. ' +
-        'Read ~/.agent-operator/docs/labels.md for full format reference. ' +
+        'Read ~/.cowork/docs/labels.md for full format reference. ' +
         'Confirm clearly when done.',
     },
     example: 'A red "Bug" label',
@@ -467,11 +460,11 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
       filePath: location, // location is the full path to tool-icons.json
       context:
         'The user wants to edit CLI tool icon mappings. ' +
-        'The file is tool-icons.json in ~/.agent-operator/tool-icons/. Icon image files live in the same directory. ' +
+        'The file is tool-icons.json in ~/.cowork/tool-icons/. Icon image files live in the same directory. ' +
         'Schema: { version: 1, tools: [{ id, displayName, icon, commands }] }. ' +
         'Each tool has: id (unique slug), displayName (shown in UI), icon (filename like "git.ico"), commands (array of CLI command names). ' +
         'Supported icon formats: .png, .ico, .svg, .jpg. Icons display at 20x20px. ' +
-        'Read ~/.agent-operator/docs/tool-icons.md for full format reference. ' +
+        'Read ~/.cowork/docs/tool-icons.md for full format reference. ' +
         'After editing, call config_validate with target "tool-icons" to verify the changes are valid. ' +
         'Confirm clearly when done.',
     },
@@ -696,11 +689,19 @@ export function EditPopover({
   const { onOpenFile, onOpenUrl } = usePlatform()
   const workspace = useActiveWorkspace()
   const { t } = useLanguage()
+  const compactPlaceholders = useMemo(
+    () => [
+      t('editPopover.compactPlaceholder1'),
+      t('editPopover.compactPlaceholder2'),
+      t('editPopover.compactPlaceholder3'),
+    ],
+    [t]
+  )
 
   // Build placeholder: for inline execution use rotating array, otherwise build descriptive string
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
   const placeholder = inlineExecution
-    ? COMPACT_PLACEHOLDERS
+    ? compactPlaceholders
     : (() => {
         const basePlaceholder = overridePlaceholder ?? t('editPopover.describePlaceholder')
         return example
@@ -714,13 +715,13 @@ export function EditPopover({
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : internalOpen
-  const setOpen = (value: boolean) => {
+  const setOpen = useCallback((value: boolean) => {
     if (isControlled) {
       controlledOnOpenChange?.(value)
     } else {
       setInternalOpen(value)
     }
-  }
+  }, [controlledOnOpenChange, isControlled])
 
   // Use App context for session management (same code path as main chat)
   const { onCreateSession, onSendMessage } = useAppShellContext()

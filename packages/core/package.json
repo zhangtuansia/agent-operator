@@ -1,6 +1,6 @@
 {
   "name": "@agent-operator/core",
-  "version": "0.0.1",
+  "version": "0.1.5a",
   "license": "Apache-2.0",
   "description": "Core types, storage, and agent logic for Cowork",
   "type": "module",

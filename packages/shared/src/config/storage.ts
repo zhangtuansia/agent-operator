@@ -143,7 +143,7 @@ export function ensureConfigDir(bundledResourcesDir?: string): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
-  // Initialize bundled docs (creates ~/.agent-operator/docs/ with sources.md, agents.md, permissions.md)
+  // Initialize bundled docs (creates ~/.cowork/docs/ with sources.md, agents.md, permissions.md)
   initializeDocs();
 
   // Initialize config defaults
@@ -1028,7 +1028,7 @@ const APP_THEMES_DIR = join(CONFIG_DIR, 'themes');
 
 /**
  * Get the app-level themes directory.
- * Preset themes are stored at ~/.agent-operator/themes/
+ * Preset themes are stored at ~/.cowork/themes/
  */
 export function getAppThemesDir(): string {
   return APP_THEMES_DIR;
@@ -1362,7 +1362,7 @@ export function clearPendingUpdate(): void {
 const TOOL_ICONS_DIR_NAME = 'tool-icons';
 
 /**
- * Returns the path to the tool-icons directory: ~/.agent-operator/tool-icons/
+ * Returns the path to the tool-icons directory: ~/.cowork/tool-icons/
  */
 export function getToolIconsDir(): string {
   return join(CONFIG_DIR, TOOL_ICONS_DIR_NAME);

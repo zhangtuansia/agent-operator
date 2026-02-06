@@ -142,15 +142,15 @@ function getOAuthDefines(): Record<string, string> {
 
 // Get environment variables for electron process
 function getElectronEnv(): Record<string, string> {
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.COWORK_VITE_PORT || process.env.OPERATOR_VITE_PORT || "5173";
 
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
-    CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
-    CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
+    COWORK_CONFIG_DIR: process.env.COWORK_CONFIG_DIR || process.env.OPERATOR_CONFIG_DIR || "",
+    COWORK_APP_NAME: process.env.COWORK_APP_NAME || process.env.OPERATOR_APP_NAME || "Cowork",
+    COWORK_DEEPLINK_SCHEME: process.env.COWORK_DEEPLINK_SCHEME || process.env.OPERATOR_DEEPLINK_SCHEME || "agentoperator",
+    COWORK_INSTANCE_NUMBER: process.env.COWORK_INSTANCE_NUMBER || process.env.OPERATOR_INSTANCE_NUMBER || "",
   };
 }
 
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
 
   copyResources();
 
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.COWORK_VITE_PORT || process.env.OPERATOR_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port

@@ -456,7 +456,7 @@ export function NavigationProvider({
       // Update our custom history stack
       navHistory.pushToHistory(finalRoute)
     },
-    [isReady, handleActionNavigation, applyNavigationState, navHistory]
+    [isReady, handleActionNavigation, applyNavigationState, navHistory, navigationState]
   )
 
   // Keep navigateRef in sync with latest navigate function

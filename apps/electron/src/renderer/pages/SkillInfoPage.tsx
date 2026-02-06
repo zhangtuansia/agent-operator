@@ -75,7 +75,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
       isMounted = false
       unsubscribe?.()
     }
-  }, [workspaceId, skillSlug])
+  }, [workspaceId, skillSlug, t])
 
   // Handle edit button click
   const handleEdit = useCallback(async () => {
@@ -112,7 +112,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     }
-  }, [skill, workspaceId, skillSlug])
+  }, [skill, workspaceId, skillSlug, t])
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {

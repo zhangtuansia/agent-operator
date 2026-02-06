@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Search, X } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
+import { useTranslation } from '@/i18n'
 
 /**
  * SessionSearchHeader - Presentational component for session list search UI.
@@ -56,12 +57,18 @@ export function SessionSearchHeader({
   resultCount,
   exceededLimit = false,
   inputRef,
-  placeholder = 'Search titles and content...',
-  closeTitle = 'Close search',
-  loadingLabel = 'Loading...',
-  resultsLabel = 'results',
+  placeholder,
+  closeTitle,
+  loadingLabel,
+  resultsLabel,
   readOnly = false,
 }: SessionSearchHeaderProps) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('sessionList.searchConversations')
+  const resolvedCloseTitle = closeTitle ?? t('sessionList.closeSearch')
+  const resolvedLoadingLabel = loadingLabel ?? t('common.loading')
+  const resolvedResultsLabel = resultsLabel ?? t('mentionMenu.results')
+
   return (
     <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
       {/* Search input */}
@@ -77,14 +84,14 @@ export function SessionSearchHeader({
           onFocus={onFocus}
           onBlur={onBlur}
           readOnly={readOnly}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           className="w-full h-8 pl-8 pr-8 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
         />
         {onSearchClose && (
           <button
             onClick={onSearchClose}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-            title={closeTitle}
+            title={resolvedCloseTitle}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -97,10 +104,10 @@ export function SessionSearchHeader({
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />
-              <span>{loadingLabel}</span>
+              <span>{resolvedLoadingLabel}</span>
             </>
           ) : (
-            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} {resultsLabel}</span>
+            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} {resolvedResultsLabel}</span>
           )}
         </div>
       )}

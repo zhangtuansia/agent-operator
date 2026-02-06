@@ -178,7 +178,7 @@ export default function AppSettingsPage() {
           window.electronAPI.getHomeDir(),
         ])
         setToolIcons(mappings)
-        setToolIconsJsonPath(`${homeDir}/.agent-operator/tool-icons/tool-icons.json`)
+        setToolIconsJsonPath(`${homeDir}/.cowork/tool-icons/tool-icons.json`)
       } catch (error) {
         console.error('Failed to load tool icon mappings:', error)
       }
@@ -325,49 +325,56 @@ export default function AppSettingsPage() {
                   </div>
                 </SettingsRow>
                 <SettingsRow label={t('appSettings.checkForUpdates')}>
-                  {/* Ready to install */}
-                  {updateChecker.isReadyToInstall ? (
-                    <Button
-                      size="sm"
-                      onClick={updateChecker.installUpdate}
-                    >
-                      {t('appSettings.restartToUpdate')}
-                    </Button>
-                  ) : /* Downloading */ updateChecker.isDownloading ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled
-                    >
-                      <Spinner className="mr-1.5" />
-                      {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
-                    </Button>
-                  ) : /* Download error */ updateChecker.updateInfo?.downloadState === 'error' ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCheckForUpdates}
-                    >
-                      {t('appSettings.retryDownload')}
-                    </Button>
-                  ) : /* Checking */ isCheckingForUpdates ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled
-                    >
-                      <Spinner className="mr-1.5" />
-                      {t('appSettings.checking')}
-                    </Button>
-                  ) : /* Default: Check Now */ (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCheckForUpdates}
-                    >
-                      {t('appSettings.checkNow')}
-                    </Button>
-                  )}
+                  <div className="flex flex-col items-end gap-1.5">
+                    {/* Ready to install */}
+                    {updateChecker.isReadyToInstall ? (
+                      <Button
+                        size="sm"
+                        onClick={updateChecker.installUpdate}
+                      >
+                        {t('appSettings.restartToUpdate')}
+                      </Button>
+                    ) : /* Downloading */ updateChecker.isDownloading ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                      >
+                        <Spinner className="mr-1.5" />
+                        {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
+                      </Button>
+                    ) : /* Download error */ updateChecker.updateInfo?.downloadState === 'error' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCheckForUpdates}
+                      >
+                        {t('appSettings.retryDownload')}
+                      </Button>
+                    ) : /* Checking */ isCheckingForUpdates ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                      >
+                        <Spinner className="mr-1.5" />
+                        {t('appSettings.checking')}
+                      </Button>
+                    ) : /* Default: Check Now */ (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCheckForUpdates}
+                      >
+                        {t('appSettings.checkNow')}
+                      </Button>
+                    )}
+                    {updateChecker.updateInfo?.downloadState === 'error' && (
+                      <p className="max-w-[24rem] text-right text-xs text-destructive/90 break-all">
+                        {updateChecker.updateInfo.error || t('appSettings.downloadFailed')}
+                      </p>
+                    )}
+                  </div>
                 </SettingsRow>
               </SettingsCard>
             </SettingsSection>

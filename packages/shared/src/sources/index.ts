@@ -70,6 +70,16 @@ export type {
   BasicAuthCredential,
 } from './credential-manager.ts';
 
+// Token refresh manager (OAuth refresh orchestration + cooldown protection)
+export {
+  TokenRefreshManager,
+  createTokenGetter,
+} from './token-refresh-manager.ts';
+export type {
+  TokenRefreshResult,
+  RefreshManagerOptions,
+} from './token-refresh-manager.ts';
+
 // Server Builder (builds MCP/API servers from sources)
 export {
   SourceServerBuilder,

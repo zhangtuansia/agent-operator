@@ -155,10 +155,10 @@ See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) to
 
 ## Configuration
 
-Configuration is stored at `~/.agent-operator/`:
+Configuration is stored at `~/.cowork/`:
 
 ```
-~/.agent-operator/
+~/.cowork/
 ├── config.json              # Main config (workspaces, auth type)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences

@@ -5,8 +5,8 @@
  * Reads credentials from environment variables.
  *
  * Supported variables (in priority order):
- *   CRAFT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY - Anthropic API key
- *   CRAFT_CLAUDE_OAUTH_TOKEN - Claude OAuth token
+ *   COWORK_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY - Anthropic API key
+ *   COWORK_CLAUDE_OAUTH_TOKEN - Claude OAuth token
  *
  * Note: Workspace and agent-scoped credentials are not supported
  * via environment variables - use file backend for those.
@@ -17,8 +17,8 @@ import type { CredentialId, StoredCredential } from '../types.ts';
 
 // Maps credential type to env var names (in priority order - first found wins)
 const ENV_MAP: Record<string, string[]> = {
-  anthropic_api_key: ['CRAFT_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
-  claude_oauth: ['CRAFT_CLAUDE_OAUTH_TOKEN'],
+  anthropic_api_key: ['COWORK_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
+  claude_oauth: ['COWORK_CLAUDE_OAUTH_TOKEN'],
 };
 
 /** Find the first env var that has a value */

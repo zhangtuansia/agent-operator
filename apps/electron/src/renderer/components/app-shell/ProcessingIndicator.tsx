@@ -1,61 +1,63 @@
 import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Spinner } from '@agent-operator/ui'
+import { useTranslation } from '@/i18n'
 
 /**
- * Processing messages - randomly cycle through these during thinking
+ * Processing message keys - translated at render time via i18n.
+ * Keep this list in sync with i18n.processing entries.
  */
-const PROCESSING_MESSAGES = [
-  'Thinking...',
-  'Analyzing...',
-  'Reasoning...',
-  'Processing...',
-  'Computing...',
-  'Considering...',
-  'Reflecting...',
-  'Deliberating...',
-  'Cogitating...',
-  'Ruminating...',
-  'Musing...',
-  'Working on it...',
-  'On it...',
-  'Crunching...',
-  'Brewing...',
-  'Connecting dots...',
-  'Mulling it over...',
-  'Deep in thought...',
-  'Hmm...',
-  'Let me see...',
-  'One moment...',
-  'Hold on...',
-  'Bear with me...',
-  'Just a sec...',
-  'Hang tight...',
-  'Getting there...',
-  'Almost...',
-  'Working...',
-  'Busy busy...',
-  'Whirring...',
-  'Churning...',
-  'Percolating...',
-  'Simmering...',
-  'Cooking...',
-  'Baking...',
-  'Stirring...',
-  'Spinning up...',
-  'Warming up...',
-  'Revving...',
-  'Buzzing...',
-  'Humming...',
-  'Ticking...',
-  'Clicking...',
-  'Whizzing...',
-  'Zooming...',
-  'Zipping...',
-  'Chugging...',
-  'Trucking...',
-  'Rolling...',
-]
+const PROCESSING_MESSAGE_KEYS = [
+  'processing.thinking',
+  'processing.analyzing',
+  'processing.reasoning',
+  'processing.processing',
+  'processing.computing',
+  'processing.considering',
+  'processing.reflecting',
+  'processing.deliberating',
+  'processing.cogitating',
+  'processing.ruminating',
+  'processing.musing',
+  'processing.workingOnIt',
+  'processing.onIt',
+  'processing.crunching',
+  'processing.brewing',
+  'processing.connectingDots',
+  'processing.mullingOver',
+  'processing.deepInThought',
+  'processing.hmm',
+  'processing.letMeSee',
+  'processing.oneMoment',
+  'processing.holdOn',
+  'processing.bearWithMe',
+  'processing.justASec',
+  'processing.hangTight',
+  'processing.gettingThere',
+  'processing.almost',
+  'processing.working',
+  'processing.busyBusy',
+  'processing.whirring',
+  'processing.churning',
+  'processing.percolating',
+  'processing.simmering',
+  'processing.cooking',
+  'processing.baking',
+  'processing.stirring',
+  'processing.spinningUp',
+  'processing.warmingUp',
+  'processing.revving',
+  'processing.buzzing',
+  'processing.humming',
+  'processing.ticking',
+  'processing.clicking',
+  'processing.whizzing',
+  'processing.zooming',
+  'processing.zipping',
+  'processing.chugging',
+  'processing.trucking',
+  'processing.rolling',
+] as const
 
 /**
  * Format elapsed time: "45s" under a minute, "1:02" for 1+ minutes
@@ -79,9 +81,14 @@ export interface ProcessingIndicatorProps {
  * Matches TurnCard header layout for visual continuity
  */
 export function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorProps) {
+  const { t } = useTranslation()
+  const processingMessages = React.useMemo(
+    () => PROCESSING_MESSAGE_KEYS.map((key) => t(key)),
+    [t]
+  )
   const [elapsed, setElapsed] = React.useState(0)
   const [messageIndex, setMessageIndex] = React.useState(() =>
-    Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+    Math.floor(Math.random() * PROCESSING_MESSAGE_KEYS.length)
   )
 
   // Update elapsed time every second using provided startTime
@@ -102,18 +109,18 @@ export function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndi
     const interval = setInterval(() => {
       setMessageIndex(prev => {
         // Pick a random different message
-        let next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
-        while (next === prev && PROCESSING_MESSAGES.length > 1) {
-          next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        let next = Math.floor(Math.random() * processingMessages.length)
+        while (next === prev && processingMessages.length > 1) {
+          next = Math.floor(Math.random() * processingMessages.length)
         }
         return next
       })
     }, 10000)
     return () => clearInterval(interval)
-  }, [statusMessage])
+  }, [processingMessages.length, statusMessage])
 
   // Use status message if provided, otherwise cycle through default messages
-  const displayMessage = statusMessage || PROCESSING_MESSAGES[messageIndex]
+  const displayMessage = statusMessage || processingMessages[messageIndex] || t('processing.thinking')
 
   return (
     <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
@@ -158,6 +165,6 @@ export function ScrollOnMount({
   React.useLayoutEffect(() => {
     targetRef.current?.scrollIntoView({ behavior: 'instant' })
     onScroll?.()
-  }, [])
+  }, [targetRef, onScroll])
   return null
 }

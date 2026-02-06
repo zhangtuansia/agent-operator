@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
+import type { BundledLanguage } from 'shiki'
 import { cn } from '../../lib/utils'
 import { useShikiTheme } from '../../context/ShikiThemeContext'
+import { loadShiki, isBundledLanguage } from '../../lib/shiki-loader'
 
 export interface CodeBlockProps {
   code: string
@@ -48,11 +49,6 @@ const CACHE_MAX_SIZE = 200
 
 function getCacheKey(code: string, lang: string, theme: string): string {
   return `${theme}:${lang}:${code}`
-}
-
-function isValidLanguage(lang: string): lang is BundledLanguage {
-  const normalized = LANGUAGE_ALIASES[lang] || lang
-  return normalized in bundledLanguages
 }
 
 /**
@@ -103,10 +99,11 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
       }
 
       try {
+        const shiki = await loadShiki()
         // Use valid language or fallback to plaintext
-        const lang = isValidLanguage(resolvedLang) ? resolvedLang : 'text'
+        const lang = isBundledLanguage(resolvedLang, shiki) ? (resolvedLang as BundledLanguage) : 'text'
 
-        const html = await codeToHtml(code, {
+        const html = await shiki.codeToHtml(code, {
           lang,
           theme,
         })

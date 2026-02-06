@@ -1378,7 +1378,10 @@ export function shouldAllowToolInMode(
       const readOnlySessionTools = [
         'mcp__session__SubmitPlan',
         'mcp__session__config_validate',
+        'mcp__session__skill_validate',
+        'mcp__session__mermaid_validate',
         'mcp__session__source_test',
+        'mcp__session__call_llm', // Invokes secondary Claude model - no side effects
       ];
       if (readOnlySessionTools.includes(toolName)) {
         return { allowed: true };
@@ -1645,5 +1648,5 @@ You can customize Explore mode via \`permissions.json\` files - extend what's al
 | Workspace | \`{workspaceRoot}/permissions.json\` | All sources in workspace |
 | Per-source | \`{workspaceRoot}/sources/{slug}/permissions.json\` | That source only (auto-scoped) |
 
-**Before editing**: Read \`~/.agent-operator/docs/permissions.md\` for the full schema and examples.`;
+**Before editing**: Read \`~/.cowork/docs/permissions.md\` for the full schema and examples.`;
 }

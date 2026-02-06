@@ -36,7 +36,7 @@ export function FileViewer({ path }: FileViewerProps) {
     }
 
     loadFile()
-  }, [path])
+  }, [path, t])
 
   if (!path) {
     return (

@@ -20,7 +20,7 @@ import { join } from 'path';
 function debugLog(_msg: string): void {
   // Disabled - uncomment below for debugging
   // try {
-  //   const logDir = join(homedir(), '.agent-operator', 'logs');
+  //   const logDir = join(homedir(), '.cowork', 'logs');
   //   if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
   //   const logFile = join(logDir, 'bedrock-debug.log');
   //   const timestamp = new Date().toISOString();

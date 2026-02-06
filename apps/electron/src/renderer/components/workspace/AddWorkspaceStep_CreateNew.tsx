@@ -21,7 +21,7 @@ interface AddWorkspaceStep_CreateNewProps {
  *
  * Fields:
  * - Workspace name (required)
- * - Location: Default (~/.agent-operator/workspaces/) or Custom
+ * - Location: Default (~/.cowork/workspaces/) or Custom
  */
 export function AddWorkspaceStep_CreateNew({
   onBack,
@@ -42,7 +42,7 @@ export function AddWorkspaceStep_CreateNew({
   }, [])
 
   const slug = slugify(name)
-  const defaultBasePath = homeDir ? `${homeDir}/.agent-operator/workspaces` : '~/.agent-operator/workspaces'
+  const defaultBasePath = homeDir ? `${homeDir}/.cowork/workspaces` : '~/.cowork/workspaces'
   const finalPath = locationOption === 'default'
     ? `${defaultBasePath}/${slug}`
     : customPath

@@ -51,7 +51,12 @@ export function WorkspaceSwitcher({
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   // Cache stores { dataUrl, sourceUrl } to detect when icon file changes
   const [iconCache, setIconCache] = useState<Record<string, { dataUrl: string; sourceUrl: string }>>({})
+  const iconCacheRef = React.useRef(iconCache)
   const selectedWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+
+  useEffect(() => {
+    iconCacheRef.current = iconCache
+  }, [iconCache])
 
   // Fetch workspace icons via IPC (converts local files to data URLs)
   useEffect(() => {
@@ -68,7 +73,7 @@ export function WorkspaceSwitcher({
         if (!iconFilename) continue
 
         // Skip if already cached with the same source URL
-        const cached = iconCache[workspace.id]
+        const cached = iconCacheRef.current[workspace.id]
         if (cached && cached.sourceUrl === workspace.iconUrl) continue
 
         try {

@@ -5,17 +5,16 @@
  * 1. Service Knowledge - Persistent understanding injected at runtime
  * 2. Setup Hints - One-time guidance for setup agent
  *
- * Guides are stored at ~/.agent-operator/docs/source-guides/ and copied on first run.
+ * Guides are stored at ~/.cowork/docs/source-guides/ and copied on first run.
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { isDebugEnabled } from '../utils/debug.ts';
 import { getAppVersion } from '../version/app-version.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 
 // Compute path directly to avoid circular dependency with ./index.ts
-const CONFIG_DIR = join(homedir(), '.agent-operator');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 const SOURCE_GUIDES_DIR = join(DOCS_DIR, 'source-guides');
 

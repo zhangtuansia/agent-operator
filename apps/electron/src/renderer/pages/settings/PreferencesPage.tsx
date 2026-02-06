@@ -1,7 +1,7 @@
 /**
  * PreferencesPage
  *
- * Form-based editor for stored user preferences (~/.agent-operator/preferences.json).
+ * Form-based editor for stored user preferences (~/.cowork/preferences.json).
  * Features:
  * - Fixed input fields for known preferences (name, timezone, location, language)
  * - Free-form textarea for notes

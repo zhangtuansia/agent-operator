@@ -168,7 +168,7 @@ export const zh: TranslationKeys = {
 
     // Tool Icons
     toolIcons: '工具图标',
-    toolIconsDescription: '显示在聊天活动中 CLI 命令旁边的图标。存储在 ~/.agent-operator/tool-icons/。',
+    toolIconsDescription: '显示在聊天活动中 CLI 命令旁边的图标。存储在 ~/.cowork/tool-icons/。',
     searchTools: '搜索工具...',
     noToolIconMappings: '未找到工具图标映射',
     editFile: '编辑文件',
@@ -724,6 +724,13 @@ export const zh: TranslationKeys = {
   // Input
   input: {
     placeholder: '向 Cowork 提问...',
+    placeholderHint1: '你想先处理什么？',
+    placeholderHint2: '使用 Shift + Tab 在 探索 和 自动 之间切换',
+    placeholderHint3: '输入 @ 提及文件、文件夹或 Skills',
+    placeholderHint4: '输入 # 给当前对话添加标签',
+    placeholderHint5: '按 Shift + Enter 换行',
+    placeholderHint6: '按 {modKey} + B 切换侧边栏',
+    placeholderHint7: '按 {modKey} + . 进入专注模式',
     attachFile: '附加文件',
     attachFiles: '附加文件',
     attachImage: '附加图片',
@@ -887,7 +894,7 @@ export const zh: TranslationKeys = {
     workspaceName: '工作区名称',
     workspaceNamePlaceholder: '我的工作区',
     defaultLocation: '默认位置',
-    underAgentOperatorFolder: '在 .agent-operator 文件夹下',
+    underAgentOperatorFolder: '在 .cowork 文件夹下',
     chooseLocation: '选择位置',
     pickAPlace: '选择一个位置来存放您的新工作区。',
     browse: '浏览',
@@ -1014,6 +1021,7 @@ export const zh: TranslationKeys = {
     restart: '重启',
     appWillRestart: '应用将自动重启。',
     downloadingUpdate: '正在下载更新...',
+    updateFailed: '更新失败',
     updateAvailable: '有可用更新',
     newVersionAvailable: '有新版本可用。',
   },
@@ -1142,6 +1150,7 @@ export const zh: TranslationKeys = {
   // Processing indicators
   processing: {
     thinking: '思考中…',
+    analyzing: '分析中…',
     pondering: '沉思中…',
     contemplating: '深思中…',
     reasoning: '推理中…',
@@ -1171,6 +1180,26 @@ export const zh: TranslationKeys = {
     almost: '就差一点…',
     working: '工作中…',
     busyBusy: '忙碌中…',
+    whirring: '高速运转中…',
+    churning: '加速处理中…',
+    percolating: '梳理思路中…',
+    simmering: '慢慢推敲中…',
+    cooking: '构思中…',
+    baking: '打磨中…',
+    stirring: '整理中…',
+    spinningUp: '启动中…',
+    warmingUp: '预热中…',
+    revving: '提速中…',
+    buzzing: '忙碌处理中…',
+    humming: '稳定运行中…',
+    ticking: '计时处理中…',
+    clicking: '逐步处理…',
+    whizzing: '快速处理中…',
+    zooming: '飞速处理中…',
+    zipping: '高速推进中…',
+    chugging: '持续处理…',
+    trucking: '稳步推进中…',
+    rolling: '继续处理中…',
   },
 
   // Playground (development)
@@ -1267,6 +1296,9 @@ export const zh: TranslationKeys = {
   // Edit popover labels and examples
   editPopover: {
     describePlaceholder: '描述你想要的更改...',
+    compactPlaceholder1: '直接告诉我你想改什么',
+    compactPlaceholder2: '描述一下要更新的内容',
+    compactPlaceholder3: '你希望我修改哪一部分？',
     examplePrefix: '，例如：',
     permissionSettings: '权限设置',
     defaultPermissions: '默认权限',

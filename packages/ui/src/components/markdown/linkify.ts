@@ -63,26 +63,31 @@ function isInsideCode(pos: number, ranges: CodeRange[]): boolean {
   return ranges.some(r => pos >= r.start && pos < r.end)
 }
 
-/**
- * Check if a link at given position is already a markdown link
- * Looks for patterns like [text](url) or [text][ref]
- */
-function isAlreadyLinked(text: string, linkStart: number, linkEnd: number): boolean {
-  // Check if preceded by ]( which indicates we're inside a markdown link href
-  // Pattern: [text](URL) - we're checking if URL is our link
-  const before = text.slice(Math.max(0, linkStart - 2), linkStart)
-  if (before.endsWith('](')) return true
+function findMarkdownLinkRanges(text: string): CodeRange[] {
+  const ranges: CodeRange[] = []
 
-  // Check if preceded by ][ for reference links
-  if (before.endsWith('][')) return true
+  // Match [text](url) style links.
+  const inlineLinkRegex = /\[(?:[^\[\]]|\\\[|\\\])*\]\([^)]*\)/g
+  let match
+  while ((match = inlineLinkRegex.exec(text)) !== null) {
+    ranges.push({ start: match.index, end: match.index + match[0].length })
+  }
 
-  // Check if the link text is wrapped in []
-  // Pattern: [URL](href) - URL is being used as link text
-  const charBefore = text[linkStart - 1]
-  const charAfter = text[linkEnd]
-  if (charBefore === '[' && charAfter === ']') return true
+  // Match [text][ref] style links.
+  const refLinkRegex = /\[(?:[^\[\]]|\\\[|\\\])*\]\[[^\]]*\]/g
+  while ((match = refLinkRegex.exec(text)) !== null) {
+    const range = { start: match.index, end: match.index + match[0].length }
+    const alreadyCovered = ranges.some(existing => rangesOverlap(existing, range))
+    if (!alreadyCovered) {
+      ranges.push(range)
+    }
+  }
 
-  return false
+  return ranges
+}
+
+function isInsideMarkdownLink(pos: number, ranges: CodeRange[]): boolean {
+  return ranges.some(range => pos >= range.start && pos < range.end)
 }
 
 /**
@@ -152,6 +157,7 @@ export function preprocessLinks(text: string): string {
   }
 
   const codeRanges = findCodeRanges(text)
+  const markdownLinkRanges = findMarkdownLinkRanges(text)
   const links = detectLinks(text)
 
   if (links.length === 0) return text
@@ -164,8 +170,8 @@ export function preprocessLinks(text: string): string {
     // Skip if inside code block
     if (isInsideCode(link.start, codeRanges)) continue
 
-    // Skip if already a markdown link
-    if (isAlreadyLinked(text, link.start, link.end)) continue
+    // Skip links that are already inside markdown link syntax.
+    if (isInsideMarkdownLink(link.start, markdownLinkRanges)) continue
 
     // Add text before this link
     result += text.slice(lastIndex, link.start)

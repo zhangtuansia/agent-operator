@@ -23,7 +23,7 @@ This package uses subpath exports for clean imports:
 import { OperatorAgent, getPermissionMode, setPermissionMode } from '@agent-operator/shared/agent';
 import { loadStoredConfig, type Workspace } from '@agent-operator/shared/config';
 import { getCredentialManager } from '@agent-operator/shared/credentials';
-import { CraftMcpClient } from '@agent-operator/shared/mcp';
+import { OperatorMcpClient } from '@agent-operator/shared/mcp';
 import { loadWorkspaceSources, type LoadedSource } from '@agent-operator/shared/sources';
 import { loadStatusConfig, createStatus } from '@agent-operator/shared/statuses';
 import { resolveTheme } from '@agent-operator/shared/config/theme';
@@ -45,7 +45,7 @@ import { withTimeout, withRetry, sleep } from '@agent-operator/shared/utils/prom
 ```
 src/
 ├── agent/              # OperatorAgent, session-scoped-tools, mode-manager, mode-types, permissions-config
-├── auth/               # OAuth, craft-token, claude-token, state
+├── auth/               # OAuth, token management, state
 ├── config/             # Storage, preferences, models, theme, watcher
 ├── credentials/        # Secure credential storage (AES-256-GCM)
 ├── headless/           # Non-interactive execution mode
@@ -56,7 +56,7 @@ src/
 ├── sessions/           # Session index, storage, persistence-queue
 ├── sources/            # Source types, storage, service
 ├── statuses/           # Dynamic status types, CRUD, storage
-├── subscription/       # Craft subscription checking
+├── subscription/       # Subscription checking
 ├── utils/              # Debug logging, file handling, promises, summarization
 ├── validation/         # URL validation
 ├── version/            # Version management, install scripts
@@ -90,8 +90,8 @@ Three-level permission system per session:
 
 ### Permissions Configuration (`src/agent/permissions-config.ts`)
 Customizable safety rules at two levels (additive merging):
-- Workspace: `~/.agent-operator/workspaces/{id}/permissions.json`
-- Source: `~/.agent-operator/workspaces/{id}/sources/{slug}/permissions.json`
+- Workspace: `~/.cowork/workspaces/{id}/permissions.json`
+- Source: `~/.cowork/workspaces/{id}/sources/{slug}/permissions.json`
 
 **Rule types:**
 - `blockedTools` - Tools to block (extends defaults)
@@ -112,7 +112,7 @@ Tools available within agent sessions with callback registry:
 ### Dynamic Status System (`src/statuses/`)
 Workspace-level customizable workflow states:
 
-**Storage:** `~/.agent-operator/workspaces/{id}/statuses/config.json`
+**Storage:** `~/.cowork/workspaces/{id}/statuses/config.json`
 
 **Status properties:** `id`, `label`, `color`, `icon`, `shortcut`, `category` (open/closed), `isFixed`, `isDefault`, `order`
 
@@ -124,8 +124,8 @@ Workspace-level customizable workflow states:
 Cascading theme configuration: app → workspace (last wins)
 
 **Storage:**
-- App: `~/.agent-operator/theme.json`
-- Workspace: `~/.agent-operator/workspaces/{id}/theme.json`
+- App: `~/.cowork/theme.json`
+- Workspace: `~/.cowork/workspaces/{id}/theme.json`
 
 **6-color system:** `background`, `foreground`, `accent`, `info`, `success`, `destructive`
 
@@ -137,10 +137,10 @@ Cascading theme configuration: app → workspace (last wins)
 - **index.ts:** Session listing and metadata
 
 ### Credentials (`src/credentials/`)
-All sensitive credentials (API keys, OAuth tokens) are stored in an AES-256-GCM encrypted file at `~/.agent-operator/credentials.enc`. The `CredentialManager` provides the API for reading and writing credentials.
+All sensitive credentials (API keys, OAuth tokens) are stored in an AES-256-GCM encrypted file at `~/.cowork/credentials.enc`. The `CredentialManager` provides the API for reading and writing credentials.
 
 ### Configuration (`src/config/storage.ts`)
-Multi-workspace configuration stored in `~/.agent-operator/config.json`. Supports:
+Multi-workspace configuration stored in `~/.cowork/config.json`. Supports:
 - Multiple workspaces with separate MCP servers and sessions
 - Default permission mode for new sessions
 - Extended cache TTL preference
@@ -152,7 +152,7 @@ File watcher for live config updates:
 - Callbacks: `onConfigChange`, `onThemeChange`, `onWorkspacePermissionsChange`, `onSourcePermissionsChange`
 
 ### Sources (`src/sources/`)
-Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.agent-operator/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
+Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.cowork/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
 
 ### IPC Module (`src/ipc/`)
 Centralized IPC (Inter-Process Communication) types and validation for Electron apps:

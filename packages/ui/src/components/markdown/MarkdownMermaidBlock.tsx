@@ -1,14 +1,22 @@
 import * as React from 'react'
-import { renderMermaid } from '@agent-operator/mermaid'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
 import { MermaidPreviewOverlay } from '../overlay/MermaidPreviewOverlay'
 
+let mermaidModulePromise: Promise<typeof import('@agent-operator/mermaid')> | null = null
+
+async function loadMermaidModule() {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('@agent-operator/mermaid')
+  }
+  return mermaidModulePromise
+}
+
 // ============================================================================
 // MarkdownMermaidBlock — renders mermaid code fences as SVG diagrams.
 //
-// Uses @craft-agent/mermaid to parse flowchart text and produce an SVG string.
+// Uses @agent-operator/mermaid to parse flowchart text and produce an SVG string.
 // Falls back to a plain code block if rendering fails (invalid syntax, etc).
 //
 // Theming: Colors are passed as CSS variable references (var(--background),
@@ -41,7 +49,7 @@ function parseSvgDimensions(svgString: string): { width: number; height: number 
   return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) }
 }
 
-interface MarkdownMermaidBlockProps {
+export interface MarkdownMermaidBlockProps {
   code: string
   className?: string
   /** Whether to show the inline expand button. Default true.
@@ -72,16 +80,17 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
     //   muted      → secondary text, edge labels
     //   surface    → node fill tint (3% fg mix)
     //   border     → node/group stroke (20% fg mix)
-    renderMermaid(code, {
-      bg: 'var(--background)',
-      fg: 'var(--foreground)',
-      accent: 'var(--accent)',
-      line: 'var(--foreground-30)',
-      muted: 'var(--muted-foreground)',
-      surface: 'var(--foreground-3)',
-      border: 'var(--foreground-20)',
-      transparent: true,
-    })
+    loadMermaidModule()
+      .then(mermaid => mermaid.renderMermaid(code, {
+        bg: 'var(--background)',
+        fg: 'var(--foreground)',
+        accent: 'var(--accent)',
+        line: 'var(--foreground-30)',
+        muted: 'var(--muted-foreground)',
+        surface: 'var(--foreground-3)',
+        border: 'var(--foreground-20)',
+        transparent: true,
+      }))
       .then(result => {
         if (!cancelled) setSvg(result)
       })

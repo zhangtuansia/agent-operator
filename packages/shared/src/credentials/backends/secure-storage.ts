@@ -1,7 +1,7 @@
 /**
  * Secure Storage Backend
  *
- * Stores credentials in an encrypted file at ~/.agent-operator/credentials.enc
+ * Stores credentials in an encrypted file at ~/.cowork/credentials.enc
  * Uses AES-256-GCM for authenticated encryption.
  *
  * Encryption key is derived from machine-specific data (hostname, username, homedir)
@@ -10,7 +10,7 @@
  *
  * File format:
  *   [Header - 64 bytes]
- *   ├── Magic: "CRAFT01\0" (8 bytes)
+ *   ├── Magic: "COWORK01" (8 bytes, legacy CRAFT01\0 supported)
  *   ├── Flags: uint32 LE (4 bytes) - reserved for future use
  *   ├── Salt: 32 bytes (PBKDF2 salt)
  *   ├── Reserved: 20 bytes
@@ -30,17 +30,19 @@ import {
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { hostname, userInfo, homedir } from 'os';
 import { join, dirname } from 'path';
+import { CONFIG_DIR } from '../../config/paths.ts';
 
 import type { CredentialBackend } from './types.ts';
 import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
 
 // File location
-const CREDENTIALS_DIR = join(homedir(), '.agent-operator');
+const CREDENTIALS_DIR = CONFIG_DIR;
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
 
 // File format constants
-const MAGIC_BYTES = Buffer.from('CRAFT01\0');
+const MAGIC_BYTES = Buffer.from('COWORK01');
+const LEGACY_MAGIC_BYTES = Buffer.from('CRAFT01\0');
 const HEADER_SIZE = 64;
 const MAGIC_SIZE = 8;
 const FLAGS_SIZE = 4;
@@ -68,6 +70,7 @@ export class SecureStorageBackend implements CredentialBackend {
 
   private cachedStore: CredentialStore | null = null;
   private encryptionKey: Buffer | null = null;
+  private legacyEncryptionKey: Buffer | null = null;
   private salt: Buffer | null = null;
 
   async isAvailable(): Promise<boolean> {
@@ -162,7 +165,9 @@ export class SecureStorageBackend implements CredentialBackend {
     }
 
     // Validate magic bytes
-    if (!fileData.subarray(0, MAGIC_SIZE).equals(MAGIC_BYTES)) {
+    const magic = fileData.subarray(0, MAGIC_SIZE);
+    const isLegacy = magic.equals(LEGACY_MAGIC_BYTES);
+    if (!magic.equals(MAGIC_BYTES) && !isLegacy) {
       this.handleCorruptedFile();
       return null;
     }
@@ -173,7 +178,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.salt = salt;
 
     // Get encryption key
-    const key = this.getEncryptionKey(salt);
+    const key = this.getEncryptionKey(salt, isLegacy);
 
     // Extract encrypted data
     const encryptedData = fileData.subarray(HEADER_SIZE);
@@ -208,7 +213,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.salt = salt;
 
     // Get encryption key
-    const key = this.getEncryptionKey(salt);
+    const key = this.getEncryptionKey(salt, false);
 
     // Serialize payload
     const plaintext = Buffer.from(JSON.stringify(store), 'utf8');
@@ -235,21 +240,27 @@ export class SecureStorageBackend implements CredentialBackend {
     this.cachedStore = store;
   }
 
-  private getEncryptionKey(salt: Buffer): Buffer {
-    if (this.encryptionKey) return this.encryptionKey;
+  private getEncryptionKey(salt: Buffer, legacy: boolean): Buffer {
+    if (legacy && this.legacyEncryptionKey) return this.legacyEncryptionKey;
+    if (!legacy && this.encryptionKey) return this.encryptionKey;
 
     // Derive machine-specific identity
     const machineId = createHash('sha256')
       .update(hostname())
       .update(userInfo().username)
       .update(homedir())
-      .update('agent-operator-v1') // App-specific constant
+      .update(legacy ? 'agent-operator-v1' : 'cowork-v1') // App-specific constant
       .digest();
 
     // Derive key using PBKDF2
-    this.encryptionKey = pbkdf2Sync(machineId, salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha256');
+    const derivedKey = pbkdf2Sync(machineId, salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha256');
+    if (legacy) {
+      this.legacyEncryptionKey = derivedKey;
+    } else {
+      this.encryptionKey = derivedKey;
+    }
 
-    return this.encryptionKey;
+    return derivedKey;
   }
 
   private handleCorruptedFile(): void {

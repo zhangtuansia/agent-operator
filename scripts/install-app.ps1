@@ -1,11 +1,11 @@
-# Craft Agent Windows Installer
-# Usage: irm https://agents.craft.do/install-app.ps1 | iex
+# Cowork Windows Installer
+# Usage: irm https://download.aicowork.chat/install-app.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$VERSIONS_URL = "https://agents.craft.do/electron"
-$DOWNLOAD_DIR = "$env:TEMP\craft-agent-install"
-$APP_NAME = "Craft Agent"
+$VERSIONS_URL = "https://download.aicowork.chat/electron"
+$DOWNLOAD_DIR = "$env:TEMP\cowork-install"
+$APP_NAME = "Cowork"
 
 # Colors for output
 function Write-Info { Write-Host "> $args" -ForegroundColor Blue }
@@ -65,7 +65,7 @@ if (-not $checksum -or $checksum.Length -ne 64) {
 
 # Use default filename if not in manifest
 if (-not $filename) {
-    $filename = "Craft-Agent-$arch.exe"
+    $filename = "Cowork-$arch.exe"
 }
 
 # Use default URL if not in manifest
@@ -148,9 +148,9 @@ if ($actualHash -ne $checksum) {
 Write-Success "Checksum verified!"
 
 # Close the app if it's running
-$process = Get-Process -Name "Craft Agent" -ErrorAction SilentlyContinue
+$process = Get-Process -Name "Cowork" -ErrorAction SilentlyContinue
 if ($process) {
-    Write-Info "Closing Craft Agent..."
+    Write-Info "Closing Cowork..."
     $process | Stop-Process -Force
     Start-Sleep -Seconds 2
 }
@@ -183,11 +183,11 @@ Write-Info "Cleaning up..."
 Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 
 # Add command line shortcut
-Write-Info "Adding 'craft-agents' command to PATH..."
+Write-Info "Adding 'cowork' command to PATH..."
 
-$binDir = "$env:LOCALAPPDATA\Craft Agent\bin"
-$cmdFile = "$binDir\craft-agents.cmd"
-$exePath = "$env:LOCALAPPDATA\Programs\Craft Agent\Craft Agent.exe"
+$binDir = "$env:LOCALAPPDATA\Cowork\bin"
+$cmdFile = "$binDir\cowork.cmd"
+$exePath = "$env:LOCALAPPDATA\Programs\Cowork\Cowork.exe"
 
 # Create bin directory
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -201,9 +201,9 @@ $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$binDir*") {
     $newPath = "$userPath;$binDir"
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    Write-Success "Added to PATH (restart terminal to use 'craft-agents' command)"
+    Write-Success "Added to PATH (restart terminal to use 'cowork' command)"
 } else {
-    Write-Success "Command 'craft-agents' is ready"
+    Write-Success "Command 'cowork' is ready"
 }
 
 Write-Host ""
@@ -211,9 +211,9 @@ Write-Host "--------------------------------------------------------------------
 Write-Host ""
 Write-Success "Installation complete!"
 Write-Host ""
-Write-Host "  Craft Agent has been installed."
+Write-Host "  Cowork has been installed."
 Write-Host ""
 Write-Host "  Launch from:"
 Write-Host "    - Start Menu or desktop shortcut"
-Write-Host "    - Command line: craft-agents (restart terminal first)"
+Write-Host "    - Command line: cowork (restart terminal first)"
 Write-Host ""

@@ -44,10 +44,20 @@ export interface AppShellContextType {
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
   skills?: LoadedSkill[]
+  /** All label configs (tree) for label menu and badge display */
+  labels?: import('@agent-operator/shared/labels').LabelConfig[]
+  /** Callback when session labels change */
+  onSessionLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
   todoStates?: TodoStateConfig[]
+  /** Active session-list search query (when search mode is open) */
+  sessionListSearchQuery?: string
+  /** Whether session-list search mode is active */
+  isSearchModeActive?: boolean
+  /** Callback with chat-match info for search result syncing */
+  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */

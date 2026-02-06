@@ -5,8 +5,8 @@
  * Users can create permissions.json files to extend the default rules.
  *
  * File locations:
- * - Workspace: ~/.agent-operator/workspaces/{slug}/permissions.json
- * - Per-source: ~/.agent-operator/workspaces/{slug}/sources/{sourceSlug}/permissions.json
+ * - Workspace: ~/.cowork/workspaces/{slug}/permissions.json
+ * - Per-source: ~/.cowork/workspaces/{slug}/sources/{sourceSlug}/permissions.json
  *
  * Rules are additive - custom configs extend the defaults (more permissive).
  */
@@ -34,7 +34,7 @@ const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
 
 /**
  * Get the app-level permissions directory.
- * Default permissions are stored at ~/.agent-operator/permissions/
+ * Default permissions are stored at ~/.cowork/permissions/
  */
 export function getAppPermissionsDir(): string {
   return APP_PERMISSIONS_DIR;
@@ -76,7 +76,7 @@ export function ensureDefaultPermissions(bundledPermissionsDir?: string): void {
 }
 
 /**
- * Load default permissions from ~/.agent-operator/permissions/default.json
+ * Load default permissions from ~/.cowork/permissions/default.json
  * Returns null if file doesn't exist or is invalid.
  */
 export function loadDefaultPermissions(): PermissionsCustomConfig | null {
@@ -370,12 +370,12 @@ class PermissionsConfigCache {
   private sourceConfigs: Map<string, PermissionsCustomConfig | null> = new Map();
   private mergedConfigs: Map<string, MergedPermissionsConfig> = new Map();
 
-  // App-level default permissions (loaded from ~/.agent-operator/permissions/default.json)
+  // App-level default permissions (loaded from ~/.cowork/permissions/default.json)
   private defaultConfig: PermissionsCustomConfig | null | undefined = undefined; // undefined = not loaded yet
 
   /**
    * Get or load app-level default permissions
-   * These come from ~/.agent-operator/permissions/default.json
+   * These come from ~/.cowork/permissions/default.json
    */
   private getDefaultConfig(): PermissionsCustomConfig | null {
     if (this.defaultConfig === undefined) {

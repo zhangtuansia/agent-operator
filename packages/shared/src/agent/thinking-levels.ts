@@ -51,12 +51,24 @@ const TOKEN_BUDGETS = {
     think: 4_000,
     max: 8_000,
   },
+  // Bedrock inference profiles tend to have noticeably higher end-to-end latency.
+  // Use a lower default budget to keep first response latency reasonable.
+  bedrock: {
+    off: 0,
+    think: 2_000,
+    max: 8_000,
+  },
   default: {
     off: 0,
     think: 10_000,
     max: 32_000,
   },
 } as const;
+
+function isBedrockModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes('arn:aws:bedrock') || lower.includes('application-inference-profile');
+}
 
 /**
  * Get the thinking token budget for a given level and model.
@@ -66,6 +78,9 @@ const TOKEN_BUDGETS = {
  * @returns Number of thinking tokens to allocate
  */
 export function getThinkingTokens(level: ThinkingLevel, modelId: string): number {
+  if (isBedrockModel(modelId)) {
+    return TOKEN_BUDGETS.bedrock[level];
+  }
   const isHaiku = modelId.toLowerCase().includes('haiku');
   const budgets = isHaiku ? TOKEN_BUDGETS.haiku : TOKEN_BUDGETS.default;
   return budgets[level];

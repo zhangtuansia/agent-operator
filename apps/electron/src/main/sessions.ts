@@ -40,7 +40,20 @@ import {
   type SessionMetadata,
   type TodoState,
 } from '@agent-operator/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@agent-operator/shared/sources'
+import {
+  loadWorkspaceSources,
+  getSourcesBySlugs,
+  type LoadedSource,
+  type McpServerConfig,
+  getSourcesNeedingAuth,
+  getSourceCredentialManager,
+  getSourceServerBuilder,
+  type SourceWithCredential,
+  isApiOAuthProvider,
+  SERVER_BUILD_ERRORS,
+  TokenRefreshManager,
+  createTokenGetter,
+} from '@agent-operator/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@agent-operator/shared/config'
 import { getAuthState, isBedrockMode } from '@agent-operator/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@agent-operator/shared/agent'
@@ -71,12 +84,21 @@ export const AGENT_FLAGS = {
   defaultModesEnabled: true,
 } as const
 
+function createSessionTokenRefreshManager(): TokenRefreshManager {
+  return new TokenRefreshManager(getSourceCredentialManager(), {
+    log: (message) => sessionLog.debug(message),
+  })
+}
+
 /**
  * Build MCP and API servers from sources using the new unified modules.
  * Handles credential loading and server building in one step.
  * When auth errors occur, updates source configs to reflect actual state.
  */
-async function buildServersFromSources(sources: LoadedSource[]) {
+async function buildServersFromSources(
+  sources: LoadedSource[],
+  tokenRefreshManager?: TokenRefreshManager
+) {
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
   const serverBuilder = getSourceServerBuilder()
@@ -95,11 +117,8 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   const getTokenForSource = (source: LoadedSource) => {
     const provider = source.config.provider
     if (isApiOAuthProvider(provider)) {
-      return async () => {
-        const token = await credManager.getToken(source)
-        if (!token) throw new Error(`No token for ${source.config.slug}`)
-        return token
-      }
+      const manager = tokenRefreshManager ?? createSessionTokenRefreshManager()
+      return createTokenGetter(manager, source)
     }
     return undefined
   }
@@ -124,6 +143,45 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   return result
 }
 
+interface McpTokenRefreshResult {
+  tokensRefreshed: boolean
+  failedSources: Array<{ slug: string; reason: string }>
+}
+
+async function refreshMcpOAuthTokensIfNeeded(
+  agent: Agent,
+  sources: LoadedSource[],
+  tokenRefreshManager: TokenRefreshManager
+): Promise<McpTokenRefreshResult> {
+  sessionLog.debug('[OAuth] Checking if any MCP OAuth tokens need refresh')
+
+  const needRefresh = await tokenRefreshManager.getSourcesNeedingRefresh(sources)
+  if (needRefresh.length === 0) {
+    return { tokensRefreshed: false, failedSources: [] }
+  }
+
+  sessionLog.debug(
+    `[OAuth] Found ${needRefresh.length} source(s) needing token refresh: ${needRefresh.map((source) => source.config.slug).join(', ')}`
+  )
+
+  const { refreshed, failed } = await tokenRefreshManager.refreshSources(needRefresh)
+  const failedSources = failed.map(({ source, reason }) => ({
+    slug: source.config.slug,
+    reason,
+  }))
+
+  if (refreshed.length > 0) {
+    sessionLog.debug(`[OAuth] Rebuilding servers after ${refreshed.length} token refresh(es)`)
+    const enabledSources = sources.filter((source) => source.config.enabled && source.config.isAuthenticated)
+    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, tokenRefreshManager)
+    const intendedSlugs = enabledSources.map((source) => source.config.slug)
+    agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+    return { tokensRefreshed: true, failedSources }
+  }
+
+  return { tokensRefreshed: false, failedSources }
+}
+
 // Agent type union - supports both Claude (OperatorAgent) and Codex (CodexAgent)
 type Agent = OperatorAgent | CodexAgent
 
@@ -131,6 +189,7 @@ interface ManagedSession {
   id: string
   workspace: Workspace
   agent: Agent | null  // Lazy-loaded - null until first message
+  tokenRefreshManager?: TokenRefreshManager
   agentType: AgentType  // Which agent backend to use
   messages: Message[]
   isProcessing: boolean
@@ -146,9 +205,8 @@ interface ManagedSession {
   // Map of toolUseId -> parentToolUseId for tracking which parent was active when each tool started
   // This is used to correctly attribute child tools even with concurrent parent tools
   toolToParentMap: Map<string, string>
-  // Parent tool ID captured when text started streaming (first text_delta)
-  // Used by text_complete to assign correct parent - prevents text from being nested
-  // under tools that started after the text began (e.g., "I'll help..." before Task call)
+  // Legacy placeholder kept for compatibility while migrating event flow.
+  // Parent binding now uses event.parentToolUseId from the agent event directly.
   pendingTextParent?: string
   // Session name (user-defined or AI-generated)
   name?: string
@@ -198,6 +256,10 @@ interface ManagedSession {
   isAsyncOperationOngoing?: boolean
   // Preview of first user message (for sidebar display fallback)
   preview?: string
+  // First user message pending AI title generation.
+  // We defer title generation until the first response completes to avoid
+  // competing with the main chat request on cold start.
+  pendingInitialTitleMessage?: string
   // Message queue for handling new messages while processing
   // When a message arrives during processing, we interrupt and queue
   messageQueue: Array<{
@@ -470,7 +532,7 @@ export class SessionManager {
 
   /**
    * Broadcast default permissions changed event to all windows
-   * Triggered when ~/.agent-operator/permissions/default.json changes
+   * Triggered when ~/.cowork/permissions/default.json changes
    */
   private broadcastDefaultPermissionsChanged(): void {
     if (!this.windowManager) return
@@ -498,7 +560,10 @@ export class SessionManager {
     const enabledSources = allSources.filter(s =>
       enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
     )
-    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources)
+    const { mcpServers, apiServers } = await buildServersFromSources(
+      enabledSources,
+      managed.tokenRefreshManager
+    )
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
@@ -659,6 +724,7 @@ export class SessionManager {
             id: meta.id,
             workspace,
             agent: null,  // Lazy-load agent when needed
+            tokenRefreshManager: createSessionTokenRefreshManager(),
             agentType: meta.agentType ?? getAgentType(),  // Use stored type or fallback to current setting
             messages: [],  // Lazy-load messages when needed
             isProcessing: false,
@@ -730,6 +796,7 @@ export class SessionManager {
         sharedId: managed.sharedId,
         model: managed.model,
         hidden: managed.hidden,
+        labels: managed.labels,
         thinkingLevel: managed.thinkingLevel,
         agentType: managed.agentType,
         messages: persistableMessages.map(messageToStored),
@@ -1209,6 +1276,7 @@ export class SessionManager {
       id: storedSession.id,
       workspace,
       agent: null,  // Lazy-load agent on first message
+      tokenRefreshManager: createSessionTokenRefreshManager(),
       agentType: getAgentType(),  // Current agent type setting
       messages: [],
       isProcessing: false,
@@ -1546,7 +1614,10 @@ export class SessionManager {
 
         // Build server configs for all enabled sources
         const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
-        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources)
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(
+          allEnabledSources,
+          managed.tokenRefreshManager
+        )
 
         if (errors.length > 0) {
           sessionLog.warn(`Source build errors during auto-enable:`, errors)
@@ -1872,7 +1943,10 @@ export class SessionManager {
     // If agent exists, build and apply servers immediately
     if (managed.agent) {
       const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(
+        sources,
+        managed.tokenRefreshManager
+      )
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
@@ -1898,6 +1972,26 @@ export class SessionManager {
     }, managed.workspace.id)
 
     sessionLog.info(`Session ${sessionId} sources updated: ${sourceSlugs.length} sources`)
+  }
+
+  /**
+   * Set labels for a session.
+   * Labels are stored as encoded entries (e.g., "bug", "priority::3", "due::2026-01-30").
+   */
+  setSessionLabels(sessionId: string, labels: string[]): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    managed.labels = labels
+    updateSessionMetadata(managed.workspace.rootPath, sessionId, { labels })
+
+    this.sendEvent({
+      type: 'labels_changed',
+      sessionId,
+      labels,
+    }, managed.workspace.id)
+
+    sessionLog.info(`Session ${sessionId} labels updated: ${labels.length} labels`)
   }
 
   /**
@@ -2028,10 +2122,26 @@ export class SessionManager {
       sessionLog.info(`Refreshed title for session ${sessionId}: "${title}"`)
       return { success: true, title }
     } catch (error) {
-      // Error occurred - clear regenerating state
-      this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: false }, managed.workspace.id)
       const message = error instanceof Error ? error.message : 'Unknown error'
       sessionLog.error(`Failed to refresh title for session ${sessionId}:`, error)
+      const fallbackCandidates = userMessages.length > 0
+        ? userMessages
+        : assistantResponse
+          ? [assistantResponse]
+          : [managed.preview ?? managed.name ?? '']
+      const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates)
+      if (fallbackTitle) {
+        managed.name = fallbackTitle
+        this.persistSession(managed)
+        this.sendEvent({ type: 'title_generated', sessionId, title: fallbackTitle }, managed.workspace.id)
+        sessionLog.warn(
+          `refreshTitle: regenerateSessionTitle failed, using local fallback "${fallbackTitle}" (reason: ${message})`
+        )
+        return { success: true, title: fallbackTitle }
+      }
+
+      // Error occurred and fallback generation failed - clear regenerating state.
+      this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: false }, managed.workspace.id)
       return { success: false, error: message }
     } finally {
       // Signal async operation end
@@ -2257,8 +2367,9 @@ export class SessionManager {
           title: initialTitle,
         }, managed.workspace.id)
 
-        // Generate AI title asynchronously (will update the initial title)
-        this.generateTitle(managed, message)
+        // Defer AI title generation until the first response completes.
+        // This avoids running a second model call in parallel with the main reply.
+        managed.pendingInitialTitleMessage = message
       }
     }
 
@@ -2286,9 +2397,16 @@ export class SessionManager {
 
     // Apply source servers if any are enabled
     if (managed.enabledSourceSlugs?.length) {
+      if (!managed.tokenRefreshManager) {
+        managed.tokenRefreshManager = createSessionTokenRefreshManager()
+      }
+
       // Always build server configs fresh (no caching - single source of truth)
       const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(
+        sources,
+        managed.tokenRefreshManager
+      )
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
@@ -2303,6 +2421,25 @@ export class SessionManager {
         sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
       }
       sendSpan.mark('servers.applied')
+
+      // Refresh expired OAuth tokens before running the chat request.
+      // This avoids first-call failures when long-lived sessions hold stale tokens.
+      const refreshResult = await refreshMcpOAuthTokensIfNeeded(
+        agent,
+        sources,
+        managed.tokenRefreshManager
+      )
+      if (refreshResult.tokensRefreshed) {
+        sendSpan.mark('oauth.tokens.refreshed')
+      }
+      for (const failed of refreshResult.failedSources) {
+        this.sendEvent({
+          type: 'info',
+          sessionId,
+          message: `Token refresh failed for "${failed.slug}" - source may need re-authentication`,
+          level: 'warning',
+        }, managed.workspace.id)
+      }
     }
 
     try {
@@ -2364,8 +2501,17 @@ ${skillContents.join('\n\n')}
       sendSpan.mark('chat.starting')
       const chatIterator = agent.chat(finalMessage, attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
+      const messageSentAt = Date.now()
+      let firstTextEventAt: number | null = null
 
       for await (const event of chatIterator) {
+        if (firstTextEventAt === null && (event.type === 'text_delta' || event.type === 'text_complete')) {
+          firstTextEventAt = Date.now()
+          sessionLog.info(
+            `First text event latency: ${firstTextEventAt - messageSentAt}ms (${event.type})`
+          )
+        }
+
         // Log events (skip noisy text_delta)
         if (event.type !== 'text_delta') {
           if (event.type === 'tool_start') {
@@ -2399,6 +2545,10 @@ ${skillContents.join('\n\n')}
         // This is the central place where processing ends
         if (event.type === 'complete') {
           sessionLog.info('Chat completed via complete event')
+          const totalLatencyMs = Date.now() - messageSentAt
+          sessionLog.info(
+            `Response total latency: ${totalLatencyMs}ms (firstText=${firstTextEventAt === null ? 'none' : `${firstTextEventAt - messageSentAt}ms`})`
+          )
 
           // Check if we got an assistant response in this turn
           // If not, the SDK may have hit context limits or other issues
@@ -2557,6 +2707,13 @@ ${skillContents.join('\n\n')}
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
     } else {
+      // First user message title generation is intentionally deferred until
+      // the first successful completion to reduce initial response latency.
+      if (reason === 'complete' && managed.pendingInitialTitleMessage) {
+        const titleSourceMessage = managed.pendingInitialTitleMessage
+        managed.pendingInitialTitleMessage = undefined
+        void this.generateTitle(managed, titleSourceMessage)
+      }
       // No queue - emit complete to UI (include tokenUsage for real-time updates)
       this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
     }
@@ -2808,20 +2965,20 @@ To view this task's output:
   private async generateTitle(managed: ManagedSession, userMessage: string): Promise<void> {
     sessionLog.info(`Starting title generation for session ${managed.id}`)
     try {
-      const title = await generateSessionTitle(userMessage)
-      if (title) {
-        managed.name = title
-        this.persistSession(managed)
-        // Flush immediately to ensure disk is up-to-date before notifying renderer.
-        // This prevents race condition where lazy loading reads stale disk data
-        // (the persistence queue has a 500ms debounce).
-        await this.flushSession(managed.id)
-        // Now safe to notify renderer - disk is authoritative
-        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
-        sessionLog.info(`Generated title for session ${managed.id}: "${title}"`)
-      } else {
-        sessionLog.warn(`Title generation returned null for session ${managed.id}`)
+      const generatedTitle = await generateSessionTitle(userMessage)
+      const title = generatedTitle?.trim() || buildFallbackTitleFromMessages([userMessage])
+      if (!generatedTitle?.trim()) {
+        sessionLog.warn(`Title generation returned empty for session ${managed.id}; using fallback "${title}"`)
       }
+      managed.name = title
+      this.persistSession(managed)
+      // Flush immediately to ensure disk is up-to-date before notifying renderer.
+      // This prevents race condition where lazy loading reads stale disk data
+      // (the persistence queue has a 500ms debounce).
+      await this.flushSession(managed.id)
+      // Now safe to notify renderer - disk is authoritative
+      this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+      sessionLog.info(`Generated title for session ${managed.id}: "${title}"`)
     } catch (error) {
       sessionLog.error(`Failed to generate title for session ${managed.id}:`, error)
     }
@@ -2833,13 +2990,6 @@ To view this task's output:
 
     switch (event.type) {
       case 'text_delta':
-        // Capture parent on FIRST delta of a text block (when streamingText is empty)
-        // This ensures text gets the parent that existed when it started, not when it completed
-        if (managed.streamingText === '') {
-          managed.pendingTextParent = managed.parentToolStack.length > 0
-            ? managed.parentToolStack[managed.parentToolStack.length - 1]
-            : undefined
-        }
         managed.streamingText += event.text
         // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
         this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
@@ -2849,9 +2999,9 @@ To view this task's output:
         // Flush any pending deltas before sending complete (ensures renderer has all content)
         this.flushDelta(sessionId, workspaceId)
 
-        // Use the parent that was active when text STARTED streaming (captured in text_delta)
-        // This prevents text from being nested under tools that started after the text began
-        const textParentToolUseId = event.isIntermediate ? managed.pendingTextParent : undefined
+        // SDK's parent_tool_use_id identifies the subagent context for this text.
+        // For intermediate chunks only, bind to that parent for proper nested rendering.
+        const textParentToolUseId = event.isIntermediate ? event.parentToolUseId : undefined
 
         const assistantMessage: Message = {
           id: generateMessageId(),
@@ -2864,7 +3014,7 @@ To view this task's output:
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
-        managed.pendingTextParent = undefined // Clear for next text block
+        managed.pendingTextParent = undefined // Legacy reset during migration period
 
         // Update lastMessageRole for badge display (only for final messages)
         if (!event.isIntermediate) {

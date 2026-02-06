@@ -5,8 +5,8 @@
  * Light mode is default, with optional dark mode overrides.
  *
  * Storage locations:
- * - App override:   ~/.agent-operator/theme.json
- * - Preset themes:  ~/.agent-operator/themes/*.json
+ * - App override:   ~/.cowork/theme.json
+ * - Preset themes:  ~/.cowork/themes/*.json
  */
 
 /**

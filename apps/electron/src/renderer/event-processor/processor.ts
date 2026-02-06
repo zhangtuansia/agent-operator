@@ -20,6 +20,7 @@ import {
   handleError,
   handleTypedError,
   handleSourcesChanged,
+  handleLabelsChanged,
   handlePermissionRequest,
   handleCredentialRequest,
   handlePlanSubmitted,
@@ -133,6 +134,9 @@ export function processEvent(
 
     case 'sources_changed':
       return handleSourcesChanged(state, event)
+
+    case 'labels_changed':
+      return handleLabelsChanged(state, event)
 
     case 'permission_request':
       return handlePermissionRequest(state, event)

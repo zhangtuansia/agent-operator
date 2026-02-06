@@ -14,7 +14,7 @@
  * - source_credential_prompt: Prompt user for API credentials
  *
  * Source and Skill CRUD is done via standard file editing tools (Read/Write/Edit).
- * See ~/.agent-operator/docs/ for config format documentation.
+ * See ~/.cowork/docs/ for config format documentation.
  */
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
@@ -58,6 +58,8 @@ import { getSourceCredentialManager } from '../sources/index.ts';
 import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, isApiOAuthProvider, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
 import { buildAuthorizationHeader } from '../sources/api-tools.ts';
 import { DOC_REFS } from '../docs/index.ts';
+import { renderMermaid } from '@agent-operator/mermaid';
+import { createLLMTool } from './llm-tool.ts';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -359,10 +361,10 @@ Use this after editing configuration files to check for errors before they take 
 Returns structured validation results with errors, warnings, and suggestions.
 
 **Targets:**
-- \`config\`: Validates ~/.agent-operator/config.json (workspaces, model, settings)
-- \`sources\`: Validates all sources in ~/.agent-operator/workspaces/{workspace}/sources/*/config.json
-- \`statuses\`: Validates ~/.agent-operator/workspaces/{workspace}/statuses/config.json (workflow states)
-- \`preferences\`: Validates ~/.agent-operator/preferences.json (user preferences)
+- \`config\`: Validates ~/.cowork/config.json (workspaces, model, settings)
+- \`sources\`: Validates all sources in ~/.cowork/workspaces/{workspace}/sources/*/config.json
+- \`statuses\`: Validates ~/.cowork/workspaces/{workspace}/statuses/config.json (workflow states)
+- \`preferences\`: Validates ~/.cowork/preferences.json (user preferences)
 - \`permissions\`: Validates permissions.json files (workspace, source, and app-level default)
 - \`all\`: Validates all configuration files
 
@@ -752,7 +754,7 @@ After creating or editing a source's config.json, run this tool to:
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found.\n\nCreate the source folder at:\n\`~/.agent-operator/workspaces/{workspace}/sources/${args.sourceSlug}/config.json\`\n\nSee \`${DOC_REFS.sources}\` for config format.`,
+              text: `Source '${args.sourceSlug}' not found.\n\nCreate the source folder at:\n\`~/.cowork/workspaces/{workspace}/sources/${args.sourceSlug}/config.json\`\n\nSee \`${DOC_REFS.sources}\` for config format.`,
             }],
             isError: true,
           };
@@ -1181,7 +1183,7 @@ A browser window will open for the user to complete authentication.
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found. Check ~/.agent-operator/workspaces/{workspace}/sources/ for available sources.`,
+              text: `Source '${args.sourceSlug}' not found. Check ~/.cowork/workspaces/{workspace}/sources/ for available sources.`,
             }],
             isError: true,
           };
@@ -1311,7 +1313,7 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found. Check ~/.agent-operator/workspaces/{workspace}/sources/ for available sources.`,
+              text: `Source '${args.sourceSlug}' not found. Check ~/.cowork/workspaces/{workspace}/sources/ for available sources.`,
             }],
             isError: true,
           };
@@ -1451,7 +1453,7 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found. Check ~/.agent-operator/workspaces/{workspace}/sources/ for available sources.`,
+              text: `Source '${args.sourceSlug}' not found. Check ~/.cowork/workspaces/{workspace}/sources/ for available sources.`,
             }],
             isError: true,
           };
@@ -1606,7 +1608,7 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found. Check ~/.agent-operator/workspaces/{workspace}/sources/ for available sources.`,
+              text: `Source '${args.sourceSlug}' not found. Check ~/.cowork/workspaces/{workspace}/sources/ for available sources.`,
             }],
             isError: true,
           };
@@ -1761,7 +1763,7 @@ source_credential_prompt({
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' not found. Check ~/.agent-operator/workspaces/{workspace}/sources/ for available sources.`,
+              text: `Source '${args.sourceSlug}' not found. Check ~/.cowork/workspaces/{workspace}/sources/ for available sources.`,
             }],
             isError: true,
           };
@@ -1820,6 +1822,67 @@ source_credential_prompt({
 }
 
 // ============================================================
+// Mermaid Validation Tool
+// ============================================================
+
+/**
+ * Create the mermaid_validate tool for validating Mermaid diagram syntax.
+ *
+ * This tool helps the agent verify diagram syntax before outputting complex diagrams.
+ * It attempts to parse and optionally render the diagram, returning structured
+ * validation results with specific error messages if invalid.
+ */
+function createMermaidValidateTool() {
+  return tool(
+    'mermaid_validate',
+    `Validate Mermaid diagram syntax before outputting.
+
+Use this when:
+- Creating complex diagrams with many nodes/relationships
+- Unsure about syntax for a specific diagram type
+- Debugging a diagram that failed to render
+
+Returns validation result with specific error messages if invalid.`,
+    {
+      code: z.string().describe('The mermaid diagram code to validate'),
+      render: z.boolean().optional().describe('Also attempt to render (catches layout errors). Default: true'),
+    },
+    async (args) => {
+      const { code, render = true } = args;
+
+      try {
+        // Attempt to render the diagram (this parses + layouts, catching most errors)
+        if (render) {
+          await renderMermaid(code);
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              valid: true,
+              message: 'Diagram syntax is valid' + (render ? ' and renders successfully' : ''),
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              valid: false,
+              error: message,
+              suggestion: `Check the syntax against ${DOC_REFS.mermaid}`,
+            }, null, 2),
+          }],
+        };
+      }
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -1833,7 +1896,7 @@ const sessionScopedToolsCache = new Map<string, ReturnType<typeof createSdkMcpSe
  * Creates and caches the provider if it doesn't exist.
  *
  * @param sessionId - Unique session identifier
- * @param workspaceRootPath - Absolute path to workspace folder (e.g., ~/.agent-operator/workspaces/xxx)
+ * @param workspaceRootPath - Absolute path to workspace folder (e.g., ~/.cowork/workspaces/xxx)
  */
 export function getSessionScopedTools(sessionId: string, workspaceRootPath: string): ReturnType<typeof createSdkMcpServer> {
   const cacheKey = `${sessionId}::${workspaceRootPath}`;
@@ -1841,7 +1904,7 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
   if (!cached) {
     // Create session-scoped tools that capture the sessionId and workspaceRootPath in their closures
     // Note: Source CRUD is done via standard file editing tools (Read/Write/Edit).
-    // See ~/.agent-operator/docs/ for config format documentation.
+    // See ~/.cowork/docs/ for config format documentation.
     cached = createSdkMcpServer({
       name: 'session',
       version: '1.0.0',
@@ -1851,6 +1914,8 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createConfigValidateTool(sessionId, workspaceRootPath),
         // Skill validation tool
         createSkillValidateTool(sessionId, workspaceRootPath),
+        // Mermaid diagram validation tool
+        createMermaidValidateTool(),
         // Source tools: test + auth only (CRUD via file editing)
         createSourceTestTool(sessionId, workspaceRootPath),
         createOAuthTriggerTool(sessionId, workspaceRootPath),
@@ -1858,6 +1923,8 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
         createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
         createCredentialPromptTool(sessionId, workspaceRootPath),
+        // LLM tool - invoke secondary Claude calls for subtasks
+        createLLMTool({ sessionId }),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);

@@ -12,6 +12,7 @@ import type {
   ErrorEvent,
   TypedErrorEvent,
   SourcesChangedEvent,
+  LabelsChangedEvent,
   PermissionRequestEvent,
   CredentialRequestEvent,
   PlanSubmittedEvent,
@@ -488,6 +489,27 @@ export function handleSourcesChanged(
       session: {
         ...session,
         enabledSourceSlugs: event.enabledSourceSlugs,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle labels_changed - update session labels
+ */
+export function handleLabelsChanged(
+  state: SessionState,
+  event: LabelsChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        labels: event.labels,
       },
       streaming,
     },

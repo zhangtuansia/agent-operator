@@ -81,9 +81,11 @@ interface LeftSidebarProps {
 // Custom hook for drag-and-drop on sidebar items
 function useSidebarDrop(link: LinkItem) {
   const [isDragOver, setIsDragOver] = useState(false)
+  const acceptsDrop = link.acceptsDrop
+  const onSessionDrop = link.onSessionDrop
 
   const handleDragOver = React.useCallback((e: React.DragEvent) => {
-    if (!link.acceptsDrop || !link.onSessionDrop) return
+    if (!acceptsDrop || !onSessionDrop) return
 
     // Check if the drag contains session data
     if (e.dataTransfer.types.includes('application/x-session-id')) {
@@ -91,7 +93,7 @@ function useSidebarDrop(link: LinkItem) {
       e.dataTransfer.dropEffect = 'move'
       setIsDragOver(true)
     }
-  }, [link.acceptsDrop, link.onSessionDrop])
+  }, [acceptsDrop, onSessionDrop])
 
   const handleDragLeave = React.useCallback((e: React.DragEvent) => {
     // Only set to false if we're actually leaving the element
@@ -107,17 +109,17 @@ function useSidebarDrop(link: LinkItem) {
     e.preventDefault()
     setIsDragOver(false)
 
-    if (!link.onSessionDrop) return
+    if (!onSessionDrop) return
 
     const sessionId = e.dataTransfer.getData('application/x-session-id')
     if (sessionId) {
-      link.onSessionDrop(sessionId)
+      onSessionDrop(sessionId)
     }
-  }, [link.onSessionDrop])
+  }, [onSessionDrop])
 
   return {
     isDragOver,
-    dragProps: link.acceptsDrop ? {
+    dragProps: acceptsDrop ? {
       onDragOver: handleDragOver,
       onDragLeave: handleDragLeave,
       onDrop: handleDrop,

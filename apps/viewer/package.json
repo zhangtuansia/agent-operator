@@ -1,6 +1,6 @@
 {
   "name": "@agent-operator/viewer",
-  "version": "0.0.1",
+  "version": "0.1.5a",
   "description": "Web viewer for Cowork sessions - upload and share session transcripts",
   "private": true,
   "type": "module",

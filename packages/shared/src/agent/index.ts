@@ -89,7 +89,7 @@ export {
   loadSourcePermissionsConfig,
   getWorkspacePermissionsPath,
   getSourcePermissionsPath,
-  // App-level default permissions (at ~/.agent-operator/permissions/)
+  // App-level default permissions (at ~/.cowork/permissions/)
   getAppPermissionsDir,
   ensureDefaultPermissions,
   loadDefaultPermissions,

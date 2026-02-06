@@ -73,8 +73,8 @@ mac:
   #   teamId: ${APPLE_TEAM_ID}
 
 dmg:
-  # Use predictable naming: Agent-Operator-arm64.dmg, Agent-Operator-x64.dmg
-  artifactName: "Agent-Operator-${arch}.dmg"
+  # Use predictable naming: Cowork-arm64.dmg, Cowork-x64.dmg
+  artifactName: "Cowork-${arch}.dmg"
   contents:
     - x: 130
       y: 220
@@ -92,8 +92,8 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: Agent-Operator-x64.exe
-  artifactName: "Agent-Operator-${arch}.${ext}"
+  # Use predictable naming: Cowork-x64.exe
+  artifactName: "Cowork-${arch}.${ext}"
   files:
     # Exclude ripgrep binaries for other platforms
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
@@ -124,12 +124,12 @@ nsis:
 linux:
   icon: resources/icon.png
   category: Utility
-  maintainer: "Agent Operator"
+  maintainer: "Cowork"
   target:
     - target: AppImage
       arch:
         - x64
-  artifactName: "Agent-Operator-${arch}.${ext}"
+  artifactName: "Cowork-${arch}.${ext}"
   # Exclude ripgrep binaries for other platforms
   files:
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
