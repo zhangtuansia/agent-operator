@@ -117,7 +117,7 @@ export default function WorkspaceSettingsPage() {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
           // Use provider-specific default model if no model is set
-          setWsModel(settings.model || getDefaultModelForProvider(effectiveProvider))
+          setWsModel(settings.model || getDefaultModelForProvider(effectiveProvider, customModels))
           setWsThinkingLevel(settings.thinkingLevel || DEFAULT_THINKING_LEVEL)
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
@@ -185,7 +185,7 @@ export default function WorkspaceSettingsPage() {
       // Reset model to default for the new provider if current model is not valid
       const models = getModelsForProvider(newProvider, customModels)
       if (!models.some(m => m.id === wsModel)) {
-        const defaultModel = getDefaultModelForProvider(newProvider)
+        const defaultModel = getDefaultModelForProvider(newProvider, customModels)
         setWsModel(defaultModel)
         // Also update workspace settings
         if (activeWorkspaceId && window.electronAPI) {

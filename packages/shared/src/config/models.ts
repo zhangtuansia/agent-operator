@@ -169,11 +169,24 @@ export function getModelsForProvider(
 
 /**
  * Get default model for a specific provider.
+ * For the 'custom' provider, if customModels are provided and non-empty,
+ * returns the first custom model's ID (since the hardcoded default may not
+ * be supported by the user's custom API endpoint).
  * @param provider - Provider ID
+ * @param customModels - Optional custom model definitions (for 'custom' provider)
  * @returns Default model ID for the provider
  */
-export function getDefaultModelForProvider(provider: string | undefined): string {
+export function getDefaultModelForProvider(
+  provider: string | undefined,
+  customModels?: Array<{ id: string; name: string }>
+): string {
   if (!provider) return DEFAULT_MODEL;
+
+  // For custom provider with user-defined models, use the first custom model
+  if (provider === 'custom' && customModels && customModels.length > 0) {
+    return customModels[0]!.id;
+  }
+
   return DEFAULT_PROVIDER_MODEL[provider] || DEFAULT_MODEL;
 }
 

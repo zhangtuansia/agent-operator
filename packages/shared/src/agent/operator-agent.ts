@@ -466,7 +466,7 @@ export class OperatorAgent {
     // the default model is appropriate for that provider instead of Claude Sonnet
     const storedConfig = loadStoredConfig();
     const currentProvider = storedConfig?.providerConfig?.provider;
-    const providerDefaultModel = getDefaultModelForProvider(currentProvider);
+    const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels);
     const resolvedModel = config.session?.model ?? config.model ?? storedConfig?.model ?? providerDefaultModel;
     this.config = { ...config, model: resolvedModel };
     this.isHeadless = config.isHeadless ?? false;

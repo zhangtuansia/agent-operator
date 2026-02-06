@@ -9,6 +9,7 @@ import {
 import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight } from "lucide-react"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { PanelLeftRounded } from "./icons/PanelLeftRounded"
+import { AiGenerate3d } from "./icons/AiGenerate3d"
 import { TopBarButton } from "./ui/TopBarButton"
 import { useLanguage } from "@/context/LanguageContext"
 
@@ -53,7 +54,7 @@ export function AppMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <TopBarButton aria-label={t('appMenu.settings')}>
-            <Settings className="h-4 w-4 text-foreground/70" />
+            <AiGenerate3d className="h-4 w-4 text-foreground/70" />
           </TopBarButton>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="start" minWidth="min-w-48">

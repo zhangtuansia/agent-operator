@@ -43,6 +43,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/shared/agent/modes"
+import type { SessionSearchResult } from "../../../shared/types"
 import { useLanguage } from "@/context/LanguageContext"
 import { getDateFnsLocale } from "@/i18n"
 
@@ -164,6 +165,8 @@ interface SessionItemProps {
   permissionMode?: PermissionMode
   /** Current search query for highlighting matches */
   searchQuery?: string
+  /** Content search match result for this session */
+  contentMatch?: SessionSearchResult
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
   /** Translation function */
@@ -196,6 +199,7 @@ const SessionItem = memo(function SessionItem({
   onOpenInNewWindow,
   permissionMode,
   searchQuery,
+  contentMatch,
   todoStates,
   t,
   language,
@@ -327,6 +331,12 @@ const SessionItem = memo(function SessionItem({
                 {searchQuery ? highlightMatch(getSessionTitle(item, t('chat.newChat')), searchQuery) : getSessionTitle(item, t('chat.newChat'))}
               </div>
             </div>
+            {/* Content match snippet - shown when search matches message content */}
+            {contentMatch && contentMatch.matches[0]?.snippet && (
+              <div className="text-xs text-muted-foreground/60 line-clamp-1 min-w-0 pr-6">
+                {searchQuery ? highlightMatch(contentMatch.matches[0].snippet, searchQuery) : contentMatch.matches[0].snippet}
+              </div>
+            )}
             {/* Subtitle - with optional flag at start, single line with truncation */}
             <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] pr-6 min-w-0">
               {item.isProcessing && (
@@ -496,6 +506,7 @@ const SessionItem = memo(function SessionItem({
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
     prevProps.searchQuery === nextProps.searchQuery &&
+    prevProps.contentMatch === nextProps.contentMatch &&
     prevProps.permissionMode === nextProps.permissionMode
   )
 })
@@ -590,6 +601,10 @@ export function SessionList({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  // Content search state
+  const [contentResults, setContentResults] = useState<Map<string, SessionSearchResult>>(new Map())
+  const [isContentSearching, setIsContentSearching] = useState(false)
+
   // Pagination: limit initial render for performance with large session lists
   const INITIAL_VISIBLE_COUNT = 50
   const LOAD_MORE_COUNT = 50
@@ -605,6 +620,36 @@ export function SessionList({
     }
   }, [searchActive])
 
+  // Debounced content search via backend ripgrep
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setContentResults(new Map())
+      setIsContentSearching(false)
+      return
+    }
+
+    let cancelled = false
+    setIsContentSearching(true)
+    const timer = setTimeout(() => {
+      window.electronAPI.searchSessionContent(searchQuery).then((results) => {
+        if (cancelled) return
+        const map = new Map<string, SessionSearchResult>()
+        for (const r of results) {
+          map.set(r.sessionId, r)
+        }
+        setContentResults(map)
+        setIsContentSearching(false)
+      }).catch(() => {
+        if (!cancelled) setIsContentSearching(false)
+      })
+    }, 300)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchQuery])
+
   // Sort by most recent activity first
   const sortedItems = items
     .filter((item) => !item.hidden)
@@ -612,16 +657,30 @@ export function SessionList({
     (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
   )
 
-  // Filter items by search query
+  // Filter items by search query (title match + content match merged)
   const newChatFallback = t('chat.newChat')
   const searchFilteredItems = useMemo(() => {
     if (!searchQuery.trim()) return sortedItems
     const query = searchQuery.toLowerCase()
-    return sortedItems.filter(item => {
+
+    // Title matches (instant, client-side)
+    const titleMatched = new Set<string>()
+    const titleResults = sortedItems.filter(item => {
       const title = getSessionTitle(item, newChatFallback).toLowerCase()
-      return title.includes(query)
+      if (title.includes(query)) {
+        titleMatched.add(item.id)
+        return true
+      }
+      return false
     })
-  }, [sortedItems, searchQuery, newChatFallback])
+
+    // Content-only matches (from backend ripgrep, deduped)
+    const contentOnlyResults = sortedItems.filter(item =>
+      !titleMatched.has(item.id) && contentResults.has(item.id)
+    )
+
+    return [...titleResults, ...contentOnlyResults]
+  }, [sortedItems, searchQuery, newChatFallback, contentResults])
 
   // Reset visible count when search changes
   useEffect(() => {
@@ -826,6 +885,12 @@ export function SessionList({
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
+            {isContentSearching && searchQuery.trim().length >= 2 && (
+              <div className="flex items-center gap-1.5 px-1 pt-1">
+                <Spinner className="text-[8px] text-muted-foreground" />
+                <span className="text-[11px] text-muted-foreground">{t('sessionList.searchingMessages')}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -891,6 +956,7 @@ export function SessionList({
                           onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
                           permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                           searchQuery={searchQuery}
+                          contentMatch={contentResults.get(item.id)}
                           todoStates={todoStates}
                           t={t}
                           language={language}

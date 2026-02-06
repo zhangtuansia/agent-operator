@@ -119,6 +119,25 @@ export type { PermissionRequest as BasePermissionRequest } from '@agent-operator
 // =============================================================================
 
 /**
+ * Search result for a single match within a session
+ */
+export interface SearchMatch {
+  sessionId: string
+  lineNumber: number
+  snippet: string
+  matchText: string
+}
+
+/**
+ * Aggregated search results for a session
+ */
+export interface SessionSearchResult {
+  sessionId: string
+  matchCount: number
+  matches: SearchMatch[]
+}
+
+/**
  * Git Bash detection status (Windows-only concern)
  */
 export interface GitBashStatus {
@@ -160,6 +179,7 @@ export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
   getSessionMessages(sessionId: string): Promise<Session | null>
+  searchSessionContent(query: string): Promise<SessionSearchResult[]>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   importSessions(workspaceId: string, source: 'openai' | 'anthropic', filePath: string): Promise<{ imported: number; failed: number; errors: string[] }>

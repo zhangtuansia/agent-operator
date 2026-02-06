@@ -2181,7 +2181,7 @@ export class SessionManager {
       if (managed.agent) {
         const storedConfig = loadStoredConfig()
         const currentProvider = storedConfig?.providerConfig?.provider
-        const providerDefaultModel = getDefaultModelForProvider(currentProvider)
+        const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels)
         const effectiveModel = model ?? storedConfig?.model ?? providerDefaultModel
         managed.agent.setModel(effectiveModel)
       }

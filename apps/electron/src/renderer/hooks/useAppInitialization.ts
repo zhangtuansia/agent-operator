@@ -88,7 +88,8 @@ export function useAppInitialization(): UseAppInitializationResult {
         const config = await window.electronAPI.getStoredConfig()
         const provider = config?.providerConfig?.provider || 'anthropic'
         const savedModel = await window.electronAPI.getModel()
-        const providerDefault = getDefaultModelForProvider(provider)
+        const customModels = config?.providerConfig?.customModels
+        const providerDefault = getDefaultModelForProvider(provider, customModels)
         setCurrentModel(savedModel || providerDefault || DEFAULT_MODEL)
 
         // Load notifications setting

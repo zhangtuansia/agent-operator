@@ -399,6 +399,7 @@ export const en = {
     clearSearch: 'Clear search',
     closeSearch: 'Close search',
     loadMore: 'Load more ({count} remaining)',
+    searchingMessages: 'Searching messages...',
   },
 
   // Chat Info (Right Sidebar)

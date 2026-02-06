@@ -401,6 +401,7 @@ export const zh: TranslationKeys = {
     clearSearch: '清除搜索',
     closeSearch: '关闭搜索',
     loadMore: '加载更多（剩余 {count} 个）',
+    searchingMessages: '搜索消息中...',
   },
 
   // Chat Info (Right Sidebar)

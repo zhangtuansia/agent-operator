@@ -299,7 +299,7 @@ export default function App() {
         setCurrentModel(storedModel)
       } else {
         // If no stored model or model is invalid for current provider, use provider-specific default
-        const defaultModel = getDefaultModelForProvider(effectiveProvider)
+        const defaultModel = getDefaultModelForProvider(effectiveProvider, customModels)
         setCurrentModel(defaultModel)
         // Persist the new default model
         window.electronAPI.setModel(defaultModel)
@@ -352,7 +352,7 @@ export default function App() {
       // Check if current model is valid for the new provider
       if (!isModelValidForProvider(currentModel, newProvider, customModels)) {
         // Current model not valid for new provider, switch to default
-        const newDefaultModel = getDefaultModelForProvider(newProvider)
+        const newDefaultModel = getDefaultModelForProvider(newProvider, customModels)
         setCurrentModel(newDefaultModel)
         window.electronAPI.setModel(newDefaultModel)
       }

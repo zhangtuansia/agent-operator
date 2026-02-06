@@ -12,6 +12,8 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@agent-operator/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getAgentType, setAgentType, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getProviderConfig, loadStoredConfig, type Workspace, type AgentType, CONFIG_DIR } from '@agent-operator/shared/config'
+import { getWorkspaceSessionsPath } from '@agent-operator/shared/workspaces'
+import { searchSessions } from './search'
 import { isCodexAuthenticated, startCodexOAuth } from '@agent-operator/shared/auth'
 import { getSessionAttachmentsPath } from '@agent-operator/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@agent-operator/shared/sources'
@@ -278,6 +280,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const session = await sessionManager.getSession(sessionId)
     end()
     return session
+  })
+
+  // Search session content using ripgrep
+  ipcMain.handle(IPC_CHANNELS.SEARCH_SESSION_CONTENT, async (event, query: string) => {
+    const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
+    if (!workspaceId) return []
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return []
+    const sessionsDir = getWorkspaceSessionsPath(workspace.rootPath)
+    return searchSessions(query, sessionsDir)
   })
 
   // Get workspaces

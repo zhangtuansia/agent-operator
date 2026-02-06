@@ -83,7 +83,7 @@
     },
     "apps/electron": {
       "name": "@agent-operator/electron",
-      "version": "0.1.5",
+      "version": "0.1.5-c",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
         "@agent-operator/mermaid": "workspace:*",
@@ -130,7 +130,7 @@
     },
     "apps/viewer": {
       "name": "@agent-operator/viewer",
-      "version": "0.0.1",
+      "version": "0.1.5-a",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
         "@agent-operator/ui": "workspace:*",
@@ -157,7 +157,7 @@
     },
     "packages/core": {
       "name": "@agent-operator/core",
-      "version": "0.0.1",
+      "version": "0.1.5-a",
       "devDependencies": {
         "@types/uuid": "^11.0.0",
       },
@@ -169,7 +169,7 @@
     },
     "packages/mermaid": {
       "name": "@agent-operator/mermaid",
-      "version": "0.0.7",
+      "version": "0.1.5-a",
       "dependencies": {
         "@dagrejs/dagre": "^1.1.8",
       },
@@ -179,9 +179,10 @@
     },
     "packages/shared": {
       "name": "@agent-operator/shared",
-      "version": "0.0.1",
+      "version": "0.1.5-a",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
+        "@agent-operator/mermaid": "workspace:*",
         "@isaacs/ttlcache": "^2.1.4",
         "@leeoniya/ufuzzy": "^1.0.19",
         "bash-parser": "^0.5.0",
@@ -204,7 +205,7 @@
     },
     "packages/ui": {
       "name": "@agent-operator/ui",
-      "version": "0.0.1",
+      "version": "0.1.5-a",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
         "@excalidraw/excalidraw": "^0.18.0",

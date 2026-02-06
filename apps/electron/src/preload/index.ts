@@ -5,6 +5,7 @@ const api: ElectronAPI = {
   // Session management
   getSessions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSIONS),
   getSessionMessages: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSION_MESSAGES, sessionId),
+  searchSessionContent: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_SESSION_CONTENT, query),
   createSession: (workspaceId: string, options?: import('../shared/types').CreateSessionOptions) => ipcRenderer.invoke(IPC_CHANNELS.CREATE_SESSION, workspaceId, options),
   deleteSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SESSION, sessionId),
   importSessions: (workspaceId: string, source: 'openai' | 'anthropic', filePath: string) =>
