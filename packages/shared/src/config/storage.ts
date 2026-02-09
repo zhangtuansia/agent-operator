@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, copyFileSync, readdirSync as readdirSyncFs } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
@@ -11,11 +11,21 @@ import {
 import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
+import { isSafeHttpHeaderValue } from '../utils/mask.ts';
 import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@agent-operator/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import { BUNDLED_CONFIG_DEFAULTS, type ConfigDefaults } from './config-defaults-schema.ts';
+import {
+  getDefaultModelsForConnection,
+  getDefaultModelForConnection,
+  isValidProviderAuthCombination,
+  type LlmConnection,
+  type LlmAuthType,
+  type LlmProviderType,
+} from './llm-connections.ts';
+import type { ModelDefinition } from './models.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -71,6 +81,10 @@ export type AgentType = 'claude' | 'codex';
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
+  // LLM Connections (migrated abstraction from legacy auth/provider fields)
+  llmConnections?: LlmConnection[];
+  // Slug of default connection for new sessions
+  defaultLlmConnection?: string;
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -194,6 +208,273 @@ export function loadStoredConfig(): StoredConfig | null {
   }
 }
 
+function getConnectionModelId(model: ModelDefinition | string): string {
+  return typeof model === 'string' ? model : model.id;
+}
+
+function ensureModelInConnectionModels(
+  models: Array<ModelDefinition | string>,
+  modelId: string,
+): Array<ModelDefinition | string> {
+  if (!modelId) return models;
+
+  const modelIds = models.map(getConnectionModelId);
+  if (modelIds.includes(modelId)) {
+    return models;
+  }
+
+  const hasObjectModels = models.some(model => typeof model !== 'string');
+  if (hasObjectModels) {
+    const injected: ModelDefinition = {
+      id: modelId,
+      name: modelId,
+      shortName: modelId,
+      description: 'Imported from legacy config',
+    };
+    return [injected, ...models];
+  }
+
+  return [modelId, ...models];
+}
+
+function formatProviderName(provider: string): string {
+  return provider
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function derivePrimaryLlmConnection(config: StoredConfig): LlmConnection {
+  const now = Date.now();
+  const existing = config.llmConnections ?? [];
+  const providerConfig = config.providerConfig;
+  const agentType = config.agentType ?? 'claude';
+
+  let slug = 'anthropic-api';
+  let name = 'Anthropic (API Key)';
+  let providerType: LlmProviderType = 'anthropic';
+  let authType: LlmAuthType = 'api_key';
+  let baseUrl: string | undefined;
+  let awsRegion: string | undefined;
+
+  if (agentType === 'codex') {
+    slug = 'codex';
+    name = 'Codex';
+    providerType = 'openai';
+    authType = 'oauth';
+  } else if (config.authType === 'bedrock' || providerConfig?.provider === 'bedrock') {
+    slug = 'bedrock';
+    name = 'AWS Bedrock';
+    providerType = 'bedrock';
+    authType = 'environment';
+    awsRegion = providerConfig?.awsRegion;
+  } else if (providerConfig) {
+    providerType = providerConfig.apiFormat === 'openai' ? 'openai_compat' : 'anthropic_compat';
+    authType = 'api_key_with_endpoint';
+    slug = `${providerConfig.provider.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-compat`;
+    name = `${formatProviderName(providerConfig.provider)} Compatible`;
+    baseUrl = providerConfig.baseURL || undefined;
+  } else if (config.authType === 'oauth_token') {
+    slug = 'claude-max';
+    name = 'Claude Max';
+    providerType = 'anthropic';
+    authType = 'oauth';
+  }
+
+  if (!isValidProviderAuthCombination(providerType, authType)) {
+    if (config.authType === 'oauth_token') {
+      slug = 'claude-max';
+      name = 'Claude Max';
+      providerType = 'anthropic';
+      authType = 'oauth';
+      baseUrl = undefined;
+    } else {
+      slug = 'anthropic-api';
+      name = 'Anthropic (API Key)';
+      providerType = 'anthropic';
+      authType = 'api_key';
+      baseUrl = undefined;
+    }
+  }
+
+  let models: Array<ModelDefinition | string>;
+  if (providerConfig?.provider === 'custom' && providerConfig.customModels?.length) {
+    models = providerConfig.customModels.map(model => ({
+      id: model.id,
+      name: model.name,
+      shortName: model.shortName ?? model.name,
+      description: model.description ?? '',
+    }));
+  } else {
+    models = getDefaultModelsForConnection(providerType);
+  }
+
+  const defaultModel = config.model ?? getDefaultModelForConnection(providerType);
+  models = ensureModelInConnectionModels(models, defaultModel);
+
+  const previous = existing.find(connection => connection.slug === slug);
+  return {
+    slug,
+    name,
+    providerType,
+    authType,
+    baseUrl,
+    awsRegion,
+    models,
+    defaultModel,
+    createdAt: previous?.createdAt ?? now,
+    lastUsedAt: previous?.lastUsedAt,
+  };
+}
+
+function ensureDefaultLlmConnection(config: StoredConfig): boolean {
+  if (!config.llmConnections || config.llmConnections.length === 0) {
+    return false;
+  }
+
+  const defaultExists = config.llmConnections.some(c => c.slug === config.defaultLlmConnection);
+  if (!config.defaultLlmConnection || !defaultExists) {
+    config.defaultLlmConnection = config.llmConnections[0]!.slug;
+    return true;
+  }
+
+  return false;
+}
+
+function backfillConnectionModels(config: StoredConfig): boolean {
+  if (!config.llmConnections || config.llmConnections.length === 0) {
+    return false;
+  }
+
+  let changed = false;
+  for (const connection of config.llmConnections) {
+    let models = connection.models;
+    if (!models || models.length === 0) {
+      models = getDefaultModelsForConnection(connection.providerType);
+      connection.models = models;
+      changed = true;
+    }
+
+    let defaultModel = connection.defaultModel;
+    if (!defaultModel) {
+      defaultModel = getDefaultModelForConnection(connection.providerType);
+      connection.defaultModel = defaultModel;
+      changed = true;
+    }
+
+    if (defaultModel && models) {
+      const fixedModels = ensureModelInConnectionModels(models, defaultModel);
+      if (JSON.stringify(fixedModels) !== JSON.stringify(models)) {
+        connection.models = fixedModels;
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
+function syncPrimaryLlmConnection(config: StoredConfig): boolean {
+  const primary = derivePrimaryLlmConnection(config);
+  const existingConnections = config.llmConnections ?? [];
+  let changed = false;
+
+  const index = existingConnections.findIndex(connection => connection.slug === primary.slug);
+  if (index >= 0) {
+    const current = existingConnections[index]!;
+    const next: LlmConnection = {
+      ...current,
+      ...primary,
+      createdAt: current.createdAt || primary.createdAt,
+      lastUsedAt: current.lastUsedAt ?? primary.lastUsedAt,
+    };
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      existingConnections[index] = next;
+      changed = true;
+    }
+  } else {
+    existingConnections.push(primary);
+    changed = true;
+  }
+
+  if (!config.llmConnections) {
+    config.llmConnections = existingConnections;
+  }
+
+  if (config.defaultLlmConnection !== primary.slug) {
+    config.defaultLlmConnection = primary.slug;
+    changed = true;
+  }
+
+  if (backfillConnectionModels(config)) {
+    changed = true;
+  }
+  if (ensureDefaultLlmConnection(config)) {
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
+ * Backward-compatible migration.
+ * Creates or syncs LLM connections from legacy auth/provider config fields.
+ */
+export function migrateLegacyLlmConnectionsConfig(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const changed = syncPrimaryLlmConnection(config);
+  if (changed) {
+    saveConfig(config);
+  }
+}
+
+/**
+ * Backfill connection-scoped credentials from legacy global credentials.
+ * Keeps legacy entries for compatibility; only writes missing connection creds.
+ */
+export async function migrateLegacyLlmConnectionCredentials(): Promise<void> {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections || config.llmConnections.length === 0) {
+    return;
+  }
+
+  const manager = getCredentialManager();
+  const legacyApiKey = await manager.getApiKey();
+  const validLegacyApiKey = legacyApiKey && isSafeHttpHeaderValue(legacyApiKey)
+    ? legacyApiKey
+    : null;
+  const legacyClaudeOAuth = await manager.getClaudeOAuthCredentials();
+
+  for (const connection of config.llmConnections) {
+    const isApiKeyAuth =
+      connection.authType === 'api_key'
+      || connection.authType === 'api_key_with_endpoint'
+      || connection.authType === 'bearer_token';
+
+    if (isApiKeyAuth) {
+      const existing = await manager.getLlmApiKey(connection.slug);
+      if (!existing && validLegacyApiKey) {
+        await manager.setLlmApiKey(connection.slug, validLegacyApiKey);
+      }
+      continue;
+    }
+
+    if (connection.authType === 'oauth' && connection.providerType === 'anthropic') {
+      const existingOauth = await manager.getLlmOAuth(connection.slug);
+      if (!existingOauth?.accessToken && legacyClaudeOAuth?.accessToken) {
+        await manager.setLlmOAuth(connection.slug, {
+          accessToken: legacyClaudeOAuth.accessToken,
+          refreshToken: legacyClaudeOAuth.refreshToken,
+          expiresAt: legacyClaudeOAuth.expiresAt,
+        });
+      }
+    }
+  }
+}
+
 /**
  * Get the Anthropic API key from credential store
  */
@@ -230,13 +511,16 @@ export function saveConfig(config: StoredConfig): void {
 export async function updateApiKey(newApiKey: string): Promise<boolean> {
   const config = loadStoredConfig();
   if (!config) return false;
+  const normalizedApiKey = newApiKey.trim();
+  if (!normalizedApiKey || !isSafeHttpHeaderValue(normalizedApiKey)) return false;
 
   // Save API key to credential store
   const manager = getCredentialManager();
-  await manager.setApiKey(newApiKey);
+  await manager.setApiKey(normalizedApiKey);
 
   // Update auth type in config (but not the key itself)
   config.authType = 'api_key';
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
   return true;
 }
@@ -254,6 +538,7 @@ export function setAuthType(authType: AuthType): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.authType = authType;
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
 }
 
@@ -266,6 +551,7 @@ export function setModel(model: string): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.model = model;
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
 }
 
@@ -285,6 +571,7 @@ export function setAgentType(agentType: AgentType): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.agentType = agentType;
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
 }
 
@@ -315,6 +602,7 @@ export function setProviderConfig(providerConfig: ProviderConfig | null): void {
   } else {
     delete config.providerConfig;
   }
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
 }
 
@@ -345,6 +633,7 @@ export function setCustomModels(models: CustomModelDefinition[]): void {
   }
 
   config.providerConfig.customModels = models;
+  syncPrimaryLlmConnection(config);
   saveConfig(config);
 }
 
@@ -429,6 +718,168 @@ export function reorderCustomModels(modelIds: string[]): CustomModelDefinition[]
 
   setCustomModels(reorderedModels);
   return reorderedModels;
+}
+
+// ============================================
+// LLM Connections
+// ============================================
+
+// Re-export connection types for convenience
+export type {
+  LlmConnection,
+  LlmProviderType,
+  LlmAuthType,
+  LlmConnectionWithStatus,
+} from './llm-connections.ts';
+
+/**
+ * Get all configured LLM connections.
+ * Returns an empty array if migration has not run yet.
+ */
+export function getLlmConnections(): LlmConnection[] {
+  const config = loadStoredConfig();
+  return config?.llmConnections ?? [];
+}
+
+/**
+ * Get a specific LLM connection by slug.
+ */
+export function getLlmConnection(slug: string): LlmConnection | null {
+  const connections = getLlmConnections();
+  return connections.find(connection => connection.slug === slug) ?? null;
+}
+
+/**
+ * Add a new LLM connection.
+ * Returns false if slug already exists or config is unavailable.
+ */
+export function addLlmConnection(connection: LlmConnection): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (!config.llmConnections) {
+    config.llmConnections = [];
+  }
+
+  if (config.llmConnections.some(existing => existing.slug === connection.slug)) {
+    return false;
+  }
+
+  config.llmConnections.push({
+    ...connection,
+    createdAt: connection.createdAt || Date.now(),
+  });
+
+  ensureDefaultLlmConnection(config);
+  backfillConnectionModels(config);
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Update an existing LLM connection by slug.
+ * Returns false if not found.
+ */
+export function updateLlmConnection(
+  slug: string,
+  updates: Partial<Omit<LlmConnection, 'slug'>>,
+): boolean {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections || config.llmConnections.length === 0) {
+    return false;
+  }
+
+  const index = config.llmConnections.findIndex(connection => connection.slug === slug);
+  if (index === -1) return false;
+
+  const existing = config.llmConnections[index]!;
+  config.llmConnections[index] = {
+    slug: existing.slug,
+    name: updates.name ?? existing.name,
+    providerType: updates.providerType ?? existing.providerType,
+    type: updates.type ?? existing.type,
+    authType: updates.authType ?? existing.authType,
+    createdAt: updates.createdAt ?? existing.createdAt,
+    baseUrl: updates.baseUrl !== undefined ? updates.baseUrl : existing.baseUrl,
+    models: updates.models !== undefined ? updates.models : existing.models,
+    defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
+    codexPath: updates.codexPath !== undefined ? updates.codexPath : existing.codexPath,
+    awsRegion: updates.awsRegion !== undefined ? updates.awsRegion : existing.awsRegion,
+    gcpProjectId: updates.gcpProjectId !== undefined ? updates.gcpProjectId : existing.gcpProjectId,
+    gcpRegion: updates.gcpRegion !== undefined ? updates.gcpRegion : existing.gcpRegion,
+    lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
+  };
+
+  backfillConnectionModels(config);
+  ensureDefaultLlmConnection(config);
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Delete an LLM connection.
+ * Returns false if not found.
+ */
+export function deleteLlmConnection(slug: string): boolean {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections || config.llmConnections.length === 0) {
+    return false;
+  }
+
+  const index = config.llmConnections.findIndex(connection => connection.slug === slug);
+  if (index === -1) return false;
+
+  config.llmConnections.splice(index, 1);
+  if (config.defaultLlmConnection === slug) {
+    config.defaultLlmConnection = config.llmConnections[0]?.slug;
+  }
+
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the default LLM connection slug.
+ */
+export function getDefaultLlmConnection(): string | null {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections || config.llmConnections.length === 0) {
+    return null;
+  }
+  return config.defaultLlmConnection ?? config.llmConnections[0]!.slug;
+}
+
+/**
+ * Set default LLM connection.
+ * Returns false if slug does not exist.
+ */
+export function setDefaultLlmConnection(slug: string): boolean {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections || config.llmConnections.length === 0) {
+    return false;
+  }
+
+  if (!config.llmConnections.some(connection => connection.slug === slug)) {
+    return false;
+  }
+
+  config.defaultLlmConnection = slug;
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Update last-used timestamp for a connection.
+ */
+export function touchLlmConnection(slug: string): void {
+  const config = loadStoredConfig();
+  if (!config?.llmConnections) return;
+
+  const connection = config.llmConnections.find(item => item.slug === slug);
+  if (!connection) return;
+
+  connection.lastUsedAt = Date.now();
+  saveConfig(config);
 }
 
 
@@ -592,7 +1043,7 @@ export function getWorkspaces(): Workspace[] {
   return workspaces.map(w => {
     // Read name from workspace folder config (single source of truth)
     const wsConfig = loadWorkspaceConfig(w.rootPath);
-    const name = wsConfig?.name || w.rootPath.split('/').pop() || 'Untitled';
+    const name = wsConfig?.name || basename(w.rootPath) || 'Untitled';
 
     // If workspace has a stored iconUrl that's a remote URL, use it
     // Otherwise check for local icon file

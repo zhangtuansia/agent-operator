@@ -143,6 +143,7 @@ export function createSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
+    llmConnection?: string;
     hidden?: boolean;
   }
 ): SessionConfig {
@@ -170,6 +171,7 @@ export function createSession(
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
+    llmConnection: options?.llmConnection,
     hidden: options?.hidden,
   };
 
@@ -272,6 +274,8 @@ export function getOrCreateSessionById(
       lastUsedAt: existing.lastUsedAt,
       sdkCwd: existing.sdkCwd,
       workingDirectory: existing.workingDirectory,
+      model: existing.model,
+      llmConnection: existing.llmConnection,
     };
   }
 
@@ -435,6 +439,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       workingDirectory: workingDir,
       sdkCwd,
       model: header.model,
+      llmConnection: header.llmConnection,
       hidden: header.hidden,
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
@@ -502,6 +507,8 @@ export function getOrCreateLatestSession(workspaceRootPath: string): SessionConf
       name: latest.name,
       createdAt: latest.createdAt,
       lastUsedAt: latest.lastUsedAt,
+      model: latest.model,
+      llmConnection: latest.llmConnection,
     };
   }
   return createSession(workspaceRootPath);
@@ -543,6 +550,7 @@ export function updateSessionMetadata(
     | 'sharedUrl'
     | 'sharedId'
     | 'model'
+    | 'llmConnection'
   >>
 ): void {
   const session = loadSession(workspaceRootPath, sessionId);
@@ -558,6 +566,7 @@ export function updateSessionMetadata(
   if ('sharedUrl' in updates) session.sharedUrl = updates.sharedUrl;
   if ('sharedId' in updates) session.sharedId = updates.sharedId;
   if (updates.model !== undefined) session.model = updates.model;
+  if ('llmConnection' in updates) session.llmConnection = updates.llmConnection;
 
   saveSession(session);
 }

@@ -60,6 +60,8 @@ export interface Session {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
+  // LLM connection slug for this session
+  llmConnection?: string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
   // Role/type of the last message (for badge display without loading messages)
@@ -286,6 +288,7 @@ export interface UpdateInfo {
 export interface WorkspaceSettings {
   name?: string
   model?: string
+  defaultLlmConnection?: string
   permissionMode?: PermissionMode
   /** Permission modes available for SHIFT+TAB cycling (min 2 modes) */
   cyclablePermissionModes?: PermissionMode[]

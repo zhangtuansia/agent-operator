@@ -172,6 +172,18 @@ const api: ElectronAPI = {
   hasClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE),
 
+  // LLM Connections (provider configurations)
+  listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
+  listLlmConnectionsWithStatus: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST_WITH_STATUS),
+  getLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_GET, slug),
+  saveLlmConnection: (connection: import('../shared/types').LlmConnection) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SAVE, connection),
+  deleteLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_DELETE, slug),
+  testLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_TEST, slug),
+  setDefaultLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_DEFAULT, slug),
+  setWorkspaceDefaultLlmConnection: (workspaceId: string, slug: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_WORKSPACE_DEFAULT, workspaceId, slug),
+
   // Settings - Billing
   getBillingMethod: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD),
   updateBillingMethod: (authType: AuthType, credential?: string) =>

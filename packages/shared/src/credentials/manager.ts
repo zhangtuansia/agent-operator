@@ -11,6 +11,7 @@
 
 import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential } from './types.ts';
+import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts';
 import { SecureStorageBackend } from './backends/secure-storage.ts';
 import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
@@ -315,6 +316,100 @@ export class CredentialManager {
     const allCreds = await this.list({ workspaceId });
     for (const cred of allCreds) {
       await this.delete(cred);
+    }
+  }
+
+  // ============================================================
+  // LLM Connection Credentials
+  // ============================================================
+
+  /** Get API key for an LLM connection */
+  async getLlmApiKey(connectionSlug: string): Promise<string | null> {
+    const cred = await this.get({ type: 'llm_api_key', connectionSlug });
+    return cred?.value || null;
+  }
+
+  /** Set API key for an LLM connection */
+  async setLlmApiKey(connectionSlug: string, apiKey: string): Promise<void> {
+    await this.set({ type: 'llm_api_key', connectionSlug }, { value: apiKey });
+  }
+
+  /** Get OAuth credentials for an LLM connection */
+  async getLlmOAuth(connectionSlug: string): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    idToken?: string;
+  } | null> {
+    const cred = await this.get({ type: 'llm_oauth', connectionSlug });
+    if (!cred) return null;
+    return {
+      accessToken: cred.value,
+      refreshToken: cred.refreshToken,
+      expiresAt: cred.expiresAt,
+      idToken: cred.idToken,
+    };
+  }
+
+  /** Set OAuth credentials for an LLM connection */
+  async setLlmOAuth(connectionSlug: string, credentials: {
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    idToken?: string;
+  }): Promise<void> {
+    await this.set({ type: 'llm_oauth', connectionSlug }, {
+      value: credentials.accessToken,
+      refreshToken: credentials.refreshToken,
+      expiresAt: credentials.expiresAt,
+      idToken: credentials.idToken,
+    });
+  }
+
+  /** Delete all credentials for an LLM connection */
+  async deleteLlmCredentials(connectionSlug: string): Promise<void> {
+    await this.delete({ type: 'llm_api_key', connectionSlug });
+    await this.delete({ type: 'llm_oauth', connectionSlug });
+  }
+
+  /**
+   * Check whether an LLM connection has usable credentials for the given auth type.
+   */
+  async hasLlmCredentials(
+    connectionSlug: string,
+    authType: LlmAuthType,
+    providerType?: LlmProviderType,
+  ): Promise<boolean> {
+    switch (authType) {
+      case 'none':
+      case 'environment':
+        return true;
+      case 'api_key':
+      case 'api_key_with_endpoint':
+      case 'bearer_token': {
+        const apiKey = await this.getLlmApiKey(connectionSlug);
+        return !!apiKey;
+      }
+      case 'oauth': {
+        const oauth = await this.getLlmOAuth(connectionSlug);
+        if (!oauth) return false;
+        // OpenAI OAuth requires idToken for downstream codex token injection.
+        if (providerType === 'openai' && (!oauth.idToken || !oauth.accessToken)) {
+          return false;
+        }
+        if (oauth.expiresAt && this.isExpired({ value: oauth.accessToken, expiresAt: oauth.expiresAt })) {
+          return !!oauth.refreshToken;
+        }
+        return true;
+      }
+      case 'iam_credentials':
+      case 'service_account_file':
+        // Not migrated yet in this repo
+        return false;
+      default: {
+        const _exhaustive: never = authType;
+        return _exhaustive;
+      }
     }
   }
 

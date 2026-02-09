@@ -128,6 +128,7 @@ export const CreateSessionOptionsSchema = z.object({
     z.literal('none'),
   ]).optional(),
   model: z.string().optional(),
+  llmConnection: z.string().optional(),
   systemPromptPreset: z.union([
     z.literal('default'),
     z.literal('mini'),
@@ -160,6 +161,7 @@ export const WorkspaceSettingKeySchema = z.enum([
   'cyclablePermissionModes',
   'thinkingLevel',
   'workingDirectory',
+  'defaultLlmConnection',
   'localMcpEnabled',
 ])
 

@@ -12,7 +12,14 @@ import {
   getWorkspaceByNameOrId,
   loadConfigDefaults,
   getProviderConfig,
+  getLlmConnections,
+  getDefaultLlmConnection,
+  getLlmConnection,
+  resolveEffectiveConnectionSlug,
   getAgentType,
+  isAnthropicProvider,
+  migrateLegacyLlmConnectionCredentials,
+  migrateLegacyLlmConnectionsConfig,
   type Workspace,
   type AgentType,
 } from '@agent-operator/shared/config'
@@ -60,7 +67,7 @@ import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPa
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { OperatorMcpClient } from '@agent-operator/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle, regenerateSessionTitle, buildFallbackTitleFromMessages, formatPathsToRelative, formatToolInputPaths, perf } from '@agent-operator/shared/utils'
+import { generateSessionTitle, regenerateSessionTitle, buildFallbackTitleFromMessages, formatPathsToRelative, formatToolInputPaths, perf, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import { DEFAULT_MODEL, getDefaultModelForProvider } from '@agent-operator/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shared/agent/thinking-levels'
 
@@ -88,6 +95,26 @@ function createSessionTokenRefreshManager(): TokenRefreshManager {
   return new TokenRefreshManager(getSourceCredentialManager(), {
     log: (message) => sessionLog.debug(message),
   })
+}
+
+function resolveSessionConnectionSlug(
+  sessionConnection?: string,
+  workspaceDefaultConnection?: string,
+): string | undefined {
+  const globalDefault = getDefaultLlmConnection()
+  const connections = getLlmConnections().map(connection => ({
+    slug: connection.slug,
+    isDefault: connection.slug === globalDefault,
+  }))
+  return resolveEffectiveConnectionSlug(sessionConnection, workspaceDefaultConnection, connections)
+}
+
+function resolveSessionConnection(
+  sessionConnection?: string,
+  workspaceDefaultConnection?: string,
+) {
+  const slug = resolveSessionConnectionSlug(sessionConnection, workspaceDefaultConnection)
+  return slug ? getLlmConnection(slug) : null
 }
 
 /**
@@ -245,6 +272,8 @@ interface ManagedSession {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
+  // LLM connection slug resolved for this session
+  llmConnection?: string
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Thinking level for this session ('off', 'think', 'max')
@@ -574,25 +603,36 @@ export class SessionManager {
    * Reinitialize authentication environment variables
    * Call this after onboarding or settings changes to pick up new credentials
    */
-  async reinitializeAuth(): Promise<void> {
+  async reinitializeAuth(connectionSlug?: string): Promise<void> {
     try {
-      const authState = await getAuthState()
-      const { billing } = authState
+      const manager = getCredentialManager()
+      const targetConnectionSlug = connectionSlug ?? getDefaultLlmConnection()
+      const targetConnection = targetConnectionSlug ? getLlmConnection(targetConnectionSlug) : null
 
-      sessionLog.info('Reinitializing auth with billing type:', billing.type)
+      sessionLog.info('Reinitializing auth', {
+        requestedConnection: connectionSlug ?? '(default)',
+        activeConnection: targetConnectionSlug ?? 'none',
+        provider: targetConnection?.providerType ?? 'legacy',
+        authType: targetConnection?.authType ?? 'legacy',
+      })
 
-      // Clear all auth-related env vars first (but preserve Bedrock-related vars)
+      // Clear auth env vars to avoid cross-session/provider leakage.
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
+      delete process.env.CLAUDE_CODE_USE_BEDROCK
 
-      // Check for AWS Bedrock mode first
-      const bedrockMode = isBedrockMode()
+      // Only use shell/config Bedrock fallback when no explicit/default connection exists.
+      const bedrockMode = !targetConnection && isBedrockMode()
+      const usingBedrockConnection = targetConnection?.providerType === 'bedrock'
 
-      if (billing.type === 'bedrock' || bedrockMode) {
+      if (usingBedrockConnection || bedrockMode) {
         // Ensure Bedrock env var is set for SDK subprocess
         // isBedrockMode() may have already set this from shell config, but ensure it's set
         process.env.CLAUDE_CODE_USE_BEDROCK = '1'
+        if (targetConnection?.awsRegion) {
+          process.env.AWS_REGION = targetConnection.awsRegion
+        }
 
         sessionLog.info('Using AWS Bedrock authentication', {
           region: process.env.AWS_REGION || '(from ~/.aws/config)',
@@ -601,21 +641,109 @@ export class SessionManager {
         return
       }
 
-      if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
-        // Use Claude Max subscription via OAuth token
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
-        sessionLog.info('Set Claude Max OAuth Token')
-      } else if (billing.apiKey) {
-        // Use API key (pay-as-you-go or third-party provider)
-        process.env.ANTHROPIC_API_KEY = billing.apiKey
-        sessionLog.info('Set Anthropic API Key')
+      // Connection-based auth path (preferred).
+      if (targetConnection) {
+        if (!isAnthropicProvider(targetConnection.providerType)) {
+          sessionLog.info('Connection does not use Anthropic runtime auth; Anthropic env cleared', {
+            connection: targetConnection.slug,
+            provider: targetConnection.providerType,
+          })
+          return
+        }
 
-        // Check for third-party provider config (MiniMax, GLM, DeepSeek, etc.)
+        if (targetConnection.authType === 'oauth') {
+          const llmOauth = await manager.getLlmOAuth(targetConnection.slug)
+          const token = llmOauth?.accessToken ?? await manager.getClaudeOAuth()
+          if (token) {
+            process.env.CLAUDE_CODE_OAUTH_TOKEN = token
+            if (targetConnection.baseUrl) {
+              process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
+            }
+            sessionLog.info('Set Claude OAuth token from LLM connection', {
+              connection: targetConnection.slug,
+            })
+            return
+          }
+          sessionLog.warn(`No OAuth token available for connection: ${targetConnection.slug}`)
+          return
+        }
+
+        if (
+          targetConnection.authType === 'api_key'
+          || targetConnection.authType === 'api_key_with_endpoint'
+          || targetConnection.authType === 'bearer_token'
+        ) {
+          const llmApiKey = await manager.getLlmApiKey(targetConnection.slug)
+          const globalApiKey = await manager.getApiKey()
+          const validLlmApiKey = llmApiKey && isSafeHttpHeaderValue(llmApiKey) ? llmApiKey : null
+          const validGlobalApiKey = globalApiKey && isSafeHttpHeaderValue(globalApiKey) ? globalApiKey : null
+          if (llmApiKey && !validLlmApiKey) {
+            sessionLog.warn('Ignoring invalid connection API key (likely masked placeholder).', {
+              connection: targetConnection.slug,
+            })
+          }
+          if (globalApiKey && !validGlobalApiKey) {
+            sessionLog.warn('Ignoring invalid global API key (likely masked placeholder).')
+          }
+          const apiKey = validLlmApiKey ?? validGlobalApiKey
+          if (apiKey) {
+            process.env.ANTHROPIC_API_KEY = apiKey
+            if (targetConnection.baseUrl) {
+              process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
+            }
+            sessionLog.info('Set Anthropic API key from LLM connection', {
+              connection: targetConnection.slug,
+              hasCustomBaseUrl: !!targetConnection.baseUrl,
+            })
+            return
+          }
+          sessionLog.warn(`No API key available for connection: ${targetConnection.slug}`)
+          return
+        }
+
+        if (targetConnection.authType === 'environment' || targetConnection.authType === 'none') {
+          if (targetConnection.baseUrl) {
+            process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
+          }
+          sessionLog.info('Using environment/no-auth mode for Anthropic connection', {
+            connection: targetConnection.slug,
+            authType: targetConnection.authType,
+          })
+          return
+        }
+
+        sessionLog.warn('Connection auth type is not yet mapped to runtime env initialization', {
+          connection: targetConnection.slug,
+          authType: targetConnection.authType,
+          provider: targetConnection.providerType,
+        })
+        return
+      }
+
+      if (targetConnectionSlug && !targetConnection) {
+        sessionLog.warn(`LLM connection not found: ${targetConnectionSlug}. Falling back to legacy auth.`)
+      }
+
+      // Legacy fallback path (kept for backward compatibility while framework migrates).
+      const authState = await getAuthState()
+      const { billing } = authState
+
+      sessionLog.info('Falling back to legacy auth state', { billingType: billing.type })
+
+      if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
+        process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
+        sessionLog.info('Set Claude Max OAuth Token (legacy)')
+      } else if (billing.apiKey && isSafeHttpHeaderValue(billing.apiKey)) {
+        process.env.ANTHROPIC_API_KEY = billing.apiKey
+        sessionLog.info('Set Anthropic API Key (legacy)')
+
         const providerConfig = getProviderConfig()
         if (providerConfig?.baseURL) {
           process.env.ANTHROPIC_BASE_URL = providerConfig.baseURL
-          sessionLog.info('Set custom API base URL for provider:', providerConfig.provider, providerConfig.baseURL)
+          sessionLog.info('Set custom API base URL from legacy provider config:', providerConfig.provider, providerConfig.baseURL)
         }
+      } else if (billing.apiKey) {
+        sessionLog.error('Configured API key appears masked or invalid. Please re-enter your full API key in settings.')
       } else {
         sessionLog.error('No authentication configured!')
       }
@@ -695,6 +823,11 @@ export class SessionManager {
       setExecutable('node')
     }
 
+    // Backfill/sync LLM connections from legacy auth/provider config.
+    // This keeps new connection-based config available without breaking legacy flows.
+    migrateLegacyLlmConnectionsConfig()
+    await migrateLegacyLlmConnectionCredentials()
+
     // Set up authentication environment variables (critical for SDK to work)
     await this.reinitializeAuth()
 
@@ -746,6 +879,7 @@ export class SessionManager {
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
             model: meta.model,
+            llmConnection: meta.llmConnection,
             hidden: meta.hidden,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
@@ -795,6 +929,7 @@ export class SessionManager {
         sharedUrl: managed.sharedUrl,
         sharedId: managed.sharedId,
         model: managed.model,
+        llmConnection: managed.llmConnection,
         hidden: managed.hidden,
         labels: managed.labels,
         thinkingLevel: managed.thinkingLevel,
@@ -1118,6 +1253,7 @@ export class SessionManager {
         lastReadMessageId: m.lastReadMessageId,
         workingDirectory: m.workingDirectory,
         model: m.model,
+        llmConnection: m.llmConnection,
         hidden: m.hidden,
         enabledSourceSlugs: m.enabledSourceSlugs,
         sharedUrl: m.sharedUrl,
@@ -1156,6 +1292,7 @@ export class SessionManager {
       lastReadMessageId: m.lastReadMessageId,
       workingDirectory: m.workingDirectory,
       model: m.model,
+      llmConnection: m.llmConnection,
       hidden: m.hidden,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
@@ -1205,6 +1342,7 @@ export class SessionManager {
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
       managed.hidden = storedSession.hidden
+      managed.llmConnection = storedSession.llmConnection
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
@@ -1250,6 +1388,18 @@ export class SessionManager {
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
     // Get default thinking level from workspace config, fallback to global defaults
     const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
+    // Resolve connection for this session using: session option > workspace default > global default
+    const resolvedConnection = resolveSessionConnection(
+      options?.llmConnection,
+      wsConfig?.defaults?.defaultLlmConnection,
+    )
+    // Model resolution priority:
+    // 1. explicit session option
+    // 2. workspace default model
+    // 3. resolved connection's default model
+    const resolvedModel = options?.model
+      ?? wsConfig?.defaults?.model
+      ?? resolvedConnection?.defaultModel
 
     // Resolve working directory from options:
     // - 'user_default' or undefined: Use workspace's configured default
@@ -1268,7 +1418,8 @@ export class SessionManager {
     const storedSession = createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
-      model: options?.model,
+      model: resolvedModel,
+      llmConnection: resolvedConnection?.slug,
       hidden: options?.hidden,
     })
 
@@ -1291,6 +1442,7 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
       sdkCwd: storedSession.sdkCwd,
       model: storedSession.model,
+      llmConnection: storedSession.llmConnection,
       systemPromptPreset: options?.systemPromptPreset,
       hidden: options?.hidden,
       thinkingLevel: defaultThinkingLevel,
@@ -1313,6 +1465,7 @@ export class SessionManager {
       todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
+      llmConnection: managed.llmConnection,
       hidden: managed.hidden,
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
@@ -1327,6 +1480,15 @@ export class SessionManager {
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id, agentType: managed.agentType })
       const config = loadStoredConfig()
+      const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+      const resolvedConnection = resolveSessionConnection(
+        managed.llmConnection,
+        workspaceConfig?.defaults?.defaultLlmConnection,
+      )
+      if (resolvedConnection && managed.llmConnection !== resolvedConnection.slug) {
+        managed.llmConnection = resolvedConnection.slug
+        this.persistSession(managed)
+      }
 
       // Create agent based on type
       if (managed.agentType === 'codex') {
@@ -1365,10 +1527,15 @@ export class SessionManager {
       }
 
       // Create Claude agent (Anthropic) - default
+      const resolvedModel = managed.model
+        ?? workspaceConfig?.defaults?.model
+        ?? resolvedConnection?.defaultModel
+        ?? config?.model
+
       managed.agent = new OperatorAgent({
         workspace: managed.workspace,
-        // Session model takes priority, fallback to global config
-        model: managed.model || config?.model,
+        // Session model takes priority, then workspace/connection defaults.
+        model: resolvedModel,
         // System prompt preset for mini agents (focused prompts for quick edits)
         systemPromptPreset: managed.systemPromptPreset,
         // Initialize thinking level at construction to avoid race conditions
@@ -1384,7 +1551,8 @@ export class SessionManager {
           lastUsedAt: managed.lastMessageAt,
           workingDirectory: managed.workingDirectory,
           sdkCwd: managed.sdkCwd,
-          model: managed.model,
+          model: resolvedModel,
+          llmConnection: managed.llmConnection,
         },
         // Critical: Immediately persist SDK session ID when captured to prevent loss on crash.
         // Without this, the ID is only saved via debounced persistSession() which may not
@@ -2179,10 +2347,20 @@ export class SessionManager {
       updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
+        const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+        const resolvedConnection = resolveSessionConnection(
+          managed.llmConnection,
+          workspaceConfig?.defaults?.defaultLlmConnection,
+        )
         const storedConfig = loadStoredConfig()
         const currentProvider = storedConfig?.providerConfig?.provider
         const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels)
-        const effectiveModel = model ?? storedConfig?.model ?? providerDefaultModel
+        const effectiveModel =
+          model
+          ?? workspaceConfig?.defaults?.model
+          ?? resolvedConnection?.defaultModel
+          ?? storedConfig?.model
+          ?? providerDefaultModel
         managed.agent.setModel(effectiveModel)
       }
       // Notify renderer of the model change
@@ -2388,6 +2566,23 @@ export class SessionManager {
     // Get or create the agent (lazy loading)
     const agent = await this.getOrCreateAgent(managed)
     sendSpan.mark('agent.ready')
+
+    // Ensure runtime auth env matches this session before each Claude turn.
+    // This avoids cross-session leakage when multiple sessions use different
+    // connection credentials within the same Electron main process.
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const resolvedConnection = resolveSessionConnection(
+      managed.llmConnection,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+    if (resolvedConnection && managed.llmConnection !== resolvedConnection.slug) {
+      managed.llmConnection = resolvedConnection.slug
+      this.persistSession(managed)
+    }
+    if (managed.agentType !== 'codex') {
+      await this.reinitializeAuth(resolvedConnection?.slug)
+      sendSpan.mark('auth.ready')
+    }
 
     // Always set all sources for context (even if none are enabled)
     const workspaceRootPath = managed.workspace.rootPath

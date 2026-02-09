@@ -70,6 +70,7 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
       model: header.model,
+      llmConnection: header.llmConnection,
       hidden: header.hidden,
       labels: header.labels,
       messages,
@@ -119,6 +120,7 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
     model: session.model,
+    llmConnection: session.llmConnection,
     hidden: session.hidden,
     labels: session.labels,
     // Pre-computed fields

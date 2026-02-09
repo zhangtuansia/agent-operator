@@ -118,6 +118,16 @@ export const IPC_CHANNELS = {
   ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
   ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
+  // LLM Connections (provider configurations)
+  LLM_CONNECTION_LIST: 'LLM_Connection:list',
+  LLM_CONNECTION_LIST_WITH_STATUS: 'LLM_Connection:listWithStatus',
+  LLM_CONNECTION_GET: 'LLM_Connection:get',
+  LLM_CONNECTION_SAVE: 'LLM_Connection:save',
+  LLM_CONNECTION_DELETE: 'LLM_Connection:delete',
+  LLM_CONNECTION_TEST: 'LLM_Connection:test',
+  LLM_CONNECTION_SET_DEFAULT: 'LLM_Connection:setDefault',
+  LLM_CONNECTION_SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
+
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',

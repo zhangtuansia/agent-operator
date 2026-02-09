@@ -43,7 +43,7 @@ export class EnvironmentBackend implements CredentialBackend {
 
   async get(id: CredentialId): Promise<StoredCredential | null> {
     // Only support global credentials
-    if (id.workspaceId) {
+    if (id.workspaceId || id.connectionSlug || id.sourceId || id.name) {
       return null;
     }
 
@@ -71,6 +71,10 @@ export class EnvironmentBackend implements CredentialBackend {
   }
 
   async list(_filter?: Partial<CredentialId>): Promise<CredentialId[]> {
+    if (_filter?.workspaceId || _filter?.connectionSlug || _filter?.sourceId || _filter?.name) {
+      return [];
+    }
+
     const ids: CredentialId[] = [];
 
     for (const [type, envVars] of Object.entries(ENV_MAP)) {

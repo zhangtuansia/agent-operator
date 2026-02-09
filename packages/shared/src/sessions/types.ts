@@ -83,6 +83,8 @@ export interface SessionConfig {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session */
+  llmConnection?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
@@ -148,6 +150,8 @@ export interface SessionHeader {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session */
+  llmConnection?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
@@ -211,6 +215,8 @@ export interface SessionMetadata {
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session */
+  llmConnection?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */

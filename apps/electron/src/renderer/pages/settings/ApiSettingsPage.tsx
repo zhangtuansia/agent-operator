@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Eye, EyeOff, Check, Plus } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
+import { isSafeHttpHeaderValue } from '@agent-operator/shared/utils/mask'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { CustomModel, AuthType, AgentType } from '../../../shared/types'
 
@@ -127,6 +128,8 @@ interface ProviderConfig {
   apiFormat: ApiFormat
 }
 
+const INVALID_API_KEY_ERROR = 'API key appears masked or contains invalid characters. Please paste the full key.'
+
 // Get provider-specific help text
 function getProviderHelpText(providerId: string, t: (key: string) => string): string | null {
   switch (providerId) {
@@ -146,6 +149,7 @@ export default function ApiSettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
 
   // Current config
   const [currentProvider, setCurrentProvider] = useState('anthropic')
@@ -414,12 +418,17 @@ export default function ApiSettingsPage() {
   }, [])
 
   const handleSaveApiKeyDialog = useCallback(async () => {
-    if (!window.electronAPI || !apiKeyDialogValue.trim()) return
+    const trimmedApiKey = apiKeyDialogValue.trim()
+    if (!window.electronAPI || !trimmedApiKey) return
+    if (!isSafeHttpHeaderValue(trimmedApiKey)) {
+      setApiKeyError(INVALID_API_KEY_ERROR)
+      return
+    }
 
     setIsSavingApiKey(true)
     setApiKeyError(undefined)
     try {
-      await window.electronAPI.updateBillingMethod('api_key', apiKeyDialogValue.trim())
+      await window.electronAPI.updateBillingMethod('api_key', trimmedApiKey)
       setAuthType('api_key')
       setHasCredential(true)
       setHasExistingKey(true)
@@ -550,6 +559,7 @@ export default function ApiSettingsPage() {
 
     setIsSaving(true)
     setSaveSuccess(false)
+    setSaveError(undefined)
 
     try {
       // Update provider config
@@ -560,12 +570,15 @@ export default function ApiSettingsPage() {
       })
 
       // Update API key if provided
-      if (apiKey.trim() && !apiKey.startsWith('••••')) {
-        await window.electronAPI.updateBillingMethod('api_key', apiKey.trim())
+      const trimmedApiKey = apiKey.trim()
+      if (trimmedApiKey) {
+        if (!isSafeHttpHeaderValue(trimmedApiKey)) {
+          throw new Error(INVALID_API_KEY_ERROR)
+        }
+        await window.electronAPI.updateBillingMethod('api_key', trimmedApiKey)
         setHasExistingKey(true)
-        // Show masked key to indicate it's saved
-        const maskedKey = apiKey.slice(0, 8) + '••••••••' + apiKey.slice(-4)
-        setApiKey(maskedKey)
+        // Keep input empty after save to avoid masked placeholders being resubmitted.
+        setApiKey('')
       }
 
       setSaveSuccess(true)
@@ -577,6 +590,7 @@ export default function ApiSettingsPage() {
       }))
     } catch (error) {
       console.error('Failed to save API config:', error)
+      setSaveError(error instanceof Error ? error.message : 'Failed to save API settings.')
     } finally {
       setIsSaving(false)
     }
@@ -817,6 +831,9 @@ export default function ApiSettingsPage() {
                         </>
                       )}
                     </Button>
+                    {saveError && (
+                      <p className="text-sm text-destructive">{saveError}</p>
+                    )}
                   </div>
                 </>
               )}

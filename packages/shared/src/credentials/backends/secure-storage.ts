@@ -134,7 +134,9 @@ export class SecureStorageBackend implements CredentialBackend {
 
     return ids.filter((id) => {
       if (filter.type && id.type !== filter.type) return false;
+      if (filter.connectionSlug && id.connectionSlug !== filter.connectionSlug) return false;
       if (filter.workspaceId && id.workspaceId !== filter.workspaceId) return false;
+      if (filter.sourceId && id.sourceId !== filter.sourceId) return false;
       if (filter.name && id.name !== filter.name) return false;
       return true;
     });

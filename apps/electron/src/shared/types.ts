@@ -45,6 +45,10 @@ export type { AuthState, SetupNeeds, AuthType, AgentType };
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@agent-operator/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
+// Import LLM connection types
+import type { LlmConnection, LlmConnectionWithStatus } from '@agent-operator/shared/config/llm-connections';
+export type { LlmConnection, LlmConnectionWithStatus };
+
 // Import skill types
 import type { LoadedSkill, SkillMetadata } from '@agent-operator/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
@@ -286,6 +290,16 @@ export interface ElectronAPI {
   exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
+
+  // LLM Connections (provider configurations)
+  listLlmConnections(): Promise<LlmConnection[]>
+  listLlmConnectionsWithStatus(): Promise<LlmConnectionWithStatus[]>
+  getLlmConnection(slug: string): Promise<LlmConnection | null>
+  saveLlmConnection(connection: LlmConnection): Promise<{ success: boolean; error?: string }>
+  deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>

@@ -13,6 +13,7 @@ import { OperatorOAuth, getMcpBaseUrl } from '@agent-operator/shared/auth'
 import { validateMcpConnection } from '@agent-operator/shared/mcp'
 import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@agent-operator/shared/auth'
 import { getCredentialManager as getCredentialManagerFn } from '@agent-operator/shared/credentials'
+import { isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import {
   IPC_CHANNELS,
   type OnboardingSaveResult,
@@ -103,13 +104,17 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
 
     try {
       const manager = getCredentialManager()
+      const trimmedCredential = config.credential?.trim()
 
       // 1. Save billing credential if provided (only when authType is specified)
-      if (config.credential && config.authType) {
+      if (trimmedCredential && config.authType) {
         mainLog.info('[Onboarding:Main] Saving credential for authType:', config.authType)
         if (config.authType === 'api_key') {
+          if (!isSafeHttpHeaderValue(trimmedCredential)) {
+            throw new Error('API key appears masked or contains invalid characters. Please paste the full key.')
+          }
           mainLog.info('[Onboarding:Main] Calling manager.setApiKey...')
-          await manager.setApiKey(config.credential)
+          await manager.setApiKey(trimmedCredential)
           mainLog.info('[Onboarding:Main] API key saved successfully')
         } else if (config.authType === 'oauth_token') {
           mainLog.info('[Onboarding:Main] Importing full Claude OAuth credentials...')
@@ -124,7 +129,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
             mainLog.info('[Onboarding:Main] Claude OAuth credentials saved with refresh token')
           } else {
             // Fallback to just saving the access token
-            await manager.setClaudeOAuth(config.credential)
+            await manager.setClaudeOAuth(trimmedCredential)
             mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only)')
           }
         }

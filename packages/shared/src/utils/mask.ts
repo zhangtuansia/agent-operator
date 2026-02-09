@@ -54,3 +54,25 @@ export function maskCredential(
 
   return '******';
 }
+
+/**
+ * Validate whether a value is safe to use as an HTTP header value.
+ *
+ * Header values cannot contain control characters (except tab) and must be
+ * representable as Latin-1 bytes. This rejects masked placeholders such as
+ * "•" (U+2022), which otherwise causes fetch to throw at runtime.
+ */
+export function isSafeHttpHeaderValue(value: string | undefined | null): boolean {
+  if (value == null) {
+    return false;
+  }
+
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return false;
+    }
+  }
+
+  return true;
+}
