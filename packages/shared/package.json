@@ -13,6 +13,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
+    "./agent/core": "./src/agent/core/index.ts",
+    "./agent/backend": "./src/agent/backend/index.ts",
     "./agent/codex": "./src/agent/codex-agent.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
     "./agent/mode-types": "./src/agent/mode-types.ts",
@@ -61,7 +63,8 @@
     "./ipc/channels": "./src/ipc/channels.ts",
     "./routing": "./src/routing/index.ts",
     "./routing/parser": "./src/routing/parser.ts",
-    "./search": "./src/search/index.ts"
+    "./search": "./src/search/index.ts",
+    "./mentions": "./src/mentions/index.ts"
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",

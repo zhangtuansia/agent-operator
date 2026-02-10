@@ -1080,7 +1080,8 @@ export type ConfigFileDetection =
   | { type: 'source'; slug: string; displayFile: string }
   | { type: 'skill'; slug: string; displayFile: string }
   | { type: 'statuses'; displayFile: string }
-  | { type: 'permissions'; slug?: string; displayFile: string };
+  | { type: 'permissions'; slug?: string; displayFile: string }
+  | { type: 'tool-icons'; displayFile: string };
 
 /**
  * Validate source config.json content before writing to disk.
@@ -1420,6 +1421,30 @@ export function validateConfigFileContent(
     default:
       return null;
   }
+}
+
+/**
+ * Detect app-level config files (outside workspace scope).
+ * Checks paths relative to CONFIG_DIR (~/.cowork/).
+ * Returns null if the path is not a recognized app-level config file.
+ */
+export function detectAppConfigFileType(filePath: string): ConfigFileDetection | null {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const normalizedConfigDir = CONFIG_DIR.replace(/\\/g, '/').replace(/\/?$/, '/');
+
+  // Only check files within CONFIG_DIR
+  if (!normalizedPath.startsWith(normalizedConfigDir)) {
+    return null;
+  }
+
+  const relativePath = normalizedPath.slice(normalizedConfigDir.length);
+
+  // Match: tool-icons/tool-icons.json
+  if (relativePath === 'tool-icons/tool-icons.json') {
+    return { type: 'tool-icons', displayFile: 'tool-icons/tool-icons.json' };
+  }
+
+  return null;
 }
 
 // ============================================================

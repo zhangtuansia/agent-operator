@@ -15,6 +15,41 @@ import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthSt
 import type { AgentType } from '../config/storage.ts';
 
 /**
+ * Session fields that persist to disk.
+ * Add new fields here - they automatically propagate to JSONL read/write
+ * via pickSessionFields() utility.
+ *
+ * IMPORTANT: When adding a new field:
+ * 1. Add it to this array
+ * 2. Add it to SessionConfig interface below
+ * 3. Done - serialization is automatic
+ */
+export const SESSION_PERSISTENT_FIELDS = [
+  // Identity
+  'id', 'workspaceRootPath', 'sdkSessionId', 'sdkCwd',
+  // Timestamps
+  'createdAt', 'lastUsedAt', 'lastMessageAt',
+  // Display
+  'name', 'isFlagged', 'todoState', 'labels', 'hidden',
+  // Read tracking
+  'lastReadMessageId', 'hasUnread',
+  // Config
+  'enabledSourceSlugs', 'permissionMode', 'workingDirectory',
+  // Model/Connection
+  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel', 'agentType',
+  // Sharing
+  'sharedUrl', 'sharedId',
+  // Plan execution
+  'pendingPlanExecution',
+  // Archive
+  'isArchived', 'archivedAt',
+  // Hierarchy
+  'parentSessionId', 'siblingOrder',
+] as const;
+
+export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
+
+/**
  * Todo state for sessions (user-controlled, never automatic)
  *
  * Dynamic status ID referencing workspace status config.
@@ -63,14 +98,25 @@ export interface SessionConfig {
   name?: string;
   createdAt: number;
   lastUsedAt: number;
+  /** Timestamp of last meaningful message (user or final assistant). Used for date grouping in session list.
+   *  Separate from lastUsedAt which tracks any session access (auto-save, open to read, etc.). */
+  lastMessageAt?: number;
   /** Whether this session is flagged */
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
   /** User-controlled todo state - determines inbox vs completed */
   todoState?: TodoState;
+  /** Labels applied to this session (bare IDs or "id::value" entries) */
+  labels?: string[];
   /** ID of last message user has read */
   lastReadMessageId?: string;
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean;
   /** Per-session source selection (source slugs) */
   enabledSourceSlugs?: string[];
   /** Working directory for this session (used by agent for bash commands and context) */
@@ -83,8 +129,10 @@ export interface SessionConfig {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
-  /** LLM connection slug for this session */
+  /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
@@ -102,8 +150,15 @@ export interface SessionConfig {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
-  /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
-  labels?: string[];
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  // Sub-session hierarchy (1 level max)
+  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
+  parentSessionId?: string;
+  /** Explicit sibling order (lazy - only populated when user reorders). */
+  siblingOrder?: number;
 }
 
 /**
@@ -130,14 +185,24 @@ export interface SessionHeader {
   name?: string;
   createdAt: number;
   lastUsedAt: number;
+  /** Timestamp of last meaningful message — persisted separately from lastUsedAt for stable date grouping across restarts. */
+  lastMessageAt?: number;
   /** Whether this session is flagged */
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
   /** User-controlled todo state - determines inbox vs completed */
   todoState?: TodoState;
+  /** Labels applied to this session (bare IDs or "id::value" entries) */
+  labels?: string[];
   /** ID of last message user has read */
   lastReadMessageId?: string;
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean;
   /** Per-session source selection (source slugs) */
   enabledSourceSlugs?: string[];
   /** Working directory for this session (used by agent for bash commands and context) */
@@ -150,8 +215,10 @@ export interface SessionHeader {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
-  /** LLM connection slug for this session */
+  /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
@@ -169,8 +236,15 @@ export interface SessionHeader {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
-  /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
-  labels?: string[];
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  // Sub-session hierarchy (1 level max)
+  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
+  parentSessionId?: string;
+  /** Explicit sibling order (lazy - only populated when user reorders). */
+  siblingOrder?: number;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -180,6 +254,8 @@ export interface SessionHeader {
   preview?: string;
   /** Token usage statistics */
   tokenUsage: SessionTokenUsage;
+  /** ID of the last final (non-intermediate) assistant message - for unread detection without loading messages */
+  lastFinalMessageId?: string;
 }
 
 /**
@@ -191,6 +267,8 @@ export interface SessionMetadata {
   name?: string;
   createdAt: number;
   lastUsedAt: number;
+  /** Timestamp of last meaningful message — used for date grouping. Falls back to lastUsedAt for pre-fix sessions. */
+  lastMessageAt?: number;
   messageCount: number;
   /** Preview of first user message */
   preview?: string;
@@ -199,6 +277,8 @@ export interface SessionMetadata {
   isFlagged?: boolean;
   /** User-controlled todo state */
   todoState?: TodoState;
+  /** Labels applied to this session (bare IDs or "id::value" entries) */
+  labels?: string[];
   /** Permission mode for this session */
   permissionMode?: PermissionMode;
   /** Number of plan files for this session */
@@ -215,14 +295,35 @@ export interface SessionMetadata {
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
   /** Model to use for this session (overrides global config if set) */
   model?: string;
-  /** LLM connection slug for this session */
+  /** LLM connection slug for this session (locked after first message) */
   llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** Agent type for this session ('claude' or 'codex') */
   agentType?: AgentType;
+  /** ID of last message user has read - for unread detection */
+  lastReadMessageId?: string;
+  /** ID of the last final (non-intermediate) assistant message - for unread detection */
+  lastFinalMessageId?: string;
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean;
+  /** Token usage statistics (from JSONL header, available without loading messages) */
+  tokenUsage?: SessionTokenUsage;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
-  /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
-  labels?: string[];
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  // Sub-session hierarchy (1 level max)
+  /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
+  parentSessionId?: string;
+  /** Explicit sibling order (lazy - only populated when user reorders). */
+  siblingOrder?: number;
 }

@@ -122,6 +122,17 @@ export function isPortablePath(path: string): boolean {
  * normalizePath('C:\\Users\\foo\\bar') // 'C:/Users/foo/bar'
  * normalizePath('/Users/foo/bar')      // '/Users/foo/bar' (unchanged)
  */
+/**
+ * Normalize a path for cross-platform comparison.
+ * - Resolve to absolute
+ * - Convert backslashes to forward slashes
+ * - Lowercase on Windows
+ */
+export function normalizePathForComparison(path: string): string {
+  const normalized = normalizePath(resolve(path));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
 export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/');
 }

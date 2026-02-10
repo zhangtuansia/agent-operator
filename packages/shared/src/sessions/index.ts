@@ -17,7 +17,11 @@ export type {
   StoredSession,
   SessionMetadata,
   SessionHeader,
+  SessionPersistentField,
 } from './types.ts';
+
+// Field constants
+export { SESSION_PERSISTENT_FIELDS } from './types.ts';
 
 // Storage functions
 export {
@@ -89,4 +93,12 @@ export {
 // Word lists (for customization if needed)
 export { ADJECTIVES, NOUNS } from './word-lists.ts';
 
+// Field utilities
+export { pickSessionFields } from './utils.ts';
 
+// Session ID validation (security)
+export {
+  validateSessionId,
+  sanitizeSessionId,
+  isValidSessionId,
+} from './validation.ts';
