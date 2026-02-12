@@ -306,12 +306,19 @@ export interface ElectronAPI {
   exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
+  // GitHub Copilot OAuth (device flow)
+  startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
+  cancelCopilotOAuth(): Promise<{ success: boolean }>
+  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
+  logoutCopilot(connectionSlug: string): Promise<{ success: boolean }>
+  onCopilotDeviceCode(callback: (deviceCode: { userCode: string; verificationUri: string }) => void): () => void
 
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>
   listLlmConnectionsWithStatus(): Promise<LlmConnectionWithStatus[]>
   getLlmConnection(slug: string): Promise<LlmConnection | null>
   saveLlmConnection(connection: LlmConnection): Promise<{ success: boolean; error?: string }>
+  setLlmConnectionApiKey(slug: string, apiKey: string): Promise<{ success: boolean; error?: string }>
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
@@ -340,7 +347,7 @@ export interface ElectronAPI {
   setModel(model: string): Promise<void>
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
-  setSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void>
+  setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
   // Custom Models (for Custom provider)
   getCustomModels(): Promise<CustomModel[]>
@@ -593,7 +600,8 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
   if (key.startsWith('settings:')) {
-    const subpage = key.slice(9) as SettingsSubpage
+    const rawSubpage = key.slice(9)
+    const subpage = (rawSubpage === 'ai' ? 'api' : rawSubpage) as SettingsSubpage
     if (VALID_SETTINGS_SUBPAGES.includes(subpage)) {
       return { navigator: 'settings', subpage }
     }

@@ -9,6 +9,7 @@
 import {
   type ModelDefinition,
   CLAUDE_MODELS,
+  BEDROCK_MODELS,
 } from './models.ts';
 
 // ============================================================
@@ -249,6 +250,10 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
     return [];
   }
 
+  if (providerType === 'bedrock') {
+    return BEDROCK_MODELS;
+  }
+
   if (providerType === 'openai') {
     return OPENAI_MODELS;
   }
@@ -270,6 +275,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
     'openai/gpt-5.1-codex-mini',
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
+  if (providerType === 'bedrock') return BEDROCK_MODELS;
   if (providerType === 'copilot') return [];
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.5',

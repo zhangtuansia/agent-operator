@@ -91,7 +91,7 @@ import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
-import { navigate, routes } from "@/lib/navigate"
+import { routes } from "@/lib/navigate"
 import {
   useNavigation,
   useNavigationState,
@@ -309,7 +309,7 @@ function AppShellContent({
   const { resolvedMode } = useTheme()
   const { t } = useTranslation()
   const { isOnline } = useNetworkStatus()
-  const { canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
+  const { navigate, canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -560,13 +560,13 @@ function AppShellContent({
   const handleSourceSelect = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.sources({ sourceSlug: source.config.slug }))
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, navigate])
 
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.skills(skill.slug))
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, navigate])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -887,40 +887,40 @@ function AppShellContent({
 
   const handleAllChatsClick = useCallback(() => {
     navigate(routes.view.allChats())
-  }, [])
+  }, [navigate])
 
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
-  }, [])
+  }, [navigate])
 
   // Handlers for imported categories
   const handleOpenAIImportedClick = useCallback(() => {
     navigate(routes.view.imported('openai'))
-  }, [])
+  }, [navigate])
 
   const handleAnthropicImportedClick = useCallback(() => {
     navigate(routes.view.imported('anthropic'))
-  }, [])
+  }, [navigate])
 
   // Handler for individual todo state views
   const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
     navigate(routes.view.state(stateId))
-  }, [])
+  }, [navigate])
 
   // Handler for sources view
   const handleSourcesClick = useCallback(() => {
     navigate(routes.view.sources())
-  }, [])
+  }, [navigate])
 
   // Handler for skills view
   const handleSkillsClick = useCallback(() => {
     navigate(routes.view.skills())
-  }, [])
+  }, [navigate])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
-  }, [])
+  }, [navigate])
 
   // ============================================================================
   // EDIT POPOVER STATE
@@ -957,7 +957,7 @@ function AppShellContent({
     const newSession = await onCreateSession(activeWorkspace.id)
     // Navigate to the new session via central routing
     navigate(routes.view.allChats(newSession.id))
-  }, [activeWorkspace, onCreateSession])
+  }, [activeWorkspace, navigate, onCreateSession])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {

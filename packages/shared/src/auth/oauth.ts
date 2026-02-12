@@ -779,3 +779,6 @@ export async function discoverOAuthMetadata(
   onLog?.(`No OAuth metadata found for ${mcpUrl}`);
   return null;
 }
+
+// Backward-compat alias used by the Electron onboarding module.
+export { CraftOAuth as OperatorOAuth };

@@ -22,6 +22,7 @@ import type {
   LoadedSource,
   LoadedSkill,
   NewChatActionParams,
+  LlmConnectionWithStatus,
 } from '../../shared/types'
 import type { TodoState as TodoStateConfig } from '@/config/todo-states'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
@@ -35,6 +36,12 @@ export interface AppShellContextType {
   // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
   activeWorkspaceId: string | null
+  /** All LLM connections with runtime auth status */
+  llmConnections: LlmConnectionWithStatus[]
+  /** Workspace-level default LLM connection slug */
+  workspaceDefaultLlmConnection?: string
+  /** Refresh LLM connections and workspace default */
+  refreshLlmConnections: () => Promise<void>
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
   pendingCredentials: Map<string, CredentialRequest[]>
@@ -64,7 +71,7 @@ export interface AppShellContextType {
   sessionOptions: Map<string, SessionOptions>
 
   // Session callbacks
-  onCreateSession: (workspaceId: string) => Promise<Session>
+  onCreateSession: (workspaceId: string, options?: import('../../shared/types').CreateSessionOptions) => Promise<Session>
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void
@@ -94,7 +101,7 @@ export interface AppShellContextType {
   onOpenUrl: (url: string) => void
 
   // Model
-  onModelChange: (model: string) => void
+  onModelChange: (model: string, connection?: string) => void
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
@@ -138,6 +145,11 @@ export function AppShellProvider({
   value: AppShellContextType
 }) {
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>
+}
+
+/** Returns context or null if not wrapped (for optional playground use) */
+export function useOptionalAppShellContext(): AppShellContextType | null {
+  return useContext(AppShellContext)
 }
 
 export function useAppShellContext(): AppShellContextType {

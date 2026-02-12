@@ -13,3 +13,4 @@ export * from './github-oauth.ts';
 export * from './oauth.ts';
 export * from './pkce.ts';
 export * from './state.ts';
+export * from './compat.ts';

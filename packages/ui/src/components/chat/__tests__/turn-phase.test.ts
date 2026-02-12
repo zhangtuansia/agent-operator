@@ -164,16 +164,13 @@ describe('deriveTurnPhase', () => {
       expect(deriveTurnPhase(turn)).toBe('awaiting')
     })
 
-    it('returns awaiting when response exists but is not streaming (non-streaming response means complete, but isComplete takes precedence)', () => {
-      // This is an edge case - if response.isStreaming is false, we should
-      // really be complete. But the deriveTurnPhase function uses isComplete
-      // as the authoritative signal for completion.
+    it('returns complete when response exists and is not streaming (fallback completion)', () => {
       const turn = createTurn({
         activities: [createActivity('completed')],
         isComplete: false,
         response: createResponse(false),
       })
-      expect(deriveTurnPhase(turn)).toBe('awaiting')
+      expect(deriveTurnPhase(turn)).toBe('complete')
     })
   })
 

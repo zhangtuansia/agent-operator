@@ -5,7 +5,7 @@
 
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 import * as esbuild from "esbuild";
 
 const ROOT_DIR = join(import.meta.dir, "..");
@@ -17,6 +17,24 @@ const IS_WINDOWS = process.platform === "win32";
 const BIN_EXT = IS_WINDOWS ? ".exe" : "";
 const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
 const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
+
+// Multi-instance detection (folder suffix based, e.g. agent-operator-2)
+// This avoids port/config collisions between parallel dev instances.
+function detectInstance(): void {
+  if (process.env.COWORK_VITE_PORT || process.env.OPERATOR_VITE_PORT) return;
+
+  const folderName = basename(ROOT_DIR);
+  const match = folderName.match(/-(\d+)$/);
+  if (!match) return;
+
+  const instanceNum = match[1];
+  process.env.COWORK_INSTANCE_NUMBER = instanceNum;
+  process.env.COWORK_VITE_PORT = `${instanceNum}173`;
+  process.env.COWORK_APP_NAME = `Cowork [${instanceNum}]`;
+  process.env.COWORK_CONFIG_DIR = join(process.env.HOME || "", `.cowork-${instanceNum}`);
+  process.env.COWORK_DEEPLINK_SCHEME = `agentoperator${instanceNum}`;
+  console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.COWORK_VITE_PORT}, config=${process.env.COWORK_CONFIG_DIR}`);
+}
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -168,7 +186,6 @@ async function runEsbuild(
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
       external: ["electron"],
-      packages: "external", // Mark all node_modules as external
       define: defines,
       logLevel: "warning",
     });
@@ -178,7 +195,8 @@ async function runEsbuild(
   }
 }
 
-// Verify a JavaScript file is syntactically valid
+// Verify a JavaScript file exists and has content.
+// esbuild build success already guarantees syntax validity.
 async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
   if (!existsSync(filePath)) {
     return { valid: false, error: "File does not exist" };
@@ -188,20 +206,6 @@ async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?:
   const stats = statSync(filePath);
   if (stats.size === 0) {
     return { valid: false, error: "File is empty" };
-  }
-
-  // Use Node to syntax-check the file
-  const proc = spawn({
-    cmd: ["node", "--check", filePath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    return { valid: false, error: stderr || "Syntax error" };
   }
 
   return { valid: true };
@@ -241,6 +245,7 @@ async function main(): Promise<void> {
   console.log("🚀 Starting Electron dev environment...\n");
 
   // Setup
+  detectInstance();
   loadEnvFile();
   cleanViteCache();
 
@@ -350,7 +355,6 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
     external: ["electron"],
-    packages: "external",
     define: oauthDefines,
     logLevel: "info",
   });
@@ -366,7 +370,6 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/preload.cjs"),
     external: ["electron"],
-    packages: "external",
     logLevel: "info",
   });
   await preloadContext.watch();

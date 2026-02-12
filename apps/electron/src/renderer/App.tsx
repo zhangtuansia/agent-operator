@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore, useAtomValue } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge, LlmConnectionWithStatus } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -27,7 +27,7 @@ import type { Language } from '@/i18n'
 import { useTranslation } from '@/i18n'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
-import { DEFAULT_MODEL, getDefaultModelForProvider, isModelValidForProvider, getModelsForProvider } from '@config/models'
+import { DEFAULT_MODEL } from '@config/models'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -91,6 +91,8 @@ export default function App() {
   // Window's workspace ID - fixed for this window (multi-window architecture)
   const [windowWorkspaceId, setWindowWorkspaceId] = useState<string | null>(null)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
+  const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
+  const [workspaceDefaultLlmConnection, setWorkspaceDefaultLlmConnection] = useState<string | undefined>()
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
@@ -139,6 +141,19 @@ export default function App() {
   useEffect(() => {
     sessionOptionsRef.current = sessionOptions
   }, [sessionOptions])
+
+  const refreshLlmConnections = useCallback(async () => {
+    if (!window.electronAPI) return
+    const connections = await window.electronAPI.listLlmConnectionsWithStatus()
+    setLlmConnections(connections)
+
+    if (windowWorkspaceId) {
+      const settings = await window.electronAPI.getWorkspaceSettings(windowWorkspaceId)
+      setWorkspaceDefaultLlmConnection(settings?.defaultLlmConnection)
+    } else {
+      setWorkspaceDefaultLlmConnection(undefined)
+    }
+  }, [windowWorkspaceId])
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
@@ -285,24 +300,23 @@ export default function App() {
         }
       }
     })
-    // Load stored model preference and provider info
+    // Load model + LLM connections (connection-driven model defaults)
     Promise.all([
       window.electronAPI.getModel(),
-      window.electronAPI.getBillingMethod(),
-      window.electronAPI.getCustomModels?.() || Promise.resolve([])
-    ]).then(([storedModel, billingInfo, customModels]) => {
-      // For OAuth, default to 'anthropic' provider
-      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
+      window.electronAPI.listLlmConnectionsWithStatus(),
+    ]).then(([storedModel, connections]) => {
+      setLlmConnections(connections)
 
-      // Validate stored model against current provider
-      if (storedModel && isModelValidForProvider(storedModel, effectiveProvider, customModels)) {
+      const defaultConnection = connections.find(c => c.isDefault) ?? connections[0]
+      const availableModelIds = (defaultConnection?.models ?? [])
+        .map((m) => typeof m === 'string' ? m : m.id)
+      const fallbackModel = defaultConnection?.defaultModel ?? DEFAULT_MODEL
+
+      if (storedModel && (availableModelIds.length === 0 || availableModelIds.includes(storedModel))) {
         setCurrentModel(storedModel)
       } else {
-        // If no stored model or model is invalid for current provider, use provider-specific default
-        const defaultModel = getDefaultModelForProvider(effectiveProvider, customModels)
-        setCurrentModel(defaultModel)
-        // Persist the new default model
-        window.electronAPI.setModel(defaultModel)
+        setCurrentModel(fallbackModel)
+        window.electronAPI.setModel(fallbackModel)
       }
     })
     // Load UI language preference
@@ -331,36 +345,11 @@ export default function App() {
     }
   }, [])
 
-  // Listen for provider changes and update model if necessary
+  // Keep LLM connections/workspace defaults fresh after workspace switches.
   useEffect(() => {
-    const handleProviderChange = async (event: Event) => {
-      const customEvent = event as CustomEvent<{ provider: string }>
-      const newProvider = customEvent.detail?.provider
-
-      if (!newProvider) return
-
-      // Load custom models if needed (for 'custom' provider)
-      let customModels: Array<{ id: string }> | undefined
-      if (newProvider === 'custom') {
-        try {
-          customModels = await window.electronAPI.getCustomModels?.()
-        } catch {
-          // Ignore errors
-        }
-      }
-
-      // Check if current model is valid for the new provider
-      if (!isModelValidForProvider(currentModel, newProvider, customModels)) {
-        // Current model not valid for new provider, switch to default
-        const newDefaultModel = getDefaultModelForProvider(newProvider, customModels)
-        setCurrentModel(newDefaultModel)
-        window.electronAPI.setModel(newDefaultModel)
-      }
-    }
-
-    window.addEventListener('cowork:provider-changed', handleProviderChange)
-    return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)
-  }, [currentModel])
+    if (appState !== 'ready') return
+    refreshLlmConnections()
+  }, [appState, windowWorkspaceId, refreshLlmConnections])
 
   const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
     const session = await window.electronAPI.createSession(workspaceId, options)
@@ -617,7 +606,7 @@ export default function App() {
     }
   }, [isOnline, t, sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 
-  const handleModelChange = useCallback((model: string) => {
+  const handleModelChange = useCallback((model: string, _connection?: string) => {
     setCurrentModel(model)
     // Persist to config so it's remembered across launches
     window.electronAPI.setModel(model)
@@ -897,6 +886,9 @@ export default function App() {
     // and useSession(id) hook for individual sessions. This prevents memory leaks.
     workspaces,
     activeWorkspaceId: windowWorkspaceId,
+    llmConnections,
+    workspaceDefaultLlmConnection,
+    refreshLlmConnections,
     currentModel,
     pendingPermissions,
     pendingCredentials,
@@ -938,6 +930,9 @@ export default function App() {
     // NOTE: sessions removed to prevent memory leaks - components use atoms instead
     workspaces,
     windowWorkspaceId,
+    llmConnections,
+    workspaceDefaultLlmConnection,
+    refreshLlmConnections,
     currentModel,
     pendingPermissions,
     pendingCredentials,

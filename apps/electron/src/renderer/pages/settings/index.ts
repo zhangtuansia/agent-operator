@@ -7,7 +7,7 @@
 export { default as SettingsNavigator } from './SettingsNavigator'
 export { default as AppSettingsPage, meta as AppSettingsMeta } from './AppSettingsPage'
 export { default as WorkspaceSettingsPage, meta as WorkspaceSettingsMeta } from './WorkspaceSettingsPage'
-export { default as ApiSettingsPage, meta as ApiSettingsMeta } from './ApiSettingsPage'
+export { default as ApiSettingsPage, meta as ApiSettingsMeta } from './AiSettingsPage'
 export { default as InputSettingsPage, meta as InputSettingsMeta } from './InputSettingsPage'
 export { default as LabelsSettingsPage, meta as LabelsMeta } from './LabelsSettingsPage'
 export { default as PermissionsSettingsPage, meta as PermissionsMeta } from './PermissionsSettingsPage'

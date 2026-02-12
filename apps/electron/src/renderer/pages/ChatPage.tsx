@@ -18,6 +18,8 @@ import { routes } from '@/lib/navigate'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
 import { useLanguage } from '@/context/LanguageContext'
+import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable, getDefaultModelsForConnection } from '@config/llm-connections'
+import { getModelDisplayName } from '@config/models'
 
 export interface ChatPageProps {
   sessionId: string
@@ -33,6 +35,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const {
     activeWorkspaceId,
+    llmConnections,
+    workspaceDefaultLlmConnection,
     currentModel,
     onSendMessage,
     onOpenFile,
@@ -147,15 +151,75 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onInputChange(sessionId, value)
   }, [sessionId, onInputChange])
 
-  // Session model change handler - persists per-session model
-  const handleModelChange = React.useCallback((model: string) => {
-    if (activeWorkspaceId) {
-      window.electronAPI.setSessionModel(sessionId, activeWorkspaceId, model)
-    }
-  }, [sessionId, activeWorkspaceId])
+  // Session model/connection change handler - persists per-session settings
+  const handleModelChange = React.useCallback((model: string, connection?: string) => {
+    if (!activeWorkspaceId) return
 
-  // Effective model for this session (session-specific or global fallback)
-  const effectiveModel = session?.model || currentModel
+    void (async () => {
+      const currentConnection = session?.llmConnection ?? sessionMeta?.llmConnection
+      if (connection && connection !== currentConnection) {
+        await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug: connection })
+      }
+
+      await window.electronAPI.setSessionModel(sessionId, activeWorkspaceId, model)
+    })()
+  }, [sessionId, activeWorkspaceId, session?.llmConnection, sessionMeta?.llmConnection])
+
+  const sessionConnectionSlug = session?.llmConnection ?? sessionMeta?.llmConnection
+  const connectionUnavailable = React.useMemo(
+    () => isSessionConnectionUnavailable(sessionConnectionSlug, llmConnections),
+    [sessionConnectionSlug, llmConnections]
+  )
+
+  const effectiveConnectionSlug = React.useMemo(() => {
+    if (connectionUnavailable) return undefined
+    return resolveEffectiveConnectionSlug(
+      sessionConnectionSlug,
+      workspaceDefaultLlmConnection,
+      llmConnections
+    )
+  }, [sessionConnectionSlug, workspaceDefaultLlmConnection, llmConnections, connectionUnavailable])
+
+  const effectiveConnection = React.useMemo(
+    () => (effectiveConnectionSlug ? llmConnections.find(c => c.slug === effectiveConnectionSlug) : null),
+    [effectiveConnectionSlug, llmConnections]
+  )
+
+  // Effective model for this session (session-specific > connection default > global fallback)
+  const effectiveModel = React.useMemo(() => {
+    const allowedModelIds = effectiveConnection
+      ? (effectiveConnection.models && effectiveConnection.models.length > 0
+          ? effectiveConnection.models
+          : getDefaultModelsForConnection(effectiveConnection.providerType)
+        )
+        .map((model) => typeof model === 'string' ? model : model.id)
+      : []
+    const sessionModel = session?.model
+
+    if (sessionModel) {
+      if (connectionUnavailable || !effectiveConnection) return sessionModel
+      if (allowedModelIds.length === 0 || allowedModelIds.includes(sessionModel)) return sessionModel
+    }
+
+    if (connectionUnavailable) return session?.model ?? ''
+    return effectiveConnection?.defaultModel ?? currentModel
+  }, [
+    session?.model,
+    effectiveConnection,
+    connectionUnavailable,
+    currentModel,
+  ])
+
+  const headerModelBadge = React.useMemo(() => {
+    if (connectionUnavailable) return null
+    const modelLabel = getModelDisplayName(effectiveModel || currentModel)
+    const label = effectiveConnection ? `${effectiveConnection.name} · ${modelLabel}` : modelLabel
+    return (
+      <span className="max-w-[220px] truncate text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+    )
+  }, [connectionUnavailable, effectiveConnection, effectiveModel, currentModel])
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
@@ -315,12 +379,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         isFlagged: sessionMeta.isFlagged,
         workingDirectory: sessionMeta.workingDirectory,
         enabledSourceSlugs: sessionMeta.enabledSourceSlugs,
+        llmConnection: sessionMeta.llmConnection,
       }
 
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 session={skeletonSession}
@@ -355,6 +420,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 searchQuery={sessionListSearchQuery}
                 isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
+                connectionUnavailable={connectionUnavailable}
               />
             </div>
           </div>
@@ -386,7 +452,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             session={session}
@@ -426,6 +492,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             searchQuery={sessionListSearchQuery}
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}
+            connectionUnavailable={connectionUnavailable}
           />
         </div>
       </div>

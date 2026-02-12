@@ -107,6 +107,10 @@ export interface OperatorAgentConfig {
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
+  /** Resolved provider type for this session connection (e.g., anthropic, bedrock). */
+  providerType?: string;
+  /** Resolved connection slug for this session (for diagnostics and provider-specific handling). */
+  connectionSlug?: string;
   thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'think')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
@@ -858,8 +862,9 @@ export class OperatorAgent {
       // Configure SDK options
       // In Bedrock mode, use getBedrockModel to handle ARN formats (Application Inference Profiles)
       const configuredModel = this.config.model || DEFAULT_MODEL;
-      const model = isBedrockMode() ? getBedrockModel(configuredModel) : configuredModel;
-      debug(`[chat] Model selection: configured=${configuredModel}, effective=${model}, bedrockMode=${isBedrockMode()}`);
+      const bedrockMode = this.isSessionBedrockMode();
+      const model = bedrockMode ? getBedrockModel(configuredModel) : configuredModel;
+      debug(`[chat] Model selection: configured=${configuredModel}, effective=${model}, bedrockMode=${bedrockMode}, connection=${this.config.connectionSlug ?? '(unknown)'}, provider=${this.config.providerType ?? '(unknown)'}`);
 
       // Determine effective thinking level: ultrathink override boosts to max for this message
       const effectiveThinkingLevel: ThinkingLevel = this.ultrathinkOverride ? 'max' : this.thinkingLevel;
@@ -2403,13 +2408,56 @@ Please continue the conversation naturally from where we left off.
           return null;
         }
 
-        // Read the file and get last 50 lines to find recent errors
+        // Read the file and get last 250 lines to find recent errors.
+        // 50 lines is often too shallow when SDK emits many debug lines between
+        // the real transport failure and the assistant error event.
         const content = fs.readFileSync(debugFilePath, 'utf-8');
-        const lines = content.split('\n').slice(-50);
+        const lines = content.split('\n').slice(-250);
 
         // Search backwards for the most recent [ERROR] line with JSON
         for (let i = lines.length - 1; i >= 0; i--) {
           const line = lines[i];
+          if (!line || !line.includes('[ERROR]')) continue;
+
+          // SDK often logs the actionable transport failure as plain text.
+          // Capture these before trying to parse embedded JSON blobs.
+          const streamFallbackMatch = line.match(/Error streaming, falling back to non-streaming mode:\s*(.+)$/i);
+          if (streamFallbackMatch?.[1]) {
+            return {
+              errorType: 'streaming_error',
+              message: streamFallbackMatch[1].replace(/^"+|"+$/g, '').trim(),
+            };
+          }
+
+          const nonStreamingFallbackMatch = line.match(/Error in non-streaming fallback:\s*(.+)$/i);
+          if (nonStreamingFallbackMatch?.[1]) {
+            return {
+              errorType: 'non_streaming_fallback_error',
+              message: nonStreamingFallbackMatch[1].replace(/^"+|"+$/g, '').trim(),
+            };
+          }
+
+          if (/404 status code \(no body\)/i.test(line)) {
+            return {
+              errorType: 'http_404',
+              message: '404 status code (no body)',
+            };
+          }
+
+          if (/unknown certificate verification error/i.test(line)) {
+            return {
+              errorType: 'tls_error',
+              message: 'unknown certificate verification error',
+            };
+          }
+
+          if (/unexpected end of json input/i.test(line)) {
+            return {
+              errorType: 'parse_error',
+              message: 'Unexpected end of JSON input',
+            };
+          }
+
           // Match [ERROR] lines containing JSON with error details
           const errorMatch = line.match(/\[ERROR\].*?(\{.*\})/);
           if (errorMatch && errorMatch[1]) {
@@ -2419,7 +2467,14 @@ Please continue the conversation naturally from where we left off.
                 return {
                   errorType: parsed.error.type || 'error',
                   message: parsed.error.message,
-                  requestId: parsed.request_id,
+                  requestId: parsed.request_id || parsed.requestId,
+                };
+              }
+              if (typeof parsed?.message === 'string') {
+                return {
+                  errorType: parsed.name || 'error',
+                  message: parsed.message,
+                  requestId: parsed.request_id || parsed.requestId,
                 };
               }
             } catch {
@@ -2566,6 +2621,92 @@ Please continue the conversation naturally from where we left off.
           ],
           canRetry: true,
           retryDelayMs: 1000,
+        };
+        return {
+          type: 'typed_error',
+          error,
+        };
+      }
+
+      const isTlsError =
+        actualError.errorType === 'tls_error' ||
+        normalizedMessage.includes('certificate verification') ||
+        normalizedMessage.includes('certificate');
+
+      if (isTlsError) {
+        error = {
+          code: 'network_error',
+          title: 'TLS Certificate Error',
+          message: 'TLS certificate verification failed while connecting to the provider endpoint.',
+          details: [
+            ...(actualError.requestId ? [`Request ID: ${actualError.requestId}`] : []),
+            'Check whether a proxy/VPN is intercepting HTTPS traffic.',
+            'If this is a custom endpoint, verify its TLS certificate chain.',
+            'Try the endpoint with curl to confirm TLS works outside the app.',
+          ],
+          actions: [
+            { key: 'r', label: 'Retry', action: 'retry' },
+            { key: 's', label: 'Settings', action: 'settings' },
+          ],
+          canRetry: true,
+          retryDelayMs: 2000,
+        };
+        return {
+          type: 'typed_error',
+          error,
+        };
+      }
+
+      const isEndpointNotCompatible =
+        actualError.errorType === 'http_404' ||
+        normalizedMessage.includes('404 status code (no body)');
+
+      if (isEndpointNotCompatible) {
+        error = {
+          code: 'invalid_request',
+          title: 'Endpoint Not Compatible',
+          message: 'The configured API endpoint returned 404 for a required Claude SDK request.',
+          details: [
+            ...(actualError.requestId ? [`Request ID: ${actualError.requestId}`] : []),
+            'Verify the base URL points to a fully Anthropic-compatible /v1 endpoint.',
+            'Some compatibility endpoints do not support all Claude SDK APIs.',
+            'Try switching this connection to a provider-native model/endpoint.',
+          ],
+          actions: [
+            { key: 's', label: 'Settings', action: 'settings' },
+            { key: 'r', label: 'Retry', action: 'retry' },
+          ],
+          canRetry: true,
+          retryDelayMs: 1000,
+        };
+        return {
+          type: 'typed_error',
+          error,
+        };
+      }
+
+      const isMalformedResponse =
+        actualError.errorType === 'parse_error' ||
+        actualError.errorType === 'non_streaming_fallback_error' ||
+        normalizedMessage.includes('unexpected end of json input') ||
+        normalizedMessage.includes('socket connection was closed unexpectedly');
+
+      if (isMalformedResponse) {
+        error = {
+          code: 'provider_error',
+          title: 'Provider Response Error',
+          message: 'The provider returned an incomplete or malformed response.',
+          details: [
+            ...(actualError.requestId ? [`Request ID: ${actualError.requestId}`] : []),
+            'This usually indicates endpoint instability or partial API compatibility.',
+            'Try a different model, or switch to a fully supported provider endpoint.',
+          ],
+          actions: [
+            { key: 'r', label: 'Retry', action: 'retry' },
+            { key: 's', label: 'Settings', action: 'settings' },
+          ],
+          canRetry: true,
+          retryDelayMs: 3000,
         };
         return {
           type: 'typed_error',
@@ -3070,10 +3211,15 @@ Please continue the conversation naturally from where we left off.
     this.currentQuery = null;
   }
 
+  private isSessionBedrockMode(): boolean {
+    if (this.config.providerType === 'bedrock') return true;
+    return isBedrockMode();
+  }
+
   getModel(): string {
     const configuredModel = this.config.model || DEFAULT_MODEL;
     // In Bedrock mode, return the effective Bedrock model (may be ARN)
-    return isBedrockMode() ? getBedrockModel(configuredModel) : configuredModel;
+    return this.isSessionBedrockMode() ? getBedrockModel(configuredModel) : configuredModel;
   }
 
   /**

@@ -56,8 +56,10 @@ export function SettingsMenuSelect({
   onHover,
 }: SettingsMenuSelectProps) {
   const [isOpen, setIsOpen] = React.useState(false)
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
 
   const selectedOption = options.find((o) => o.value === value)
+  const portalContainer = triggerRef.current?.closest('[data-slot="dialog-content"]') as HTMLElement | null
 
   const handleSelect = (optionValue: string) => {
     onValueChange(optionValue)
@@ -78,6 +80,7 @@ export function SettingsMenuSelect({
     <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild disabled={disabled}>
         <button
+          ref={triggerRef}
           type="button"
           className={cn(
             'inline-flex items-center h-8 px-3 gap-1 text-sm rounded-lg',
@@ -92,6 +95,7 @@ export function SettingsMenuSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
+        container={portalContainer ?? undefined}
         align="start"
         sideOffset={4}
         collisionPadding={8}

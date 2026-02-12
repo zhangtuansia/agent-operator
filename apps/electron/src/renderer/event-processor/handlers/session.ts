@@ -25,6 +25,7 @@ import type {
   WorkingDirectoryChangedEvent,
   PermissionModeChangedEvent,
   SessionModelChangedEvent,
+  ConnectionChangedEvent,
   UserMessageEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
@@ -47,20 +48,21 @@ export function handleComplete(
 ): ProcessResult {
   const { session } = state
 
-  // Fail-safe: mark any running tools as complete
-  let updatedMessages = session.messages
-  const hasRunningTools = session.messages.some(
-    m => m.role === 'tool' && m.toolStatus === 'executing'
-  )
-
-  if (hasRunningTools) {
-    updatedMessages = session.messages.map(m => {
+  // Fail-safe cleanup on completion:
+  // - mark any running tools as completed
+  // - clear transient assistant streaming flags
+  // - remove transient status messages
+  const updatedMessages = session.messages
+    .filter(m => m.role !== 'status')
+    .map(m => {
       if (m.role === 'tool' && m.toolStatus === 'executing') {
         return { ...m, toolStatus: 'completed' as const }
       }
+      if (m.role === 'assistant' && (m.isPending || m.isStreaming)) {
+        return { ...m, isPending: false, isStreaming: false }
+      }
       return m
     })
-  }
 
   return {
     state: {
@@ -403,7 +405,31 @@ export function handleSessionModelChanged(
 
   return {
     state: {
-      session: { ...session, model: event.model ?? undefined },
+      session: {
+        ...session,
+        model: event.model ?? undefined,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle connection_changed - update session connection
+ */
+export function handleConnectionChanged(
+  state: SessionState,
+  event: ConnectionChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        llmConnection: event.connectionSlug,
+      },
       streaming,
     },
     effects: [],

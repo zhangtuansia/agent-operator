@@ -32,7 +32,6 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuSub,
-  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import {
   StyledDropdownMenuContent,
@@ -46,7 +45,9 @@ import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { getModelShortName, getModelsForProvider } from '@config/models'
+import { getModelShortName, getModelDisplayName } from '@config/models'
+import { resolveEffectiveConnectionSlug, isCompatProvider, getDefaultModelsForConnection } from '@config/llm-connections'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { WorkingDirectoryBadge, getRecentDirs, addRecentDir } from './WorkingDirectoryBadge'
 import { SourceSelectorBadge } from './SourceSelectorBadge'
@@ -98,7 +99,7 @@ export interface FreeFormInputProps {
   /** Current model ID */
   currentModel: string
   /** Callback when model changes */
-  onModelChange: (model: string) => void
+  onModelChange: (model: string, connection?: string) => void
   // Thinking level (session-level setting)
   /** Current thinking level ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel
@@ -164,6 +165,10 @@ export interface FreeFormInputProps {
   }
   /** Enable compact mode for embedded chat input (e.g. EditPopover) */
   compactMode?: boolean
+  /** Current session connection slug */
+  currentConnection?: string
+  /** True when the session connection was removed */
+  connectionUnavailable?: boolean
 }
 
 /**
@@ -213,7 +218,14 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
   compactMode = false,
+  currentConnection,
+  connectionUnavailable = false,
 }: FreeFormInputProps) {
+  const appShellCtx = useOptionalAppShellContext()
+  const llmConnections = appShellCtx?.llmConnections ?? []
+  const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
+  const canSwitchConnections = llmConnections.length > 1
+
   const { t } = useTranslation()
   const modKey = isMac ? '⌘' : 'Ctrl'
   const defaultPlaceholders = React.useMemo(
@@ -301,61 +313,96 @@ export function FreeFormInput({
   // Input settings (loaded from config)
   const [sendMessageKey, setSendMessageKey] = React.useState<'enter' | 'cmd-enter'>('enter')
 
-  // Provider state for showing correct model options
-  const [currentProvider, setCurrentProvider] = React.useState<string | undefined>(undefined)
-  // Custom models for 'custom' provider
-  const [customModels, setCustomModels] = React.useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
+  const connectionDefaultModel = React.useMemo(() => {
+    const effectiveSlug = resolveEffectiveConnectionSlug(
+      currentConnection,
+      workspaceDefaultConnection,
+      llmConnections
+    )
+    const conn = llmConnections.find(c => c.slug === effectiveSlug)
+    if (!conn) return null
+    if (!isCompatProvider(conn.providerType)) return null
+    if (conn.models && conn.models.length > 1) return null
+    return conn.defaultModel ?? null
+  }, [currentConnection, workspaceDefaultConnection, llmConnections])
 
-  // Load provider info on mount
-  const loadProvider = React.useCallback(async () => {
-    if (!window.electronAPI) return
-    try {
-      const billingInfo = await window.electronAPI.getBillingMethod()
-      // For OAuth, default to 'anthropic' provider
-      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
-      setCurrentProvider(effectiveProvider)
+  const effectiveConnection = resolveEffectiveConnectionSlug(
+    currentConnection,
+    workspaceDefaultConnection,
+    llmConnections
+  )
 
-      // Load custom models if using custom provider
-      if (effectiveProvider === 'custom') {
-        const models = await window.electronAPI.getCustomModels()
-        setCustomModels(models || [])
-      }
-    } catch {
-      // Ignore errors, use default models
+  const currentConnectionDetails = React.useMemo(() => {
+    if (!currentConnection) return null
+    return llmConnections.find(c => c.slug === currentConnection) ?? null
+  }, [llmConnections, currentConnection])
+
+  const effectiveConnectionDetails = React.useMemo(() => {
+    if (!effectiveConnection) return null
+    return llmConnections.find(c => c.slug === effectiveConnection) ?? null
+  }, [effectiveConnection, llmConnections])
+
+  const getConnectionModels = React.useCallback((connection: (typeof llmConnections)[number]) => {
+    if (connection.models && connection.models.length > 0) {
+      return connection.models
     }
+    const defaults = getDefaultModelsForConnection(connection.providerType)
+    if (defaults.length > 0) return defaults
+    if (connection.defaultModel) return [connection.defaultModel]
+    return []
   }, [])
 
-  React.useEffect(() => {
-    loadProvider()
+  const availableModels = React.useMemo(() => {
+    if (connectionUnavailable) return []
 
-    // Listen for provider changes from API settings
-    // Use event detail directly to avoid extra IPC call
-    const handleProviderChange = async (event: Event) => {
-      const customEvent = event as CustomEvent<{ provider: string }>
-      const newProvider = customEvent.detail?.provider
+    const connection = effectiveConnection
+      ? llmConnections.find(c => c.slug === effectiveConnection)
+      : null
+    if (!connection) return []
+    return getConnectionModels(connection)
+  }, [effectiveConnection, llmConnections, connectionUnavailable, getConnectionModels])
 
-      if (newProvider) {
-        setCurrentProvider(newProvider)
+  const currentModelDisplayName = React.useMemo(() => {
+    const modelToDisplay = connectionDefaultModel ?? currentModel
+    const model = availableModels.find((m) =>
+      typeof m === 'string' ? m === modelToDisplay : m.id === modelToDisplay
+    )
+    if (!model) return getModelDisplayName(modelToDisplay)
+    return typeof model === 'string' ? getModelShortName(model) : model.name
+  }, [availableModels, connectionDefaultModel, currentModel])
+  const modelSelectorLocked = Boolean(connectionDefaultModel) && !canSwitchConnections
 
-        // Load custom models if using custom provider
-        if (newProvider === 'custom') {
-          try {
-            const models = await window.electronAPI.getCustomModels()
-            setCustomModels(models || [])
-          } catch {
-            // Ignore errors
-          }
-        } else {
-          setCustomModels([])
-        }
-      } else {
-        // Fallback to full reload if no provider in event
-        loadProvider()
+  const modelButtonLabel = React.useMemo(() => {
+    if (connectionUnavailable) return 'Unavailable'
+    if (effectiveConnectionDetails) {
+      return `${effectiveConnectionDetails.name} · ${currentModelDisplayName}`
+    }
+    return currentModelDisplayName
+  }, [connectionUnavailable, effectiveConnectionDetails, currentModelDisplayName])
+
+  const connectionsByProvider = React.useMemo(() => {
+    const groups: Record<string, typeof llmConnections> = {
+      Anthropic: [],
+      AWS: [],
+      OpenAI: [],
+      Copilot: [],
+    }
+
+    for (const conn of llmConnections) {
+      const provider = conn.providerType || 'anthropic'
+      if (provider === 'bedrock') {
+        groups.AWS.push(conn)
+      } else if (provider === 'anthropic' || provider === 'anthropic_compat' || provider === 'vertex') {
+        groups.Anthropic.push(conn)
+      } else if (provider === 'openai' || provider === 'openai_compat') {
+        groups.OpenAI.push(conn)
+      } else if (provider === 'copilot') {
+        groups.Copilot.push(conn)
       }
     }
-    window.addEventListener('cowork:provider-changed', handleProviderChange)
-    return () => window.removeEventListener('cowork:provider-changed', handleProviderChange)
-  }, [loadProvider])
+
+    return Object.entries(groups).filter(([, conns]) => conns.length > 0)
+  }, [llmConnections])
 
   // Load input settings (sendMessageKey) on mount
   React.useEffect(() => {
@@ -1277,59 +1324,124 @@ export function FreeFormInput({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5"
+                    className={cn(
+                      "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5",
+                      connectionUnavailable && "text-destructive",
+                    )}
                   >
-                    {getModelShortName(currentModel)}
-                    <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+                    <span className="max-w-[220px] truncate">{modelButtonLabel}</span>
+                    {!connectionUnavailable && !modelSelectorLocked && (
+                      <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+                    )}
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">{t('input.model')}</TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
-              {/* Model options - dynamically loaded based on provider */}
-              {getModelsForProvider(currentProvider, customModels).map((model) => {
-                const isSelected = currentModel === model.id
-                return (
-                  <StyledDropdownMenuItem
-                    key={model.id}
-                    onSelect={() => onModelChange(model.id)}
-                    className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                  >
-                    <div className="text-left">
-                      <div className="font-medium text-sm">{model.name}</div>
-                      <div className="text-xs text-muted-foreground">{model.description}</div>
-                    </div>
-                    {isSelected && (
-                      <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                    )}
-                  </StyledDropdownMenuItem>
-                )
-              })}
-
-              {/* Separator before thinking level */}
-              <StyledDropdownMenuSeparator className="my-1" />
-
-              {/* Thinking Level - Radix submenu with automatic edge detection */}
-              <DropdownMenuSub>
-                <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
-                  <div className="text-left flex-1">
-                    <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
-                    <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
+              {connectionUnavailable ? (
+                <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+                  <div className="font-medium text-sm mb-1">Connection unavailable</div>
+                  <div className="text-xs text-muted-foreground">
+                    This session connection was removed. Create a new session to continue.
                   </div>
-                </StyledDropdownMenuSubTrigger>
-                <StyledDropdownMenuSubContent className="min-w-[220px]">
-                  {THINKING_LEVELS.map(({ id, name, description }) => {
-                    const isSelected = thinkingLevel === id
+                </div>
+              ) : canSwitchConnections ? (
+                connectionsByProvider.map(([providerName, connections], index) => (
+                  <React.Fragment key={providerName}>
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
+                      {providerName}
+                    </div>
+                    {connections.map((conn) => {
+                      const isCurrentConnection = effectiveConnection === conn.slug
+                      const isAuthenticated = conn.isAuthenticated
+                      return (
+                        <DropdownMenuSub key={conn.slug}>
+                          <StyledDropdownMenuSubTrigger
+                            disabled={!isAuthenticated}
+                            className={cn(
+                              "flex items-center justify-between px-2 py-2 rounded-lg",
+                              isCurrentConnection && "bg-foreground/5"
+                            )}
+                          >
+                            <div className="text-left flex-1">
+                              <div className="font-medium text-sm flex items-center gap-1.5">
+                                {conn.name}
+                                {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
+                              </div>
+                              {!isAuthenticated && (
+                                <div className="text-xs text-muted-foreground">Not authenticated</div>
+                              )}
+                            </div>
+                          </StyledDropdownMenuSubTrigger>
+                          {isAuthenticated && (
+                            <StyledDropdownMenuSubContent className="min-w-[220px]">
+                              {getConnectionModels(conn).map((model) => {
+                                const modelId = typeof model === 'string' ? model : model.id
+                                const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
+                                const isSelectedModel = isCurrentConnection && currentModel === modelId
+                                return (
+                                  <StyledDropdownMenuItem
+                                    key={modelId}
+                                    onSelect={() => onModelChange(modelId, conn.slug)}
+                                    className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                                  >
+                                    <div className="font-medium text-sm">{modelName}</div>
+                                    {isSelectedModel && (
+                                      <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                                    )}
+                                  </StyledDropdownMenuItem>
+                                )
+                              })}
+                            </StyledDropdownMenuSubContent>
+                          )}
+                        </DropdownMenuSub>
+                      )
+                    })}
+                    {index < connectionsByProvider.length - 1 && (
+                      <StyledDropdownMenuSeparator className="my-1" />
+                    )}
+                  </React.Fragment>
+                ))
+              ) : connectionDefaultModel ? (
+                <StyledDropdownMenuItem
+                  disabled
+                  className="flex items-center justify-between px-2 py-2 rounded-lg"
+                >
+                  <div className="text-left">
+                    <div className="font-medium text-sm">{getModelDisplayName(connectionDefaultModel)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {effectiveConnectionDetails ? `${effectiveConnectionDetails.name} default` : 'Connection default'}
+                    </div>
+                  </div>
+                  <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                </StyledDropdownMenuItem>
+              ) : (
+                <>
+                  {!isEmptySession && currentConnectionDetails && (
+                    <>
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
+                        <span>Using {currentConnectionDetails.name}</span>
+                      </div>
+                      <StyledDropdownMenuSeparator className="my-1" />
+                    </>
+                  )}
+                  {availableModels.map((model) => {
+                    const modelId = typeof model === 'string' ? model : model.id
+                    const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
+                    const description = typeof model === 'string' ? '' : model.description
+                    const isSelected = currentModel === modelId
                     return (
                       <StyledDropdownMenuItem
-                        key={id}
-                        onSelect={() => onThinkingLevelChange?.(id)}
+                        key={modelId}
+                        onSelect={() => onModelChange(modelId, effectiveConnection)}
                         className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                       >
                         <div className="text-left">
-                          <div className="font-medium text-sm">{name}</div>
-                          <div className="text-xs text-muted-foreground">{description}</div>
+                          <div className="font-medium text-sm">{modelName}</div>
+                          {description && (
+                            <div className="text-xs text-muted-foreground">{description}</div>
+                          )}
                         </div>
                         {isSelected && (
                           <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
@@ -1337,29 +1449,66 @@ export function FreeFormInput({
                       </StyledDropdownMenuItem>
                     )
                   })}
-                </StyledDropdownMenuSubContent>
-              </DropdownMenuSub>
+                </>
+              )}
 
-              {/* Context usage footer - only show when we have token data */}
-              {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
+              {!connectionUnavailable && (
                 <>
+                  {/* Separator before thinking level */}
                   <StyledDropdownMenuSeparator className="my-1" />
-                  <div className="px-2 py-1.5">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{t('input.context')}</span>
-                      <span className="flex items-center gap-1.5">
-                        {contextStatus.isCompacting && (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        )}
-                        {formatTokenCount(contextStatus.inputTokens)}
-                        {/* Show compaction threshold (~77.5% of context window) as the limit,
-                            since that's when auto-compaction kicks in - not the full context window */}
-                        {contextStatus.contextWindow && (
-                          <span className="opacity-60">/ {formatTokenCount(Math.round(contextStatus.contextWindow * 0.775))}</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
+
+                  {/* Thinking Level - Radix submenu with automatic edge detection */}
+                  <DropdownMenuSub>
+                    <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
+                      <div className="text-left flex-1">
+                        <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
+                        <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
+                      </div>
+                    </StyledDropdownMenuSubTrigger>
+                    <StyledDropdownMenuSubContent className="min-w-[220px]">
+                      {THINKING_LEVELS.map(({ id, name, description }) => {
+                        const isSelected = thinkingLevel === id
+                        return (
+                          <StyledDropdownMenuItem
+                            key={id}
+                            onSelect={() => onThinkingLevelChange?.(id)}
+                            className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                          >
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{name}</div>
+                              <div className="text-xs text-muted-foreground">{description}</div>
+                            </div>
+                            {isSelected && (
+                              <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                            )}
+                          </StyledDropdownMenuItem>
+                        )
+                      })}
+                    </StyledDropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  {/* Context usage footer - only show when we have token data */}
+                  {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
+                    <>
+                      <StyledDropdownMenuSeparator className="my-1" />
+                      <div className="px-2 py-1.5">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{t('input.context')}</span>
+                          <span className="flex items-center gap-1.5">
+                            {contextStatus.isCompacting && (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            )}
+                            {formatTokenCount(contextStatus.inputTokens)}
+                            {/* Show compaction threshold (~77.5% of context window) as the limit,
+                                since that's when auto-compaction kicks in - not the full context window */}
+                            {contextStatus.contextWindow && (
+                              <span className="opacity-60">/ {formatTokenCount(Math.round(contextStatus.contextWindow * 0.775))}</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </StyledDropdownMenuContent>

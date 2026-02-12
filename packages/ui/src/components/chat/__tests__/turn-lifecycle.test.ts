@@ -343,10 +343,7 @@ describe('edge cases', () => {
     expect(deriveTurnPhase(turn)).toBe('complete')
   })
 
-  it('response with isStreaming false but isComplete false returns awaiting', () => {
-    // This is an edge case - usually when response.isStreaming is false,
-    // the turn should be marked complete. But we trust isComplete as
-    // the authoritative signal.
+  it('response with isStreaming false but isComplete false returns complete', () => {
     const turn: AssistantTurn = {
       type: 'assistant',
       turnId: 'test',
@@ -366,10 +363,27 @@ describe('edge cases', () => {
       isComplete: false, // Not yet marked complete
       timestamp: Date.now(),
     }
-    // Per our priority: complete > streaming > tool_active > awaiting > pending
-    // response.isStreaming is false, so not streaming
-    // no running tools, so not tool_active
-    // has activities, so awaiting
-    expect(deriveTurnPhase(turn)).toBe('awaiting')
+    // Fallback completion prevents stale "Thinking..." when final response is visible.
+    expect(deriveTurnPhase(turn)).toBe('complete')
+  })
+
+  it('keeps post-response tool activity in the same assistant turn', () => {
+    resetCounters()
+    turnIdCounter++
+
+    const turnId = `turn-${turnIdCounter}`
+    const messages: Message[] = [
+      createUserMessage(),
+      createAssistantMessage(false, false, turnId),
+      createToolMessage('completed', 'TodoWrite', turnId),
+    ]
+
+    const turns = groupMessagesByTurn(messages)
+    const assistantTurns = turns.filter(t => t.type === 'assistant') as AssistantTurn[]
+
+    expect(assistantTurns).toHaveLength(1)
+    expect(assistantTurns[0]?.response?.text).toBe('Response text')
+    expect(assistantTurns[0]?.activities).toHaveLength(1)
+    expect(deriveTurnPhase(assistantTurns[0]!)).toBe('complete')
   })
 })

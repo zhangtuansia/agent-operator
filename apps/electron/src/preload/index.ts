@@ -171,6 +171,16 @@ const api: ElectronAPI = {
   exchangeClaudeCode: (code: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, code),
   hasClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE),
+  // GitHub Copilot OAuth (device flow)
+  startCopilotOAuth: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_START_OAUTH, connectionSlug),
+  cancelCopilotOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_CANCEL_OAUTH),
+  getCopilotAuthStatus: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_GET_AUTH_STATUS, connectionSlug),
+  logoutCopilot: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_LOGOUT, connectionSlug),
+  onCopilotDeviceCode: (callback: (deviceCode: { userCode: string; verificationUri: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, deviceCode: { userCode: string; verificationUri: string }) => callback(deviceCode)
+    ipcRenderer.on(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
+  },
 
   // LLM Connections (provider configurations)
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
@@ -178,6 +188,8 @@ const api: ElectronAPI = {
   getLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_GET, slug),
   saveLlmConnection: (connection: import('../shared/types').LlmConnection) =>
     ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SAVE, connection),
+  setLlmConnectionApiKey: (slug: string, apiKey: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_API_KEY, slug, apiKey),
   deleteLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_DELETE, slug),
   testLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_TEST, slug),
   setDefaultLlmConnection: (slug: string) => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_SET_DEFAULT, slug),
@@ -207,8 +219,8 @@ const api: ElectronAPI = {
   // Session-specific model (overrides global)
   getSessionModel: (sessionId: string, workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, sessionId, workspaceId),
-  setSessionModel: (sessionId: string, workspaceId: string, model: string | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model),
+  setSessionModel: (sessionId: string, workspaceId: string, model: string | null, connection?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model, connection),
 
   // Custom Models (for Custom provider)
   getCustomModels: () =>

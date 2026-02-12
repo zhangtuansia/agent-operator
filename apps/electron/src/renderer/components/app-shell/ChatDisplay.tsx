@@ -86,7 +86,7 @@ interface ChatDisplayProps {
   onOpenUrl: (url: string) => void
   // Model selection
   currentModel: string
-  onModelChange: (model: string) => void
+  onModelChange: (model: string, connection?: string) => void
   /** Ref for the input, used for external focus control */
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** When true, disables input (e.g., when agent needs activation) */
@@ -161,6 +161,8 @@ interface ChatDisplayProps {
   compactMode?: boolean
   /** Optional label for embedded empty state contexts */
   emptyStateLabel?: string
+  /** When true, the session connection was removed and input should be disabled */
+  connectionUnavailable?: boolean
 }
 
 /**
@@ -225,6 +227,7 @@ export function ChatDisplay({
   // Compact mode (for EditPopover embedding)
   compactMode = false,
   emptyStateLabel,
+  connectionUnavailable = false,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -478,8 +481,42 @@ export function ChatDisplay({
   const deferredSessionMessages = useDeferredValue(sessionMessages)
   const allTurns = React.useMemo(() => {
     if (!deferredSessionMessages) return []
-    return groupMessagesByTurn(deferredSessionMessages)
-  }, [deferredSessionMessages])
+    const groupedTurns = groupMessagesByTurn(deferredSessionMessages)
+
+    // Post-stream cleanup:
+    // If a turn finished but some non-tool activities are still marked running
+    // (e.g., stale intermediate "Thinking..." rows), normalize them so completed
+    // responses don't keep showing perpetual thinking UI.
+    if (session?.isProcessing) return groupedTurns
+
+    return groupedTurns.map((turn) => {
+      if (turn.type !== 'assistant') return turn
+
+      let activitiesChanged = false
+      const normalizedActivities = turn.activities.map((activity) => {
+        if ((activity.type === 'intermediate' || activity.type === 'status') && activity.status === 'running') {
+          activitiesChanged = true
+          return { ...activity, status: 'completed' as const }
+        }
+        return activity
+      })
+
+      const hasRunning = normalizedActivities.some(
+        (activity) => activity.status === 'running' || activity.status === 'pending'
+      )
+      const responseStreaming = !!turn.response?.isStreaming
+      const shouldMarkComplete = !turn.isComplete && !hasRunning && !responseStreaming
+
+      if (!activitiesChanged && !shouldMarkComplete) return turn
+
+      return {
+        ...turn,
+        activities: normalizedActivities,
+        isComplete: shouldMarkComplete ? true : turn.isComplete,
+        isStreaming: responseStreaming ? turn.isStreaming : false,
+      }
+    })
+  }, [deferredSessionMessages, session?.isProcessing])
 
   // Helper to count occurrences of a substring.
   const countOccurrences = useCallback((text: string, query: string): number => {
@@ -1162,6 +1199,7 @@ export function ChatDisplay({
               textareaRef={textareaRef}
               currentModel={currentModel}
               onModelChange={onModelChange}
+              currentConnection={session.llmConnection}
               thinkingLevel={thinkingLevel}
               onThinkingLevelChange={onThinkingLevelChange}
               ultrathinkEnabled={ultrathinkEnabled}
@@ -1190,8 +1228,9 @@ export function ChatDisplay({
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
               sessionId={session.id}
-              disableSend={disableSend}
+              disableSend={disableSend || connectionUnavailable}
               isEmptySession={session.messages.length === 0}
+              connectionUnavailable={connectionUnavailable}
               contextStatus={{
                 isCompacting: session.currentStatus?.statusType === 'compacting',
                 inputTokens: session.tokenUsage?.inputTokens,

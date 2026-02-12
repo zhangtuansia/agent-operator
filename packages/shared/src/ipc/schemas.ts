@@ -101,6 +101,7 @@ export const SessionCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('markUnread') }),
   z.object({ type: z.literal('setPermissionMode'), mode: PermissionModeSchema }),
   z.object({ type: z.literal('setThinkingLevel'), level: ThinkingLevelSchema }),
+  z.object({ type: z.literal('setConnection'), connectionSlug: z.string().min(1) }),
   z.object({ type: z.literal('updateWorkingDirectory'), dir: z.string() }),
   z.object({ type: z.literal('setSources'), sourceSlugs: z.array(z.string()) }),
   z.object({ type: z.literal('setLabels'), labels: z.array(z.string()) }),

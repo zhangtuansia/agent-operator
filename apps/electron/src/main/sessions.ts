@@ -1,8 +1,8 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
-import { OperatorAgent, CodexAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { OperatorAgent, CodexAgent, CopilotAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
@@ -16,11 +16,14 @@ import {
   getLlmConnections,
   getDefaultLlmConnection,
   getLlmConnection,
+  getDefaultModelsForConnection,
   resolveEffectiveConnectionSlug,
   getAgentType,
   isAnthropicProvider,
   migrateLegacyLlmConnectionCredentials,
   migrateLegacyLlmConnectionsConfig,
+  isBedrockArn,
+  isBedrockModelId,
   type Workspace,
   type AgentType,
 } from '@agent-operator/shared/config'
@@ -104,6 +107,29 @@ function resolveSessionConnection(
 ) {
   const slug = resolveSessionConnectionSlug(sessionConnection, workspaceDefaultConnection)
   return slug ? getLlmConnection(slug) : null
+}
+
+function resolveSessionProvider(
+  connection: ReturnType<typeof resolveSessionConnection>,
+  agentType: AgentType,
+): 'anthropic' | 'openai' | 'copilot' {
+  const providerType = connection?.providerType
+  if (!providerType) return agentType === 'codex' ? 'openai' : 'anthropic'
+  if (providerType === 'openai' || providerType === 'openai_compat') return 'openai'
+  if (providerType === 'copilot') return 'copilot'
+  return 'anthropic'
+}
+
+function getConnectionModelIds(
+  connection: ReturnType<typeof resolveSessionConnection>,
+): string[] {
+  if (!connection) return []
+  const models = connection.models && connection.models.length > 0
+    ? connection.models
+    : getDefaultModelsForConnection(connection.providerType)
+  return models
+    .map((model) => (typeof model === 'string' ? model : model.id))
+    .filter((modelId): modelId is string => !!modelId)
 }
 
 /**
@@ -198,8 +224,8 @@ async function refreshMcpOAuthTokensIfNeeded(
   return { tokensRefreshed: false, failedSources }
 }
 
-// Agent type union - supports both Claude (OperatorAgent) and Codex (CodexAgent)
-type Agent = OperatorAgent | CodexAgent
+// Agent type union for supported backends
+type Agent = OperatorAgent | CodexAgent | CopilotAgent
 
 interface ManagedSession {
   id: string
@@ -207,6 +233,7 @@ interface ManagedSession {
   agent: Agent | null  // Lazy-loaded - null until first message
   tokenRefreshManager?: TokenRefreshManager
   agentType: AgentType  // Which agent backend to use
+  createdAt: number
   messages: Message[]
   isProcessing: boolean
   lastMessageAt: number
@@ -263,6 +290,8 @@ interface ManagedSession {
   model?: string
   // LLM connection slug resolved for this session
   llmConnection?: string
+  // Whether the LLM connection is locked for this session (after first agent create)
+  connectionLocked?: boolean
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Thinking level for this session ('off', 'think', 'max')
@@ -403,6 +432,19 @@ interface PendingDelta {
   turnId?: string
 }
 
+function isExplicitBedrockModel(model?: string): boolean {
+  const value = model?.trim()
+  if (!value) return false
+  return isBedrockArn(value) || isBedrockModelId(value)
+}
+
+interface LegacyBedrockCompatState {
+  enabled: boolean
+  awsRegion?: string
+  awsProfile?: string
+  model?: string
+}
+
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private windowManager: WindowManager | null = null
@@ -415,6 +457,9 @@ export class SessionManager {
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
   private messageLoadingPromises: Map<string, Promise<void>> = new Map()
+  // Snapshot of legacy Bedrock shell config before runtime env gets normalized.
+  private legacyBedrockCompatSnapshot: LegacyBedrockCompatState = { enabled: false }
+  private cachedClaudeSettingsModel: string | null | undefined = undefined
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -597,6 +642,7 @@ export class SessionManager {
       const manager = getCredentialManager()
       const targetConnectionSlug = connectionSlug ?? getDefaultLlmConnection()
       const targetConnection = targetConnectionSlug ? getLlmConnection(targetConnectionSlug) : null
+      const legacyBedrockCompat = this.getLegacyBedrockCompatState()
 
       sessionLog.info('Reinitializing auth', {
         requestedConnection: connectionSlug ?? '(default)',
@@ -611,21 +657,41 @@ export class SessionManager {
       delete process.env.ANTHROPIC_BASE_URL
       delete process.env.CLAUDE_CODE_USE_BEDROCK
 
-      // Only use shell/config Bedrock fallback when no explicit/default connection exists.
+      // Legacy compatibility fallback:
+      // allow shell/Claude settings Bedrock config when current connection can't authenticate.
       const bedrockMode = !targetConnection && isBedrockMode()
       const usingBedrockConnection = targetConnection?.providerType === 'bedrock'
+      const useLegacyBedrockFallback = await this.shouldUseLegacyBedrockFallback(
+        manager,
+        targetConnection,
+        legacyBedrockCompat,
+      )
 
-      if (usingBedrockConnection || bedrockMode) {
+      if (usingBedrockConnection || bedrockMode || useLegacyBedrockFallback) {
         // Ensure Bedrock env var is set for SDK subprocess
-        // isBedrockMode() may have already set this from shell config, but ensure it's set
+        // Compatibility: preserve legacy Claude Code Bedrock shell/settings behavior.
         process.env.CLAUDE_CODE_USE_BEDROCK = '1'
-        if (targetConnection?.awsRegion) {
-          process.env.AWS_REGION = targetConnection.awsRegion
+        const resolvedRegion = targetConnection?.awsRegion || legacyBedrockCompat.awsRegion
+        if (resolvedRegion) {
+          process.env.AWS_REGION = resolvedRegion
+        }
+        const resolvedProfile = targetConnection?.awsProfile || legacyBedrockCompat.awsProfile
+        if (resolvedProfile) {
+          process.env.AWS_PROFILE = resolvedProfile
+        }
+        if (legacyBedrockCompat.model && !process.env.ANTHROPIC_MODEL) {
+          process.env.ANTHROPIC_MODEL = legacyBedrockCompat.model
         }
 
         sessionLog.info('Using AWS Bedrock authentication', {
+          source: usingBedrockConnection
+            ? 'llm_connection'
+            : useLegacyBedrockFallback
+              ? 'legacy_claude_config'
+              : 'legacy_default_fallback',
           region: process.env.AWS_REGION || '(from ~/.aws/config)',
-          profile: process.env.AWS_PROFILE || 'default',
+          profile: process.env.AWS_PROFILE || process.env.CLAUDE_CODE_AWS_PROFILE || 'default',
+          model: process.env.ANTHROPIC_MODEL || '(from SDK default)',
         })
         return
       }
@@ -742,6 +808,108 @@ export class SessionManager {
     }
   }
 
+  private getClaudeSettingsModel(): string | null {
+    if (this.cachedClaudeSettingsModel !== undefined) {
+      return this.cachedClaudeSettingsModel
+    }
+
+    try {
+      const home = process.env.HOME
+      if (!home) {
+        this.cachedClaudeSettingsModel = null
+        return null
+      }
+      const settingsPath = join(home, '.claude', 'settings.json')
+      if (!existsSync(settingsPath)) {
+        this.cachedClaudeSettingsModel = null
+        return null
+      }
+
+      const raw = readFileSync(settingsPath, 'utf-8')
+      const parsed = JSON.parse(raw) as { model?: unknown }
+      const model = typeof parsed.model === 'string' ? parsed.model.trim() : ''
+      this.cachedClaudeSettingsModel = model || null
+      return this.cachedClaudeSettingsModel
+    } catch {
+      this.cachedClaudeSettingsModel = null
+      return null
+    }
+  }
+
+  private getLegacyBedrockCompatState(): LegacyBedrockCompatState {
+    const readValue = (value?: string): string | undefined => {
+      const trimmed = value?.trim()
+      return trimmed ? trimmed : undefined
+    }
+
+    const envModelCandidates = [
+      readValue(process.env.ANTHROPIC_MODEL),
+      readValue(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL),
+      readValue(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL),
+      readValue(process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+      readValue(process.env.ANTHROPIC_SMALL_FAST_MODEL),
+    ].filter((model): model is string => !!model && isExplicitBedrockModel(model))
+    const envBedrockModel = envModelCandidates[0]
+    const envAwsRegion = readValue(process.env.AWS_REGION)
+    const envAwsProfile = readValue(process.env.AWS_PROFILE) || readValue(process.env.CLAUDE_CODE_AWS_PROFILE)
+    const envBedrockEnabled = process.env.CLAUDE_CODE_USE_BEDROCK === '1' || !!envBedrockModel
+
+    if (envBedrockEnabled || envAwsRegion || envAwsProfile || envBedrockModel) {
+      this.legacyBedrockCompatSnapshot = {
+        enabled: this.legacyBedrockCompatSnapshot.enabled || envBedrockEnabled,
+        awsRegion: envAwsRegion || this.legacyBedrockCompatSnapshot.awsRegion,
+        awsProfile: envAwsProfile || this.legacyBedrockCompatSnapshot.awsProfile,
+        model: envBedrockModel || this.legacyBedrockCompatSnapshot.model,
+      }
+    }
+
+    const claudeSettingsModel = this.getClaudeSettingsModel()
+    const settingsBedrockEnabled = !!(
+      claudeSettingsModel
+      && isExplicitBedrockModel(claudeSettingsModel)
+    )
+
+    return {
+      enabled: envBedrockEnabled || settingsBedrockEnabled || this.legacyBedrockCompatSnapshot.enabled,
+      awsRegion: envAwsRegion || this.legacyBedrockCompatSnapshot.awsRegion,
+      awsProfile: envAwsProfile || this.legacyBedrockCompatSnapshot.awsProfile,
+      model: envBedrockModel || this.legacyBedrockCompatSnapshot.model || claudeSettingsModel || undefined,
+    }
+  }
+
+  private async shouldUseLegacyBedrockFallback(
+    manager: ReturnType<typeof getCredentialManager>,
+    targetConnection: ReturnType<typeof getLlmConnection>,
+    legacyBedrockCompat: LegacyBedrockCompatState,
+  ): Promise<boolean> {
+    if (!legacyBedrockCompat.enabled) return false
+    if (!targetConnection) return true
+    if (targetConnection.providerType === 'bedrock') return false
+
+    // Respect explicit non-Anthropic providers (OpenAI/Copilot/etc.).
+    if (targetConnection.providerType !== 'anthropic' && targetConnection.providerType !== 'anthropic_compat') {
+      return false
+    }
+
+    if (
+      targetConnection.authType === 'api_key'
+      || targetConnection.authType === 'api_key_with_endpoint'
+      || targetConnection.authType === 'bearer_token'
+    ) {
+      const llmApiKey = await manager.getLlmApiKey(targetConnection.slug)
+      const globalApiKey = await manager.getApiKey()
+      const hasConnectionKey = !!(llmApiKey && isSafeHttpHeaderValue(llmApiKey))
+      const hasGlobalKey = !!(globalApiKey && isSafeHttpHeaderValue(globalApiKey))
+      return !(hasConnectionKey || hasGlobalKey)
+    }
+
+    if (targetConnection.authType === 'environment' || targetConnection.authType === 'none') {
+      return true
+    }
+
+    return false
+  }
+
   async initialize(): Promise<void> {
     // Set path to Claude Code executable (cli.js from SDK)
     // In packaged app: use app.getAppPath() (points to app folder, ASAR is disabled)
@@ -839,6 +1007,32 @@ export class SessionManager {
         const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
 
         for (const meta of sessionMetadata) {
+          const resolvedConnection = resolveSessionConnection(
+            meta.llmConnection,
+            wsConfig?.defaults?.defaultLlmConnection,
+          )
+          const normalizedConnection = resolvedConnection?.slug ?? meta.llmConnection
+          const connectionModelIds = getConnectionModelIds(resolvedConnection)
+          const normalizedModel = (
+            meta.model
+            && connectionModelIds.length > 0
+            && !connectionModelIds.includes(meta.model)
+          )
+            ? (resolvedConnection?.defaultModel ?? connectionModelIds[0])
+            : meta.model
+
+          if (normalizedConnection !== meta.llmConnection || normalizedModel !== meta.model) {
+            void updateSessionMetadata(workspaceRootPath, meta.id, {
+              ...(normalizedConnection !== meta.llmConnection ? { llmConnection: normalizedConnection } : {}),
+              ...(normalizedModel !== meta.model ? { model: normalizedModel } : {}),
+            }).catch((error) => {
+              sessionLog.warn(
+                `Failed to normalize session metadata for ${meta.id}:`,
+                error instanceof Error ? error.message : error,
+              )
+            })
+          }
+
           // Create managed session from metadata only (messages lazy-loaded on demand)
           // This dramatically reduces memory usage at startup - messages are loaded
           // when getSession() is called for a specific session
@@ -848,9 +1042,10 @@ export class SessionManager {
             agent: null,  // Lazy-load agent when needed
             tokenRefreshManager: createSessionTokenRefreshManager(),
             agentType: meta.agentType ?? getAgentType(),  // Use stored type or fallback to current setting
+            createdAt: meta.createdAt,
             messages: [],  // Lazy-load messages when needed
             isProcessing: false,
-            lastMessageAt: meta.lastUsedAt,
+            lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,
             streamingText: '',
             pendingTools: new Map(),
             parentToolStack: [],
@@ -867,8 +1062,9 @@ export class SessionManager {
             enabledSourceSlugs: undefined,  // Loaded with messages
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
-            model: meta.model,
-            llmConnection: meta.llmConnection,
+            model: normalizedModel,
+            llmConnection: normalizedConnection,
+            connectionLocked: meta.connectionLocked,
             hidden: meta.hidden,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
@@ -906,7 +1102,7 @@ export class SessionManager {
         id: managed.id,
         workspaceRootPath,
         name: managed.name,
-        createdAt: managed.lastMessageAt,  // Approximate, will be overwritten if already exists
+        createdAt: managed.createdAt,
         lastUsedAt: Date.now(),
         sdkSessionId: managed.sdkSessionId,
         isFlagged: managed.isFlagged,
@@ -919,6 +1115,7 @@ export class SessionManager {
         sharedId: managed.sharedId,
         model: managed.model,
         llmConnection: managed.llmConnection,
+        connectionLocked: managed.connectionLocked,
         hidden: managed.hidden,
         labels: managed.labels,
         thinkingLevel: managed.thinkingLevel,
@@ -1232,6 +1429,7 @@ export class SessionManager {
         workspaceName: m.workspace.name,
         name: m.name,
         preview: m.preview,
+        createdAt: m.createdAt,
         lastMessageAt: m.lastMessageAt,
         messages: [],  // Never send all messages - use getSession(id) for specific session
         isProcessing: m.isProcessing,
@@ -1271,6 +1469,7 @@ export class SessionManager {
       workspaceName: m.workspace.name,
       name: m.name,
       preview: m.preview,  // Include preview for title fallback consistency with getSessions()
+      createdAt: m.createdAt,
       lastMessageAt: m.lastMessageAt,
       messages: m.messages,
       isProcessing: m.isProcessing,
@@ -1332,6 +1531,7 @@ export class SessionManager {
       managed.sharedId = storedSession.sharedId
       managed.hidden = storedSession.hidden
       managed.llmConnection = storedSession.llmConnection
+      managed.connectionLocked = storedSession.connectionLocked
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
@@ -1404,7 +1604,7 @@ export class SessionManager {
     }
 
     // Use storage layer to create and persist the session
-    const storedSession = createStoredSession(workspaceRootPath, {
+    const storedSession = await createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       model: resolvedModel,
@@ -1418,9 +1618,10 @@ export class SessionManager {
       agent: null,  // Lazy-load agent on first message
       tokenRefreshManager: createSessionTokenRefreshManager(),
       agentType: getAgentType(),  // Current agent type setting
+      createdAt: storedSession.createdAt,
       messages: [],
       isProcessing: false,
-      lastMessageAt: storedSession.lastUsedAt,
+      lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,
       streamingText: '',
       pendingTools: new Map(),
       parentToolStack: [],
@@ -1432,6 +1633,7 @@ export class SessionManager {
       sdkCwd: storedSession.sdkCwd,
       model: storedSession.model,
       llmConnection: storedSession.llmConnection,
+      connectionLocked: false,
       systemPromptPreset: options?.systemPromptPreset,
       hidden: options?.hidden,
       thinkingLevel: defaultThinkingLevel,
@@ -1446,6 +1648,7 @@ export class SessionManager {
       id: storedSession.id,
       workspaceId: workspace.id,
       workspaceName: workspace.name,
+      createdAt: managed.createdAt,
       lastMessageAt: managed.lastMessageAt,
       messages: [],
       isProcessing: false,
@@ -1479,108 +1682,177 @@ export class SessionManager {
         this.persistSession(managed)
       }
 
-      // Create agent based on type
-      if (managed.agentType === 'codex') {
-        // Create Codex agent (OpenAI)
-        const codexAgent = new CodexAgent({
-          workingDirectory: managed.workingDirectory || managed.workspace.rootPath,
-          sessionId: managed.sdkSessionId,
-          skipGitRepoCheck: true,
-        })
-        managed.agent = codexAgent
-        sessionLog.info(`Created Codex agent for session ${managed.id}`)
-
-        // Set up permission handler (Codex handles permissions internally, but we forward for UI)
-        codexAgent.onPermissionRequest = (request) => {
-          sessionLog.info(`Permission request for session ${managed.id}:`, request.command)
-          this.sendEvent({
-            type: 'permission_request',
+      const allowedModelIds = getConnectionModelIds(resolvedConnection)
+      if (managed.model && allowedModelIds.length > 0 && !allowedModelIds.includes(managed.model)) {
+        const fallbackModel = resolvedConnection?.defaultModel ?? allowedModelIds[0]
+        managed.model = fallbackModel
+        await updateSessionMetadata(managed.workspace.rootPath, managed.id, { model: fallbackModel })
+        this.sendEvent(
+          {
+            type: 'session_model_changed',
             sessionId: managed.id,
-            request: {
-              ...request,
-              sessionId: managed.id,
-            }
-          }, managed.workspace.id)
-        }
-
-        // Capture thread ID after chat starts (for session resume)
-        codexAgent.onThreadIdUpdate = (threadId: string) => {
-          managed.sdkSessionId = threadId
-          sessionLog.info(`Codex thread ID captured for ${managed.id}: ${threadId}`)
-          this.persistSession(managed)
-          sessionPersistenceQueue.flush(managed.id)
-        }
-
-        end()
-        return managed.agent
+            model: fallbackModel ?? null,
+          },
+          managed.workspace.id
+        )
+        this.persistSession(managed)
+        sessionLog.warn(
+          `Session ${managed.id} had incompatible model for ${resolvedConnection?.slug}; reset to ${fallbackModel ?? '(none)'}`
+        )
       }
 
-      // Create Claude agent (Anthropic) - default
-      const resolvedModel = managed.model
+      const preferredModel = managed.model
         ?? workspaceConfig?.defaults?.model
         ?? resolvedConnection?.defaultModel
         ?? config?.model
+      const resolvedModel = (
+        preferredModel
+        && allowedModelIds.length > 0
+        && !allowedModelIds.includes(preferredModel)
+      )
+        ? (resolvedConnection?.defaultModel ?? allowedModelIds[0] ?? preferredModel)
+        : preferredModel
 
-      managed.agent = new OperatorAgent({
-        workspace: managed.workspace,
-        // Session model takes priority, then workspace/connection defaults.
+      const provider = resolveSessionProvider(resolvedConnection, managed.agentType)
+
+      const sessionConfig = {
+        id: managed.id,
+        workspaceRootPath: managed.workspace.rootPath,
+        sdkSessionId: managed.sdkSessionId,
+        createdAt: managed.createdAt,
+        lastUsedAt: managed.lastMessageAt,
+        workingDirectory: managed.workingDirectory,
+        sdkCwd: managed.sdkCwd,
         model: resolvedModel,
-        // System prompt preset for mini agents (focused prompts for quick edits)
-        systemPromptPreset: managed.systemPromptPreset,
-        // Initialize thinking level at construction to avoid race conditions
-        thinkingLevel: managed.thinkingLevel,
-        isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-        // Always pass session object - id is required for plan mode callbacks
-        // sdkSessionId is optional and used for conversation resumption
-        session: {
-          id: managed.id,
-          workspaceRootPath: managed.workspace.rootPath,
-          sdkSessionId: managed.sdkSessionId,
-          createdAt: managed.lastMessageAt,
-          lastUsedAt: managed.lastMessageAt,
-          workingDirectory: managed.workingDirectory,
-          sdkCwd: managed.sdkCwd,
-          model: resolvedModel,
-          llmConnection: managed.llmConnection,
-        },
-        // Critical: Immediately persist SDK session ID when captured to prevent loss on crash.
-        // Without this, the ID is only saved via debounced persistSession() which may not
-        // complete before app crash/quit, causing session resumption to fail.
-        onSdkSessionIdUpdate: (sdkSessionId: string) => {
-          managed.sdkSessionId = sdkSessionId
-          sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
-          // Persist immediately and flush - critical for resumption reliability
-          this.persistSession(managed)
-          sessionPersistenceQueue.flush(managed.id)
-        },
-        // Called when SDK session ID is cleared after failed resume (empty response recovery)
-        onSdkSessionIdCleared: () => {
-          managed.sdkSessionId = undefined
-          sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
-          // Persist immediately to prevent repeated resume attempts
-          this.persistSession(managed)
-          sessionPersistenceQueue.flush(managed.id)
-        },
-        // Called to get recent messages for recovery context when resume fails.
-        // Returns last 6 messages (3 exchanges) of user/assistant content.
-        getRecoveryMessages: () => {
-          const relevantMessages = managed.messages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .filter(m => !m.isIntermediate)  // Skip intermediate assistant messages
-            .slice(-6);  // Last 6 messages (3 exchanges)
+        llmConnection: managed.llmConnection,
+      }
 
-          return relevantMessages.map(m => ({
-            type: m.role as 'user' | 'assistant',
-            content: m.content,
-          }));
-        },
-        // Debug mode - enables log file path injection into system prompt
-        debugMode: isDebugMode ? {
-          enabled: true,
-          logFilePath: getLogFilePath(),
-        } : undefined,
-      })
-      sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      const getRecoveryMessages = () => {
+        const relevantMessages = managed.messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .filter(m => !m.isIntermediate)
+          .slice(-6)
+
+        return relevantMessages.map(m => ({
+          type: m.role as 'user' | 'assistant',
+          content: m.content,
+        }))
+      }
+
+      if (provider === 'openai') {
+        const codexModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
+        managed.agent = new CodexAgent({
+          provider: 'openai',
+          providerType: resolvedConnection?.providerType,
+          authType: resolvedConnection?.authType,
+          workspace: managed.workspace,
+          model: codexModel,
+          thinkingLevel: managed.thinkingLevel,
+          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+          session: sessionConfig,
+          onSdkSessionIdUpdate: (sdkSessionId: string) => {
+            managed.sdkSessionId = sdkSessionId
+            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          onSdkSessionIdCleared: () => {
+            managed.sdkSessionId = undefined
+            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          getRecoveryMessages,
+          debugMode: isDebugMode ? {
+            enabled: true,
+            logFilePath: getLogFilePath(),
+          } : undefined,
+        })
+        sessionLog.info(`Created Codex agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      } else if (provider === 'copilot') {
+        const copilotModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
+        managed.agent = new CopilotAgent({
+          provider: 'copilot',
+          providerType: resolvedConnection?.providerType,
+          authType: resolvedConnection?.authType,
+          workspace: managed.workspace,
+          model: copilotModel,
+          thinkingLevel: managed.thinkingLevel,
+          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+          session: sessionConfig,
+          onSdkSessionIdUpdate: (sdkSessionId: string) => {
+            managed.sdkSessionId = sdkSessionId
+            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          onSdkSessionIdCleared: () => {
+            managed.sdkSessionId = undefined
+            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          getRecoveryMessages,
+          debugMode: isDebugMode ? {
+            enabled: true,
+            logFilePath: getLogFilePath(),
+          } : undefined,
+        })
+        sessionLog.info(`Created Copilot agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      } else {
+        // Create Claude agent (Anthropic) - default
+
+        managed.agent = new OperatorAgent({
+          workspace: managed.workspace,
+          // Session model takes priority, then workspace/connection defaults.
+          model: resolvedModel,
+          providerType: resolvedConnection?.providerType,
+          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+          // System prompt preset for mini agents (focused prompts for quick edits)
+          systemPromptPreset: managed.systemPromptPreset,
+          // Initialize thinking level at construction to avoid race conditions
+          thinkingLevel: managed.thinkingLevel,
+          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          // Always pass session object - id is required for plan mode callbacks
+          // sdkSessionId is optional and used for conversation resumption
+          session: sessionConfig,
+          // Critical: Immediately persist SDK session ID when captured to prevent loss on crash.
+          // Without this, the ID is only saved via debounced persistSession() which may not
+          // complete before app crash/quit, causing session resumption to fail.
+          onSdkSessionIdUpdate: (sdkSessionId: string) => {
+            managed.sdkSessionId = sdkSessionId
+            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+            // Persist immediately and flush - critical for resumption reliability
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          // Called when SDK session ID is cleared after failed resume (empty response recovery)
+          onSdkSessionIdCleared: () => {
+            managed.sdkSessionId = undefined
+            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+            // Persist immediately to prevent repeated resume attempts
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          // Called to get recent messages for recovery context when resume fails.
+          // Returns last 6 messages (3 exchanges) of user/assistant content.
+          getRecoveryMessages,
+          // Debug mode - enables log file path injection into system prompt
+          debugMode: isDebugMode ? {
+            enabled: true,
+            logFilePath: getLogFilePath(),
+          } : undefined,
+        })
+        sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      }
+
+      if (resolvedConnection && !managed.connectionLocked) {
+        managed.llmConnection = resolvedConnection.slug
+        managed.connectionLocked = true
+        this.persistSession(managed)
+      }
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request) => {
@@ -2325,37 +2597,135 @@ export class SessionManager {
   }
 
   /**
+   * Update the LLM connection for a session.
+   * Switching connections resets provider-bound conversation state.
+   */
+  async updateSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    if (connectionSlug === managed.llmConnection) return
+
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const previousResolvedConnection = resolveSessionConnection(
+      managed.llmConnection,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+    const nextResolvedConnection = resolveSessionConnection(
+      connectionSlug,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+
+    managed.llmConnection = connectionSlug
+    let modelChanged = false
+    if (managed.model) {
+      const nextModelIds = getConnectionModelIds(nextResolvedConnection)
+      if (nextModelIds.length > 0 && !nextModelIds.includes(managed.model)) {
+        const fallbackModel = nextResolvedConnection?.defaultModel ?? nextModelIds[0]
+        managed.model = fallbackModel
+        modelChanged = true
+        sessionLog.info(
+          `Session ${sessionId} model auto-adjusted for connection ${connectionSlug}: ${fallbackModel ?? '(none)'}`
+        )
+      }
+    }
+
+    // Switching LLM connections mid-session must reset provider conversation state.
+    // Otherwise the next turn may try to resume a transcript bound to a different
+    // endpoint/provider and fail unexpectedly.
+    managed.sdkSessionId = undefined
+    if (managed.agent) {
+      const previousProvider = resolveSessionProvider(previousResolvedConnection, managed.agentType)
+      const nextProvider = resolveSessionProvider(nextResolvedConnection, managed.agentType)
+      const previousProviderType = previousResolvedConnection?.providerType
+      const nextProviderType = nextResolvedConnection?.providerType
+      const providerTypeChanged = previousProviderType !== nextProviderType
+
+      if (previousProvider !== nextProvider || providerTypeChanged) {
+        managed.agent.dispose()
+        managed.agent = null
+      } else {
+        managed.agent.clearHistory()
+        if (modelChanged && managed.model) {
+          managed.agent.setModel(managed.model)
+        }
+      }
+    }
+
+    await updateSessionMetadata(managed.workspace.rootPath, sessionId, {
+      llmConnection: connectionSlug,
+      ...(modelChanged ? { model: managed.model } : {}),
+    })
+    this.persistSession(managed)
+    await sessionPersistenceQueue.flush(managed.id)
+
+    this.sendEvent(
+      {
+        type: 'connection_changed',
+        sessionId,
+        connectionSlug,
+      },
+      managed.workspace.id
+    )
+    if (modelChanged) {
+      this.sendEvent(
+        {
+          type: 'session_model_changed',
+          sessionId,
+          model: managed.model ?? null,
+        },
+        managed.workspace.id
+      )
+    }
+    sessionLog.info(`Session ${sessionId} connection updated to: ${connectionSlug}`)
+  }
+
+  /**
    * Update the model for a session
    * Pass null to clear the session-specific model (will use global config)
    */
-  async updateSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.model = model ?? undefined
-      // Persist to disk
-      updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
-      // Update agent model if it already exists (takes effect on next query)
-      if (managed.agent) {
-        const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-        const resolvedConnection = resolveSessionConnection(
-          managed.llmConnection,
-          workspaceConfig?.defaults?.defaultLlmConnection,
-        )
-        const storedConfig = loadStoredConfig()
-        const currentProvider = storedConfig?.providerConfig?.provider
-        const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels)
-        const effectiveModel =
-          model
-          ?? workspaceConfig?.defaults?.model
-          ?? resolvedConnection?.defaultModel
-          ?? storedConfig?.model
-          ?? providerDefaultModel
-        managed.agent.setModel(effectiveModel)
-      }
-      // Notify renderer of the model change
-      this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
-      sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
+  async updateSessionModel(sessionId: string, _workspaceId: string, model: string | null, connection?: string): Promise<void> {
+    if (connection) {
+      await this.updateSessionConnection(sessionId, connection)
     }
+
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    managed.model = model ?? undefined
+
+    // Persist to disk
+    await updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
+
+    // Update agent model if it already exists (takes effect on next query)
+    if (managed.agent) {
+      const resolvedConnection = resolveSessionConnection(
+        managed.llmConnection,
+        workspaceConfig?.defaults?.defaultLlmConnection,
+      )
+      const storedConfig = loadStoredConfig()
+      const currentProvider = storedConfig?.providerConfig?.provider
+      const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels)
+      const effectiveModel =
+        model
+        ?? workspaceConfig?.defaults?.model
+        ?? resolvedConnection?.defaultModel
+        ?? storedConfig?.model
+        ?? providerDefaultModel
+      managed.agent.setModel(effectiveModel)
+    }
+
+    // Notify renderer of the model change
+    this.sendEvent(
+      {
+        type: 'session_model_changed',
+        sessionId,
+        model,
+      },
+      managed.workspace.id
+    )
+    sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
   }
 
   /**
@@ -2568,7 +2938,11 @@ export class SessionManager {
       managed.llmConnection = resolvedConnection.slug
       this.persistSession(managed)
     }
-    if (managed.agentType !== 'codex') {
+
+    // Keep Anthropic-style env auth in sync per turn.
+    // OpenAI/Copilot backends handle credentials via their own clients.
+    const activeProvider = resolveSessionProvider(resolvedConnection, managed.agentType)
+    if (activeProvider === 'anthropic') {
       await this.reinitializeAuth(resolvedConnection?.slug)
       sendSpan.mark('auth.ready')
     }

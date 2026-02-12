@@ -140,9 +140,10 @@ export type TurnPhase =
  * Priority order (first match wins):
  * 1. complete - turn.isComplete is true
  * 2. streaming - response exists and is streaming (final response)
- * 3. tool_active - any TOOL activity has status 'running'
- * 4. awaiting - has activities but no tools running (the gap!)
- * 5. pending - no activities yet
+ * 3. complete (fallback) - response exists and is not streaming, with no running tools
+ * 4. tool_active - any TOOL activity has status 'running'
+ * 5. awaiting - has activities but no tools running (the gap!)
+ * 6. pending - no activities yet
  *
  * Note: Only `type: 'tool'` activities count for tool_active phase.
  * Intermediate text (type: 'intermediate') and status activities (type: 'status')
@@ -154,16 +155,24 @@ export function deriveTurnPhase(turn: AssistantTurn): TurnPhase {
     return 'complete'
   }
 
+  // Check if any TOOL activities are currently running.
+  // Only tool-type activities count - intermediate text and status activities
+  // with 'running' status should show "Thinking...", not tool spinners.
+  const hasRunningTools = turn.activities.some(a => a.type === 'tool' && a.status === 'running')
+
   // Check if final response is streaming
   // Note: turn.response only exists for final responses, not intermediate text
   if (turn.response && turn.response.isStreaming) {
     return 'streaming'
   }
 
-  // Check if any TOOL activities are currently running.
-  // Only tool-type activities count - intermediate text and status activities
-  // with 'running' status should show "Thinking...", not tool spinners.
-  const hasRunningTools = turn.activities.some(a => a.type === 'tool' && a.status === 'running')
+  // Fallback completion: if we already have a non-streaming final response and
+  // no running tools, treat the turn as complete even if isComplete flag lags.
+  // This prevents stale "Thinking..." indicators after visible output is done.
+  if (turn.response && !turn.response.isStreaming && !hasRunningTools) {
+    return 'complete'
+  }
+
   if (hasRunningTools) {
     return 'tool_active'
   }
@@ -612,10 +621,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       currentTurn.isStreaming = !!message.isStreaming
       currentTurn.isComplete = !message.isStreaming
 
-      // Flush when turn is complete (non-streaming = final response received)
-      if (!message.isStreaming) {
-        flushCurrentTurn()
-      }
+      // Do not flush immediately on final response.
+      // Some tool/info events can arrive just after the response due to event
+      // ordering; keeping the turn open avoids splitting one logical turn into
+      // two UI cards (which can leave a stale "Thinking..." card behind).
       continue
     }
   }

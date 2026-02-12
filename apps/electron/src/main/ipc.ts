@@ -36,6 +36,7 @@ import {
   getDefaultLlmConnection,
   setDefaultLlmConnection,
   touchLlmConnection,
+  isCopilotProvider,
   type Workspace,
   type AgentType,
   type LlmConnection,
@@ -98,6 +99,72 @@ function getWorkspaceOrThrow(workspaceId: string): Workspace {
     throw new Error(`Workspace not found: ${workspaceId}`)
   }
   return workspace
+}
+
+/**
+ * Fetch available models from Copilot SDK and persist them on the connection.
+ * Copilot models are dynamic and should not rely on hardcoded defaults.
+ */
+async function fetchAndStoreCopilotModels(slug: string, accessToken: string): Promise<void> {
+  const { CopilotClient } = await import('@github/copilot-sdk')
+
+  const copilotRelativePath = join('node_modules', '@github', 'copilot', 'index.js')
+  const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
+  let copilotCliPath = join(basePath, copilotRelativePath)
+  if (!existsSync(copilotCliPath)) {
+    const monorepoRoot = join(basePath, '..', '..')
+    copilotCliPath = join(monorepoRoot, copilotRelativePath)
+  }
+
+  const previousToken = process.env.COPILOT_GITHUB_TOKEN
+  process.env.COPILOT_GITHUB_TOKEN = accessToken
+
+  const client = new CopilotClient({
+    useStdio: true,
+    autoStart: true,
+    logLevel: 'error',
+    ...(existsSync(copilotCliPath) ? { cliPath: copilotCliPath } : {}),
+  })
+
+  let models: Array<{ id: string; name: string; supportedReasoningEfforts?: string[] }>
+  try {
+    await client.start()
+    models = await client.listModels()
+  } finally {
+    try {
+      await client.stop()
+    } catch {
+      // noop
+    }
+    if (previousToken !== undefined) {
+      process.env.COPILOT_GITHUB_TOKEN = previousToken
+    } else {
+      delete process.env.COPILOT_GITHUB_TOKEN
+    }
+  }
+
+  if (!models || models.length === 0) {
+    throw new Error('No models returned from Copilot API')
+  }
+
+  const modelDefs = models.map((m) => ({
+    id: m.id,
+    name: m.name,
+    shortName: m.name,
+    description: '',
+    provider: 'copilot' as const,
+    contextWindow: 200_000,
+    supportsThinking: !!(m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0),
+  }))
+
+  const current = getLlmConnection(slug)
+  const currentDefault = current?.defaultModel
+  const defaultStillValid = currentDefault && modelDefs.some((m) => m.id === currentDefault)
+
+  updateLlmConnection(slug, {
+    models: modelDefs,
+    defaultModel: defaultStillValid ? currentDefault : modelDefs[0].id,
+  })
 }
 
 /**
@@ -616,6 +683,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           throw new Error(`Invalid thinking level: ${validatedCommand.level}. Valid values: 'off', 'think', 'max'`)
         }
         return sessionManager.setSessionThinkingLevel(validatedSessionId, validatedCommand.level)
+      case 'setConnection':
+        return sessionManager.updateSessionConnection(validatedSessionId, validatedCommand.connectionSlug)
       case 'updateWorkingDirectory':
         return sessionManager.updateWorkingDirectory(validatedSessionId, validatedCommand.dir)
       case 'setSources':
@@ -1341,6 +1410,77 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // GitHub Copilot OAuth (device flow)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.COPILOT_START_OAUTH, async (event, connectionSlug: string): Promise<{
+    success: boolean
+    error?: string
+  }> => {
+    try {
+      const { startGithubOAuth } = await import('@agent-operator/shared/auth')
+      const credentialManager = getCredentialManager()
+
+      const tokens = await startGithubOAuth(
+        (status) => ipcLog.info(`[GitHub OAuth] ${status}`),
+        (deviceCode) => {
+          event.sender.send(IPC_CHANNELS.COPILOT_DEVICE_CODE, deviceCode)
+        },
+      )
+
+      await credentialManager.setLlmOAuth(connectionSlug, {
+        accessToken: tokens.accessToken,
+      })
+
+      // Refresh dynamic Copilot model list after OAuth success.
+      await fetchAndStoreCopilotModels(connectionSlug, tokens.accessToken)
+
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('GitHub OAuth failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'OAuth authentication failed',
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COPILOT_CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
+    try {
+      const { cancelGithubOAuth } = await import('@agent-operator/shared/auth')
+      cancelGithubOAuth()
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to cancel GitHub OAuth:', error)
+      return { success: false }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COPILOT_GET_AUTH_STATUS, async (_event, connectionSlug: string): Promise<{
+    authenticated: boolean
+  }> => {
+    try {
+      const credentialManager = getCredentialManager()
+      const oauth = await credentialManager.getLlmOAuth(connectionSlug)
+      return { authenticated: !!oauth?.accessToken }
+    } catch (error) {
+      ipcLog.error('Failed to get GitHub auth status:', error)
+      return { authenticated: false }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COPILOT_LOGOUT, async (_event, connectionSlug: string): Promise<{ success: boolean }> => {
+    try {
+      const credentialManager = getCredentialManager()
+      await credentialManager.deleteLlmCredentials(connectionSlug)
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to clear Copilot credentials:', error)
+      return { success: false }
+    }
+  })
+
+  // ============================================================
   // Settings - Provider Config
   // ============================================================
 
@@ -1390,9 +1530,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return session?.model ?? null
   })
 
-  // Set session-specific model
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, sessionId: string, workspaceId: string, model: string | null) => {
-    await sessionManager.updateSessionModel(sessionId, workspaceId, model)
+  // Set session-specific model.
+  // Backward compatibility: optional connection is still accepted and routed
+  // through SessionManager.updateSessionConnection.
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, sessionId: string, workspaceId: string, model: string | null, connection?: string) => {
+    await sessionManager.updateSessionModel(sessionId, workspaceId, model, connection)
     ipcLog.info(`Session ${sessionId} model updated to: ${model}`)
   })
 
@@ -1648,6 +1790,38 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Set API key credential for a specific LLM connection
+  ipcMain.handle(IPC_CHANNELS.LLM_CONNECTION_SET_API_KEY, async (_event, slug: string, apiKey: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const connection = getLlmConnection(slug)
+      if (!connection) {
+        return { success: false, error: 'Connection not found' }
+      }
+
+      const normalizedApiKey = apiKey.trim()
+      if (!normalizedApiKey) {
+        return { success: false, error: 'API key is required' }
+      }
+
+      if (!isSafeHttpHeaderValue(normalizedApiKey)) {
+        return { success: false, error: 'API key appears masked or contains invalid characters. Please paste the full key.' }
+      }
+
+      const credentialManager = getCredentialManager()
+      await credentialManager.setLlmApiKey(slug, normalizedApiKey)
+
+      if (getDefaultLlmConnection() === slug) {
+        await sessionManager.reinitializeAuth()
+      }
+
+      ipcLog.info(`LLM connection API key updated: ${slug}`)
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to set LLM connection API key:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
   // Delete an LLM connection and associated credentials
   ipcMain.handle(IPC_CHANNELS.LLM_CONNECTION_DELETE, async (_event, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -1703,6 +1877,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         connection.providerType === 'openai' || connection.providerType === 'openai_compat'
       const isAnthropicProvider =
         connection.providerType === 'anthropic' || connection.providerType === 'anthropic_compat'
+
+      // Copilot OAuth validation (and dynamic model refresh)
+      if (isCopilotProvider(connection.providerType) && connection.authType === 'oauth') {
+        const oauth = await credentialManager.getLlmOAuth(slug)
+        if (!oauth?.accessToken) {
+          return { success: false, error: 'Not authenticated. Please sign in with GitHub.' }
+        }
+
+        try {
+          await fetchAndStoreCopilotModels(slug, oauth.accessToken)
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Unknown error'
+          ipcLog.error(`Copilot model fetch failed during validation: ${msg}`)
+          return { success: false, error: `Failed to load Copilot models: ${msg}` }
+        }
+
+        touchLlmConnection(slug)
+        return { success: true }
+      }
 
       // OpenAI / OpenAI-compatible validation via /v1/models
       if (isOpenAiProvider) {

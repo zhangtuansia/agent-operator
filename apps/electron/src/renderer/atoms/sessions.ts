@@ -46,6 +46,8 @@ export interface SessionMeta {
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   /** Model used for the session */
   model?: string
+  /** LLM connection slug used for the session */
+  llmConnection?: string
   /** When the session was created */
   createdAt?: number
   /** Number of messages in the session */
@@ -72,7 +74,8 @@ export interface SessionMeta {
 function findLastFinalMessageId(messages: Message[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    // Include plan messages as final AI output, not only assistant text.
+    if ((msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate) {
       return msg.id
     }
   }
@@ -91,6 +94,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     name: session.name,
     preview: session.preview,
     workspaceId: session.workspaceId,
+    createdAt: session.createdAt,
     lastMessageAt: session.lastMessageAt,
     isProcessing: session.isProcessing,
     isFlagged: session.isFlagged,
@@ -106,6 +110,18 @@ export function extractSessionMeta(session: Session): SessionMeta {
     // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle
     isAsyncOperationOngoing: session.isAsyncOperationOngoing ?? session.isRegeneratingTitle,
     isRegeneratingTitle: session.isRegeneratingTitle,
+    model: session.model,
+    llmConnection: session.llmConnection,
+    messageCount: session.messages?.length ?? 0,
+    tokenUsage: session.tokenUsage
+      ? {
+          inputTokens: session.tokenUsage.inputTokens,
+          outputTokens: session.tokenUsage.outputTokens,
+          totalTokens: session.tokenUsage.totalTokens,
+          costUsd: session.tokenUsage.costUsd,
+          contextTokens: session.tokenUsage.contextTokens,
+        }
+      : undefined,
     labels: session.labels,
   }
 }

@@ -5,8 +5,6 @@
  * - Default connection, model, and thinking level
  * - Per-workspace overrides
  * - Connection management (add/edit/delete)
- *
- * Follows the Appearance settings pattern: app-level defaults + workspace overrides.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
@@ -15,13 +13,27 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw } from 'lucide-react'
-import type { CredentialHealthIssue } from '../../../shared/types'
-import { Spinner, FullscreenOverlayBase } from '@agent-operator/ui'
-import { useSetAtom } from 'jotai'
-import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
+import {
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Star,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCcw,
+} from 'lucide-react'
+import type {
+  CredentialHealthIssue,
+  LlmConnection,
+  LlmConnectionWithStatus,
+  ThinkingLevel,
+  WorkspaceSettings,
+  Workspace,
+} from '../../../shared/types'
+import { Spinner } from '@agent-operator/ui'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@agent-operator/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -40,13 +52,31 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsMenuSelectRow,
+  SettingsInput,
+  SettingsSecretInput,
+  SettingsTextarea,
 } from '@/components/settings'
-import { useOnboarding } from '@/hooks/useOnboarding'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
-import { OnboardingWizard } from '@/components/onboarding'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useLanguage } from '@/context/LanguageContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
-import { getModelsForProviderType } from '@config/llm-connections'
+import {
+  getModelsForProviderType,
+  getDefaultModelsForConnection,
+  getDefaultModelForConnection,
+  generateSlug,
+  isValidProviderAuthCombination,
+  type LlmProviderType,
+  type LlmAuthType,
+} from '@config/llm-connections'
 
 /**
  * Derive model dropdown options from a connection's models array,
@@ -57,19 +87,16 @@ function getModelOptionsForConnection(
 ): Array<{ value: string; label: string; description: string }> {
   if (!connection) return []
 
-  // If connection has explicit models, use those
   if (connection.models && connection.models.length > 0) {
     return connection.models.map((m) => {
       if (typeof m === 'string') {
         return { value: m, label: getModelShortName(m), description: '' }
       }
-      // ModelDefinition object
       const def = m as ModelDefinition
       return { value: def.id, label: def.name, description: def.description }
     })
   }
 
-  // Fall back to registry models for this provider type
   const registryModels = getModelsForProviderType(connection.providerType)
   return registryModels.map((m) => ({
     value: m.id,
@@ -80,33 +107,168 @@ function getModelOptionsForConnection(
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
-  slug: 'ai',
+  slug: 'api',
 }
 
-// ============================================
-// Credential Health Warning Banner
-// ============================================
+type ValidationState = 'idle' | 'validating' | 'success' | 'error'
 
-/** Get user-friendly message for credential health issue */
-function getHealthIssueMessage(issue: CredentialHealthIssue): string {
+const PROVIDER_TYPES: LlmProviderType[] = [
+  'anthropic',
+  'openai',
+  'copilot',
+  'anthropic_compat',
+  'openai_compat',
+  'bedrock',
+  'vertex',
+]
+
+const AUTH_TYPE_ORDER: LlmAuthType[] = [
+  'api_key',
+  'api_key_with_endpoint',
+  'oauth',
+  'bearer_token',
+  'environment',
+  'none',
+  'iam_credentials',
+  'service_account_file',
+]
+
+function getProviderLabel(provider: string, t: (key: string) => string): string {
+  switch (provider) {
+    case 'anthropic':
+      return t('apiSettings.providerAnthropic')
+    case 'anthropic_compat':
+      return t('apiSettings.aiPage.providerAnthropicCompat')
+    case 'openai':
+      return t('apiSettings.aiPage.providerOpenAI')
+    case 'openai_compat':
+      return t('apiSettings.aiPage.providerOpenAICompat')
+    case 'copilot':
+      return t('apiSettings.aiPage.providerCopilot')
+    case 'bedrock':
+      return t('apiSettings.providerBedrock')
+    case 'vertex':
+      return t('apiSettings.aiPage.providerVertex')
+    default:
+      return t('apiSettings.aiPage.unknownProvider')
+  }
+}
+
+function getProviderDescription(provider: string, t: (key: string) => string): string {
+  switch (provider) {
+    case 'anthropic':
+      return 'Anthropic API'
+    case 'anthropic_compat':
+      return t('apiSettings.aiPage.providerAnthropicCompat')
+    case 'openai':
+      return 'OpenAI API'
+    case 'openai_compat':
+      return t('apiSettings.aiPage.providerOpenAICompat')
+    case 'copilot':
+      return 'GitHub Copilot'
+    case 'bedrock':
+      return 'AWS Bedrock'
+    case 'vertex':
+      return 'Google Vertex'
+    default:
+      return t('apiSettings.aiPage.unknownProvider')
+  }
+}
+
+function getAuthTypeLabel(authType: LlmAuthType, t: (key: string) => string): string {
+  switch (authType) {
+    case 'api_key':
+      return t('apiSettings.aiPage.authApiKey')
+    case 'api_key_with_endpoint':
+      return t('apiSettings.aiPage.authApiKeyWithEndpoint')
+    case 'oauth':
+      return t('apiSettings.aiPage.authOAuth')
+    case 'bearer_token':
+      return t('apiSettings.aiPage.authBearerToken')
+    case 'environment':
+      return t('apiSettings.aiPage.authEnvironment')
+    case 'none':
+      return t('apiSettings.aiPage.authNone')
+    case 'iam_credentials':
+      return t('apiSettings.aiPage.authIamCredentials')
+    case 'service_account_file':
+      return t('apiSettings.aiPage.authServiceAccountFile')
+    default:
+      return authType
+  }
+}
+
+function defaultAuthForProvider(providerType: LlmProviderType): LlmAuthType {
+  switch (providerType) {
+    case 'anthropic':
+      return 'api_key'
+    case 'anthropic_compat':
+      return 'api_key_with_endpoint'
+    case 'openai':
+      return 'api_key'
+    case 'openai_compat':
+      return 'api_key_with_endpoint'
+    case 'copilot':
+      return 'oauth'
+    case 'bedrock':
+      return 'environment'
+    case 'vertex':
+      return 'environment'
+    default:
+      return 'api_key'
+  }
+}
+
+function defaultBaseUrlForProvider(providerType: LlmProviderType): string {
+  switch (providerType) {
+    case 'anthropic':
+      return 'https://api.anthropic.com'
+    case 'openai':
+      return 'https://api.openai.com'
+    default:
+      return ''
+  }
+}
+
+function modelsToMultiline(models: Array<ModelDefinition | string> | undefined): string {
+  if (!models || models.length === 0) return ''
+  return models
+    .map((m) => (typeof m === 'string' ? m : m.id))
+    .filter(Boolean)
+    .join('\n')
+}
+
+function parseModelsFromMultiline(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function authRequiresApiKey(authType: LlmAuthType): boolean {
+  return authType === 'api_key' || authType === 'api_key_with_endpoint' || authType === 'bearer_token'
+}
+
+function getHealthIssueMessage(issue: CredentialHealthIssue, t: (key: string) => string): string {
   switch (issue.type) {
     case 'file_corrupted':
-      return 'Credential file is corrupted. Please re-authenticate.'
+      return t('apiSettings.aiPage.credentialFileCorrupted')
     case 'decryption_failed':
-      return 'Credentials from another machine detected. Please re-authenticate on this device.'
+      return t('apiSettings.aiPage.credentialDifferentMachine')
     case 'no_default_credentials':
-      return 'No credentials found for your default connection.'
+      return t('apiSettings.aiPage.credentialNoDefault')
     default:
-      return issue.message || 'Credential issue detected.'
+      return issue.message || t('apiSettings.aiPage.credentialIssueFallback')
   }
 }
 
 interface CredentialHealthBannerProps {
   issues: CredentialHealthIssue[]
   onReauthenticate: () => void
+  t: (key: string) => string
 }
 
-function CredentialHealthBanner({ issues, onReauthenticate }: CredentialHealthBannerProps) {
+function CredentialHealthBanner({ issues, onReauthenticate, t }: CredentialHealthBannerProps) {
   if (issues.length === 0) return null
 
   return (
@@ -115,10 +277,10 @@ function CredentialHealthBanner({ issues, onReauthenticate }: CredentialHealthBa
         <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
-            Credential Issue Detected
+            {t('apiSettings.aiPage.credentialIssueDetected')}
           </h4>
           <p className="mt-1 text-sm text-amber-600 dark:text-amber-300/80">
-            {getHealthIssueMessage(issues[0])}
+            {getHealthIssueMessage(issues[0], t)}
           </p>
         </div>
         <Button
@@ -127,18 +289,12 @@ function CredentialHealthBanner({ issues, onReauthenticate }: CredentialHealthBa
           onClick={onReauthenticate}
           className="flex-shrink-0 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
         >
-          Re-authenticate
+          {t('apiSettings.aiPage.reauthenticate')}
         </Button>
       </div>
     </div>
   )
 }
-
-// ============================================
-// Connection Row Component
-// ============================================
-
-type ValidationState = 'idle' | 'validating' | 'success' | 'error'
 
 interface ConnectionRowProps {
   connection: LlmConnectionWithStatus
@@ -150,34 +306,50 @@ interface ConnectionRowProps {
   onReauthenticate: () => void
   validationState: ValidationState
   validationError?: string
+  t: (key: string) => string
 }
 
-function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDefault, onValidate, onReauthenticate, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({
+  connection,
+  isLastConnection,
+  onEdit,
+  onDelete,
+  onSetDefault,
+  onValidate,
+  onReauthenticate,
+  validationState,
+  validationError,
+  t,
+}: ConnectionRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // Build description with provider, default indicator, auth status, and validation state
   const getDescription = () => {
-    // Show validation state if not idle
-    if (validationState === 'validating') return 'Validating...'
-    if (validationState === 'success') return 'Connection valid'
-    if (validationState === 'error') return validationError || 'Validation failed'
+    if (validationState === 'validating') return t('apiSettings.aiPage.validating')
+    if (validationState === 'success') return t('apiSettings.aiPage.connectionValid')
+    if (validationState === 'error') return validationError || t('apiSettings.aiPage.validationFailed')
 
     const parts: string[] = []
-
-    // Provider type (fall back to legacy 'type' field if providerType missing)
     const provider = connection.providerType || connection.type
-    switch (provider) {
-      case 'anthropic': parts.push('Anthropic API'); break
-      case 'anthropic_compat': parts.push('Anthropic Compatible'); break
-      case 'openai': parts.push('OpenAI API'); break
-      case 'openai_compat': parts.push('OpenAI Compatible'); break
-      case 'bedrock': parts.push('AWS Bedrock'); break
-      case 'vertex': parts.push('Google Vertex'); break
-      default: parts.push(provider || 'Unknown')
+    parts.push(getProviderDescription(provider || '', t))
+
+    if (connection.authType !== 'oauth') {
+      let endpoint = connection.baseUrl
+      if (!endpoint) {
+        if (provider === 'anthropic') endpoint = 'https://api.anthropic.com'
+        else if (provider === 'openai') endpoint = 'https://api.openai.com'
+      }
+      if (endpoint) {
+        try {
+          parts.push(new URL(endpoint).host)
+        } catch {
+          parts.push(endpoint)
+        }
+      }
     }
 
-    // Auth status
-    if (!connection.isAuthenticated) parts.push('Not authenticated')
+    if (!connection.isAuthenticated) {
+      parts.push(t('apiSettings.aiPage.notAuthenticated'))
+    }
 
     return parts.join(' · ')
   }
@@ -189,7 +361,7 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
           <span>{connection.name}</span>
           {connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
-              Default
+              {t('common.default')}
             </span>
           )}
         </div>
@@ -208,26 +380,24 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
         <StyledDropdownMenuContent align="end">
           <StyledDropdownMenuItem onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />
-            <span>Edit</span>
+            <span>{t('common.edit')}</span>
           </StyledDropdownMenuItem>
           {!connection.isDefault && (
             <StyledDropdownMenuItem onClick={onSetDefault}>
               <Star className="h-3.5 w-3.5" />
-              <span>Set as default</span>
+              <span>{t('apiSettings.aiPage.actionSetAsDefault')}</span>
             </StyledDropdownMenuItem>
           )}
-          <StyledDropdownMenuItem
-            onClick={onReauthenticate}
-          >
+          <StyledDropdownMenuItem onClick={onReauthenticate}>
             <RefreshCcw className="h-3.5 w-3.5" />
-            <span>Re-authenticate</span>
+            <span>{t('apiSettings.aiPage.actionReauthenticate')}</span>
           </StyledDropdownMenuItem>
           <StyledDropdownMenuItem
             onClick={onValidate}
             disabled={validationState === 'validating'}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>Validate Connection</span>
+            <span>{t('apiSettings.aiPage.actionValidateConnection')}</span>
           </StyledDropdownMenuItem>
           <StyledDropdownMenuSeparator />
           <StyledDropdownMenuItem
@@ -236,7 +406,7 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
             disabled={isLastConnection}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>Delete</span>
+            <span>{t('common.delete')}</span>
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>
@@ -244,25 +414,20 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
   )
 }
 
-// ============================================
-// Workspace Override Card Component
-// ============================================
-
 interface WorkspaceOverrideCardProps {
   workspace: Workspace
   llmConnections: LlmConnectionWithStatus[]
   onSettingsChange: () => void
+  t: (key: string) => string
 }
 
-function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: WorkspaceOverrideCardProps) {
+function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange, t }: WorkspaceOverrideCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch workspace icon as data URL (file:// URLs don't work in renderer)
   const iconUrl = useWorkspaceIcon(workspace)
 
-  // Load workspace settings
   useEffect(() => {
     const loadSettings = async () => {
       if (!window.electronAPI) return
@@ -279,7 +444,6 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     loadSettings()
   }, [workspace.id])
 
-  // Save workspace setting helper
   const updateSetting = useCallback(async <K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) => {
     if (!window.electronAPI) return
     try {
@@ -292,41 +456,34 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
   }, [workspace.id, onSettingsChange])
 
   const handleConnectionChange = useCallback((slug: string) => {
-    // 'global' means use app default (clear workspace override)
     updateSetting('defaultLlmConnection', slug === 'global' ? undefined : slug)
   }, [updateSetting])
 
   const handleModelChange = useCallback((model: string) => {
-    // 'global' means use app default (clear workspace override)
     updateSetting('model', model === 'global' ? undefined : model)
   }, [updateSetting])
 
   const handleThinkingChange = useCallback((level: string) => {
-    // 'global' means use app default (clear workspace override)
     updateSetting('thinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
   }, [updateSetting])
 
-  // Determine if workspace has any overrides
   const hasOverrides = settings && (
     settings.defaultLlmConnection ||
     settings.model ||
     settings.thinkingLevel
   )
 
-  // Get display values
   const currentConnection = settings?.defaultLlmConnection || 'global'
   const currentModel = settings?.model || 'global'
   const currentThinking = settings?.thinkingLevel || 'global'
 
-  // Derive workspace's effective connection (override or default)
   const workspaceEffectiveConnection = useMemo(() => {
     const connSlug = settings?.defaultLlmConnection
     return connSlug ? llmConnections.find(c => c.slug === connSlug) : llmConnections.find(c => c.isDefault)
   }, [settings?.defaultLlmConnection, llmConnections])
 
-  // Get summary text for collapsed state
   const getSummary = () => {
-    if (!hasOverrides) return 'Using defaults'
+    if (!hasOverrides) return t('apiSettings.aiPage.workspaceUsingDefaults')
     const parts: string[] = []
     if (settings?.defaultLlmConnection) {
       const conn = llmConnections.find(c => c.slug === settings.defaultLlmConnection)
@@ -367,7 +524,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
           <div className="text-left">
             <div className="text-sm font-medium">{workspace.name}</div>
             <div className="text-xs text-muted-foreground">
-              {isLoading ? 'Loading...' : getSummary()}
+              {isLoading ? t('apiSettings.aiPage.workspaceLoading') : getSummary()}
             </div>
           </div>
         </div>
@@ -389,38 +546,48 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
           >
             <div className="border-t border-border/50 px-4 py-2">
               <SettingsMenuSelectRow
-                label="Connection"
-                description="API connection for new chats"
+                label={t('apiSettings.aiPage.connection')}
+                description={t('apiSettings.aiPage.connectionDescription')}
                 value={currentConnection}
                 onValueChange={handleConnectionChange}
                 options={[
-                  { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
+                  {
+                    value: 'global',
+                    label: t('apiSettings.aiPage.useDefault'),
+                    description: t('apiSettings.aiPage.inheritFromAppSettings'),
+                  },
                   ...llmConnections.map((conn) => ({
                     value: conn.slug,
                     label: conn.name,
-                    description: conn.providerType === 'anthropic' ? 'Anthropic' :
-                                 conn.providerType === 'openai' ? 'OpenAI' :
-                                 conn.providerType || 'Unknown',
+                    description: getProviderDescription(conn.providerType, t),
                   })),
                 ]}
               />
               <SettingsMenuSelectRow
-                label="Model"
-                description="AI model for new chats"
+                label={t('workspaceSettings.model')}
+                description={t('workspaceSettings.defaultModelDescription')}
                 value={currentModel}
                 onValueChange={handleModelChange}
                 options={[
-                  { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
+                  {
+                    value: 'global',
+                    label: t('apiSettings.aiPage.useDefault'),
+                    description: t('apiSettings.aiPage.inheritFromAppSettings'),
+                  },
                   ...getModelOptionsForConnection(workspaceEffectiveConnection),
                 ]}
               />
               <SettingsMenuSelectRow
-                label="Thinking"
-                description="Reasoning depth for new chats"
+                label={t('workspaceSettings.thinkingLevel')}
+                description={t('workspaceSettings.thinkingLevelDescription')}
                 value={currentThinking}
                 onValueChange={handleThinkingChange}
                 options={[
-                  { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
+                  {
+                    value: 'global',
+                    label: t('apiSettings.aiPage.useDefault'),
+                    description: t('apiSettings.aiPage.inheritFromAppSettings'),
+                  },
                   ...THINKING_LEVELS.map(({ id, name, description }) => ({
                     value: id,
                     label: name,
@@ -436,34 +603,57 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
   )
 }
 
-// ============================================
-// Main Component
-// ============================================
+interface ConnectionFormState {
+  name: string
+  providerType: LlmProviderType
+  authType: LlmAuthType
+  baseUrl: string
+  defaultModel: string
+  modelsText: string
+  awsRegion: string
+  codexPath: string
+  apiKey: string
+}
+
+function createConnectionForm(connection?: LlmConnectionWithStatus): ConnectionFormState {
+  const providerType = connection?.providerType ?? 'anthropic'
+  const authType = connection?.authType ?? defaultAuthForProvider(providerType)
+  const defaultModel = connection?.defaultModel ?? getDefaultModelForConnection(providerType)
+  const modelsText = connection?.models
+    ? modelsToMultiline(connection.models)
+    : modelsToMultiline(getDefaultModelsForConnection(providerType))
+
+  return {
+    name: connection?.name ?? '',
+    providerType,
+    authType,
+    baseUrl: connection?.baseUrl ?? defaultBaseUrlForProvider(providerType),
+    defaultModel,
+    modelsText,
+    awsRegion: connection?.awsRegion ?? '',
+    codexPath: connection?.codexPath ?? '',
+    apiKey: '',
+  }
+}
 
 export default function AiSettingsPage() {
+  const { t } = useLanguage()
   const { llmConnections, refreshLlmConnections } = useAppShellContext()
 
-  // API Setup overlay state
-  const [showApiSetup, setShowApiSetup] = useState(false)
-  const [editingConnectionSlug, setEditingConnectionSlug] = useState<string | null>(null)
-  const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
-
-  // Workspaces for override cards
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-
-  // Default settings state (app-level)
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
-
-  // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
     state: ValidationState
     error?: string
   }>>({})
-
-  // Credential health state (for startup warning banner)
   const [credentialHealthIssues, setCredentialHealthIssues] = useState<CredentialHealthIssue[]>([])
 
-  // Load workspaces, default settings, and credential health
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false)
+  const [editingConnection, setEditingConnection] = useState<LlmConnectionWithStatus | null>(null)
+  const [connectionForm, setConnectionForm] = useState<ConnectionFormState>(createConnectionForm())
+  const [connectionFormError, setConnectionFormError] = useState<string | null>(null)
+  const [isSavingConnection, setIsSavingConnection] = useState(false)
+
   useEffect(() => {
     const load = async () => {
       if (!window.electronAPI) return
@@ -471,7 +661,6 @@ export default function AiSettingsPage() {
         const ws = await window.electronAPI.getWorkspaces()
         setWorkspaces(ws)
 
-        // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
         if (!health.healthy) {
           setCredentialHealthIssues(health.issues)
@@ -483,73 +672,206 @@ export default function AiSettingsPage() {
     load()
   }, [])
 
-  // Helpers to open/close the fullscreen API setup overlay
-  const openApiSetup = useCallback((connectionSlug?: string) => {
-    setEditingConnectionSlug(connectionSlug || null)
-    setShowApiSetup(true)
-    setFullscreenOverlayOpen(true)
-  }, [setFullscreenOverlayOpen])
+  const closeConnectionDialog = useCallback(() => {
+    setConnectionDialogOpen(false)
+    setEditingConnection(null)
+    setConnectionFormError(null)
+    setIsSavingConnection(false)
+  }, [])
 
-  const closeApiSetup = useCallback(() => {
-    setShowApiSetup(false)
-    setFullscreenOverlayOpen(false)
-    setEditingConnectionSlug(null)
-  }, [setFullscreenOverlayOpen])
+  const openCreateConnectionDialog = useCallback(() => {
+    setEditingConnection(null)
+    setConnectionForm(createConnectionForm())
+    setConnectionFormError(null)
+    setConnectionDialogOpen(true)
+  }, [])
 
-  // OnboardingWizard hook for editing API connection
-  const apiSetupOnboarding = useOnboarding({
-    initialStep: 'api-setup',
-    onConfigSaved: refreshLlmConnections,
-    onComplete: () => {
-      closeApiSetup()
-      refreshLlmConnections?.()
-      apiSetupOnboarding.reset()
-    },
-    onDismiss: () => {
-      closeApiSetup()
-      apiSetupOnboarding.reset()
-    },
-  })
+  const openEditConnectionDialog = useCallback((connection: LlmConnectionWithStatus) => {
+    setEditingConnection(connection)
+    setConnectionForm(createConnectionForm(connection))
+    setConnectionFormError(null)
+    setConnectionDialogOpen(true)
+  }, [])
 
-  const handleApiSetupFinish = useCallback(() => {
-    closeApiSetup()
-    refreshLlmConnections?.()
-    apiSetupOnboarding.reset()
-    // Clear any credential health issues after successful re-authentication
-    setCredentialHealthIssues([])
-  }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
+  const getUniqueSlug = useCallback((baseSlug: string) => {
+    const normalizedBase = baseSlug || 'connection'
+    const existingSlugs = new Set(llmConnections.map(c => c.slug))
+    if (!existingSlugs.has(normalizedBase)) return normalizedBase
 
-  // Handler for closing the modal via X button or Escape - resets state and cancels OAuth
-  const handleCloseApiSetup = useCallback(() => {
-    closeApiSetup()
-    apiSetupOnboarding.reset()
-  }, [closeApiSetup, apiSetupOnboarding])
+    let index = 2
+    while (existingSlugs.has(`${normalizedBase}-${index}`)) {
+      index += 1
+    }
+    return `${normalizedBase}-${index}`
+  }, [llmConnections])
 
-  // Handler for re-authenticate button in credential health banner
+  const handleProviderTypeChange = useCallback((providerType: LlmProviderType) => {
+    setConnectionForm((prev) => {
+      const nextAuthType = isValidProviderAuthCombination(providerType, prev.authType)
+        ? prev.authType
+        : defaultAuthForProvider(providerType)
+
+      return {
+        ...prev,
+        providerType,
+        authType: nextAuthType,
+        baseUrl: defaultBaseUrlForProvider(providerType),
+        defaultModel: getDefaultModelForConnection(providerType),
+        modelsText: modelsToMultiline(getDefaultModelsForConnection(providerType)),
+        awsRegion: providerType === 'bedrock' ? (prev.awsRegion || 'us-east-1') : '',
+      }
+    })
+  }, [])
+
+  const handleAuthTypeChange = useCallback((authType: LlmAuthType) => {
+    setConnectionForm((prev) => ({ ...prev, authType }))
+  }, [])
+
+  const handleSaveConnection = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    const trimmedName = connectionForm.name.trim()
+    const trimmedDefaultModel = connectionForm.defaultModel.trim()
+    const trimmedBaseUrl = connectionForm.baseUrl.trim()
+    const trimmedApiKey = connectionForm.apiKey.trim()
+
+    if (!trimmedName) {
+      setConnectionFormError(t('apiSettings.aiPage.validationConnectionNameRequired'))
+      return
+    }
+
+    if (!trimmedDefaultModel) {
+      setConnectionFormError(t('apiSettings.aiPage.validationModelRequired'))
+      return
+    }
+
+    if (connectionForm.authType === 'api_key_with_endpoint' && !trimmedBaseUrl) {
+      setConnectionFormError(t('apiSettings.aiPage.validationBaseUrlRequired'))
+      return
+    }
+
+    if (trimmedBaseUrl) {
+      try {
+        new URL(trimmedBaseUrl)
+      } catch {
+        setConnectionFormError(t('apiSettings.aiPage.validationInvalidBaseUrl'))
+        return
+      }
+    }
+
+    const requiresApiKey = authRequiresApiKey(connectionForm.authType)
+    if (requiresApiKey && !trimmedApiKey && !editingConnection?.isAuthenticated) {
+      setConnectionFormError(t('apiSettings.aiPage.validationApiKeyRequired'))
+      return
+    }
+
+    setIsSavingConnection(true)
+    setConnectionFormError(null)
+
+    try {
+      const slug = editingConnection?.slug ?? getUniqueSlug(generateSlug(trimmedName) || 'connection')
+
+      const isCompatProvider =
+        connectionForm.providerType === 'anthropic_compat' || connectionForm.providerType === 'openai_compat'
+      let models: Array<ModelDefinition | string> | undefined
+
+      if (isCompatProvider) {
+        let compatModels = parseModelsFromMultiline(connectionForm.modelsText)
+        if (compatModels.length === 0) {
+          compatModels = getDefaultModelsForConnection(connectionForm.providerType)
+            .map((m) => (typeof m === 'string' ? m : m.id))
+        }
+        if (!compatModels.includes(trimmedDefaultModel)) {
+          compatModels = [trimmedDefaultModel, ...compatModels]
+        }
+        models = compatModels
+      } else if (
+        editingConnection?.providerType === connectionForm.providerType &&
+        editingConnection.models &&
+        editingConnection.models.length > 0
+      ) {
+        models = editingConnection.models
+      } else {
+        const defaults = getDefaultModelsForConnection(connectionForm.providerType)
+        models = defaults.length > 0 ? defaults : undefined
+      }
+
+      const payload: LlmConnection = {
+        slug,
+        name: trimmedName,
+        providerType: connectionForm.providerType,
+        authType: connectionForm.authType,
+        baseUrl: trimmedBaseUrl || undefined,
+        models,
+        defaultModel: trimmedDefaultModel,
+        codexPath: connectionForm.codexPath.trim() || undefined,
+        awsRegion: connectionForm.providerType === 'bedrock'
+          ? (connectionForm.awsRegion.trim() || undefined)
+          : undefined,
+        createdAt: editingConnection?.createdAt ?? Date.now(),
+        lastUsedAt: editingConnection?.lastUsedAt,
+      }
+
+      const saveResult = await window.electronAPI.saveLlmConnection(payload)
+      if (!saveResult.success) {
+        setConnectionFormError(saveResult.error || t('common.error'))
+        return
+      }
+
+      if (requiresApiKey && trimmedApiKey) {
+        const keyResult = await window.electronAPI.setLlmConnectionApiKey(slug, trimmedApiKey)
+        if (!keyResult.success) {
+          setConnectionFormError(keyResult.error || t('common.error'))
+          return
+        }
+      }
+
+      await refreshLlmConnections?.()
+      closeConnectionDialog()
+    } catch (error) {
+      setConnectionFormError(error instanceof Error ? error.message : t('common.error'))
+    } finally {
+      setIsSavingConnection(false)
+    }
+  }, [
+    closeConnectionDialog,
+    connectionForm,
+    editingConnection,
+    getUniqueSlug,
+    refreshLlmConnections,
+    t,
+  ])
+
   const handleReauthenticate = useCallback(() => {
-    // Open API setup for the default connection (or first connection if available)
     const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
     if (defaultConn) {
-      openApiSetup(defaultConn.slug)
+      openEditConnectionDialog(defaultConn)
     } else {
-      openApiSetup()
+      openCreateConnectionDialog()
     }
-  }, [llmConnections, openApiSetup])
+  }, [llmConnections, openCreateConnectionDialog, openEditConnectionDialog])
 
-  // Connection action handlers
   const handleEditConnection = useCallback((slug: string) => {
-    openApiSetup(slug)
-  }, [openApiSetup])
+    const connection = llmConnections.find(c => c.slug === slug)
+    if (!connection) return
+    openEditConnectionDialog(connection)
+  }, [llmConnections, openEditConnectionDialog])
 
-  const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
-    openApiSetup(connection.slug)
-    apiSetupOnboarding.reset()
+  const handleReauthenticateConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
+    if (!window.electronAPI) return
 
-    if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'openai' ? 'chatgpt_oauth' : 'claude_oauth'
-      apiSetupOnboarding.handleStartOAuth(method)
+    if (connection.providerType === 'copilot' && connection.authType === 'oauth') {
+      try {
+        await window.electronAPI.startCopilotOAuth(connection.slug)
+        await refreshLlmConnections?.()
+      } catch (error) {
+        console.error('Failed to start Copilot OAuth:', error)
+      }
+      return
     }
-  }, [apiSetupOnboarding, openApiSetup])
+
+    openEditConnectionDialog(connection)
+  }, [openEditConnectionDialog, refreshLlmConnections])
 
   const handleDeleteConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
@@ -568,7 +890,6 @@ export default function AiSettingsPage() {
   const handleValidateConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
 
-    // Set validating state
     setValidationStates(prev => ({ ...prev, [slug]: { state: 'validating' } }))
 
     try {
@@ -576,7 +897,6 @@ export default function AiSettingsPage() {
 
       if (result.success) {
         setValidationStates(prev => ({ ...prev, [slug]: { state: 'success' } }))
-        // Auto-clear success state after 3 seconds
         setTimeout(() => {
           setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
         }, 3000)
@@ -585,21 +905,20 @@ export default function AiSettingsPage() {
           ...prev,
           [slug]: { state: 'error', error: result.error }
         }))
-        // Auto-clear error state after 5 seconds
         setTimeout(() => {
           setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
         }, 5000)
       }
-    } catch (error) {
+    } catch {
       setValidationStates(prev => ({
         ...prev,
-        [slug]: { state: 'error', error: 'Validation failed' }
+        [slug]: { state: 'error', error: t('apiSettings.aiPage.validationFailed') }
       }))
       setTimeout(() => {
         setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
       }, 5000)
     }
-  }, [])
+  }, [t])
 
   const handleSetDefaultConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
@@ -615,93 +934,105 @@ export default function AiSettingsPage() {
     }
   }, [refreshLlmConnections])
 
-  // Get the default connection for display
   const defaultConnection = useMemo(() => {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
-  // App-level default handlers
   const handleDefaultModelChange = useCallback(async (model: string) => {
     if (!window.electronAPI || !defaultConnection) return
-    // Update defaultModel on the connection, then save the full connection
     const updated = { ...defaultConnection, defaultModel: model }
-    // Remove status fields that aren't part of LlmConnection
     const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
-    await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
+    await window.electronAPI.saveLlmConnection(connectionData as LlmConnection)
     await refreshLlmConnections()
   }, [defaultConnection, refreshLlmConnections])
 
   const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
     setDefaultThinking(level)
-    // TODO: Add app-level thinking level storage
   }, [])
 
-  // Refresh callback for workspace cards
   const handleWorkspaceSettingsChange = useCallback(() => {
-    // Refresh context so changes propagate immediately
     refreshLlmConnections?.()
   }, [refreshLlmConnections])
 
+  const connectionDialogAuthOptions = useMemo(() => {
+    return AUTH_TYPE_ORDER
+      .filter((authType) => isValidProviderAuthCombination(connectionForm.providerType, authType))
+      .map((authType) => ({
+        value: authType,
+        label: getAuthTypeLabel(authType, t),
+        description: getAuthTypeLabel(authType, t),
+      }))
+  }, [connectionForm.providerType, t])
+
+  const connectionDialogProviderOptions = useMemo(() => {
+    return PROVIDER_TYPES.map((providerType) => ({
+      value: providerType,
+      label: getProviderLabel(providerType, t),
+      description: getProviderDescription(providerType, t),
+    }))
+  }, [t])
+
+  const showModelListEditor = connectionForm.providerType === 'anthropic_compat' || connectionForm.providerType === 'openai_compat'
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="AI" actions={<HeaderMenu route={routes.view.settings('ai')} />} />
+      <PanelHeader title={t('workspaceSettings.ai')} actions={<HeaderMenu route={routes.view.settings('api')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
-            {/* Credential Health Warning Banner */}
             <CredentialHealthBanner
               issues={credentialHealthIssues}
               onReauthenticate={handleReauthenticate}
+              t={t}
             />
 
             <div className="space-y-8">
-              {/* Default Settings - only show if connections exist */}
               {llmConnections.length > 0 && (
-              <SettingsSection title="Default" description="Settings for new chats when no workspace override is set.">
-                <SettingsCard>
-                  <SettingsMenuSelectRow
-                    label="Connection"
-                    description="API connection for new chats"
-                    value={defaultConnection?.slug || ''}
-                    onValueChange={handleSetDefaultConnection}
-                    options={llmConnections.map((conn) => ({
-                      value: conn.slug,
-                      label: conn.name,
-                      description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'openai' ? 'OpenAI API' :
-                                   conn.providerType === 'openai_compat' ? 'OpenAI Compatible' :
-                                   conn.providerType === 'bedrock' ? 'AWS Bedrock' :
-                                   conn.providerType === 'vertex' ? 'Google Vertex' :
-                                   conn.providerType || 'Unknown',
-                    }))}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Model"
-                    description="AI model for new chats"
-                    value={defaultModel}
-                    onValueChange={handleDefaultModelChange}
-                    options={getModelOptionsForConnection(defaultConnection)}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Thinking"
-                    description="Reasoning depth for new chats"
-                    value={defaultThinking}
-                    onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                    options={THINKING_LEVELS.map(({ id, name, description }) => ({
-                      value: id,
-                      label: name,
-                      description,
-                    }))}
-                  />
-                </SettingsCard>
-              </SettingsSection>
+                <SettingsSection
+                  title={t('apiSettings.aiPage.sectionDefaultTitle')}
+                  description={t('apiSettings.aiPage.sectionDefaultDescription')}
+                >
+                  <SettingsCard>
+                    <SettingsMenuSelectRow
+                      label={t('apiSettings.aiPage.connection')}
+                      description={t('apiSettings.aiPage.connectionDescription')}
+                      value={defaultConnection?.slug || ''}
+                      onValueChange={handleSetDefaultConnection}
+                      options={llmConnections.map((conn) => ({
+                        value: conn.slug,
+                        label: conn.name,
+                        description: getProviderDescription(conn.providerType, t),
+                      }))}
+                    />
+                    <SettingsMenuSelectRow
+                      label={t('workspaceSettings.model')}
+                      description={t('workspaceSettings.defaultModelDescription')}
+                      value={defaultModel}
+                      onValueChange={handleDefaultModelChange}
+                      options={getModelOptionsForConnection(defaultConnection)}
+                    />
+                    <SettingsMenuSelectRow
+                      label={t('workspaceSettings.thinkingLevel')}
+                      description={t('workspaceSettings.thinkingLevelDescription')}
+                      value={defaultThinking}
+                      onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
+                      options={THINKING_LEVELS.map(({ id, name, description }) => ({
+                        value: id,
+                        label: name,
+                        description,
+                      }))}
+                    />
+                  </SettingsCard>
+                </SettingsSection>
               )}
 
-              {/* Workspace Overrides - only show if connections exist */}
               {workspaces.length > 0 && llmConnections.length > 0 && (
-                <SettingsSection title="Workspace Overrides" description="Override default settings per workspace.">
+                <SettingsSection
+                  title={t('apiSettings.aiPage.sectionWorkspaceOverridesTitle')}
+                  description={t('apiSettings.aiPage.sectionWorkspaceOverridesDescription')}
+                >
                   <div className="space-y-2">
                     {workspaces.map((workspace) => (
                       <WorkspaceOverrideCard
@@ -709,18 +1040,21 @@ export default function AiSettingsPage() {
                         workspace={workspace}
                         llmConnections={llmConnections}
                         onSettingsChange={handleWorkspaceSettingsChange}
+                        t={t}
                       />
                     ))}
                   </div>
                 </SettingsSection>
               )}
 
-              {/* Connections Management */}
-              <SettingsSection title="Connections" description="Manage your AI provider connections.">
+              <SettingsSection
+                title={t('apiSettings.aiPage.sectionConnectionsTitle')}
+                description={t('apiSettings.aiPage.sectionConnectionsDescription')}
+              >
                 <SettingsCard>
                   {llmConnections.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      No connections configured. Add a connection to get started.
+                      {t('apiSettings.aiPage.noConnectionsConfigured')}
                     </div>
                   ) : (
                     [...llmConnections]
@@ -730,67 +1064,171 @@ export default function AiSettingsPage() {
                         return a.name.localeCompare(b.name)
                       })
                       .map((conn) => (
-                      <ConnectionRow
-                        key={conn.slug}
-                        connection={conn}
-                        isLastConnection={false}
-                        onEdit={() => handleEditConnection(conn.slug)}
-                        onDelete={() => handleDeleteConnection(conn.slug)}
-                        onSetDefault={() => handleSetDefaultConnection(conn.slug)}
-                        onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
-                        validationState={validationStates[conn.slug]?.state || 'idle'}
-                        validationError={validationStates[conn.slug]?.error}
-                      />
-                    ))
+                        <ConnectionRow
+                          key={conn.slug}
+                          connection={conn}
+                          isLastConnection={llmConnections.length === 1}
+                          onEdit={() => handleEditConnection(conn.slug)}
+                          onDelete={() => handleDeleteConnection(conn.slug)}
+                          onSetDefault={() => handleSetDefaultConnection(conn.slug)}
+                          onValidate={() => handleValidateConnection(conn.slug)}
+                          onReauthenticate={() => handleReauthenticateConnection(conn)}
+                          validationState={validationStates[conn.slug]?.state || 'idle'}
+                          validationError={validationStates[conn.slug]?.error}
+                          t={t}
+                        />
+                      ))
                   )}
                 </SettingsCard>
                 <div className="pt-0">
                   <button
-                    onClick={() => openApiSetup()}
+                    onClick={openCreateConnectionDialog}
                     className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                   >
-                    + Add Connection
+                    + {t('apiSettings.aiPage.addConnection')}
                   </button>
                 </div>
               </SettingsSection>
-
-              {/* API Setup Fullscreen Overlay */}
-              <FullscreenOverlayBase
-                isOpen={showApiSetup}
-                onClose={handleCloseApiSetup}
-                className="z-splash flex flex-col bg-foreground-2"
-              >
-                <OnboardingWizard
-                  state={apiSetupOnboarding.state}
-                  onContinue={apiSetupOnboarding.handleContinue}
-                  onBack={apiSetupOnboarding.handleBack}
-                  onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
-                  onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
-                  onStartOAuth={apiSetupOnboarding.handleStartOAuth}
-                  onFinish={handleApiSetupFinish}
-                  isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
-                  onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
-                  onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
-                  className="h-full"
-                />
-                <div
-                  className="fixed top-0 right-0 h-[50px] flex items-center pr-5 [-webkit-app-region:no-drag]"
-                  style={{ zIndex: 'var(--z-fullscreen, 350)' }}
-                >
-                  <button
-                    onClick={handleCloseApiSetup}
-                    className="p-1.5 rounded-[6px] transition-all bg-background shadow-minimal text-muted-foreground/50 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    title="Close (Esc)"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </FullscreenOverlayBase>
             </div>
           </div>
         </ScrollArea>
       </div>
+
+      <Dialog
+        open={connectionDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeConnectionDialog()
+            return
+          }
+          setConnectionDialogOpen(true)
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingConnection
+                ? t('apiSettings.aiPage.editConnectionTitle')
+                : t('apiSettings.aiPage.addConnectionTitle')}
+            </DialogTitle>
+            <DialogDescription>
+              {editingConnection
+                ? t('apiSettings.aiPage.editConnection')
+                : t('apiSettings.aiPage.addConnection')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <SettingsCard>
+              <SettingsInput
+                label={t('apiSettings.aiPage.connectionName')}
+                placeholder={t('apiSettings.aiPage.connectionNamePlaceholder')}
+                value={connectionForm.name}
+                onChange={(value) => setConnectionForm(prev => ({ ...prev, name: value }))}
+                inCard={true}
+              />
+
+              <SettingsMenuSelectRow
+                label={t('apiSettings.aiPage.providerType')}
+                description={t('apiSettings.aiPage.providerTypeDescription')}
+                value={connectionForm.providerType}
+                onValueChange={(value) => handleProviderTypeChange(value as LlmProviderType)}
+                options={connectionDialogProviderOptions}
+              />
+
+              <SettingsMenuSelectRow
+                label={t('apiSettings.aiPage.authType')}
+                description={t('apiSettings.aiPage.authTypeDescription')}
+                value={connectionForm.authType}
+                onValueChange={(value) => handleAuthTypeChange(value as LlmAuthType)}
+                options={connectionDialogAuthOptions}
+              />
+
+              <SettingsInput
+                label={t('apiSettings.aiPage.baseUrl')}
+                description={t('apiSettings.aiPage.baseUrlDescription')}
+                placeholder={t('apiSettings.aiPage.baseUrlPlaceholder')}
+                value={connectionForm.baseUrl}
+                onChange={(value) => setConnectionForm(prev => ({ ...prev, baseUrl: value }))}
+                inCard={true}
+              />
+
+              <SettingsInput
+                label={t('apiSettings.aiPage.defaultModel')}
+                description={t('apiSettings.aiPage.defaultModelDescription')}
+                placeholder={t('apiSettings.aiPage.defaultModelPlaceholder')}
+                value={connectionForm.defaultModel}
+                onChange={(value) => setConnectionForm(prev => ({ ...prev, defaultModel: value }))}
+                inCard={true}
+              />
+
+              {showModelListEditor && (
+                <SettingsTextarea
+                  label={t('apiSettings.aiPage.customModels')}
+                  description={t('apiSettings.aiPage.customModelsDescription')}
+                  placeholder={t('apiSettings.aiPage.customModelsPlaceholder')}
+                  value={connectionForm.modelsText}
+                  onChange={(value) => setConnectionForm(prev => ({ ...prev, modelsText: value }))}
+                  rows={5}
+                  inCard={true}
+                />
+              )}
+
+              {connectionForm.providerType === 'bedrock' && (
+                <SettingsInput
+                  label={t('apiSettings.aiPage.awsRegion')}
+                  description={t('apiSettings.aiPage.awsRegionDescription')}
+                  value={connectionForm.awsRegion}
+                  onChange={(value) => setConnectionForm(prev => ({ ...prev, awsRegion: value }))}
+                  inCard={true}
+                />
+              )}
+
+              {connectionForm.providerType === 'openai' && (
+                <SettingsInput
+                  label={t('apiSettings.aiPage.codexPath')}
+                  description={t('apiSettings.aiPage.codexPathDescription')}
+                  value={connectionForm.codexPath}
+                  onChange={(value) => setConnectionForm(prev => ({ ...prev, codexPath: value }))}
+                  inCard={true}
+                />
+              )}
+
+              {authRequiresApiKey(connectionForm.authType) && (
+                <SettingsSecretInput
+                  label={t('apiSettings.aiPage.apiKey')}
+                  description={t('apiSettings.aiPage.apiKeyDescription')}
+                  placeholder={t('apiSettings.aiPage.apiKeyPlaceholder')}
+                  value={connectionForm.apiKey}
+                  onChange={(value) => setConnectionForm(prev => ({ ...prev, apiKey: value }))}
+                  hasExistingValue={Boolean(editingConnection?.isAuthenticated)}
+                  inCard={true}
+                />
+              )}
+            </SettingsCard>
+
+            {connectionFormError && (
+              <p className="text-sm text-destructive">{connectionFormError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeConnectionDialog}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleSaveConnection} disabled={isSavingConnection}>
+              {isSavingConnection ? (
+                <>
+                  <Spinner className="size-4 mr-2" />
+                  {t('apiSettings.aiPage.savingConnection')}
+                </>
+              ) : (
+                t('apiSettings.aiPage.saveConnection')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

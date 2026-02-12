@@ -66,7 +66,7 @@ function groupSessionsByDate(sessions: SessionMeta[], t: (key: string) => string
   const groups = new Map<string, { date: Date; sessions: SessionMeta[] }>()
 
   for (const session of sessions) {
-    const timestamp = session.lastMessageAt || 0
+    const timestamp = session.lastMessageAt ?? session.createdAt ?? 0
     const date = startOfDay(new Date(timestamp))
     const key = date.toISOString()
 

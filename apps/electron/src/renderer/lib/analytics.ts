@@ -66,6 +66,7 @@ const SESSION_EVENT_ALIAS: Record<SessionEvent['type'], string> = {
   session_flagged: 'session_flagged',
   session_unflagged: 'session_unflagged',
   session_model_changed: 'session_model_changed',
+  connection_changed: 'connection_changed',
   todo_state_changed: 'session_todo_state_changed',
   session_deleted: 'session_deleted',
   session_shared: 'session_shared',
@@ -203,6 +204,8 @@ function sessionEventToProps(event: SessionEvent): Record<string, Primitive> {
       return { ...base, todo_state: event.todoState }
     case 'session_model_changed':
       return { ...base, model: event.model || '' }
+    case 'connection_changed':
+      return { ...base, connection_slug: event.connectionSlug || '' }
     case 'usage_update':
       return { ...base, input_tokens: event.tokenUsage.inputTokens }
     default:

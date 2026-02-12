@@ -5,9 +5,11 @@
  *
  * Settings:
  * - Identity (Name, Icon)
- * - Model
+ * - AI (entry point to AI settings)
  * - Permissions (Default mode, Mode cycling)
  * - Advanced (Working directory, Local MCP servers)
+ *
+ * Note: AI defaults (model, thinking, connection) are configured in AiSettingsPage.
  */
 
 import * as React from 'react'
@@ -19,12 +21,10 @@ import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
+import { useNavigation } from '@/contexts/NavigationContext'
 import { Spinner } from '@agent-operator/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode, ThinkingLevel, WorkspaceSettings } from '../../../shared/types'
-import { PERMISSION_MODE_CONFIG } from '@agent-operator/shared/agent/mode-types'
-import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@agent-operator/shared/agent/thinking-levels'
-import { getModelsForProvider, getDefaultModelForProvider } from '@config/models'
+import type { PermissionMode, WorkspaceSettings } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -46,9 +46,9 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function WorkspaceSettingsPage() {
-  // Get model, onModelChange, and active workspace from context
+  // Get active workspace from context
   const appShellContext = useAppShellContext()
-  const onModelChange = appShellContext.onModelChange
+  const { navigate } = useNavigation()
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
 
@@ -58,8 +58,6 @@ export default function WorkspaceSettingsPage() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [wsIconUrl, setWsIconUrl] = useState<string | null>(null)
   const [isUploadingIcon, setIsUploadingIcon] = useState(false)
-  const [wsModel, setWsModel] = useState('claude-sonnet-4-5-20250929')
-  const [wsThinkingLevel, setWsThinkingLevel] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
@@ -68,36 +66,6 @@ export default function WorkspaceSettingsPage() {
   // Mode cycling state
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
-
-  // Provider state (for showing correct model options)
-  const [currentProvider, setCurrentProvider] = useState<string | undefined>(undefined)
-  // Custom models for 'custom' provider
-  const [customModels, setCustomModels] = useState<Array<{ id: string; name: string; shortName?: string; description?: string }>>([])
-
-  // Load provider info
-  const loadProviderInfo = useCallback(async () => {
-    if (!window.electronAPI) return
-
-    try {
-      const billingInfo = await window.electronAPI.getBillingMethod()
-      // For OAuth, default to 'anthropic' provider
-      const effectiveProvider = billingInfo.authType === 'oauth_token' ? 'anthropic' : billingInfo.provider
-      setCurrentProvider(effectiveProvider)
-
-      // Load custom models if using custom provider
-      if (effectiveProvider === 'custom') {
-        const models = await window.electronAPI.getCustomModels()
-        setCustomModels(models || [])
-      } else {
-        setCustomModels([])
-      }
-
-      return effectiveProvider
-    } catch (error) {
-      console.error('Failed to load provider info:', error)
-      return undefined
-    }
-  }, [])
 
   // Load workspace settings when active workspace changes
   useEffect(() => {
@@ -109,16 +77,10 @@ export default function WorkspaceSettingsPage() {
 
       setIsLoadingWorkspace(true)
       try {
-        // Load billing method to get current provider
-        const effectiveProvider = await loadProviderInfo()
-
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
-          // Use provider-specific default model if no model is set
-          setWsModel(settings.model || getDefaultModelForProvider(effectiveProvider, customModels))
-          setWsThinkingLevel(settings.thinkingLevel || DEFAULT_THINKING_LEVEL)
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
@@ -160,7 +122,7 @@ export default function WorkspaceSettingsPage() {
     }
 
     loadWorkspaceSettings()
-  }, [activeWorkspaceId, loadProviderInfo])
+  }, [activeWorkspaceId])
 
   // Save workspace setting
   const updateWorkspaceSetting = useCallback(
@@ -175,31 +137,6 @@ export default function WorkspaceSettingsPage() {
     },
     [activeWorkspaceId]
   )
-
-  // Listen for provider changes from ApiSettingsPage
-  useEffect(() => {
-    const handleProviderChanged = async (event: CustomEvent<{ provider: string }>) => {
-      const newProvider = event.detail?.provider || 'anthropic'
-      setCurrentProvider(newProvider)
-
-      // Reset model to default for the new provider if current model is not valid
-      const models = getModelsForProvider(newProvider, customModels)
-      if (!models.some(m => m.id === wsModel)) {
-        const defaultModel = getDefaultModelForProvider(newProvider, customModels)
-        setWsModel(defaultModel)
-        // Also update workspace settings
-        if (activeWorkspaceId && window.electronAPI) {
-          await window.electronAPI.updateWorkspaceSetting(activeWorkspaceId, 'model', defaultModel)
-          onModelChange?.(defaultModel)
-        }
-      }
-    }
-
-    window.addEventListener('cowork:provider-changed', handleProviderChanged as EventListener)
-    return () => {
-      window.removeEventListener('cowork:provider-changed', handleProviderChanged as EventListener)
-    }
-  }, [wsModel, customModels, activeWorkspaceId, onModelChange])
 
   // Workspace icon upload handler
   const handleIconUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,24 +190,11 @@ export default function WorkspaceSettingsPage() {
     }
   }, [activeWorkspaceId, onRefreshWorkspaces])
 
-  // Workspace settings handlers
-  const handleModelChange = useCallback(
-    async (newModel: string) => {
-      setWsModel(newModel)
-      await updateWorkspaceSetting('model', newModel)
-      // Also update the global model context so it takes effect immediately
-      onModelChange?.(newModel)
-    },
-    [updateWorkspaceSetting, onModelChange]
-  )
+  const handleOpenAiSettings = useCallback(() => {
+    navigate(routes.view.settings('api'))
+  }, [navigate])
 
-  const handleThinkingLevelChange = useCallback(
-    async (newLevel: ThinkingLevel) => {
-      setWsThinkingLevel(newLevel)
-      await updateWorkspaceSetting('thinkingLevel', newLevel)
-    },
-    [updateWorkspaceSetting]
-  )
+  // Workspace settings handlers
 
   const handlePermissionModeChange = useCallback(
     async (newMode: PermissionMode) => {
@@ -451,30 +375,21 @@ export default function WorkspaceSettingsPage() {
               />
             </SettingsSection>
 
-            {/* Model */}
-            <SettingsSection title={t('workspaceSettings.model')}>
+            {/* AI */}
+            <SettingsSection title={t('workspaceSettings.ai')}>
               <SettingsCard>
-                <SettingsMenuSelectRow
-                  label={t('workspaceSettings.defaultModel')}
-                  description={t('workspaceSettings.defaultModelDescription')}
-                  value={wsModel}
-                  onValueChange={handleModelChange}
-                  options={getModelsForProvider(currentProvider, customModels).map((model) => ({
-                    value: model.id,
-                    label: model.name,
-                    description: model.description,
-                  }))}
-                />
-                <SettingsMenuSelectRow
-                  label={t('workspaceSettings.thinkingLevel')}
-                  description={t('workspaceSettings.thinkingLevelDescription')}
-                  value={wsThinkingLevel}
-                  onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
-                  options={THINKING_LEVELS.map(({ id, name, description }) => ({
-                    value: id,
-                    label: name,
-                    description,
-                  }))}
+                <SettingsRow
+                  label={t('workspaceSettings.aiSettings')}
+                  description={t('workspaceSettings.aiSettingsDescription')}
+                  action={
+                    <button
+                      type="button"
+                      onClick={handleOpenAiSettings}
+                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                    >
+                      {t('common.configure')}
+                    </button>
+                  }
                 />
               </SettingsCard>
             </SettingsSection>

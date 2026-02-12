@@ -120,11 +120,19 @@ export const IPC_CHANNELS = {
   ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
   ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
+  // GitHub Copilot OAuth (device flow)
+  COPILOT_START_OAUTH: 'copilot:startOAuth',
+  COPILOT_CANCEL_OAUTH: 'copilot:cancelOAuth',
+  COPILOT_GET_AUTH_STATUS: 'copilot:getAuthStatus',
+  COPILOT_LOGOUT: 'copilot:logout',
+  COPILOT_DEVICE_CODE: 'copilot:deviceCode',
+
   // LLM Connections (provider configurations)
   LLM_CONNECTION_LIST: 'LLM_Connection:list',
   LLM_CONNECTION_LIST_WITH_STATUS: 'LLM_Connection:listWithStatus',
   LLM_CONNECTION_GET: 'LLM_Connection:get',
   LLM_CONNECTION_SAVE: 'LLM_Connection:save',
+  LLM_CONNECTION_SET_API_KEY: 'LLM_Connection:setApiKey',
   LLM_CONNECTION_DELETE: 'LLM_Connection:delete',
   LLM_CONNECTION_TEST: 'LLM_Connection:test',
   LLM_CONNECTION_SET_DEFAULT: 'LLM_Connection:setDefault',

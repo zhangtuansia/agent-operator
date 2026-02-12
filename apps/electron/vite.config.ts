@@ -4,7 +4,18 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          // Keep Jotai atoms stable across HMR updates.
+          'jotai/babel/plugin-debug-label',
+          ['jotai/babel/plugin-react-refresh', { customAtomNames: ['atomFamily'] }],
+        ],
+      },
+    }),
+    tailwindcss(),
+  ],
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {
@@ -29,8 +40,12 @@ export default defineConfig({
     dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'jotai'],
-    exclude: ['@agent-operator/ui']
+    include: ['react', 'react-dom', 'jotai', 'filtrex', 'pdfjs-dist'],
+    exclude: ['@agent-operator/ui'],
+    esbuildOptions: {
+      supported: { 'top-level-await': true },
+      target: 'esnext',
+    },
   },
   server: {
     port: 5173,

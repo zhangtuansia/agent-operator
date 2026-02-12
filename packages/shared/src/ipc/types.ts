@@ -36,6 +36,8 @@ export interface Session {
   name?: string  // User-defined or AI-generated session name
   /** Preview of first user message (from JSONL header, for lazy-loaded sessions) */
   preview?: string
+  /** Session creation timestamp */
+  createdAt?: number
   lastMessageAt: number
   messages: Message[]
   isProcessing: boolean
@@ -153,6 +155,7 @@ export type SessionEvent =
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
+  | { type: 'connection_changed'; sessionId: string; connectionSlug: string }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }

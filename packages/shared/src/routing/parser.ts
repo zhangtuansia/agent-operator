@@ -98,7 +98,8 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   // Settings navigator
   if (first === 'settings') {
-    const subpage = (segments[1] || 'app') as SettingsSubpage
+    const rawSubpage = segments[1] || 'app'
+    const subpage = (rawSubpage === 'ai' ? 'api' : rawSubpage) as SettingsSubpage
     if (!VALID_SETTINGS_SUBPAGES.includes(subpage)) return null
     return {
       navigator: 'settings',

@@ -25,7 +25,13 @@ import {
   type LlmAuthType,
   type LlmProviderType,
 } from './llm-connections.ts';
-import type { ModelDefinition } from './models.ts';
+import {
+  getModelsForProvider,
+  getDefaultModelForProvider,
+  isBedrockArn,
+  isBedrockModelId,
+  type ModelDefinition,
+} from './models.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -247,6 +253,18 @@ function formatProviderName(provider: string): string {
     .join(' ');
 }
 
+function cloneModelsForConnection(models: ModelDefinition[]): Array<ModelDefinition | string> {
+  return models.map(model => ({ ...model }));
+}
+
+function hasModelInConnectionModels(
+  modelId: string | undefined,
+  models: Array<ModelDefinition | string>,
+): boolean {
+  if (!modelId) return false;
+  return models.some(model => getConnectionModelId(model) === modelId);
+}
+
 function normalizeProviderConfig(providerConfig: ProviderConfig): ProviderConfig {
   const providerId = providerConfig.provider.toLowerCase();
   if (providerId !== DEEPSEEK_PROVIDER_ID) {
@@ -319,19 +337,19 @@ function derivePrimaryLlmConnection(config: StoredConfig): LlmConnection {
     }
   }
 
-  let models: Array<ModelDefinition | string>;
-  if (providerConfig?.provider === 'custom' && providerConfig.customModels?.length) {
-    models = providerConfig.customModels.map(model => ({
-      id: model.id,
-      name: model.name,
-      shortName: model.shortName ?? model.name,
-      description: model.description ?? '',
-    }));
-  } else {
-    models = getDefaultModelsForConnection(providerType);
-  }
+  const providerPresetModels = providerConfig
+    ? getModelsForProvider(providerConfig.provider, providerConfig.customModels)
+    : [];
+  let models = providerPresetModels.length > 0
+    ? cloneModelsForConnection(providerPresetModels)
+    : getDefaultModelsForConnection(providerType);
 
-  const defaultModel = config.model ?? getDefaultModelForConnection(providerType);
+  const providerDefaultModel = providerConfig
+    ? getDefaultModelForProvider(providerConfig.provider, providerConfig.customModels)
+    : getDefaultModelForConnection(providerType);
+  const defaultModel = hasModelInConnectionModels(config.model, models)
+    ? config.model!
+    : providerDefaultModel;
   models = ensureModelInConnectionModels(models, defaultModel);
 
   const previous = existing.find(connection => connection.slug === slug);
@@ -396,6 +414,129 @@ function backfillConnectionModels(config: StoredConfig): boolean {
   return changed;
 }
 
+function readExplicitBedrockModelFromClaudeSettings(): string | undefined {
+  try {
+    const home = process.env.HOME;
+    if (!home) return undefined;
+    const settingsPath = join(home, '.claude', 'settings.json');
+    if (!existsSync(settingsPath)) return undefined;
+    const raw = readFileSync(settingsPath, 'utf-8');
+    const parsed = JSON.parse(raw) as { model?: unknown };
+    const model = typeof parsed.model === 'string' ? parsed.model.trim() : '';
+    if (!model) return undefined;
+    return isBedrockArn(model) || isBedrockModelId(model) ? model : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getLegacyBedrockSignal(config: StoredConfig): {
+  enabled: boolean;
+  awsRegion?: string;
+  model?: string;
+} {
+  const readValue = (value?: string): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+  };
+
+  const envBedrockModel = [
+    readValue(process.env.ANTHROPIC_MODEL),
+    readValue(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL),
+    readValue(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL),
+    readValue(process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+    readValue(process.env.ANTHROPIC_SMALL_FAST_MODEL),
+  ].find((model): model is string => !!model && (isBedrockArn(model) || isBedrockModelId(model)));
+
+  const settingsBedrockModel = readExplicitBedrockModelFromClaudeSettings();
+  const awsRegion = readValue(process.env.AWS_REGION) || config.providerConfig?.awsRegion;
+  const awsProfile = readValue(process.env.AWS_PROFILE) || readValue(process.env.CLAUDE_CODE_AWS_PROFILE);
+  const explicitBedrockFlag = process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+  const enabled = Boolean(
+    explicitBedrockFlag
+    || config.authType === 'bedrock'
+    || config.providerConfig?.provider === 'bedrock'
+    || awsRegion
+    || awsProfile
+    || envBedrockModel
+    || settingsBedrockModel
+  );
+
+  return {
+    enabled,
+    awsRegion,
+    model: envBedrockModel || settingsBedrockModel,
+  };
+}
+
+function ensureLegacyBedrockConnection(config: StoredConfig): boolean {
+  const signal = getLegacyBedrockSignal(config);
+  if (!signal.enabled) return false;
+
+  if (!config.llmConnections) {
+    config.llmConnections = [];
+  }
+
+  const bedrockDefaults = getDefaultModelsForConnection('bedrock');
+  const bedrockDefaultModel = getDefaultModelForConnection('bedrock');
+  const preferredSignalModel = signal.model && hasModelInConnectionModels(signal.model, bedrockDefaults)
+    ? signal.model
+    : undefined;
+
+  const existing = config.llmConnections.find(connection => connection.providerType === 'bedrock');
+  if (existing) {
+    let changed = false;
+
+    if (!existing.models || existing.models.length === 0) {
+      existing.models = bedrockDefaults;
+      changed = true;
+    }
+
+    const existingModelPool = existing.models ?? bedrockDefaults;
+    const preferredDefaultModel = preferredSignalModel && hasModelInConnectionModels(preferredSignalModel, existingModelPool)
+      ? preferredSignalModel
+      : bedrockDefaultModel;
+    if (!existing.defaultModel || !hasModelInConnectionModels(existing.defaultModel, existingModelPool)) {
+      existing.defaultModel = preferredDefaultModel;
+      changed = true;
+    }
+
+    if (!existing.awsRegion && signal.awsRegion) {
+      existing.awsRegion = signal.awsRegion;
+      changed = true;
+    }
+
+    if (
+      existing.authType !== 'environment'
+      && existing.authType !== 'iam_credentials'
+      && existing.authType !== 'bearer_token'
+    ) {
+      existing.authType = 'environment';
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  let slug = 'bedrock';
+  let suffix = 2;
+  while (config.llmConnections.some(connection => connection.slug === slug)) {
+    slug = `bedrock-${suffix++}`;
+  }
+
+  config.llmConnections.push({
+    slug,
+    name: 'AWS Bedrock',
+    providerType: 'bedrock',
+    authType: 'environment',
+    models: bedrockDefaults,
+    defaultModel: preferredSignalModel ?? bedrockDefaultModel,
+    awsRegion: signal.awsRegion,
+    createdAt: Date.now(),
+  });
+  return true;
+}
+
 function syncPrimaryLlmConnection(config: StoredConfig): boolean {
   let changed = false;
   if (config.providerConfig) {
@@ -429,6 +570,10 @@ function syncPrimaryLlmConnection(config: StoredConfig): boolean {
 
   if (!config.llmConnections) {
     config.llmConnections = existingConnections;
+  }
+
+  if (ensureLegacyBedrockConnection(config)) {
+    changed = true;
   }
 
   if (config.defaultLlmConnection !== primary.slug) {
