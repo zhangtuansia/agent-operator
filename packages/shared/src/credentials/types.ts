@@ -97,10 +97,14 @@ export interface StoredCredential {
   expiresAt?: number;
   /** OAuth client ID (needed for token refresh) */
   clientId?: string;
+  /** OAuth client secret (needed for some token refresh flows) */
+  clientSecret?: string;
   /** OIDC id_token for providers that return both access + identity tokens */
   idToken?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
+  /** Token source marker for migration/refresh behavior */
+  source?: 'native' | 'cli';
 }
 
 // Using "::" as delimiter instead of "/" because server names and API names
@@ -186,4 +190,30 @@ export function accountToCredentialId(account: string): CredentialId | null {
 
   // Unknown format
   return null;
+}
+
+// ============================================
+// Credential Health Check Types
+// ============================================
+
+export type CredentialHealthIssueType =
+  | 'file_corrupted'         // Credential file exists but can't be parsed
+  | 'decryption_failed'      // File exists but can't be decrypted (machine migration)
+  | 'no_default_credentials' // No credentials for the default connection
+
+/** A single credential health issue */
+export interface CredentialHealthIssue {
+  type: CredentialHealthIssueType
+  /** Human-readable error message */
+  message: string
+  /** Original error if available */
+  error?: string
+}
+
+/** Result of credential store health check */
+export interface CredentialHealthStatus {
+  /** True if credential store is healthy and usable */
+  healthy: boolean
+  /** List of issues found (empty if healthy) */
+  issues: CredentialHealthIssue[]
 }

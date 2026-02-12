@@ -10,13 +10,13 @@ import type { AuthType, Workspace } from '../config/types.ts';
 /**
  * Unified authentication state
  */
-export interface AuthState {
-  /** Platform authentication (for accessing API and MCP) */
-  craft: {
-    hasToken: boolean;
-    token: string | null;
-  };
+/** Migration info when user needs to re-authenticate */
+export interface MigrationInfo {
+  reason: 'legacy_token';
+  message: string;
+}
 
+export interface AuthState {
   /** Claude API billing configuration */
   billing: {
     /** Configured billing type, or null if not yet configured */
@@ -27,6 +27,8 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Migration info if user needs to re-authenticate */
+    migrationRequired?: MigrationInfo;
   };
 
   /** Workspace/MCP configuration */
@@ -40,14 +42,33 @@ export interface AuthState {
  * What setup steps are needed
  */
 export interface SetupNeeds {
-  /** No auth token AND no workspace → show full onboarding (new user) */
-  needsAuth: boolean;
-  /** Has workspace but token expired/missing → show simple re-login screen */
-  needsReauth: boolean;
   /** No billing type configured → show billing picker */
   needsBillingConfig: boolean;
   /** Billing type set but missing credentials → show credential entry */
   needsCredentials: boolean;
   /** Everything complete → go straight to App */
   isFullyConfigured: boolean;
+  /** User has legacy tokens that need migration */
+  needsMigration?: MigrationInfo;
+}
+
+/**
+ * Session context for OAuth flows.
+ * Used to build deeplinks that return users to their active chat session
+ * after completing OAuth authentication.
+ */
+export interface OAuthSessionContext {
+  /** The session ID to return to after OAuth completes */
+  sessionId?: string;
+  /** The app's deeplink scheme (e.g., 'craftagents') */
+  deeplinkScheme?: string;
+}
+
+/**
+ * Build a deeplink URL to return to a chat session after OAuth.
+ * Returns undefined if session context is incomplete.
+ */
+export function buildOAuthDeeplinkUrl(ctx?: OAuthSessionContext): string | undefined {
+  if (!ctx?.sessionId || !ctx?.deeplinkScheme) return undefined;
+  return `${ctx.deeplinkScheme}://allSessions/session/${ctx.sessionId}`;
 }

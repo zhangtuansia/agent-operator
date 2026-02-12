@@ -1,7 +1,49 @@
-import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync } from 'fs';
+import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync, renameSync } from 'fs';
 import { extname, basename, resolve, join, relative } from 'path';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
+
+/**
+ * Strip UTF-8 BOM (Byte Order Mark) from a string.
+ * BOM (\uFEFF) can appear when files are written by certain editors or tools
+ * and causes JSON.parse() to fail with "Unexpected token" errors.
+ */
+export function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+
+/**
+ * Parse a JSON string, stripping any leading UTF-8 BOM.
+ * Use this instead of raw JSON.parse() for any content that may originate from a file.
+ */
+export function safeJsonParse(text: string): unknown {
+  return JSON.parse(stripBom(text));
+}
+
+/**
+ * Read and parse a JSON file, handling UTF-8 BOM transparently.
+ * Replaces the common JSON.parse(readFileSync(path, 'utf-8')) pattern.
+ */
+export function readJsonFileSync<T = unknown>(filePath: string): T {
+  return JSON.parse(stripBom(readFileSync(filePath, 'utf-8'))) as T;
+}
+
+/**
+ * Atomically write a file by writing to a temp file then renaming.
+ * This prevents partial writes from corrupting the file on crash/interrupt.
+ * Uses write-to-temp-then-rename pattern which is atomic on POSIX systems.
+ */
+export function atomicWriteFileSync(filePath: string, data: string): void {
+  const tmpPath = filePath + '.tmp';
+  try {
+    writeFileSync(tmpPath, data);
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    // Clean up temp file if rename failed
+    try { unlinkSync(tmpPath); } catch {}
+    throw error;
+  }
+}
 
 export interface FileAttachment {
   type: 'image' | 'text' | 'pdf' | 'office' | 'unknown';
@@ -70,6 +112,8 @@ export interface ImageValidationResult {
   valid: boolean;
   /** Hard error - image cannot be sent */
   error?: string;
+  /** Error code for programmatic handling */
+  errorCode?: 'dimension_exceeded' | 'size_exceeded';
   /** Warning - image will work but may have issues */
   warning?: string;
   /** Image needs resizing for optimal performance */
@@ -91,21 +135,23 @@ export function validateImageForClaudeAPI(
   width?: number,
   height?: number
 ): ImageValidationResult {
-  // Check file size first (hard limit)
+  // Check file size first (hard limit - cannot resize to fix)
   if (size > MAX_IMAGE_SIZE) {
     const sizeMB = (size / 1024 / 1024).toFixed(1);
     return {
       valid: false,
+      errorCode: 'size_exceeded',
       error: `Image too large (${sizeMB}MB). Claude API limit is 5MB. Please resize or compress the image.`,
     };
   }
 
   // Check dimensions if provided
   if (width !== undefined && height !== undefined) {
-    // Hard limit on dimensions
+    // Hard limit on dimensions - can be fixed by resizing
     if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
       return {
         valid: false,
+        errorCode: 'dimension_exceeded',
         error: `Image dimensions too large (${width}×${height}). Maximum is ${MAX_IMAGE_DIMENSION}×${MAX_IMAGE_DIMENSION} pixels.`,
       };
     }
@@ -134,6 +180,10 @@ export const IMAGE_LIMITS = {
   MAX_SIZE: MAX_IMAGE_SIZE,
   MAX_DIMENSION: MAX_IMAGE_DIMENSION,
   OPTIMAL_EDGE: OPTIMAL_IMAGE_EDGE,
+  /** JPEG quality for photo-like images */
+  JPEG_QUALITY_HIGH: 90,
+  /** JPEG quality for fallback compression when size still exceeds limits */
+  JPEG_QUALITY_FALLBACK: 75,
 } as const;
 
 /**
@@ -760,7 +810,7 @@ function readImageFile(tempFile: string): FileAttachment | null {
     return {
       type: 'image',
       path: 'clipboard',
-      name: `clipboard-${Date.now()}.png`,
+      name: `pasted-image.png`, // Renderer assigns sequential name
       mimeType: 'image/png',
       base64,
       size: stats.size,

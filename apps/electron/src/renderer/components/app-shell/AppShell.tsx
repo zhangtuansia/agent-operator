@@ -1196,6 +1196,7 @@ function AppShellContent({
           <AppMenu
             onNewChat={() => handleNewChat(true)}
             onOpenSettings={onOpenSettings}
+            onOpenSettingsSubpage={(subpage) => navigate(routes.view.settings(subpage))}
             onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
             onOpenStoredUserPreferences={onOpenStoredUserPreferences}
             onReset={onReset}

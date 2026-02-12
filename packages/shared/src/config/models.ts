@@ -17,6 +17,8 @@ export interface ModelDefinition {
   description: string;
   /** Token pricing (optional, defaults provided) */
   pricing?: ModelPricing;
+  /** Optional model context window size */
+  contextWindow?: number;
 }
 
 // ============================================
@@ -57,6 +59,12 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
   { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
   { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced', pricing: DEFAULT_PRICING.sonnet },
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
+];
+
+// OpenAI Codex models (for Codex backend routing/defaults)
+export const CODEX_MODELS: ModelDefinition[] = [
+  { id: 'gpt-5.3-codex', name: 'Codex', shortName: 'Codex', description: 'Most capable Codex model' },
+  { id: 'gpt-5.1-codex-mini', name: 'Codex Mini', shortName: 'Codex Mini', description: 'Fast Codex model' },
 ];
 
 // 智谱 GLM models
@@ -216,6 +224,9 @@ export const MODELS: ModelDefinition[] = CLAUDE_MODELS;
 /** Default model for main chat (user-facing) */
 export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
+/** Default model for Codex/OpenAI backend */
+export const DEFAULT_CODEX_MODEL = CODEX_MODELS[0]!.id;
+
 /** Model for agent definition extraction (always high quality) */
 export const EXTRACTION_MODEL = 'claude-opus-4-5-20251101';
 
@@ -232,6 +243,7 @@ export const INSTRUCTION_UPDATE_MODEL = 'claude-opus-4-5-20251101';
 /** All available models across all providers */
 const ALL_MODELS: ModelDefinition[] = [
   ...CLAUDE_MODELS,
+  ...CODEX_MODELS,
   ...GLM_MODELS,
   ...MINIMAX_MODELS,
   ...DEEPSEEK_MODELS,
@@ -239,6 +251,20 @@ const ALL_MODELS: ModelDefinition[] = [
   ...OPENROUTER_MODELS,
   ...OLLAMA_MODELS,
 ];
+
+/** Resolve model definition by ID from built-in registries. */
+export function getModelById(modelId: string): ModelDefinition | undefined {
+  return ALL_MODELS.find(model => model.id === modelId);
+}
+
+/** Get model id by short name. Throws if no match is found. */
+export function getModelIdByShortName(shortName: string): string {
+  const model = ALL_MODELS.find((m) => m.shortName === shortName);
+  if (!model) {
+    throw new Error(`Model not found: ${shortName}`);
+  }
+  return model.id;
+}
 
 /** Get display name for a model ID (full name with version) */
 export function getModelDisplayName(modelId: string): string {
@@ -254,6 +280,20 @@ export function getModelShortName(modelId: string): string {
   if (model) return model.shortName;
   // Fallback: strip prefix and date suffix
   return modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
+}
+
+/**
+ * Check if a model ID refers to a Claude model.
+ * Handles direct Anthropic IDs and provider-prefixed IDs.
+ */
+export function isClaudeModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.startsWith('claude-') || lower.includes('/claude');
+}
+
+/** Check if model is a Codex model. */
+export function isCodexModel(modelId: string): boolean {
+  return modelId.toLowerCase().includes('codex');
 }
 
 /** Check if model is an Opus model (for cache TTL decisions) */

@@ -1,38 +1,32 @@
-import { writeFile } from 'fs/promises'
+import { writeFile, rename, unlink } from 'fs/promises'
+import { dirname } from 'path'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
 import { toPortablePath } from '../utils/paths.js'
-import { createSessionHeader } from './jsonl.js'
-
-// Configuration constants
-const DEFAULT_DEBOUNCE_MS = 500
-const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAY_MS = 100
+import { createSessionHeader, makeSessionPathPortable } from './jsonl.js'
+import { debug } from '../utils/debug.js'
 
 interface PendingWrite {
   data: StoredSession
   timer: ReturnType<typeof setTimeout>
-  retryCount?: number
 }
 
 /**
  * Debounced async session persistence queue.
  * Prevents main thread blocking by using async writes and coalescing
  * rapid successive persist calls into a single write.
+ *
+ * IMPORTANT: Writes are serialized per-session to prevent race conditions
+ * when rapid successive flushes (e.g., clearSessionForRecovery + onSdkSessionIdUpdate)
+ * would otherwise write to the same .tmp file concurrently.
  */
 class SessionPersistenceQueue {
   private pending = new Map<string, PendingWrite>()
+  private writeInProgress = new Map<string, Promise<void>>()
   private debounceMs: number
 
-  constructor(debounceMs = DEFAULT_DEBOUNCE_MS) {
+  constructor(debounceMs = 500) {
     this.debounceMs = debounceMs
-  }
-
-  /**
-   * Sleep helper for retry delays
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
   }
 
   /**
@@ -54,9 +48,9 @@ class SessionPersistenceQueue {
 
   /**
    * Write a session to disk immediately in JSONL format.
-   * Includes retry logic for transient failures.
+   * Uses atomic write (write-to-temp-then-rename) to prevent corruption on crash.
    */
-  private async write(sessionId: string, retryCount = 0): Promise<void> {
+  private async write(sessionId: string): Promise<void> {
     const entry = this.pending.get(sessionId)
     if (!entry) return
 
@@ -79,35 +73,55 @@ class SessionPersistenceQueue {
       }
 
       // Create JSONL content: header + messages (one per line)
+      // Filter out intermediate messages - they're transient streaming status updates
       const header = createSessionHeader(storageSession)
+      const persistableMessages = storageSession.messages.filter(m => !m.isIntermediate)
+      // Use original absolute sessionDir (before toPortablePath) for path replacement
+      const sessionDir = dirname(filePath)
       const lines = [
-        JSON.stringify(header),
-        ...storageSession.messages.map(m => JSON.stringify(m)),
+        makeSessionPathPortable(JSON.stringify(header), sessionDir),
+        ...persistableMessages.map(m => makeSessionPathPortable(JSON.stringify(m), sessionDir)),
       ]
 
-      await writeFile(filePath, lines.join('\n') + '\n', 'utf-8')
-      console.log(`[PersistenceQueue] Wrote session ${sessionId}`)
+      // Atomic write: write to .tmp then rename over the real file.
+      // If the process crashes mid-write, only the .tmp is corrupted —
+      // the original session.jsonl remains intact.
+      const tmpFile = filePath + '.tmp'
+      await writeFile(tmpFile, lines.join('\n') + '\n', 'utf-8')
+      // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
+      try { await unlink(filePath) } catch { /* ignore if doesn't exist */ }
+      await rename(tmpFile, filePath)
+      debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
-      // Retry transient failures
-      if (retryCount < MAX_RETRY_ATTEMPTS) {
-        console.warn(`[PersistenceQueue] Write failed for ${sessionId}, retrying (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})...`)
-        // Re-add to pending for retry
-        this.pending.set(sessionId, entry)
-        await this.sleep(RETRY_DELAY_MS * (retryCount + 1)) // Exponential backoff
-        return this.write(sessionId, retryCount + 1)
-      }
-      console.error(`[PersistenceQueue] Failed to write session ${sessionId} after ${MAX_RETRY_ATTEMPTS} attempts:`, error)
+      console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)
     }
   }
 
   /**
    * Immediately flush a specific session if pending.
+   * Waits for any in-progress write to complete before starting a new one
+   * to prevent race conditions on the shared .tmp file.
    */
   async flush(sessionId: string): Promise<void> {
     const entry = this.pending.get(sessionId)
     if (entry) {
       clearTimeout(entry.timer)
-      await this.write(sessionId)
+
+      // Wait for any in-progress write to complete first
+      const inProgress = this.writeInProgress.get(sessionId)
+      if (inProgress) {
+        await inProgress
+      }
+
+      // Start new write and track it
+      const writePromise = this.write(sessionId)
+      this.writeInProgress.set(sessionId, writePromise)
+
+      try {
+        await writePromise
+      } finally {
+        this.writeInProgress.delete(sessionId)
+      }
     }
   }
 
@@ -119,45 +133,16 @@ class SessionPersistenceQueue {
     if (entry) {
       clearTimeout(entry.timer)
       this.pending.delete(sessionId)
-      console.log(`[PersistenceQueue] Cancelled pending write for session ${sessionId}`)
+      debug(`[PersistenceQueue] Cancelled pending write for session ${sessionId}`)
     }
   }
 
   /**
    * Flush all pending sessions. Call this on app quit.
-   * Uses Promise.allSettled to ensure all sessions are attempted
-   * even if some fail.
    */
-  async flushAll(): Promise<{ succeeded: number; failed: number }> {
+  async flushAll(): Promise<void> {
     const sessionIds = [...this.pending.keys()]
-    if (sessionIds.length === 0) {
-      return { succeeded: 0, failed: 0 }
-    }
-
-    const results = await Promise.allSettled(sessionIds.map(id => this.flush(id)))
-
-    const succeeded = results.filter(r => r.status === 'fulfilled').length
-    const failed = results.filter(r => r.status === 'rejected').length
-
-    if (failed > 0) {
-      console.warn(`[PersistenceQueue] flushAll completed: ${succeeded} succeeded, ${failed} failed`)
-    } else {
-      console.log(`[PersistenceQueue] flushAll completed: ${succeeded} sessions flushed`)
-    }
-
-    return { succeeded, failed }
-  }
-
-  /**
-   * Clean up all pending timers and clear the queue.
-   * Call this when disposing of the queue or shutting down.
-   */
-  dispose(): void {
-    for (const [sessionId, entry] of this.pending) {
-      clearTimeout(entry.timer)
-      console.log(`[PersistenceQueue] Disposed timer for session ${sessionId}`)
-    }
-    this.pending.clear()
+    await Promise.all(sessionIds.map(id => this.flush(id)))
   }
 
   /**

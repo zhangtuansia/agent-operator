@@ -4,6 +4,9 @@ copyright: Copyright © 2025
 
 electronVersion: "39.2.7"
 
+# Hook for optional macOS Assets.car copy (non-fatal if asset is absent)
+afterPack: scripts/afterPack.cjs
+
 directories:
   output: release
   buildResources: resources
@@ -122,6 +125,7 @@ nsis:
   deleteAppDataOnUninstall: true
 
 linux:
+  executableName: cowork
   icon: resources/icon.png
   category: Utility
   maintainer: "Cowork"

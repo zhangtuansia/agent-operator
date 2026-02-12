@@ -229,6 +229,30 @@ export function generateSlug(name: string): string {
 }
 
 /**
+ * Generate a unique workspace folder path by appending a numeric suffix if needed.
+ *
+ * @param name - Display name to derive the slug from
+ * @param baseDir - Parent directory where workspace folders live (e.g., ~/.cowork/workspaces/)
+ * @returns Full path to a unique, non-existing folder
+ */
+export function generateUniqueWorkspacePath(name: string, baseDir: string): string {
+  const slug = generateSlug(name);
+  let candidate = join(baseDir, slug);
+
+  if (!existsSync(candidate)) {
+    return candidate;
+  }
+
+  // Append numeric suffix until we find a non-existing path
+  let counter = 2;
+  while (existsSync(join(baseDir, `${slug}-${counter}`))) {
+    counter++;
+  }
+
+  return join(baseDir, `${slug}-${counter}`);
+}
+
+/**
  * Create workspace folder structure at a given path
  * @param rootPath - Absolute path where workspace folder will be created
  * @param name - Display name for the workspace

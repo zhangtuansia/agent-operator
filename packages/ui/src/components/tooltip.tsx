@@ -15,9 +15,9 @@ function TooltipProvider({
   )
 }
 
-const Tooltip = TooltipPrimitive.Root
+const Tooltip: typeof TooltipPrimitive.Root = TooltipPrimitive.Root
 
-const TooltipTrigger = TooltipPrimitive.Trigger
+const TooltipTrigger: typeof TooltipPrimitive.Trigger = TooltipPrimitive.Trigger
 
 function TooltipContent({
   className,

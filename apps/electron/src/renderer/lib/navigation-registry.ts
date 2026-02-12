@@ -16,6 +16,7 @@
 
 import type { ComponentType } from 'react'
 import type { ChatFilter } from '../../shared/types'
+import { SETTINGS_PAGES, type SettingsSubpage } from '../../shared/settings-registry'
 
 // =============================================================================
 // Types
@@ -106,6 +107,10 @@ export interface DetailsPageMeta {
  */
 const PlaceholderComponent: ComponentType<DetailsProps> = () => null
 
+const SETTINGS_DETAILS_PAGES = Object.fromEntries(
+  SETTINGS_PAGES.map((page) => [page.id, PlaceholderComponent])
+) as Record<SettingsSubpage, ComponentType<DetailsProps>>
+
 /**
  * The central navigation registry
  *
@@ -156,16 +161,7 @@ export const NavigationRegistry = {
 
   settings: {
     displayName: 'Settings',
-    detailsPages: {
-      app: PlaceholderComponent, // AppSettingsPage
-      workspace: PlaceholderComponent, // WorkspaceSettingsPage
-      api: PlaceholderComponent, // ApiSettingsPage
-      input: PlaceholderComponent, // InputSettingsPage
-      permissions: PlaceholderComponent, // PermissionsSettingsPage
-      shortcuts: PlaceholderComponent, // ShortcutsPage
-      preferences: PlaceholderComponent, // PreferencesPage
-      import: PlaceholderComponent, // ImportSettingsPage
-    },
+    detailsPages: SETTINGS_DETAILS_PAGES,
     defaultDetails: 'app', // Always has a default
     getFirstItem: () => 'app',
   },
@@ -196,4 +192,3 @@ export type NavigationState =
   | { navigator: 'chats'; chatFilter: ChatFilter; details: { type: 'chat'; id: string } | null }
   | { navigator: 'sources'; details: { type: 'source'; id: string } | null }
   | { navigator: 'settings'; details: { type: DetailsType<'settings'>; id: string } }
-

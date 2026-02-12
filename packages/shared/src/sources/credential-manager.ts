@@ -24,7 +24,8 @@ import {
 } from './types.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
-import { OperatorOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import { CraftOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import { type OAuthSessionContext } from '../auth/types.ts';
 import {
   startGoogleOAuth,
   refreshGoogleToken,
@@ -57,13 +58,31 @@ export interface AuthResult {
 }
 
 /**
- * API credential types (string for simple auth, object for basic auth)
+ * API credential types (string for simple auth, object for basic auth or multi-header)
  */
-export type ApiCredential = string | BasicAuthCredential;
-
 export interface BasicAuthCredential {
   username: string;
   password: string;
+}
+
+/**
+ * Multi-header credentials stored as Record<string, string>
+ * Used for APIs like Datadog that require multiple auth headers (DD-API-KEY + DD-APPLICATION-KEY)
+ */
+export type MultiHeaderCredential = Record<string, string>;
+
+export type ApiCredential = string | BasicAuthCredential | MultiHeaderCredential;
+
+/**
+ * Type guard to check if credential is a MultiHeaderCredential.
+ * Returns true for Record<string, string> objects that are NOT BasicAuthCredential.
+ */
+export function isMultiHeaderCredential(cred: ApiCredential): cred is MultiHeaderCredential {
+  return (
+    typeof cred === 'object' &&
+    cred !== null &&
+    !('username' in cred && 'password' in cred)
+  );
 }
 
 /**
@@ -87,6 +106,10 @@ export interface BasicAuthCredential {
  * ```
  */
 export class SourceCredentialManager {
+  // Track in-flight refresh promises to prevent concurrent refreshes for the same source
+  // This prevents race conditions (especially important for Microsoft which rotates refresh tokens)
+  private pendingRefreshes = new Map<string, Promise<string | null>>();
+
   // ============================================================
   // Core CRUD Operations
   // ============================================================
@@ -186,11 +209,30 @@ export class SourceCredentialManager {
   }
 
   /**
-   * Get API credential for a source (handles basic auth JSON parsing)
+   * Get API credential for a source (handles basic auth and multi-header JSON parsing)
    */
   async getApiCredential(source: LoadedSource): Promise<ApiCredential | null> {
     const cred = await this.load(source);
+    debug(`[SourceCredentialManager] getApiCredential for ${source.config.slug}: cred.value exists=${!!cred?.value}, headerNames=${JSON.stringify(source.config.api?.headerNames)}`);
     if (!cred?.value) return null;
+
+    // Check for multi-header auth (JSON with header names as keys)
+    if (source.config.api?.headerNames?.length) {
+      debug(`[SourceCredentialManager] Attempting multi-header parse for ${source.config.slug}, raw value length=${cred.value.length}`);
+      try {
+        const parsed = JSON.parse(cred.value);
+        debug(`[SourceCredentialManager] Parsed JSON keys: ${Object.keys(parsed).join(', ')}`);
+        // Validate all required headers are present
+        const hasAllHeaders = source.config.api.headerNames.every((h) => h in parsed);
+        debug(`[SourceCredentialManager] hasAllHeaders=${hasAllHeaders}`);
+        if (hasAllHeaders) {
+          return parsed as MultiHeaderCredential;
+        }
+      } catch (e) {
+        // Not JSON, fall through to other auth types
+        debug(`[SourceCredentialManager] JSON parse failed: ${e}`);
+      }
+    }
 
     // Check for basic auth (JSON with username/password)
     if (source.config.api?.authType === 'basic') {
@@ -311,7 +353,8 @@ export class SourceCredentialManager {
    */
   async authenticate(
     source: LoadedSource,
-    callbacks?: OAuthCallbacks
+    callbacks?: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     const defaultCallbacks: OAuthCallbacks = {
       onStatus: (msg) => debug(`[SourceCredentialManager] ${msg}`),
@@ -321,22 +364,22 @@ export class SourceCredentialManager {
 
     // Google APIs use Google OAuth
     if (source.config.provider === 'google') {
-      return this.authenticateGoogle(source, cb);
+      return this.authenticateGoogle(source, cb, sessionContext);
     }
 
     // Slack APIs use Slack OAuth
     if (source.config.provider === 'slack') {
-      return this.authenticateSlack(source, cb);
+      return this.authenticateSlack(source, cb, sessionContext);
     }
 
     // Microsoft APIs use Microsoft OAuth
     if (source.config.provider === 'microsoft') {
-      return this.authenticateMicrosoft(source, cb);
+      return this.authenticateMicrosoft(source, cb, sessionContext);
     }
 
     // MCP OAuth flow
     if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth') {
-      return this.authenticateMcp(source, cb);
+      return this.authenticateMcp(source, cb, sessionContext);
     }
 
     return {
@@ -350,16 +393,18 @@ export class SourceCredentialManager {
    */
   private async authenticateMcp(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     if (!source.config.mcp?.url) {
       return { success: false, error: 'MCP URL not configured' };
     }
 
     try {
-      const oauth = new OperatorOAuth(
-        { mcpBaseUrl: getMcpBaseUrl(source.config.mcp.url) },
-        callbacks
+      const oauth = new CraftOAuth(
+        { mcpUrl: source.config.mcp.url },
+        callbacks,
+        sessionContext
       );
 
       const { tokens, clientId } = await oauth.authenticate();
@@ -394,7 +439,8 @@ export class SourceCredentialManager {
    */
   private async authenticateGoogle(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -426,6 +472,10 @@ export class SourceCredentialManager {
         service,
         scopes,
         appType: 'electron',
+        // Pass user-provided OAuth credentials from source config (if available)
+        clientId: api?.googleOAuthClientId,
+        clientSecret: api?.googleOAuthClientSecret,
+        sessionContext,
       };
 
       const result: GoogleOAuthResult = await startGoogleOAuth(options);
@@ -434,11 +484,13 @@ export class SourceCredentialManager {
         return { success: false, error: result.error || 'Google OAuth failed' };
       }
 
-      // Save the credentials
+      // Save the credentials (including clientId/clientSecret for token refresh)
       await this.save(source, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
+        clientId: result.clientId,
+        clientSecret: result.clientSecret,
       });
 
       // Mark source as authenticated in config.json
@@ -463,7 +515,8 @@ export class SourceCredentialManager {
    */
   private async authenticateSlack(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -489,6 +542,7 @@ export class SourceCredentialManager {
         service,
         userScopes,
         appType: 'electron',
+        sessionContext,
       };
 
       const result: SlackOAuthResult = await startSlackOAuth(options);
@@ -527,7 +581,8 @@ export class SourceCredentialManager {
    */
   private async authenticateMicrosoft(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -559,6 +614,7 @@ export class SourceCredentialManager {
         service,
         scopes,
         appType: 'electron',
+        sessionContext,
       };
 
       const result: MicrosoftOAuthResult = await startMicrosoftOAuth(options);
@@ -591,8 +647,35 @@ export class SourceCredentialManager {
    *
    * Returns the new access token, or null if refresh fails.
    * On success, credentials are automatically updated.
+   *
+   * Uses promise deduplication to prevent concurrent refresh requests for the same source.
+   * This is important because:
+   * - Multiple API calls may hit refresh simultaneously when token is expiring
+   * - Microsoft rotates refresh tokens, so concurrent refreshes could cause token invalidation
    */
   async refresh(source: LoadedSource): Promise<string | null> {
+    const key = source.config.slug;
+
+    // Return existing refresh promise if one is in progress
+    const pending = this.pendingRefreshes.get(key);
+    if (pending) {
+      debug(`[SourceCredentialManager] Reusing pending refresh for ${key}`);
+      return pending;
+    }
+
+    // Create and track new refresh promise
+    const refreshPromise = this.doRefresh(source).finally(() => {
+      this.pendingRefreshes.delete(key);
+    });
+
+    this.pendingRefreshes.set(key, refreshPromise);
+    return refreshPromise;
+  }
+
+  /**
+   * Internal refresh implementation
+   */
+  private async doRefresh(source: LoadedSource): Promise<string | null> {
     const cred = await this.load(source);
     if (!cred?.refreshToken) {
       debug(`[SourceCredentialManager] No refresh token for ${source.config.slug}`);
@@ -630,7 +713,12 @@ export class SourceCredentialManager {
     cred: StoredCredential
   ): Promise<string | null> {
     try {
-      const result = await refreshGoogleToken(cred.refreshToken!);
+      // Pass stored credentials (or fall back to env vars via undefined)
+      const result = await refreshGoogleToken(
+        cred.refreshToken!,
+        cred.clientId,
+        cred.clientSecret
+      );
 
       // Update stored credentials
       await this.save(source, {
@@ -725,8 +813,8 @@ export class SourceCredentialManager {
         return null;
       }
 
-      const oauth = new OperatorOAuth(
-        { mcpBaseUrl: getMcpBaseUrl(source.config.mcp.url) },
+      const oauth = new CraftOAuth(
+        { mcpUrl: source.config.mcp.url },
         {
           onStatus: () => {},
           onError: () => {},
@@ -761,6 +849,13 @@ export class SourceCredentialManager {
 /**
  * Check if a single source needs authentication.
  * Returns true if the source requires auth but isn't yet authenticated.
+ *
+ * This is the **inverse** of the auth portion of isSourceUsable().
+ * - isSourceUsable() → Is the source ready to use? (enabled AND auth OK)
+ * - sourceNeedsAuthentication() → Does the source need auth to become usable?
+ *
+ * Use this to prompt users for authentication, not for filtering sources.
+ * For filtering sources, use isSourceUsable() from storage.ts.
  *
  * This correctly handles:
  * - MCP sources with authType: "none" → never needs auth

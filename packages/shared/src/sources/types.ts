@@ -5,7 +5,7 @@
  * They replace the old "connections" concept with a more flexible, folder-based architecture.
  *
  * File structure:
- * ~/.cowork/workspaces/{workspaceId}/sources/{sourceSlug}/
+ * ~/.craft-agent/workspaces/{workspaceId}/sources/{sourceSlug}/
  *   ├── config.json   - Source settings
  *   └── guide.md      - Usage guidelines + cached data (in YAML frontmatter)
  */
@@ -105,7 +105,7 @@ export function inferSlackServiceFromUrl(baseUrl: string | undefined): SlackServ
 /**
  * Infer Microsoft service from API baseUrl.
  * Microsoft Graph API uses graph.microsoft.com for all services.
- * Returns 'outlook' by default if URL matches Microsoft Graph pattern.
+ * Returns undefined if service cannot be determined from URL path.
  */
 export function inferMicrosoftServiceFromUrl(baseUrl: string | undefined): MicrosoftService | undefined {
   if (!baseUrl) return undefined;
@@ -138,8 +138,8 @@ export function inferMicrosoftServiceFromUrl(baseUrl: string | undefined): Micro
     if (pathname.includes('/sites')) {
       return 'sharepoint';
     }
-    // Default to outlook for general Graph API access
-    return 'outlook';
+    // Cannot determine service from generic Graph URL - require explicit microsoftService config
+    return undefined;
   }
 
   // Match Outlook-specific API (legacy, but still used)
@@ -175,6 +175,31 @@ export type ApiOAuthProvider = typeof API_OAUTH_PROVIDERS[number];
  */
 export function isApiOAuthProvider(provider: string | undefined): provider is ApiOAuthProvider {
   return API_OAUTH_PROVIDERS.includes(provider as ApiOAuthProvider);
+}
+
+/**
+ * Check if a source uses OAuth authentication (for proactive token refresh).
+ *
+ * Returns true for:
+ * - MCP sources with authType: 'oauth'
+ * - API sources with OAuth providers (google, slack, microsoft)
+ *
+ * Only returns true if the source is authenticated (has tokens to refresh).
+ */
+export function isOAuthSource(source: LoadedSource): boolean {
+  if (!source.config.isAuthenticated) return false;
+
+  // MCP OAuth sources
+  if (source.config.type === 'mcp') {
+    return source.config.mcp?.authType === 'oauth';
+  }
+
+  // API OAuth sources (Google, Slack, Microsoft)
+  if (source.config.type === 'api') {
+    return isApiOAuthProvider(source.config.provider);
+  }
+
+  return false;
 }
 
 /**
@@ -247,6 +272,7 @@ export interface ApiSourceConfig {
   baseUrl: string;
   authType: ApiAuthType;
   headerName?: string; // For 'header' auth (e.g., "X-API-Key")
+  headerNames?: string[]; // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
   queryParam?: string; // For 'query' auth (e.g., "api_key")
   authScheme?: string; // For 'bearer' auth (default: "Bearer", could be "Token")
   defaultHeaders?: Record<string, string>; // Headers to include with every request
@@ -255,6 +281,9 @@ export interface ApiSourceConfig {
   // Google OAuth fields (used when provider is 'google')
   googleService?: GoogleService; // Predefined service for scope selection
   googleScopes?: string[]; // Custom scopes (overrides googleService)
+  // User-provided OAuth credentials (for OSS users who create their own Google Cloud project)
+  googleOAuthClientId?: string; // User's Google OAuth Client ID
+  googleOAuthClientSecret?: string; // User's Google OAuth Client Secret
 
   // Slack OAuth fields (used when provider is 'slack')
   // Uses user_scope for user authentication (posts as the user, not a bot)
@@ -284,6 +313,62 @@ export interface LocalSourceConfig {
  */
 export type SourceConnectionStatus = 'connected' | 'needs_auth' | 'failed' | 'untested' | 'local_disabled';
 
+// ============================================================================
+// Source Brand & Action Cards
+// ============================================================================
+
+/**
+ * Brand theming for a source's UI elements (card headers, buttons).
+ * Uses the EntityColor system for light/dark mode support.
+ */
+export interface SourceBrand {
+  /** Primary brand color — used for card header tint and primary action buttons.
+   *  Can be a system color name ("accent", "info") or custom { light, dark } values.
+   *  Defaults to "accent" if not set. */
+  color?: import('../colors/types').EntityColor;
+}
+
+/**
+ * Handler for an action card button — defines what happens on click.
+ */
+export type SourceCardActionHandler =
+  | { type: 'api'; method: string; path: string }
+  | { type: 'mcp'; tool: string }
+  | { type: 'copy' }
+  | { type: 'open'; urlTemplate: string };
+
+/**
+ * An action button in a source card footer.
+ */
+export interface SourceCardAction {
+  /** Button label (e.g., "Send Email", "Post to #channel") */
+  label: string;
+  /** 'primary' uses brand color, 'secondary' uses outline */
+  variant: 'primary' | 'secondary';
+  /** What happens on click */
+  handler: SourceCardActionHandler;
+}
+
+/**
+ * Defines a card type that a source can render in AI responses.
+ * Sources declare these in config.json so the UI knows how to present
+ * structured content with source-branded styling and action buttons.
+ */
+export interface SourceCardDefinition {
+  /** Card type identifier (e.g., "email", "message", "event", "payment") */
+  type: string;
+  /** Human-readable label for the card header (e.g., "Email Draft") */
+  label: string;
+  /** Lucide icon name for the header (e.g., "mail", "hash", "calendar") */
+  icon: string;
+  /** Action buttons shown in the card footer */
+  actions: SourceCardAction[];
+}
+
+// ============================================================================
+// Main Source Config
+// ============================================================================
+
 /**
  * Main source configuration (stored in config.json)
  */
@@ -304,14 +389,20 @@ export interface FolderSourceConfig {
   api?: ApiSourceConfig;
   local?: LocalSourceConfig;
 
-  // Icon: emoji or URL (auto-downloaded to icon.* file)
-  // Local icon files (icon.svg, icon.png) are auto-discovered
-  // Priority: local file > URL (downloaded) > emoji
+  // Icon: emoji or URL
+  // Config is the source of truth. Local icon files are auto-discovered only when icon is undefined.
+  // Priority: emoji > URL > local file (auto-discovered)
   icon?: string;
 
   // Short description for agent context (e.g., "Issue tracking, bugs, tasks, sprints")
   // If not set, extracted from guide.md first paragraph
   tagline?: string;
+
+  // Brand theming for this source's UI elements (card headers, buttons)
+  brand?: SourceBrand;
+
+  // Action card definitions this source supports
+  cards?: SourceCardDefinition[];
 
   // Status tracking
   isAuthenticated?: boolean;
@@ -351,7 +442,7 @@ export interface LoadedSource {
   /** Absolute path to source folder (for resolving relative icon paths) */
   folderPath: string;
 
-  /** Absolute path to workspace folder (e.g., ~/.cowork/workspaces/xxx) */
+  /** Absolute path to workspace folder (e.g., ~/.craft-agent/workspaces/xxx) */
   workspaceRootPath: string;
 
   /**
@@ -360,8 +451,17 @@ export interface LoadedSource {
    */
   workspaceId: string;
 
-  /** Whether this is a built-in source (not user-defined) */
+  /**
+   * Whether this is a built-in source (e.g., craft-agents-docs).
+   * Built-in sources are always available and not shown in the sources UI.
+   */
   isBuiltin?: boolean;
+
+  /**
+   * Pre-computed path to local icon file (icon.svg, icon.png, etc.) if it exists.
+   * Computed during source loading so renderer doesn't need filesystem access.
+   */
+  iconPath?: string;
 }
 
 /**
@@ -388,6 +488,7 @@ export interface ApiConfig {
   auth?: {
     type: 'none' | 'header' | 'bearer' | 'query' | 'basic';
     headerName?: string;
+    headerNames?: string[]; // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
     queryParam?: string;
     authScheme?: string;
     credentialLabel?: string;

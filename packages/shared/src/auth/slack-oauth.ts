@@ -12,10 +12,11 @@
  */
 
 import { URL } from 'url';
-import open from 'open';
 import { randomBytes } from 'crypto';
+import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
+import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
 
 // Re-export for convenience
 export type { SlackService } from '../sources/types.ts';
@@ -28,8 +29,6 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_OAUTH_CLIENT_SECRET || '';
 // Slack OAuth endpoints
 const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
-const SLACK_OAUTH_RELAY_BASE_URL =
-  (process.env.SLACK_OAUTH_RELAY_BASE_URL || 'https://www.aicowork.chat').replace(/\/+$/, '');
 
 /**
  * Predefined USER scope sets for common Slack services
@@ -72,6 +71,8 @@ export interface SlackOAuthOptions {
   userScopes?: string[];
   /** App type for callback server styling */
   appType?: AppType;
+  /** Session context for building deeplink back to chat after OAuth */
+  sessionContext?: OAuthSessionContext;
 }
 
 /**
@@ -271,17 +272,18 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     // Generate state for CSRF protection
     const state = generateState();
 
-    // Start local HTTP callback server
+    // Start local HTTP callback server with deeplink for returning to chat session
     const appType = options.appType || 'electron';
-    const callbackServer = await createCallbackServer({ appType });
+    const deeplinkUrl = buildOAuthDeeplinkUrl(options.sessionContext);
+    const callbackServer = await createCallbackServer({ appType, deeplinkUrl });
 
     // Extract port from local callback URL
     const localUrl = new URL(callbackServer.url);
     const port = localUrl.port;
 
-    // Use HTTPS relay for Slack OAuth (Slack requires HTTPS).
-    // The relay redirects: {relay}/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `${SLACK_OAUTH_RELAY_BASE_URL}/auth/slack/callback?port=${port}`;
+    // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
+    // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
+    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token
@@ -293,7 +295,7 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     authUrl.searchParams.set('user_scope', userScopes.join(','));
 
     // Open browser for authorization
-    await open(authUrl.toString());
+    await openUrl(authUrl.toString());
 
     // Wait for callback
     const callback = await callbackServer.promise;

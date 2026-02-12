@@ -11,7 +11,7 @@
  * - Session-isolated (each session can have its own manager)
  */
 
-import type { LoadedSource } from './types.ts';
+import { isOAuthSource, type LoadedSource } from './types.ts';
 import type { SourceCredentialManager } from './credential-manager.ts';
 
 /** Default cooldown after failed refresh (5 minutes) */
@@ -148,24 +148,21 @@ export class TokenRefreshManager {
   }
 
   /**
-   * Get all MCP OAuth sources that need refresh.
+   * Get all OAuth sources that need token refresh.
+   * Includes both MCP OAuth sources and API OAuth sources (Google, Slack, Microsoft).
    * Filters out sources in cooldown.
    */
   async getSourcesNeedingRefresh(sources: LoadedSource[]): Promise<LoadedSource[]> {
-    // Filter to MCP OAuth sources first (sync operation)
-    const mcpOAuthSources = sources.filter(source =>
-      source.config.type === 'mcp' &&
-      source.config.mcp?.authType === 'oauth' &&
-      source.config.isAuthenticated
-    );
+    // Filter to OAuth sources (MCP OAuth + API OAuth providers)
+    const oauthSources = sources.filter(isOAuthSource);
 
-    if (mcpOAuthSources.length === 0) {
+    if (oauthSources.length === 0) {
       return [];
     }
 
     // Check each source in parallel
     const results = await Promise.all(
-      mcpOAuthSources.map(async (source) => {
+      oauthSources.map(async (source) => {
         // Skip if in cooldown
         if (this.isInCooldown(source.config.slug)) {
           this.log(`[TokenRefresh] Skipping ${source.config.slug} - in cooldown`);

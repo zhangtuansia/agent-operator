@@ -7,6 +7,9 @@
  * - session.jsonl (main data in JSONL format: line 1 = header, lines 2+ = messages)
  * - attachments/ (file attachments)
  * - plans/ (plan files for Safe Mode)
+ * - data/ (transform_data tool output: JSON files for datatable/spreadsheet blocks)
+ * - long_responses/ (full tool results that were summarized due to size limits)
+ * - downloads/ (binary files downloaded from API sources: PDFs, images, archives, etc.)
  */
 
 import {
@@ -19,10 +22,11 @@ import {
   statSync,
   unlinkSync,
 } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { getWorkspaceSessionsPath } from '../workspaces/storage.ts';
 import { generateUniqueSessionId } from './slug-generator.ts';
 import { toPortablePath, expandPath } from '../utils/paths.ts';
+import { sanitizeSessionId } from './validation.ts';
 import { perf } from '../utils/perf.ts';
 import type {
   SessionConfig,
@@ -34,8 +38,10 @@ import type {
 } from './types.ts';
 import type { Plan } from '../agent/plan-types.ts';
 import { validateSessionStatus } from '../statuses/validation.ts';
+import { debug } from '../utils/debug.ts';
 import { getStatusCategory } from '../statuses/storage.ts';
-import { readSessionHeader, readSessionJsonl, writeSessionJsonl } from './jsonl.ts';
+import { readSessionHeader, readSessionJsonl } from './jsonl.ts';
+import { sessionPersistenceQueue } from './persistence-queue.ts';
 
 // Re-export types for convenience
 export type { SessionConfig } from './types.ts';
@@ -57,9 +63,14 @@ export function ensureSessionsDir(workspaceRootPath: string): string {
 
 /**
  * Get path to a session's directory
+ *
+ * SECURITY: Uses sanitizeSessionId() as defense-in-depth to prevent path traversal.
+ * Callers should still validate sessionId before calling this function.
  */
 export function getSessionPath(workspaceRootPath: string, sessionId: string): string {
-  return join(getWorkspaceSessionsPath(workspaceRootPath), sessionId);
+  // Defense-in-depth: strip any path components from sessionId
+  const safeSessionId = sanitizeSessionId(sessionId);
+  return join(getWorkspaceSessionsPath(workspaceRootPath), safeSessionId);
 }
 
 /**
@@ -77,7 +88,7 @@ export function ensureSessionDir(workspaceRootPath: string, sessionId: string): 
   if (!existsSync(sessionDir)) {
     mkdirSync(sessionDir, { recursive: true });
   }
-  // Also create plans and attachments directories
+  // Also create plans, attachments, long_responses, and downloads directories
   const plansDir = join(sessionDir, 'plans');
   if (!existsSync(plansDir)) {
     mkdirSync(plansDir, { recursive: true });
@@ -85,6 +96,20 @@ export function ensureSessionDir(workspaceRootPath: string, sessionId: string): 
   const attachmentsDir = join(sessionDir, 'attachments');
   if (!existsSync(attachmentsDir)) {
     mkdirSync(attachmentsDir, { recursive: true });
+  }
+  const longResponsesDir = join(sessionDir, 'long_responses');
+  if (!existsSync(longResponsesDir)) {
+    mkdirSync(longResponsesDir, { recursive: true });
+  }
+  // Data directory for transform_data tool output (JSON files for datatable/spreadsheet)
+  const dataDir = join(sessionDir, 'data');
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+  // Downloads directory for binary files from API responses (PDFs, images, etc.)
+  const downloadsDir = join(sessionDir, 'downloads');
+  if (!existsSync(downloadsDir)) {
+    mkdirSync(downloadsDir, { recursive: true });
   }
   return sessionDir;
 }
@@ -101,6 +126,20 @@ export function getSessionAttachmentsPath(workspaceRootPath: string, sessionId: 
  */
 export function getSessionPlansPath(workspaceRootPath: string, sessionId: string): string {
   return join(getSessionPath(workspaceRootPath, sessionId), 'plans');
+}
+
+/**
+ * Get the data directory for a session (transform_data tool output)
+ */
+export function getSessionDataPath(workspaceRootPath: string, sessionId: string): string {
+  return join(getSessionPath(workspaceRootPath, sessionId), 'data');
+}
+
+/**
+ * Get the downloads directory for a session (binary files from API responses)
+ */
+export function getSessionDownloadsPath(workspaceRootPath: string, sessionId: string): string {
+  return join(getSessionPath(workspaceRootPath, sessionId), 'downloads');
 }
 
 // ============================================================
@@ -135,7 +174,7 @@ export function generateSessionId(workspaceRootPath: string): string {
 /**
  * Create a new session for a workspace
  */
-export function createSession(
+export async function createSession(
   workspaceRootPath: string,
   options?: {
     name?: string;
@@ -143,10 +182,12 @@ export function createSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
-    llmConnection?: string;
     hidden?: boolean;
+    todoState?: SessionConfig['todoState'];
+    labels?: string[];
+    isFlagged?: boolean;
   }
-): SessionConfig {
+): Promise<SessionConfig> {
   ensureSessionsDir(workspaceRootPath);
 
   const now = Date.now();
@@ -171,8 +212,10 @@ export function createSession(
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
-    llmConnection: options?.llmConnection,
     hidden: options?.hidden,
+    todoState: options?.todoState,
+    labels: options?.labels,
+    isFlagged: options?.isFlagged,
   };
 
   // Save empty session
@@ -187,70 +230,7 @@ export function createSession(
       costUsd: 0,
     },
   };
-  saveSession(storedSession);
-
-  return session;
-}
-
-/**
- * Create an imported session with pre-existing messages
- * Used for importing conversations from external platforms (OpenAI, Anthropic)
- */
-export function createImportedSession(
-  workspaceRootPath: string,
-  options: {
-    name?: string;
-    labels: string[];
-    createdAt: number;
-    updatedAt: number;
-    messages: Array<{
-      role: 'user' | 'assistant';
-      content: string;
-      timestamp?: number;
-    }>;
-  }
-): SessionConfig {
-  ensureSessionsDir(workspaceRootPath);
-
-  const sessionId = generateSessionId(workspaceRootPath);
-
-  // Create session directory with all subdirectories (plans, attachments)
-  ensureSessionDir(workspaceRootPath, sessionId);
-
-  const sdkCwd = getSessionPath(workspaceRootPath, sessionId);
-
-  const session: SessionConfig = {
-    id: sessionId,
-    workspaceRootPath,
-    name: options.name,
-    createdAt: options.createdAt,
-    lastUsedAt: options.updatedAt,
-    sdkCwd,
-    labels: options.labels,
-  };
-
-  // Convert imported messages to stored format
-  const storedMessages = options.messages.map((msg, idx) => ({
-    id: `imported-${idx}`,
-    type: msg.role as 'user' | 'assistant',
-    content: msg.content,
-    timestamp: msg.timestamp ?? options.createdAt + idx,
-  }));
-
-  // Save session with messages
-  const storedSession: StoredSession = {
-    ...session,
-    messages: storedMessages,
-    tokenUsage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      contextTokens: 0,
-      costUsd: 0,
-    },
-  };
-  // Preserve original timestamps for imported sessions
-  saveSession(storedSession, { preserveTimestamps: true });
+  await saveSession(storedSession);
 
   return session;
 }
@@ -259,10 +239,10 @@ export function createImportedSession(
  * Get or create a session with a specific ID
  * Used for --session <id> flag to allow user-defined session IDs
  */
-export function getOrCreateSessionById(
+export async function getOrCreateSessionById(
   workspaceRootPath: string,
   sessionId: string
-): SessionConfig {
+): Promise<SessionConfig> {
   const existing = loadSession(workspaceRootPath, sessionId);
   if (existing) {
     return {
@@ -274,8 +254,6 @@ export function getOrCreateSessionById(
       lastUsedAt: existing.lastUsedAt,
       sdkCwd: existing.sdkCwd,
       workingDirectory: existing.workingDirectory,
-      model: existing.model,
-      llmConnection: existing.llmConnection,
     };
   }
 
@@ -308,35 +286,23 @@ export function getOrCreateSessionById(
       costUsd: 0,
     },
   };
-  saveSession(storedSession);
+  await saveSession(storedSession);
 
   return session;
 }
 
 /**
- * Save session synchronously (conversation data + metadata)
- * Use saveSessionAsync for non-blocking writes during active sessions.
+ * Save session immediately using the persistence queue.
+ * Enqueues the session and flushes to ensure immediate write.
+ *
+ * This unified approach ensures all session writes go through the same
+ * async code path, which is more reliable on Windows.
  *
  * Writes in JSONL format: line 1 = header, lines 2+ = messages
  */
-export function saveSession(session: StoredSession, options?: { preserveTimestamps?: boolean }): void {
-  ensureSessionsDir(session.workspaceRootPath);
-  // Ensure session directory exists (creates plans/attachments subdirs too)
-  ensureSessionDir(session.workspaceRootPath, session.id);
-  const filePath = getSessionFilePath(session.workspaceRootPath, session.id);
-
-  // Prepare session with portable paths for cross-machine compatibility
-  const storageSession: StoredSession = {
-    ...session,
-    workspaceRootPath: toPortablePath(session.workspaceRootPath),
-    // Also make workingDirectory portable if set
-    workingDirectory: session.workingDirectory ? toPortablePath(session.workingDirectory) : undefined,
-    // For imported sessions, preserve original timestamps; otherwise update to now
-    lastUsedAt: options?.preserveTimestamps ? session.lastUsedAt : Date.now(),
-  };
-
-  // Write in JSONL format
-  writeSessionJsonl(filePath, storageSession);
+export async function saveSession(session: StoredSession): Promise<void> {
+  sessionPersistenceQueue.enqueue(session);
+  await sessionPersistenceQueue.flush(session.id);
 }
 
 /**
@@ -387,7 +353,16 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const sessionId = entry.name;
-      const jsonlFile = join(sessionsDir, sessionId, 'session.jsonl');
+      const sessionDir = join(sessionsDir, sessionId);
+      const jsonlFile = join(sessionDir, 'session.jsonl');
+
+      // Clean up orphaned .tmp files from crashed atomic writes.
+      // These are harmless but waste disk space.
+      const tmpFile = jsonlFile + '.tmp';
+      if (existsSync(tmpFile)) {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+      }
+
       if (existsSync(jsonlFile)) {
         const header = readSessionHeader(jsonlFile);
         if (header) {
@@ -428,11 +403,13 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       name: header.name,
       createdAt: header.createdAt,
       lastUsedAt: header.lastUsedAt,
+      lastMessageAt: header.lastMessageAt,
       messageCount: header.messageCount,
       preview: header.preview,
       sdkSessionId: header.sdkSessionId,
       isFlagged: header.isFlagged,
       todoState: validatedTodoState,
+      labels: header.labels,
       permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
       lastMessageRole: header.lastMessageRole,
@@ -440,14 +417,29 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       sdkCwd,
       model: header.model,
       llmConnection: header.llmConnection,
-      hidden: header.hidden,
+      connectionLocked: header.connectionLocked,
+      thinkingLevel: header.thinkingLevel,
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
-      // Labels for import categorization and other tagging
-      labels: header.labels,
+      // Token usage from JSONL header (available without loading messages)
+      tokenUsage: header.tokenUsage,
+      // Unread detection fields - pre-computed for session list display without loading messages
+      lastReadMessageId: header.lastReadMessageId,
+      lastFinalMessageId: header.lastFinalMessageId,
+      // Explicit unread flag - single source of truth for NEW badge (state machine approach)
+      hasUnread: header.hasUnread,
+      // Hidden flag for mini-agent sessions (not shown in session list)
+      hidden: header.hidden,
+      // Archive state
+      isArchived: header.isArchived,
+      archivedAt: header.archivedAt,
+      // Sub-session hierarchy
+      parentSessionId: header.parentSessionId,
+      siblingOrder: header.siblingOrder,
     };
-  } catch {
+  } catch (error) {
+    debug(`[sessions] Failed to convert header to metadata for session "${header?.id}" in ${workspaceRootPath}:`, error);
     return null;
   }
 }
@@ -475,7 +467,7 @@ export function deleteSession(workspaceRootPath: string, sessionId: string): boo
  * Used for /clear command to reset conversation without creating a new session.
  * Also clears the SDK session ID to start a fresh Claude conversation.
  */
-export function clearSessionMessages(workspaceRootPath: string, sessionId: string): void {
+export async function clearSessionMessages(workspaceRootPath: string, sessionId: string): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (session) {
     // Clear messages and SDK session ID but preserve metadata
@@ -489,15 +481,16 @@ export function clearSessionMessages(workspaceRootPath: string, sessionId: strin
       contextTokens: 0,
       costUsd: 0,
     };
-    saveSession(session);
+    await saveSession(session);
   }
 }
 
 /**
  * Get or create the latest session for a workspace
+ * Uses listActiveSessions to exclude archived sessions
  */
-export function getOrCreateLatestSession(workspaceRootPath: string): SessionConfig {
-  const sessions = listSessions(workspaceRootPath);
+export async function getOrCreateLatestSession(workspaceRootPath: string): Promise<SessionConfig> {
+  const sessions = listActiveSessions(workspaceRootPath);
   if (sessions.length > 0 && sessions[0]) {
     const latest = sessions[0];
     return {
@@ -507,8 +500,6 @@ export function getOrCreateLatestSession(workspaceRootPath: string): SessionConf
       name: latest.name,
       createdAt: latest.createdAt,
       lastUsedAt: latest.lastUsedAt,
-      model: latest.model,
-      llmConnection: latest.llmConnection,
     };
   }
   return createSession(workspaceRootPath);
@@ -521,79 +512,136 @@ export function getOrCreateLatestSession(workspaceRootPath: string): SessionConf
 /**
  * Update SDK session ID for a session
  */
-export function updateSessionSdkId(
+export async function updateSessionSdkId(
   workspaceRootPath: string,
   sessionId: string,
   sdkSessionId: string
-): void {
+): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (session) {
     session.sdkSessionId = sdkSessionId;
-    saveSession(session);
+    await saveSession(session);
   }
+}
+
+/**
+ * Check if sdkCwd can be safely updated for a session.
+ *
+ * sdkCwd is normally immutable because the SDK stores session transcripts at
+ * ~/.claude/projects/{cwd-slugified}/. However, it's safe to update sdkCwd if
+ * no SDK interaction has occurred yet (no transcripts to preserve).
+ *
+ * @returns true if sdkCwd can be updated (no messages and no SDK session ID)
+ */
+export function canUpdateSdkCwd(session: StoredSession): boolean {
+  // Safe to update if:
+  // 1. No messages have been sent yet (no conversation to preserve)
+  // 2. No SDK session ID (no transcript exists at the sdkCwd path)
+  return session.messages.length === 0 && !session.sdkSessionId;
 }
 
 /**
  * Update session metadata
  */
-export function updateSessionMetadata(
+export async function updateSessionMetadata(
   workspaceRootPath: string,
   sessionId: string,
   updates: Partial<Pick<SessionConfig,
     | 'isFlagged'
     | 'name'
     | 'todoState'
+    | 'labels'
     | 'lastReadMessageId'
+    | 'hasUnread'
     | 'enabledSourceSlugs'
     | 'workingDirectory'
+    | 'sdkCwd'
     | 'permissionMode'
     | 'sharedUrl'
     | 'sharedId'
     | 'model'
     | 'llmConnection'
+    | 'isArchived'
+    | 'archivedAt'
   >>
-): void {
+): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session) return;
 
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
   if (updates.name !== undefined) session.name = updates.name;
   if (updates.todoState !== undefined) session.todoState = updates.todoState;
+  if (updates.labels !== undefined) session.labels = updates.labels;
   if (updates.enabledSourceSlugs !== undefined) session.enabledSourceSlugs = updates.enabledSourceSlugs;
   if (updates.workingDirectory !== undefined) session.workingDirectory = updates.workingDirectory;
+  if (updates.sdkCwd !== undefined) session.sdkCwd = updates.sdkCwd;
   if (updates.permissionMode !== undefined) session.permissionMode = updates.permissionMode;
   if ('lastReadMessageId' in updates) session.lastReadMessageId = updates.lastReadMessageId;
+  if ('hasUnread' in updates) session.hasUnread = updates.hasUnread;
   if ('sharedUrl' in updates) session.sharedUrl = updates.sharedUrl;
   if ('sharedId' in updates) session.sharedId = updates.sharedId;
   if (updates.model !== undefined) session.model = updates.model;
-  if ('llmConnection' in updates) session.llmConnection = updates.llmConnection;
+  if (updates.llmConnection !== undefined) session.llmConnection = updates.llmConnection;
+  if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
+  if ('archivedAt' in updates) session.archivedAt = updates.archivedAt;
 
-  saveSession(session);
+  await saveSession(session);
 }
 
 /**
  * Flag a session
  */
-export function flagSession(workspaceRootPath: string, sessionId: string): void {
-  updateSessionMetadata(workspaceRootPath, sessionId, { isFlagged: true });
+export async function flagSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { isFlagged: true });
 }
 
 /**
  * Unflag a session
  */
-export function unflagSession(workspaceRootPath: string, sessionId: string): void {
-  updateSessionMetadata(workspaceRootPath, sessionId, { isFlagged: false });
+export async function unflagSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { isFlagged: false });
 }
 
 /**
  * Set todo state for a session
  */
-export function setSessionTodoState(
+export async function setSessionTodoState(
   workspaceRootPath: string,
   sessionId: string,
   todoState: TodoState
-): void {
-  updateSessionMetadata(workspaceRootPath, sessionId, { todoState });
+): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { todoState });
+}
+
+/**
+ * Set labels for a session
+ */
+export async function setSessionLabels(
+  workspaceRootPath: string,
+  sessionId: string,
+  labels: string[]
+): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { labels });
+}
+
+/**
+ * Archive a session
+ */
+export async function archiveSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, {
+    isArchived: true,
+    archivedAt: Date.now(),
+  });
+}
+
+/**
+ * Unarchive a session
+ */
+export async function unarchiveSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, {
+    isArchived: false,
+    archivedAt: undefined,
+  });
 }
 
 // ============================================================
@@ -605,11 +653,11 @@ export function setSessionTodoState(
  * Called when user clicks "Accept & Compact" - stores the plan path
  * so it can be executed after compaction, even if the page reloads.
  */
-export function setPendingPlanExecution(
+export async function setPendingPlanExecution(
   workspaceRootPath: string,
   sessionId: string,
   planPath: string
-): void {
+): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session) return;
 
@@ -617,7 +665,7 @@ export function setPendingPlanExecution(
     planPath,
     awaitingCompaction: true,
   };
-  saveSession(session);
+  await saveSession(session);
 }
 
 /**
@@ -625,15 +673,15 @@ export function setPendingPlanExecution(
  * Called when compaction_complete event fires - sets awaitingCompaction to false
  * so reload recovery knows compaction finished and can trigger execution.
  */
-export function markCompactionComplete(
+export async function markCompactionComplete(
   workspaceRootPath: string,
   sessionId: string
-): void {
+): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session?.pendingPlanExecution) return;
 
   session.pendingPlanExecution.awaitingCompaction = false;
-  saveSession(session);
+  await saveSession(session);
 }
 
 /**
@@ -641,15 +689,15 @@ export function markCompactionComplete(
  * Called after plan execution is sent, on new user message, or when
  * the pending execution is no longer relevant.
  */
-export function clearPendingPlanExecution(
+export async function clearPendingPlanExecution(
   workspaceRootPath: string,
   sessionId: string
-): void {
+): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session) return;
 
   delete session.pendingPlanExecution;
-  saveSession(session);
+  await saveSession(session);
 }
 
 /**
@@ -669,18 +717,19 @@ export function getPendingPlanExecution(
 // ============================================================
 
 /**
- * List flagged sessions
+ * List flagged sessions (excludes archived)
  */
 export function listFlaggedSessions(workspaceRootPath: string): SessionMetadata[] {
-  return listSessions(workspaceRootPath).filter(s => s.isFlagged === true);
+  return listActiveSessions(workspaceRootPath).filter(s => s.isFlagged === true);
 }
 
 /**
  * List completed sessions (category: closed)
  * Includes done, cancelled, and any custom "closed" statuses
+ * Excludes archived sessions
  */
 export function listCompletedSessions(workspaceRootPath: string): SessionMetadata[] {
-  return listSessions(workspaceRootPath).filter(s => {
+  return listActiveSessions(workspaceRootPath).filter(s => {
     const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
     return category === 'closed';
   });
@@ -689,12 +738,286 @@ export function listCompletedSessions(workspaceRootPath: string): SessionMetadat
 /**
  * List inbox sessions (category: open)
  * Includes todo, in-progress, needs-review, and any custom "open" statuses
+ * Excludes archived sessions
  */
 export function listInboxSessions(workspaceRootPath: string): SessionMetadata[] {
-  return listSessions(workspaceRootPath).filter(s => {
+  return listActiveSessions(workspaceRootPath).filter(s => {
     const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
     return category === 'open';
   });
+}
+
+/**
+ * List archived sessions
+ */
+export function listArchivedSessions(workspaceRootPath: string): SessionMetadata[] {
+  return listSessions(workspaceRootPath).filter(s => s.isArchived === true);
+}
+
+/**
+ * List active (non-archived) sessions
+ */
+export function listActiveSessions(workspaceRootPath: string): SessionMetadata[] {
+  return listSessions(workspaceRootPath).filter(s => s.isArchived !== true);
+}
+
+/**
+ * Delete archived sessions older than the specified number of days
+ * Returns the number of sessions deleted
+ */
+export function deleteOldArchivedSessions(workspaceRootPath: string, retentionDays: number): number {
+  const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+  const archivedSessions = listArchivedSessions(workspaceRootPath);
+  let deletedCount = 0;
+
+  for (const session of archivedSessions) {
+    // Use archivedAt if available, otherwise fall back to lastUsedAt
+    const archiveTime = session.archivedAt ?? session.lastUsedAt;
+    if (archiveTime < cutoffTime) {
+      if (deleteSession(workspaceRootPath, session.id)) {
+        deletedCount++;
+      }
+    }
+  }
+
+  return deletedCount;
+}
+
+// ============================================================
+// Sub-Session Hierarchy (1 level max)
+// ============================================================
+
+/**
+ * Sort siblings by explicit order or creation time.
+ * Uses siblingOrder if any sibling has it set, otherwise falls back to createdAt.
+ */
+export function sortSiblings(sessions: SessionMetadata[]): SessionMetadata[] {
+  const hasExplicitOrder = sessions.some(s => s.siblingOrder !== undefined);
+
+  return [...sessions].sort((a, b) => {
+    if (hasExplicitOrder) {
+      // Explicit order takes precedence (undefined = end)
+      return (a.siblingOrder ?? Infinity) - (b.siblingOrder ?? Infinity);
+    }
+    // Default: creation order
+    return a.createdAt - b.createdAt;
+  });
+}
+
+/**
+ * Create a sub-session under a parent session.
+ * Sub-sessions share the same workspace but have a parentSessionId reference.
+ */
+export async function createSubSession(
+  workspaceRootPath: string,
+  parentSessionId: string,
+  options?: {
+    name?: string;
+    workingDirectory?: string;
+    permissionMode?: SessionConfig['permissionMode'];
+    enabledSourceSlugs?: string[];
+    model?: string;
+    todoState?: SessionConfig['todoState'];
+    labels?: string[];
+  }
+): Promise<SessionConfig> {
+  // Verify parent exists
+  const parent = loadSession(workspaceRootPath, parentSessionId);
+  if (!parent) {
+    throw new Error(`Parent session not found: ${parentSessionId}`);
+  }
+
+  // Prevent nested sub-sessions (max 1 level)
+  if (parent.parentSessionId) {
+    throw new Error('Cannot create sub-session of a sub-session (max 1 level)');
+  }
+
+  // Create child session with parentSessionId set
+  const session = await createSession(workspaceRootPath, {
+    name: options?.name,
+    workingDirectory: options?.workingDirectory ?? parent.workingDirectory,
+    permissionMode: options?.permissionMode ?? parent.permissionMode,
+    enabledSourceSlugs: options?.enabledSourceSlugs ?? parent.enabledSourceSlugs,
+    model: options?.model ?? parent.model,
+    todoState: options?.todoState,
+    labels: options?.labels,
+  });
+
+  // Set parentSessionId
+  const storedSession = loadSession(workspaceRootPath, session.id);
+  if (storedSession) {
+    storedSession.parentSessionId = parentSessionId;
+    await saveSession(storedSession);
+  }
+
+  return { ...session, parentSessionId };
+}
+
+/**
+ * Get all direct children of a session.
+ * Returns sessions where parentSessionId matches the given sessionId.
+ */
+export function getChildSessions(workspaceRootPath: string, parentSessionId: string): SessionMetadata[] {
+  const allSessions = listSessions(workspaceRootPath);
+  const children = allSessions.filter(s => s.parentSessionId === parentSessionId);
+  return sortSiblings(children);
+}
+
+/**
+ * Get parent session metadata (if this is a sub-session).
+ */
+export function getParentSession(workspaceRootPath: string, sessionId: string): SessionMetadata | null {
+  const session = loadSession(workspaceRootPath, sessionId);
+  if (!session?.parentSessionId) {
+    return null;
+  }
+
+  const allSessions = listSessions(workspaceRootPath);
+  return allSessions.find(s => s.id === session.parentSessionId) ?? null;
+}
+
+/**
+ * Get sibling sessions (same parent, excluding self).
+ * Returns empty array if session has no parent.
+ */
+export function getSiblingsSessions(workspaceRootPath: string, sessionId: string): SessionMetadata[] {
+  const session = loadSession(workspaceRootPath, sessionId);
+  if (!session?.parentSessionId) {
+    return [];
+  }
+
+  const children = getChildSessions(workspaceRootPath, session.parentSessionId);
+  return children.filter(s => s.id !== sessionId);
+}
+
+/**
+ * Get full session family (parent + siblings) for a sub-session.
+ * Returns null if session is a root session (no parent).
+ */
+export function getSessionFamily(workspaceRootPath: string, sessionId: string): {
+  parent: SessionMetadata;
+  siblings: SessionMetadata[];
+  self: SessionMetadata;
+} | null {
+  const session = loadSession(workspaceRootPath, sessionId);
+  if (!session?.parentSessionId) {
+    return null;
+  }
+
+  const parent = getParentSession(workspaceRootPath, sessionId);
+  if (!parent) {
+    return null;
+  }
+
+  const allChildren = getChildSessions(workspaceRootPath, session.parentSessionId);
+  const self = allChildren.find(s => s.id === sessionId);
+  const siblings = allChildren.filter(s => s.id !== sessionId);
+
+  if (!self) {
+    return null;
+  }
+
+  return { parent, siblings, self };
+}
+
+/**
+ * Check if a session has any children.
+ */
+export function hasChildren(workspaceRootPath: string, sessionId: string): boolean {
+  return getChildSessions(workspaceRootPath, sessionId).length > 0;
+}
+
+/**
+ * Update sibling order for multiple sessions at once.
+ * Used when user reorders siblings via drag-drop.
+ */
+export async function updateSiblingOrder(
+  workspaceRootPath: string,
+  orderedSessionIds: string[]
+): Promise<void> {
+  for (let i = 0; i < orderedSessionIds.length; i++) {
+    const sessionId = orderedSessionIds[i];
+    if (!sessionId) continue;
+
+    const session = loadSession(workspaceRootPath, sessionId);
+    if (session) {
+      session.siblingOrder = i;
+      await saveSession(session);
+    }
+  }
+}
+
+/**
+ * Archive a session and all its children.
+ * Returns the count of sessions archived.
+ */
+export async function archiveSessionCascade(workspaceRootPath: string, sessionId: string): Promise<number> {
+  const children = getChildSessions(workspaceRootPath, sessionId);
+  let count = 0;
+
+  // Archive children first
+  for (const child of children) {
+    await archiveSession(workspaceRootPath, child.id);
+    count++;
+  }
+
+  // Archive parent
+  await archiveSession(workspaceRootPath, sessionId);
+  count++;
+
+  return count;
+}
+
+/**
+ * Unarchive a session and optionally its children.
+ * Returns the count of sessions unarchived.
+ */
+export async function unarchiveSessionCascade(
+  workspaceRootPath: string,
+  sessionId: string,
+  includeChildren: boolean = true
+): Promise<number> {
+  let count = 0;
+
+  // Unarchive parent first
+  await unarchiveSession(workspaceRootPath, sessionId);
+  count++;
+
+  // Optionally unarchive children
+  if (includeChildren) {
+    const children = getChildSessions(workspaceRootPath, sessionId);
+    for (const child of children) {
+      if (child.isArchived) {
+        await unarchiveSession(workspaceRootPath, child.id);
+        count++;
+      }
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Delete a session and all its children.
+ * Returns the count of sessions deleted.
+ */
+export function deleteSessionCascade(workspaceRootPath: string, sessionId: string): number {
+  const children = getChildSessions(workspaceRootPath, sessionId);
+  let count = 0;
+
+  // Delete children first
+  for (const child of children) {
+    if (deleteSession(workspaceRootPath, child.id)) {
+      count++;
+    }
+  }
+
+  // Delete parent
+  if (deleteSession(workspaceRootPath, sessionId)) {
+    count++;
+  }
+
+  return count;
 }
 
 // ============================================================
@@ -910,7 +1233,7 @@ export function loadPlanFromPath(filePath: string): Plan | null {
 
   try {
     const content = readFileSync(filePath, 'utf-8');
-    const fileName = filePath.split('/').pop()?.replace('.md', '') || 'unknown';
+    const fileName = basename(filePath).replace('.md', '') || 'unknown';
     return parsePlanFromMarkdown(content, fileName);
   } catch {
     return null;

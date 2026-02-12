@@ -207,6 +207,7 @@ export class CredentialManager {
     accessToken: string;
     refreshToken?: string;
     expiresAt?: number;
+    source?: 'native' | 'cli';
   } | null> {
     const cred = await this.get({ type: 'claude_oauth' });
     if (!cred) return null;
@@ -215,6 +216,7 @@ export class CredentialManager {
       accessToken: cred.value,
       refreshToken: cred.refreshToken,
       expiresAt: cred.expiresAt,
+      source: cred.source,
     };
   }
 
@@ -223,11 +225,13 @@ export class CredentialManager {
     accessToken: string;
     refreshToken?: string;
     expiresAt?: number;
+    source?: 'native' | 'cli';
   }): Promise<void> {
     await this.set({ type: 'claude_oauth' }, {
       value: credentials.accessToken,
       refreshToken: credentials.refreshToken,
       expiresAt: credentials.expiresAt,
+      source: credentials.source,
     });
   }
 

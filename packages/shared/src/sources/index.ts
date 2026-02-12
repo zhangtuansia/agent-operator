@@ -47,7 +47,9 @@ export {
   // Load operations
   loadSource,
   loadWorkspaceSources,
+  loadAllSources,
   getEnabledSources,
+  isSourceUsable,
   getSourcesBySlugs,
   // Create/Delete operations
   generateSourceSlug,
@@ -70,16 +72,6 @@ export type {
   BasicAuthCredential,
 } from './credential-manager.ts';
 
-// Token refresh manager (OAuth refresh orchestration + cooldown protection)
-export {
-  TokenRefreshManager,
-  createTokenGetter,
-} from './token-refresh-manager.ts';
-export type {
-  TokenRefreshResult,
-  RefreshManagerOptions,
-} from './token-refresh-manager.ts';
-
 // Server Builder (builds MCP/API servers from sources)
 export {
   SourceServerBuilder,
@@ -92,3 +84,23 @@ export type {
   SourceWithCredential,
   BuiltServers,
 } from './server-builder.ts';
+
+// Built-in Sources (always available in every workspace)
+export {
+  getDocsSource,
+  getBuiltinSources,
+  isBuiltinSource,
+} from './builtin-sources.ts';
+
+// API Tools (types)
+export type { SummarizeCallback } from './api-tools.ts';
+
+// Token Refresh Manager (handles OAuth token refresh with rate limiting)
+export {
+  TokenRefreshManager,
+  createTokenGetter,
+} from './token-refresh-manager.ts';
+export type {
+  TokenRefreshResult,
+  RefreshManagerOptions,
+} from './token-refresh-manager.ts';

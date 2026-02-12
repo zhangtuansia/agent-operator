@@ -76,6 +76,12 @@ export interface PlatformActions {
   onOpenActivityDetails?: (sessionId: string, activityId: string) => void
 
   /**
+   * Read a file's contents as UTF-8 string (Electron: fs.readFile via IPC)
+   * Used by datatable/spreadsheet markdown blocks with `src` references.
+   */
+  onReadFile?: (path: string) => Promise<string>
+
+  /**
    * Show/hide macOS traffic light buttons (close/minimize/maximize).
    * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
    * No-op on non-macOS platforms or in web viewer.

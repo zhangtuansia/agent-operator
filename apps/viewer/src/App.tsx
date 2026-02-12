@@ -15,12 +15,17 @@ import {
   SessionViewer,
   GenericOverlay,
   CodePreviewOverlay,
-  DiffPreviewOverlay,
+  MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
+  JSONPreviewOverlay,
+  DocumentFormattedMarkdownOverlay,
+  TooltipProvider,
   extractOverlayData,
+  detectLanguage,
   type PlatformActions,
   type ActivityItem,
   type OverlayData,
+  type FileChange,
 } from '@agent-operator/ui'
 import { SessionUpload } from './components/SessionUpload'
 import { Header } from './components/Header'
@@ -131,17 +136,36 @@ export function App() {
 
   // State for overlay
   const [overlayActivity, setOverlayActivity] = useState<ActivityItem | null>(null)
+  // State for multi-diff overlay (Edit/Write activities shown as diffs)
+  const [multiDiffState, setMultiDiffState] = useState<{ changes: FileChange[] } | null>(null)
 
-  // Handle activity click - show in overlay
+  // Handle activity click - Edit/Write opens multi-diff, others use extractOverlayData
   const handleActivityClick = useCallback((activity: ActivityItem) => {
-    setOverlayActivity(activity)
+    if (activity.toolName === 'Edit' || activity.toolName === 'Write') {
+      const input = activity.toolInput as Record<string, unknown> | undefined
+      const filePath = (input?.file_path as string) || (input?.path as string) || 'unknown'
+      const change: FileChange = {
+        id: activity.id,
+        filePath,
+        toolType: activity.toolName,
+        original: activity.toolName === 'Edit' ? ((input?.old_string as string) || '') : '',
+        modified: activity.toolName === 'Edit'
+          ? ((input?.new_string as string) || '')
+          : ((input?.content as string) || ''),
+        error: activity.error || undefined,
+      }
+      setMultiDiffState({ changes: [change] })
+    } else {
+      setOverlayActivity(activity)
+    }
   }, [])
 
   const handleCloseOverlay = useCallback(() => {
     setOverlayActivity(null)
+    setMultiDiffState(null)
   }, [])
 
-  // Extract overlay data using shared parser
+  // Extract overlay data using shared parser (non-Edit/Write tools only)
   const overlayData: OverlayData | null = useMemo(() => {
     if (!overlayActivity) return null
     return extractOverlayData(overlayActivity)
@@ -160,6 +184,7 @@ export function App() {
   const theme = isDark ? 'dark' : 'light'
 
   return (
+    <TooltipProvider>
     <div className="h-full flex flex-col bg-foreground-2 text-foreground">
       <Header
         hasSession={!!session}
@@ -181,7 +206,7 @@ export function App() {
             <div className="text-destructive mb-4">{error}</div>
             <button
               onClick={handleClear}
-              className="px-4 py-2 rounded-md bg-background text-foreground shadow-sm border border-border hover:bg-accent transition-colors"
+              className="px-4 py-2 rounded-md bg-background text-foreground shadow-sm border border-border hover:bg-foreground/5 transition-colors"
             >
               Go back
             </button>
@@ -218,16 +243,14 @@ export function App() {
         />
       )}
 
-      {/* Diff preview overlay for Edit tool */}
-      {overlayData?.type === 'diff' && (
-        <DiffPreviewOverlay
-          isOpen={!!overlayActivity}
+      {/* Multi-diff preview overlay for Edit/Write tools */}
+      {multiDiffState && (
+        <MultiDiffPreviewOverlay
+          isOpen={true}
           onClose={handleCloseOverlay}
-          original={overlayData.original}
-          modified={overlayData.modified}
-          filePath={overlayData.filePath}
+          changes={multiDiffState.changes}
+          consolidated={false}
           theme={theme}
-          error={overlayData.error}
         />
       )}
 
@@ -245,15 +268,48 @@ export function App() {
         />
       )}
 
-      {/* Generic overlay for unknown tools */}
-      {overlayData?.type === 'generic' && (
-        <GenericOverlay
+      {/* JSON preview overlay for tools returning JSON data */}
+      {overlayData?.type === 'json' && (
+        <JSONPreviewOverlay
+          isOpen={!!overlayActivity}
+          onClose={handleCloseOverlay}
+          data={overlayData.data}
+          title={overlayData.title}
+          theme={theme}
+          error={overlayData.error}
+        />
+      )}
+
+      {/* Document overlay for formatted markdown content (Write tool on .md/.txt, WebSearch results) */}
+      {overlayData?.type === 'document' && (
+        <DocumentFormattedMarkdownOverlay
           isOpen={!!overlayActivity}
           onClose={handleCloseOverlay}
           content={overlayData.content}
-          title={overlayData.title}
+          onOpenUrl={platformActions.onOpenUrl}
         />
       )}
+
+      {/* Generic overlay for unknown tools - route markdown to fullscreen viewer */}
+      {overlayData?.type === 'generic' && (
+        detectLanguage(overlayData.content) === 'markdown' ? (
+          <DocumentFormattedMarkdownOverlay
+            isOpen={!!overlayActivity}
+            onClose={handleCloseOverlay}
+            content={overlayData.content}
+            onOpenUrl={platformActions.onOpenUrl}
+          />
+        ) : (
+          <GenericOverlay
+            isOpen={!!overlayActivity}
+            onClose={handleCloseOverlay}
+            content={overlayData.content}
+            title={overlayData.title}
+            theme={theme}
+          />
+        )
+      )}
     </div>
+    </TooltipProvider>
   )
 }

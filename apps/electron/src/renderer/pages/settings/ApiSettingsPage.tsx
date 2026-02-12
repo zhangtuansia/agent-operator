@@ -107,8 +107,8 @@ const PROVIDERS = [
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    baseURL: 'https://api.deepseek.com/v1',
-    apiFormat: 'openai' as const,
+    baseURL: 'https://api.deepseek.com/anthropic',
+    apiFormat: 'anthropic' as const,
     description: 'DeepSeek AI models',
   },
   {

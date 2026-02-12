@@ -24,7 +24,8 @@ export type LlmProviderType =
   | 'openai'
   | 'openai_compat'
   | 'bedrock'
-  | 'vertex';
+  | 'vertex'
+  | 'copilot';
 
 /**
  * @deprecated Use LlmProviderType instead.
@@ -233,6 +234,13 @@ export function isOpenAIProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
+ * Whether provider uses GitHub Copilot backend.
+ */
+export function isCopilotProvider(providerType: LlmProviderType): boolean {
+  return providerType === 'copilot';
+}
+
+/**
  * Registry models for standard providers.
  * Compat providers intentionally return empty here.
  */
@@ -243,6 +251,10 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
 
   if (providerType === 'openai') {
     return OPENAI_MODELS;
+  }
+
+  if (providerType === 'copilot') {
+    return [];
   }
 
   return CLAUDE_MODELS;
@@ -258,6 +270,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
     'openai/gpt-5.1-codex-mini',
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
+  if (providerType === 'copilot') return [];
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.5',
     'anthropic/claude-sonnet-4.5',
@@ -322,6 +335,7 @@ export function isValidProviderAuthCombination(
     openai_compat: ['api_key_with_endpoint', 'none', 'api_key'],
     bedrock: ['bearer_token', 'iam_credentials', 'environment'],
     vertex: ['oauth', 'service_account_file', 'environment'],
+    copilot: ['oauth'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

@@ -7,6 +7,7 @@
 
 // Import shared types - single source of truth
 import type { ChatFilter, SettingsSubpage } from '../../../shared/types'
+import { VALID_SETTINGS_SUBPAGES } from '../../../shared/settings-registry'
 export type { ChatFilter, SettingsSubpage }
 
 /**
@@ -64,7 +65,7 @@ export const parseSidebarModeKey = (key: string): SidebarMode | null => {
   }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'workspace', 'shortcuts', 'preferences'].includes(subpage)) {
+    if (VALID_SETTINGS_SUBPAGES.includes(subpage)) {
       return { type: 'settings', subpage }
     }
   }

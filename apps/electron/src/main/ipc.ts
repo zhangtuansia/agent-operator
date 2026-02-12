@@ -980,6 +980,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Release notes
+  ipcMain.handle(IPC_CHANNELS.GET_RELEASE_NOTES, () => {
+    const { getCombinedReleaseNotes } = require('@agent-operator/shared/release-notes') as typeof import('@agent-operator/shared/release-notes')
+    return getCombinedReleaseNotes()
+  })
+  ipcMain.handle(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION, () => {
+    const { getLatestReleaseVersion } = require('@agent-operator/shared/release-notes') as typeof import('@agent-operator/shared/release-notes')
+    return getLatestReleaseVersion()
+  })
+
   // Get fonts path (for sandbox-enabled preload)
   ipcMain.handle(IPC_CHANNELS.GET_FONTS_PATH, () => {
     // Check if we're in development (running via Vite)

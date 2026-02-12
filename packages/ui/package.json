@@ -21,11 +21,14 @@
     "@excalidraw/excalidraw": "^0.18.0",
     "@types/mdast": "^4.0.0",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
+    "fflate": "^0.8.2",
+    "nice-ticks": "^1.0.2",
     "unified": "^11.0.0",
     "unist-util-visit": "^5.0.0"
   },
   "peerDependencies": {
     "@radix-ui/react-dialog": ">=1.0.0",
+    "@radix-ui/react-dropdown-menu": ">=2.0.0",
     "@radix-ui/react-tooltip": ">=1.0.0",
     "@pierre/diffs": ">=0.1.0",
     "@tailwindcss/typography": ">=0.5.0",
@@ -45,6 +48,9 @@
   },
   "peerDependenciesMeta": {
     "@radix-ui/react-dialog": {
+      "optional": true
+    },
+    "@radix-ui/react-dropdown-menu": {
       "optional": true
     },
     "@pierre/diffs": {

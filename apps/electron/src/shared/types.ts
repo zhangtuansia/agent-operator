@@ -53,6 +53,11 @@ export type { LlmConnection, LlmConnectionWithStatus };
 import type { LoadedSkill, SkillMetadata } from '@agent-operator/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
 
+// Import credential health types
+import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@agent-operator/shared/credentials/types';
+export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
+import { VALID_SETTINGS_SUBPAGES } from './settings-registry';
+
 // Re-export IPC types from shared package
 export type {
   // Session types
@@ -139,6 +144,17 @@ export interface SessionSearchResult {
   sessionId: string
   matchCount: number
   matches: SearchMatch[]
+}
+
+/**
+ * Tool icon mapping for CLI commands shown in turn cards
+ */
+export interface ToolIconMapping {
+  id: string
+  displayName: string
+  /** Data URL of the icon (e.g., data:image/png;base64,...) */
+  iconDataUrl: string
+  commands: string[]
 }
 
 /**
@@ -413,6 +429,13 @@ export interface ElectronAPI {
   loadPresetTheme(themeId: string): Promise<import('@config/theme').PresetTheme | null>
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
+  // Per-workspace color theme overrides
+  setWorkspaceColorTheme(workspaceId: string, themeId: string | null): Promise<void>
+  getAllWorkspaceThemes(): Promise<Record<string, string | undefined>>
+  // Tool icon mappings (CLI command → icon)
+  getToolIconMappings(): Promise<ToolIconMapping[]>
+  // Credential health check
+  getCredentialHealth(): Promise<CredentialHealthStatus>
 
   // Fonts (local font files)
   getFontsPath(): Promise<string>
@@ -571,7 +594,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'workspace', 'api', 'input', 'permissions', 'shortcuts', 'preferences'].includes(subpage)) {
+    if (VALID_SETTINGS_SUBPAGES.includes(subpage)) {
       return { navigator: 'settings', subpage }
     }
   }

@@ -14,6 +14,7 @@ import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces } from '@agent-operator/shared/config'
 import { getAuthState } from '@agent-operator/shared/auth'
 import { initializeDocs } from '@agent-operator/shared/docs'
+import { initializeReleaseNotes } from '@agent-operator/shared/release-notes'
 import { ensureDefaultPermissions } from '@agent-operator/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
@@ -162,6 +163,8 @@ async function createInitialWindows(): Promise<void> {
 app.whenReady().then(async () => {
   // Initialize bundled docs
   initializeDocs()
+  // Initialize bundled release notes
+  initializeReleaseNotes()
 
   // Ensure default permissions file exists (copies bundled default.json on first run)
   const bundledPermissionsDir = join(__dirname, 'resources/permissions')
@@ -219,6 +222,7 @@ app.whenReady().then(async () => {
     await sessionManager.initialize()
 
     // Register IPC handlers (must happen before window creation)
+    // Note: registerIpcHandlers internally calls registerOnboardingHandlers
     registerIpcHandlers(sessionManager, windowManager)
 
     // Create initial windows (restores from saved state or opens first workspace)

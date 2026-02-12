@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
 import { OperatorAgent, CodexAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
+import { sanitizeForTitle } from './title-sanitizer'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
 import {
@@ -70,18 +71,6 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { generateSessionTitle, regenerateSessionTitle, buildFallbackTitleFromMessages, formatPathsToRelative, formatToolInputPaths, perf, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import { DEFAULT_MODEL, getDefaultModelForProvider } from '@agent-operator/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shared/agent/thinking-levels'
-
-/**
- * Sanitize message content for use as session title.
- * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
- */
-function sanitizeForTitle(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
-    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
-    .replace(/\s+/g, ' ')        // Collapse whitespace
-    .trim()
-}
 
 /**
  * Feature flags for agent behavior

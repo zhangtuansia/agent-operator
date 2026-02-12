@@ -2,175 +2,44 @@
  * Unified Auth State Management
  *
  * Provides a single source of truth for all authentication state:
- * - OAuth (for accessing API and MCP servers)
- * - Billing configuration (api_key, oauth_token, or bedrock)
+ * - Billing configuration (api_key or oauth_token)
  * - Workspace/MCP configuration
+ *
+ * MIGRATION NOTE (v0.3.0+):
+ * We no longer support tokens from Claude CLI / Claude Desktop.
+ * Users with legacy tokens will be prompted to re-authenticate using
+ * our native OAuth flow. This is a one-time migration.
  */
 
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadStoredConfig, getActiveWorkspace, saveConfig, generateWorkspaceId, type AuthType, type Workspace } from '../config/storage.ts';
-import { getDefaultWorkspacesDir } from '../workspaces/storage.ts';
-import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from './claude-token.ts';
+import {
+  loadStoredConfig,
+  getActiveWorkspace,
+  getDefaultLlmConnection,
+  getLlmConnection,
+  type AuthType,
+  type Workspace,
+} from '../config/storage.ts';
+import { refreshClaudeToken, isTokenExpired } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-
-// Debug logging (disabled in production)
-function debugLog(_msg: string): void {
-  // Disabled - uncomment below for debugging
-  // try {
-  //   const logDir = join(homedir(), '.cowork', 'logs');
-  //   if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-  //   const logFile = join(logDir, 'bedrock-debug.log');
-  //   const timestamp = new Date().toISOString();
-  //   appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
-  // } catch {
-  //   // Ignore logging errors
-  // }
-}
-
-/**
- * Shell config files to check for Bedrock configuration.
- */
-const SHELL_CONFIG_FILES = ['.zshrc', '.bashrc', '.bash_profile', '.profile'];
-
-/**
- * Check if user has CLAUDE_CODE_USE_BEDROCK=1 in their shell config files.
- * This is needed because macOS GUI apps don't inherit shell environment variables.
- * Also extracts and sets AWS_REGION if found.
- */
-function checkShellConfigForBedrock(): boolean {
-  const home = homedir();
-  debugLog(`checkShellConfigForBedrock: home = ${home}`);
-
-  for (const configFile of SHELL_CONFIG_FILES) {
-    const configPath = join(home, configFile);
-    debugLog(`checkShellConfigForBedrock: checking ${configPath}`);
-    try {
-      if (existsSync(configPath)) {
-        debugLog(`checkShellConfigForBedrock: ${configPath} exists, reading...`);
-        const content = readFileSync(configPath, 'utf-8');
-        // Look for export CLAUDE_CODE_USE_BEDROCK=1 (with or without quotes)
-        const hasBedrockExport = /export\s+CLAUDE_CODE_USE_BEDROCK\s*=\s*["']?1["']?/.test(content);
-        debugLog(`checkShellConfigForBedrock: ${configPath} hasBedrockExport = ${hasBedrockExport}`);
-        if (hasBedrockExport) {
-          debug(`[auth] Found CLAUDE_CODE_USE_BEDROCK=1 in ${configPath}`);
-
-          // Also extract AWS_REGION if present
-          const regionMatch = content.match(/export\s+AWS_REGION\s*=\s*["']?([a-z0-9-]+)["']?/);
-          if (regionMatch && !process.env.AWS_REGION) {
-            process.env.AWS_REGION = regionMatch[1];
-            debug(`[auth] Found AWS_REGION=${regionMatch[1]} in ${configPath}`);
-          }
-
-          // Extract AWS_PROFILE if present
-          const profileMatch = content.match(/export\s+(?:AWS_PROFILE|CLAUDE_CODE_AWS_PROFILE)\s*=\s*["']?([a-zA-Z0-9_-]+)["']?/);
-          if (profileMatch && !process.env.AWS_PROFILE) {
-            process.env.AWS_PROFILE = profileMatch[1];
-            debug(`[auth] Found AWS_PROFILE=${profileMatch[1]} in ${configPath}`);
-          }
-
-          return true;
-        }
-      }
-    } catch {
-      // Ignore read errors
-    }
-  }
-  return false;
-}
-
-/**
- * Check if AWS credentials are configured for Bedrock.
- * Looks for ~/.aws/credentials file existence as a hint.
- */
-function hasAwsCredentials(): boolean {
-  const awsCredentialsPath = join(homedir(), '.aws', 'credentials');
-  return existsSync(awsCredentialsPath);
-}
-
-/**
- * Check if AWS Bedrock mode is enabled.
- * Detection sources (any of these triggers Bedrock mode):
- * 1. Environment variable: CLAUDE_CODE_USE_BEDROCK=1
- * 2. Config file: authType === 'bedrock'
- * 3. Shell config files (.zshrc, .bashrc, etc.) contain CLAUDE_CODE_USE_BEDROCK=1
- */
-export function isBedrockMode(): boolean {
-  debugLog('isBedrockMode() called');
-  debugLog(`process.env.CLAUDE_CODE_USE_BEDROCK = ${process.env.CLAUDE_CODE_USE_BEDROCK}`);
-
-  // Check environment variable first (highest priority)
-  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
-    debugLog('Detected via env var');
-    return true;
-  }
-
-  // Check config file
-  const config = loadStoredConfig();
-  debugLog(`config.authType = ${config?.authType}`);
-  if (config?.authType === 'bedrock') {
-    debugLog('Detected via config file');
-    return true;
-  }
-
-  // Check shell config files (for macOS GUI apps that don't inherit env vars)
-  debugLog('Checking shell config files...');
-  if (checkShellConfigForBedrock()) {
-    // Also set the env var so SDK subprocess can use it
-    process.env.CLAUDE_CODE_USE_BEDROCK = '1';
-    debugLog('Detected via shell config, set env var');
-    return true;
-  }
-
-  debugLog('Not in Bedrock mode');
-  return false;
-}
-
-/**
- * Auto-create minimal config for Bedrock users who have environment variables set
- * but no config.json file yet. This allows them to skip onboarding entirely.
- */
-function ensureBedrockConfig(): void {
-  debugLog('ensureBedrockConfig() called');
-  const bedrockMode = isBedrockMode();
-  debugLog(`ensureBedrockConfig: isBedrockMode() = ${bedrockMode}`);
-
-  if (!bedrockMode) return;
-
-  const existingConfig = loadStoredConfig();
-  debugLog(`ensureBedrockConfig: existingConfig.authType = ${existingConfig?.authType}`);
-  if (existingConfig?.authType === 'bedrock') return; // Already configured
-
-  debugLog('Bedrock mode detected, auto-creating config');
-  debug('[auth] Bedrock mode detected, auto-creating config');
-
-  const workspaceId = generateWorkspaceId();
-  saveConfig({
-    authType: 'bedrock',
-    workspaces: [{
-      id: workspaceId,
-      name: 'Default',
-      rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
-      createdAt: Date.now(),
-    }],
-    activeWorkspaceId: workspaceId,
-    activeSessionId: null,
-  });
-}
 
 // ============================================
 // Types
 // ============================================
 
-export interface AuthState {
-  /** Platform authentication (for accessing API and MCP) */
-  craft: {
-    hasToken: boolean;
-    token: string | null;
-  };
+/** Migration info when user needs to re-authenticate */
+export interface MigrationInfo {
+  reason: 'legacy_token';
+  message: string;
+}
 
+/** Result of token validation/refresh operations */
+export interface TokenResult {
+  accessToken: string | null;
+  migrationRequired?: MigrationInfo;
+}
+
+export interface AuthState {
   /** Claude API billing configuration */
   billing: {
     /** Configured billing type, or null if not yet configured */
@@ -181,6 +50,8 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Migration info if user needs to re-authenticate */
+    migrationRequired?: MigrationInfo;
   };
 
   /** Workspace/MCP configuration */
@@ -191,16 +62,104 @@ export interface AuthState {
 }
 
 export interface SetupNeeds {
-  /** No auth token AND no workspace → show full onboarding (new user) */
-  needsAuth: boolean;
-  /** Has workspace but token expired/missing → show simple re-login screen */
-  needsReauth: boolean;
   /** No billing type configured → show billing picker */
   needsBillingConfig: boolean;
   /** Billing type set but missing credentials → show credential entry */
   needsCredentials: boolean;
   /** Everything complete → go straight to App */
   isFullyConfigured: boolean;
+  /** User has legacy tokens that need migration */
+  needsMigration?: MigrationInfo;
+}
+
+// ============================================
+// Token Refresh Mutex
+// ============================================
+
+// Mutex to prevent concurrent token refresh attempts
+// When a refresh is in progress, other callers wait for it to complete
+let refreshInProgress: Promise<TokenResult> | null = null;
+
+/**
+ * Perform the actual token refresh (internal, called only when holding mutex)
+ * Returns TokenResult with accessToken and optional migrationRequired info
+ */
+export async function performTokenRefresh(
+  manager: ReturnType<typeof getCredentialManager>,
+  refreshToken: string,
+  originalSource: 'native' | 'cli' | undefined,
+  connectionSlug: string
+): Promise<TokenResult> {
+  try {
+    const refreshed = await refreshClaudeToken(refreshToken);
+
+    // Format expiry time for logging
+    const expiresAtDate = refreshed.expiresAt ? new Date(refreshed.expiresAt).toISOString() : 'never';
+    debug(`[auth] Successfully refreshed Claude OAuth token (expires: ${expiresAtDate})`);
+
+    // Store the new credentials
+    // If refresh succeeded with our native endpoint, mark as 'native'
+    // (successful refresh proves compatibility with our OAuth system)
+    await manager.setClaudeOAuthCredentials({
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+      expiresAt: refreshed.expiresAt,
+      source: 'native',
+    });
+
+    // Also save to LLM connection (dual-write for backwards compatibility)
+    // This ensures both legacy and modern auth paths have the refreshed token
+    await manager.setLlmOAuth(connectionSlug, {
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+      expiresAt: refreshed.expiresAt,
+    });
+
+    return { accessToken: refreshed.accessToken };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    debug('[auth] Failed to refresh Claude OAuth token:', errorMessage);
+
+    // Only clear credentials for specific OAuth errors that indicate the token is truly invalid
+    // Be conservative - don't clear for network errors, timeouts, or unknown errors
+    const isIncompatibleToken =
+      errorMessage.includes('invalid_grant') ||
+      errorMessage.includes('Refresh token not found or invalid') ||
+      errorMessage.includes('invalid_refresh_token');
+
+    let migrationRequired: MigrationInfo | undefined;
+
+    if (isIncompatibleToken) {
+      // Token refresh failed - could be legacy CLI token or expired/revoked
+      debug('[auth] Token refresh failed - credentials will be cleared');
+
+      // Check if this was from CLI based on stored source
+      const isFromCLI = originalSource === 'cli' || !originalSource;
+      if (isFromCLI) {
+        debug('[auth] Token was from CLI or unknown source - migration required');
+        migrationRequired = {
+          reason: 'legacy_token',
+          message:
+            'Your Claude authentication needs to be refreshed. ' +
+            'Please sign in again.',
+        };
+      }
+
+      // Clear the incompatible credentials to force fresh authentication
+      // Clear from both legacy and LLM connection locations
+      await manager.setClaudeOAuthCredentials({
+        accessToken: '',
+        refreshToken: undefined,
+        expiresAt: undefined,
+      });
+
+      // Also clear from LLM connection (dual-clear for consistency)
+      await manager.deleteLlmCredentials(connectionSlug);
+    }
+
+    // Token refresh failed - return null token with optional migration info
+    return { accessToken: null, migrationRequired };
+  }
 }
 
 // ============================================
@@ -209,110 +168,145 @@ export interface SetupNeeds {
 
 /**
  * Get and refresh Claude OAuth token if needed
+ *
  * This function:
  * 1. Checks if we have a token in our credential store
- * 2. If not, tries to import from Claude CLI keychain
+ * 2. Detects legacy tokens (from Claude CLI) and triggers migration
  * 3. If token is expired and we have a refresh token, refreshes it
- * 4. Returns the valid access token
+ * 4. Returns TokenResult with valid access token and optional migration info
+ *
+ * MUTEX: Only one refresh can happen at a time. If a refresh is already
+ * in progress, other callers wait for it and then re-read credentials.
+ *
+ * MIGRATION (v0.3.0+):
+ * - We NO LONGER import tokens from Claude CLI keychain
+ * - Legacy tokens are detected and cleared, prompting re-authentication
  */
-async function getValidClaudeOAuthToken(): Promise<string | null> {
+export async function getValidClaudeOAuthToken(connectionSlug: string): Promise<TokenResult> {
   const manager = getCredentialManager();
 
   // Try to get credentials from our store
-  let creds = await manager.getClaudeOAuthCredentials();
+  const creds = await manager.getClaudeOAuthCredentials();
 
-  // If we don't have credentials in our store, try to import from Claude CLI
-  if (!creds) {
-    const cliCreds = getExistingClaudeCredentials();
-    if (cliCreds) {
-      debug('[auth] Importing Claude credentials from CLI keychain');
-      await manager.setClaudeOAuthCredentials({
-        accessToken: cliCreds.accessToken,
-        refreshToken: cliCreds.refreshToken,
-        expiresAt: cliCreds.expiresAt,
-      });
-      creds = cliCreds;
-    }
+  if (!creds || !creds.accessToken) {
+    return { accessToken: null };
   }
 
-  if (!creds) {
-    return null;
-  }
-
-  // Check if token is expired
+  // Check if token is expired or about to expire
   if (isTokenExpired(creds.expiresAt)) {
-    debug('[auth] Claude OAuth token expired, attempting refresh');
+    const expiresAtDate = creds.expiresAt ? new Date(creds.expiresAt).toISOString() : 'unknown';
+    debug(`[auth] Claude OAuth token expired (was: ${expiresAtDate}), attempting refresh`);
 
     // Try to refresh if we have a refresh token
     if (creds.refreshToken) {
+      // Check if a refresh is already in progress
+      if (refreshInProgress) {
+        debug('[auth] Token refresh already in progress, waiting...');
+        try {
+          await refreshInProgress;
+        } catch {
+          // Ignore errors from the other refresh attempt
+        }
+        // Re-read credentials after waiting (they may have been updated)
+        const updatedCreds = await manager.getClaudeOAuthCredentials();
+        if (updatedCreds?.accessToken && !isTokenExpired(updatedCreds.expiresAt)) {
+          const expiresAtDate = updatedCreds.expiresAt ? new Date(updatedCreds.expiresAt).toISOString() : 'never';
+          debug(`[auth] Got refreshed token from concurrent refresh (expires: ${expiresAtDate})`);
+          return { accessToken: updatedCreds.accessToken };
+        }
+        // If still no valid token, return null (the other refresh may have failed)
+        debug('[auth] Concurrent refresh did not produce valid token');
+        return { accessToken: null };
+      }
+
+      // Start the refresh and set the mutex
+      debug('[auth] Starting token refresh (holding mutex)');
+      refreshInProgress = performTokenRefresh(manager, creds.refreshToken, creds.source, connectionSlug);
+
       try {
-        const refreshed = await refreshClaudeToken(creds.refreshToken);
-        debug('[auth] Successfully refreshed Claude OAuth token');
-
-        // Store the new credentials
-        await manager.setClaudeOAuthCredentials({
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken,
-          expiresAt: refreshed.expiresAt,
-        });
-
-        return refreshed.accessToken;
-      } catch (error) {
-        debug('[auth] Failed to refresh Claude OAuth token:', error);
-        // Token refresh failed - return null to trigger re-authentication
-        return null;
+        const result = await refreshInProgress;
+        return result;
+      } finally {
+        // Release the mutex
+        refreshInProgress = null;
       }
     } else {
       debug('[auth] No refresh token available, cannot refresh expired token');
-      return null;
+      return { accessToken: null };
     }
   }
 
-  return creds.accessToken;
+  return { accessToken: creds.accessToken };
 }
 
 /**
  * Get complete authentication state from all sources (config file + credential store)
+ *
+ * Uses LLM connections as the source of truth for auth type and credentials.
+ * Falls back to legacy global credentials for backwards compatibility.
  */
 export async function getAuthState(): Promise<AuthState> {
-  debugLog('getAuthState() called');
-
-  // Auto-create config for Bedrock users if needed
-  debugLog('Calling ensureBedrockConfig()...');
-  ensureBedrockConfig();
-
   const config = loadStoredConfig();
-  debugLog(`config.authType = ${config?.authType}`);
-  debugLog(`config.workspaces.length = ${config?.workspaces?.length ?? 0}`);
-  debugLog(`config.activeWorkspaceId = ${config?.activeWorkspaceId}`);
   const manager = getCredentialManager();
-
-  const craftToken = await manager.getOperatorOAuth();
-  const apiKey = await manager.getApiKey();
-  const claudeOAuth = await getValidClaudeOAuthToken();
   const activeWorkspace = getActiveWorkspace();
 
-  // Determine if billing credentials are satisfied based on auth type
+  // Get the default LLM connection to determine auth type
+  const defaultConnectionSlug = getDefaultLlmConnection();
+  const connection = defaultConnectionSlug ? getLlmConnection(defaultConnectionSlug) : null;
+
+  // Determine auth type from connection (no legacy fallback - migration ensures all users have connections)
+  let effectiveAuthType: AuthType | null = null;
+  if (connection) {
+    // Map connection authType to legacy AuthType format for backwards compatibility
+    // New auth types (api_key, api_key_with_endpoint, bearer_token) map to 'api_key'
+    // OAuth maps to 'oauth_token'
+    if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+      effectiveAuthType = 'api_key';
+    } else if (connection.authType === 'oauth') {
+      effectiveAuthType = 'oauth_token';
+    }
+    // Other auth types (iam_credentials, service_account_file, environment, none) don't map to legacy types
+  }
+  // No fallback to legacy config.authType - if no connection, return unauthenticated state
+
+  // Check credentials based on the effective auth type and connection
   let hasCredentials = false;
-  if (config?.authType === 'api_key') {
-    hasCredentials = !!apiKey;
-  } else if (config?.authType === 'oauth_token') {
-    hasCredentials = !!claudeOAuth;
-  } else if (config?.authType === 'bedrock') {
-    // Bedrock uses AWS credentials from ~/.aws/credentials, not our credential store
-    hasCredentials = true;
+  let apiKey: string | null = null;
+  let claudeOAuthToken: string | null = null;
+  let migrationRequired: MigrationInfo | undefined;
+
+  if (connection && defaultConnectionSlug) {
+    // Use LLM connection credentials
+    // Pass providerType for OAuth routing (OpenAI OAuth needs idToken)
+    hasCredentials = await manager.hasLlmCredentials(defaultConnectionSlug, connection.authType, connection.providerType);
+
+    if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+      apiKey = await manager.getLlmApiKey(defaultConnectionSlug);
+      // Keyless providers (Ollama) are valid when a custom base URL is configured
+      if (!apiKey && connection.baseUrl) {
+        hasCredentials = true;
+      }
+    } else if (connection.authType === 'oauth') {
+      const llmOAuth = await manager.getLlmOAuth(defaultConnectionSlug);
+      if (llmOAuth?.accessToken) {
+        claudeOAuthToken = llmOAuth.accessToken;
+      }
+    }
+    // Other auth types (iam_credentials, service_account_file, environment, none) are handled by hasLlmCredentials
+    // OpenAI OAuth credentials are handled separately by CodexAgent
+  } else {
+    // No connection configured - credentials not available
+    // Legacy migration should have created a default connection
+    hasCredentials = false;
   }
 
   return {
-    craft: {
-      hasToken: !!craftToken,
-      token: craftToken,
-    },
     billing: {
-      type: config?.authType ?? null,
+      type: effectiveAuthType,
       hasCredentials,
       apiKey,
-      claudeOAuthToken: claudeOAuth,
+      claudeOAuthToken,
+      migrationRequired,
     },
     workspace: {
       hasWorkspace: !!activeWorkspace,
@@ -325,33 +319,38 @@ export async function getAuthState(): Promise<AuthState> {
  * Derive what setup steps are needed based on current auth state
  */
 export function getSetupNeeds(state: AuthState): SetupNeeds {
-  debugLog('getSetupNeeds() called');
-  debugLog(`state.craft.hasToken = ${state.craft.hasToken}`);
-  debugLog(`state.billing.type = ${state.billing.type}`);
-  debugLog(`state.billing.hasCredentials = ${state.billing.hasCredentials}`);
-  debugLog(`state.workspace.hasWorkspace = ${state.workspace.hasWorkspace}`);
-
-  // OAuth is only required for new users (no workspace) who need to select a space during onboarding
-  const needsAuth = !state.craft.hasToken && !state.workspace.hasWorkspace;
-
-  // Reauth is not needed for api_key or oauth_token billing
-  const needsReauth = false;
-
   // Need billing config if no billing type is set
   const needsBillingConfig = state.billing.type === null;
 
   // Need credentials if billing type is set but credentials are missing
   const needsCredentials = state.billing.type !== null && !state.billing.hasCredentials;
 
-  const isFullyConfigured = !needsAuth && !needsReauth && !needsBillingConfig && !needsCredentials;
-
-  debugLog(`getSetupNeeds result: needsAuth=${needsAuth}, needsBillingConfig=${needsBillingConfig}, needsCredentials=${needsCredentials}, isFullyConfigured=${isFullyConfigured}`);
-
   return {
-    needsAuth,
-    needsReauth,
     needsBillingConfig,
     needsCredentials,
-    isFullyConfigured,
+    isFullyConfigured: !needsBillingConfig && !needsCredentials,
+    needsMigration: state.billing.migrationRequired,
   };
+}
+
+/**
+ * Legacy helper used by OperatorAgent to detect Bedrock mode.
+ */
+export function isBedrockMode(): boolean {
+  const defaultSlug = getDefaultLlmConnection();
+  if (!defaultSlug) return false;
+  const connection = getLlmConnection(defaultSlug);
+  return connection?.providerType === 'bedrock';
+}
+
+// ============================================
+// Test helpers (exported for testing only)
+// ============================================
+
+/**
+ * Reset the refresh mutex (for testing only)
+ * This allows tests to start with a clean state
+ */
+export function _resetRefreshMutex(): void {
+  refreshInProgress = null;
 }

@@ -2542,15 +2542,45 @@ Please continue the conversation naturally from where we left off.
 
     let error = errorMap[errorCode];
 
-    // Check if this is an API provider error (internal server error, api_error, overloaded, etc.)
-    // These indicate issues on the provider side, not the user's side
+    // Upgrade generic SDK "unknown" errors into actionable categories when possible.
     if (errorCode === 'unknown' && actualError) {
+      const normalizedMessage = actualError.message.toLowerCase();
+      const isModelNotFound =
+        actualError.errorType === 'not_found_error' &&
+        normalizedMessage.startsWith('model:');
+
+      if (isModelNotFound) {
+        const modelId = actualError.message.replace(/^model:\s*/i, '').trim();
+        error = {
+          code: 'invalid_request',
+          title: 'Model Not Available',
+          message: `The selected model${modelId ? ` (${modelId})` : ''} is not available for the current provider endpoint.`,
+          details: [
+            ...(actualError.requestId ? [`Request ID: ${actualError.requestId}`] : []),
+            'Open Settings and switch to a model returned by this provider endpoint.',
+            'If you changed API format/endpoints, make sure model IDs match that endpoint.',
+          ],
+          actions: [
+            { key: 's', label: 'Settings', action: 'settings' },
+            { key: 'r', label: 'Retry', action: 'retry' },
+          ],
+          canRetry: true,
+          retryDelayMs: 1000,
+        };
+        return {
+          type: 'typed_error',
+          error,
+        };
+      }
+
+      // Check if this is an API provider error (internal server error, api_error, overloaded, etc.)
+      // These indicate issues on the provider side, not the user's side.
       const isProviderError =
         actualError.errorType === 'api_error' ||
         actualError.errorType === 'overloaded_error' ||
-        actualError.message.toLowerCase().includes('internal server error') ||
-        actualError.message.toLowerCase().includes('overloaded') ||
-        actualError.message.toLowerCase().includes('service unavailable');
+        normalizedMessage.includes('internal server error') ||
+        normalizedMessage.includes('overloaded') ||
+        normalizedMessage.includes('service unavailable');
 
       if (isProviderError) {
         error = {

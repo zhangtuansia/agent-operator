@@ -1,4 +1,3 @@
-/// <reference path="../types/bash-parser.d.ts" />
 /**
  * Bash Command Validator
  *
@@ -177,14 +176,10 @@ function validateNode(
       return validateLogicalExpression(node as LogicalExpressionNode, patterns, results);
 
     case 'Pipeline':
-      // Pipelines are blocked - they transform data between commands
-      return {
-        allowed: false,
-        reason: {
-          type: 'pipeline',
-          explanation: 'Pipelines (|) transform data between commands which could be dangerous',
-        },
-      };
+      // Validate each command in the pipeline individually.
+      // If all commands are in the allowlist, the pipeline is safe.
+      // e.g., `git log | head` is allowed because both commands are read-only.
+      return validatePipeline(node as PipelineNode, patterns, results);
 
     case 'Subshell':
       return validateSubshell(node as SubshellNode, patterns, results);
@@ -258,14 +253,17 @@ function validateCommand(
     for (const item of node.prefix) {
       if (item.type === 'Redirect') {
         const redirect = item as RedirectNode;
-        return {
-          allowed: false,
-          reason: {
-            type: 'redirect',
-            op: redirect.op.text,
-            explanation: getRedirectExplanation(redirect.op.text),
-          },
-        };
+        // Allow safe redirects (input redirects and output to /dev/null)
+        if (!isRedirectSafe(redirect)) {
+          return {
+            allowed: false,
+            reason: {
+              type: 'redirect',
+              op: redirect.op.text,
+              explanation: getRedirectExplanation(redirect.op.text),
+            },
+          };
+        }
       }
     }
   }
@@ -275,17 +273,18 @@ function validateCommand(
     for (const item of node.suffix) {
       if (item.type === 'Redirect') {
         const redirect = item as RedirectNode;
-        return {
-          allowed: false,
-          reason: {
-            type: 'redirect',
-            op: redirect.op.text,
-            explanation: getRedirectExplanation(redirect.op.text),
-          },
-        };
-      }
-
-      if (item.type === 'Word') {
+        // Allow safe redirects (input redirects and output to /dev/null)
+        if (!isRedirectSafe(redirect)) {
+          return {
+            allowed: false,
+            reason: {
+              type: 'redirect',
+              op: redirect.op.text,
+              explanation: getRedirectExplanation(redirect.op.text),
+            },
+          };
+        }
+      } else if (item.type === 'Word') {
         const word = item as WordNode;
 
         // Check for command expansions in arguments
@@ -351,6 +350,24 @@ function validateLogicalExpression(
 }
 
 /**
+ * Validate a Pipeline node (cmd1 | cmd2 | ...).
+ * Each command in the pipeline must be valid for the whole pipeline to be allowed.
+ */
+function validatePipeline(
+  node: PipelineNode,
+  patterns: CompiledBashPattern[],
+  results: SubcommandResult[]
+): BashValidationResult {
+  for (const cmd of node.commands) {
+    const result = validateNode(cmd, patterns, results);
+    if (!result.allowed) {
+      return result;
+    }
+  }
+  return { allowed: true };
+}
+
+/**
  * Validate a Subshell node (...).
  * The inner commands must all be valid.
  */
@@ -410,38 +427,76 @@ function checkWordForExpansions(word: WordNode): BashValidationReason | null {
 }
 
 /**
+ * Safe input redirect operators that don't write to files.
+ */
+const SAFE_INPUT_REDIRECTS = new Set([
+  '<',    // Input redirect - read-only
+  '<&',   // Duplicate input file descriptor
+]);
+
+/**
+ * Check if a redirect is safe (read-only or to /dev/null).
+ *
+ * Safe redirects:
+ * - Input redirects: <, <&
+ * - Output redirects to /dev/null (e.g., >/dev/null, 2>/dev/null)
+ * - File descriptor duplication (e.g., 2>&1) - just duplicates, doesn't write to file
+ */
+function isRedirectSafe(redirect: RedirectNode): boolean {
+  const op = redirect.op.text;
+
+  // Input redirects are always safe (read-only)
+  if (SAFE_INPUT_REDIRECTS.has(op)) {
+    return true;
+  }
+
+  const target = redirect.file?.text;
+
+  // Output redirects to /dev/null are safe
+  if (target === '/dev/null') {
+    return true;
+  }
+
+  // File descriptor duplication (e.g., 2>&1) is safe - it just redirects to another fd
+  // These have targets like "1", "2" (file descriptor numbers)
+  if (op === '>&' && target && /^\d+$/.test(target)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Get explanation for a redirect operator.
  */
 function getRedirectExplanation(op: string): string {
   const explanations: Record<string, string> = {
     '>': 'overwrites file contents',
     '>>': 'appends to file',
-    '<': 'reads from file (could expose sensitive data)',
     '>&': 'redirects file descriptors',
-    '<&': 'duplicates input file descriptors',
     '>|': 'forces overwrite (clobber)',
     '<<': 'here-document could inject arbitrary content',
-    '<<<': 'here-string',
   };
 
   return explanations[op] || `redirect operator "${op}" modifies file I/O`;
 }
 
 /**
- * Check if the command string contains control characters.
- * These are checked before parsing since they could affect parsing itself.
+ * Check if the command string contains dangerous control characters.
+ *
+ * Note: Newlines and carriage returns are NOT blocked here because bash-parser
+ * correctly parses them as command separators, and the AST validation will
+ * check each command individually. Only null bytes are blocked as they could
+ * cause issues at lower levels (C bindings, string handling).
  */
 export function hasControlCharacters(command: string): { char: string; explanation: string } | null {
   const dangerous: Record<string, string> = {
-    '\n': 'Newline acts as command separator in bash',
-    '\r': 'Carriage return can act as command separator',
     '\x00': 'Null byte can truncate strings unexpectedly',
   };
 
   for (const char of command) {
     if (dangerous[char]) {
-      const displayChar = char === '\n' ? '\\n' : char === '\r' ? '\\r' : '\\0';
-      return { char: displayChar, explanation: dangerous[char] };
+      return { char: '\\0', explanation: dangerous[char] };
     }
   }
 

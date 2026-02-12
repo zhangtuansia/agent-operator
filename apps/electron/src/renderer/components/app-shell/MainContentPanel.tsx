@@ -14,7 +14,6 @@
 
 import * as React from 'react'
 import { Panel } from './Panel'
-import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -25,7 +24,8 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
 } from '@/contexts/NavigationContext'
-import { AppSettingsPage, WorkspaceSettingsPage, ApiSettingsPage, InputSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, ImportSettingsPage } from '@/pages'
+import { SourceInfoPage, ChatPage } from '@/pages'
+import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { useLanguage } from '@/context/LanguageContext'
 
@@ -53,57 +53,12 @@ export function MainContentPanel({
 
   // Settings navigator - always has content (subpage determines which page)
   if (isSettingsNavigation(navState)) {
-    switch (navState.subpage) {
-      case 'workspace':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <WorkspaceSettingsPage />
-          </Panel>
-        )
-      case 'api':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <ApiSettingsPage />
-          </Panel>
-        )
-      case 'input':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <InputSettingsPage />
-          </Panel>
-        )
-      case 'permissions':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <PermissionsSettingsPage />
-          </Panel>
-        )
-      case 'shortcuts':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <ShortcutsPage />
-          </Panel>
-        )
-      case 'preferences':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <PreferencesPage />
-          </Panel>
-        )
-      case 'import':
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <ImportSettingsPage />
-          </Panel>
-        )
-      case 'app':
-      default:
-        return wrapWithStoplight(
-          <Panel variant="grow" className={className}>
-            <AppSettingsPage />
-          </Panel>
-        )
-    }
+    const SettingsPage = getSettingsPageComponent(navState.subpage)
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <SettingsPage />
+      </Panel>
+    )
   }
 
   // Sources navigator - show source info or empty state

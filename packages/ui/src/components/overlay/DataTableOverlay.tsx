@@ -20,8 +20,12 @@ export interface DataTableOverlayProps {
   title: string
   /** Optional subtitle (e.g., row count) */
   subtitle?: string
+  /** Theme mode for dark/light styling (defaults to 'light') */
+  theme?: 'light' | 'dark'
   /** Badge variant for the header (default: gray) */
   badgeVariant?: BadgeVariant
+  /** Actions to show in header right side (e.g., copy dropdown) */
+  headerActions?: ReactNode
   /** The data table content to render */
   children: ReactNode
 }
@@ -31,13 +35,16 @@ export function DataTableOverlay({
   onClose,
   title,
   subtitle,
+  theme,
   badgeVariant = 'gray',
+  headerActions,
   children,
 }: DataTableOverlayProps) {
   return (
     <PreviewOverlay
       isOpen={isOpen}
       onClose={onClose}
+      theme={theme}
       typeBadge={{
         icon: Table2,
         label: 'Table',
@@ -45,10 +52,10 @@ export function DataTableOverlay({
       }}
       title={title}
       subtitle={subtitle}
+      headerActions={headerActions}
     >
-      {/* Scrollable container - uses h-full and overflow-auto to enable scrolling
-          within the flex-1 min-h-0 container provided by PreviewOverlay */}
-      <div className="h-full overflow-auto">
+      {/* Table content - scrolling is handled by the parent overlay's scroll container */}
+      <div>
         {children}
       </div>
     </PreviewOverlay>

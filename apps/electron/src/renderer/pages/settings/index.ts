@@ -9,10 +9,12 @@ export { default as AppSettingsPage, meta as AppSettingsMeta } from './AppSettin
 export { default as WorkspaceSettingsPage, meta as WorkspaceSettingsMeta } from './WorkspaceSettingsPage'
 export { default as ApiSettingsPage, meta as ApiSettingsMeta } from './ApiSettingsPage'
 export { default as InputSettingsPage, meta as InputSettingsMeta } from './InputSettingsPage'
+export { default as LabelsSettingsPage, meta as LabelsMeta } from './LabelsSettingsPage'
 export { default as PermissionsSettingsPage, meta as PermissionsMeta } from './PermissionsSettingsPage'
 export { default as ShortcutsPage, meta as ShortcutsMeta } from './ShortcutsPage'
 export { default as PreferencesPage, meta as PreferencesMeta } from './PreferencesPage'
 export { default as ImportSettingsPage, meta as ImportSettingsMeta } from './ImportSettingsPage'
+export { SETTINGS_PAGE_COMPONENTS, getSettingsPageComponent } from './settings-pages'
 
 // Re-export types
 export type { DetailsPageMeta } from '@/lib/navigation-registry'

@@ -51,6 +51,8 @@ export interface PermissionManagerConfig {
   workingDirectory?: string;
   /** Plans folder path (writes to this folder are allowed in Explore mode) */
   plansFolderPath?: string;
+  /** Session data folder path (optional metadata storage) */
+  dataFolderPath?: string;
 }
 
 /**

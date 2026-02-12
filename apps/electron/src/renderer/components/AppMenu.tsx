@@ -6,16 +6,20 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
-import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight } from "lucide-react"
+import { RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { PanelLeftRounded } from "./icons/PanelLeftRounded"
 import { AiGenerate3d } from "./icons/AiGenerate3d"
 import { TopBarButton } from "./ui/TopBarButton"
 import { useLanguage } from "@/context/LanguageContext"
+import { AppSettingsIcon, SETTINGS_ICONS } from "./icons/SettingsIcons"
+import { SETTINGS_ITEMS } from "../../shared/menu-schema"
+import type { SettingsSubpage } from "../../shared/types"
 
 interface AppMenuProps {
   onNewChat: () => void
   onOpenSettings: () => void
+  onOpenSettingsSubpage?: (subpage: SettingsSubpage) => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onReset: () => void
@@ -36,6 +40,7 @@ interface AppMenuProps {
 export function AppMenu({
   onNewChat,
   onOpenSettings,
+  onOpenSettingsSubpage,
   onOpenKeyboardShortcuts,
   onOpenStoredUserPreferences,
   onReset,
@@ -47,6 +52,29 @@ export function AppMenu({
   isSidebarVisible = true,
 }: AppMenuProps) {
   const { t } = useLanguage()
+
+  const handleOpenSettingsItem = (subpage: SettingsSubpage) => {
+    if (onOpenSettingsSubpage) {
+      onOpenSettingsSubpage(subpage)
+      return
+    }
+    // Backward-compatible fallbacks for legacy callers.
+    if (subpage === "shortcuts") {
+      onOpenKeyboardShortcuts()
+      return
+    }
+    if (subpage === "preferences") {
+      onOpenStoredUserPreferences()
+      return
+    }
+    onOpenSettings()
+  }
+
+  const getSettingsShortcut = (subpage: SettingsSubpage): string | null => {
+    if (subpage === "app") return "⌘,"
+    if (subpage === "shortcuts") return "⌘/"
+    return null
+  }
 
   return (
     <div className="flex items-center gap-[5px] w-full">
@@ -67,21 +95,23 @@ export function AppMenu({
 
           <StyledDropdownMenuSeparator />
 
-          {/* Settings and preferences */}
-          <StyledDropdownMenuItem onClick={onOpenSettings}>
-            <Settings className="h-3.5 w-3.5" />
-            {t('appMenu.settings')}
-            <DropdownMenuShortcut className="pl-6">⌘,</DropdownMenuShortcut>
-          </StyledDropdownMenuItem>
-          <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
-            <Keyboard className="h-3.5 w-3.5" />
-            {t('appMenu.keyboardShortcuts')}
-            <DropdownMenuShortcut className="pl-6">⌘/</DropdownMenuShortcut>
-          </StyledDropdownMenuItem>
-          <StyledDropdownMenuItem onClick={onOpenStoredUserPreferences}>
-            <User className="h-3.5 w-3.5" />
-            {t('appMenu.storedUserPreferences')}
-          </StyledDropdownMenuItem>
+          {/* Settings pages from shared schema */}
+          {SETTINGS_ITEMS.map((item) => {
+            const Icon = SETTINGS_ICONS[item.id] ?? AppSettingsIcon
+            const shortcut = getSettingsShortcut(item.id)
+            return (
+              <StyledDropdownMenuItem
+                key={item.id}
+                onClick={() => handleOpenSettingsItem(item.id)}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t(`settings.${item.id}`)}
+                {shortcut ? (
+                  <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>
+                ) : null}
+              </StyledDropdownMenuItem>
+            )
+          })}
 
           <StyledDropdownMenuSeparator />
 

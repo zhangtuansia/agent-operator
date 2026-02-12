@@ -20,41 +20,42 @@ export interface CallbackServer {
   close: () => void | Promise<void>;
 }
 
-async function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = createHttpServer();
-    server.once('error', () => {
-      resolve(false);
+/**
+ * Attempt to bind an HTTP server to the given port.
+ * Resolves on success, rejects on error (e.g. EADDRINUSE).
+ */
+function tryBind(server: Server, port: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    // Use 'localhost' consistently for both the bind address and the URL
+    // that callers construct (avoids subtle mismatches between 127.0.0.1 and localhost).
+    server.listen(port, 'localhost', () => {
+      server.removeListener('error', reject);
+      resolve();
     });
-    server.once('listening', () => {
-      server.close(() => resolve(true));
-    });
-    server.listen(port, '127.0.0.1');
   });
-}
-
-async function findAvailablePort(): Promise<number> {
-  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
-    const port = START_PORT + i;
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found in range ${START_PORT}-${START_PORT + MAX_PORT_ATTEMPTS - 1}`);
 }
 
 export interface CreateCallbackServerOptions {
   appType?: AppType;
-  /** Deep link URL to redirect to after successful auth (e.g., agentoperator://auth-complete) */
+  /** Deep link URL to redirect to after successful auth (e.g., craftagents://auth-complete) */
   deeplinkUrl?: string;
 }
 
+/**
+ * Creates an OAuth callback server by binding directly to a port in the range
+ * START_PORT .. START_PORT + MAX_PORT_ATTEMPTS - 1.
+ *
+ * Unlike a check-then-bind approach, this eliminates the TOCTOU race condition
+ * by attempting to bind the real server on each candidate port. If the port is
+ * already in use (EADDRINUSE), the server is closed and the next port is tried.
+ */
 export async function createCallbackServer(options?: CreateCallbackServerOptions): Promise<CallbackServer> {
   const appType = options?.appType ?? 'terminal';
   const deeplinkUrl = options?.deeplinkUrl;
-  const port = await findAvailablePort();
 
   let server: Server | null = null;
+  let boundPort: number | null = null;
   let resolveCallback: ((payload: CallbackPayload) => void) | null = null;
   let rejectCallback: ((error: Error) => void) | null = null;
 
@@ -63,9 +64,11 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     rejectCallback = reject;
   });
 
+  // Build the request handler. It closes over `boundPort` which is set before
+  // any requests can arrive (the browser isn't opened until after we return).
   const requestHandler = async (req: import('http').IncomingMessage, res: import('http').ServerResponse) => {
     try {
-      const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+      const url = new URL(req.url || '/', `http://localhost:${boundPort}`);
 
       if (url.pathname !== '/callback') {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -128,20 +131,40 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     }
   };
 
-  // Create HTTP server
-  server = createHttpServer(requestHandler);
+  // Try binding the real server directly on each candidate port.
+  // This eliminates the TOCTOU race: the port we return is the port we're
+  // actually listening on — no gap between check and bind.
+  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
+    const port = START_PORT + i;
+    const candidate = createHttpServer(requestHandler);
 
-  await new Promise<void>((resolve, reject) => {
-    server?.once('error', (error) => {
-      reject(error instanceof Error ? error : new Error(String(error)));
-      rejectCallback?.(error instanceof Error ? error : new Error(String(error)));
-    });
-    server?.listen(port, 'localhost', () => {
-      resolve();
-    });
-  });
+    try {
+      await tryBind(candidate, port);
+      // Bind succeeded — wire up the error handler for runtime errors
+      // and propagate them to the callback promise.
+      server = candidate;
+      boundPort = port;
+      server.on('error', (err) => {
+        rejectCallback?.(err instanceof Error ? err : new Error(String(err)));
+      });
+      break;
+    } catch (err: unknown) {
+      // Port in use — close the candidate and try the next one
+      candidate.close();
+      const isAddressInUse =
+        err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
+      if (!isAddressInUse) {
+        // Unexpected error (e.g. permission denied) — propagate immediately
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    }
+  }
 
-  const callbackUrl = `http://localhost:${port}`;
+  if (server === null || boundPort === null) {
+    throw new Error(`No available port found in range ${START_PORT}-${START_PORT + MAX_PORT_ATTEMPTS - 1}`);
+  }
+
+  const callbackUrl = `http://localhost:${boundPort}`;
 
   return {
     promise: callbackPromise,

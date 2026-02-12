@@ -365,6 +365,118 @@ describe('groupActivitiesByParent', () => {
       expect(group.taskOutputData).toBeUndefined()
     })
   })
+
+  describe('stateless invariants (post-refactor)', () => {
+    it('out-of-order stored messages: children before parent still group correctly', () => {
+      resetCounters()
+
+      // Simulate a restored session where children were persisted before
+      // their parent Task (e.g., from parallel event processing).
+      // The grouping must work regardless of insertion order.
+      const task = createTaskActivity('Search code')
+      const child1 = createChildActivity(task.toolUseId!, {
+        toolName: 'Grep',
+        timestamp: 1500,
+      })
+      const child2 = createChildActivity(task.toolUseId!, {
+        toolName: 'Read',
+        timestamp: 2000,
+      })
+
+      // Children appear BEFORE parent in the array
+      const activities = [child1, child2, task]
+      const result = groupActivitiesByParent(activities)
+
+      // Should still produce a single group with both children
+      expect(result.length).toBe(1)
+      expect(isActivityGroup(result[0]!)).toBe(true)
+
+      const group = result[0] as ActivityGroup
+      expect(group.parent.id).toBe(task.id)
+      expect(group.children.length).toBe(2)
+    })
+
+    it('restored session with nested Task hierarchy produces correct groups', () => {
+      resetCounters()
+
+      // Outer Task spawns an inner Task (nested subagent pattern).
+      // After session restore, all activities arrive as a flat list.
+      const outerTask = createTaskActivity('Explore codebase', { timestamp: 1000 })
+      const innerTask = createChildActivity(outerTask.toolUseId!, {
+        toolName: 'Task',
+        toolInput: { description: 'Deep search', subagent_type: 'Explore' },
+        timestamp: 1500,
+      })
+      const innerChild = createActivity({
+        toolName: 'Grep',
+        parentId: innerTask.toolUseId,
+        depth: 2,
+        timestamp: 2000,
+      })
+      const outerChild = createChildActivity(outerTask.toolUseId!, {
+        toolName: 'Read',
+        timestamp: 3000,
+      })
+
+      const activities = [outerTask, innerTask, innerChild, outerChild]
+      const result = groupActivitiesByParent(activities)
+
+      // Outer Task should be grouped with innerTask + outerChild as its children.
+      // innerChild belongs to innerTask (depth 2), but groupActivitiesByParent
+      // only groups by direct parentId, so innerChild is a child of innerTask.
+      expect(result.length).toBe(1)
+      expect(isActivityGroup(result[0]!)).toBe(true)
+
+      const outerGroup = result[0] as ActivityGroup
+      expect(outerGroup.parent.id).toBe(outerTask.id)
+      // outerTask's direct children: innerTask and outerChild
+      // innerChild has parentId = innerTask.toolUseId, not outerTask.toolUseId
+      expect(outerGroup.children.length).toBe(2)
+    })
+
+    it('mixed top-level and nested tools group into correct turns', () => {
+      resetCounters()
+
+      // Realistic scenario: top-level Read, then a Task with children,
+      // then another top-level Write. Verifies clean separation.
+      const topRead = createActivity({
+        toolName: 'Read',
+        timestamp: 1000,
+      })
+      const task = createTaskActivity('Analyze', { timestamp: 2000 })
+      const taskChild1 = createChildActivity(task.toolUseId!, {
+        toolName: 'Grep',
+        timestamp: 2500,
+      })
+      const taskChild2 = createChildActivity(task.toolUseId!, {
+        toolName: 'Read',
+        timestamp: 3000,
+      })
+      const topWrite = createActivity({
+        toolName: 'Write',
+        timestamp: 4000,
+      })
+
+      const activities = [topRead, task, taskChild1, taskChild2, topWrite]
+      const result = groupActivitiesByParent(activities)
+
+      // 3 items: topRead (standalone), Task group, topWrite (standalone)
+      expect(result.length).toBe(3)
+
+      expect(isActivityGroup(result[0]!)).toBe(false)
+      expect((result[0] as ActivityItem).toolName).toBe('Read')
+
+      expect(isActivityGroup(result[1]!)).toBe(true)
+      const group = result[1] as ActivityGroup
+      expect(group.parent.toolName).toBe('Task')
+      expect(group.children.length).toBe(2)
+      expect(group.children[0]!.toolName).toBe('Grep')
+      expect(group.children[1]!.toolName).toBe('Read')
+
+      expect(isActivityGroup(result[2]!)).toBe(false)
+      expect((result[2] as ActivityItem).toolName).toBe('Write')
+    })
+  })
 })
 
 // ============================================================================

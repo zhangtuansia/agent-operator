@@ -7,6 +7,8 @@ import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
 import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownDatatableBlock } from './MarkdownDatatableBlock'
+import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { MarkdownExcalidrawBlock } from './MarkdownExcalidrawBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
@@ -336,6 +338,14 @@ function createComponents(
           if (lower === 'json') {
             return <MarkdownJsonBlock code={code} className="my-1" />
           }
+          // Datatable code blocks → sortable/filterable data table
+          if (lower === 'datatable') {
+            return <MarkdownDatatableBlock code={code} className="my-1" />
+          }
+          // Spreadsheet code blocks → Excel-style grid
+          if (lower === 'spreadsheet') {
+            return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+          }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
           // content in the message — TurnCard's own fullscreen button occupies
@@ -424,6 +434,14 @@ function createComponents(
         // JSON code blocks → interactive tree viewer
         if (lower === 'json') {
           return <MarkdownJsonBlock code={code} className="my-1" />
+        }
+        // Datatable code blocks → sortable/filterable data table
+        if (lower === 'datatable') {
+          return <MarkdownDatatableBlock code={code} className="my-1" />
+        }
+        // Spreadsheet code blocks → Excel-style grid
+        if (lower === 'spreadsheet') {
+          return <MarkdownSpreadsheetBlock code={code} className="my-1" />
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)

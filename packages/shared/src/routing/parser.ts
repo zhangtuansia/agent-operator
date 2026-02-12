@@ -58,6 +58,18 @@ const COMPOUND_ROUTE_PREFIXES = [
   'allChats', 'flagged', 'state', 'imported', 'sources', 'skills', 'settings'
 ]
 
+const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
+  'app',
+  'workspace',
+  'api',
+  'input',
+  'labels',
+  'permissions',
+  'shortcuts',
+  'preferences',
+  'import',
+]
+
 /**
  * Check if a route is a compound route (new format)
  */
@@ -87,8 +99,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Settings navigator
   if (first === 'settings') {
     const subpage = (segments[1] || 'app') as SettingsSubpage
-    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'api', 'input', 'permissions', 'shortcuts', 'preferences', 'import']
-    if (!validSubpages.includes(subpage)) return null
+    if (!VALID_SETTINGS_SUBPAGES.includes(subpage)) return null
     return {
       navigator: 'settings',
       details: { type: subpage, id: subpage },
@@ -451,6 +462,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'api' }
     case 'input':
       return { navigator: 'settings', subpage: 'input' }
+    case 'labels':
+      return { navigator: 'settings', subpage: 'labels' }
     case 'permissions':
       return { navigator: 'settings', subpage: 'permissions' }
     case 'shortcuts':

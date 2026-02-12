@@ -55,11 +55,15 @@ export {
   MemoizedMarkdown,
   CodeBlock,
   InlineCode,
+  MarkdownDatatableBlock,
+  MarkdownSpreadsheetBlock,
   MarkdownExcalidrawBlock,
   CollapsibleMarkdownProvider,
   useCollapsibleMarkdown,
   type MarkdownProps,
   type RenderMode,
+  type MarkdownDatatableBlockProps,
+  type MarkdownSpreadsheetBlockProps,
 } from './components/markdown'
 
 // UI primitives
@@ -70,6 +74,15 @@ export {
   PreviewHeader,
   PreviewHeaderBadge,
   PREVIEW_BADGE_VARIANTS,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuShortcut,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
   type SpinnerProps,
   type SimpleDropdownProps,
   type SimpleDropdownItemProps,
@@ -90,12 +103,21 @@ export {
 export {
   ShikiCodeViewer,
   ShikiDiffViewer,
+  UnifiedDiffViewer,
+  getDiffStats,
+  getUnifiedDiffStats,
+  DiffViewerControls,
+  DiffSplitIcon,
+  DiffUnifiedIcon,
+  DiffBackgroundIcon,
   LANGUAGE_MAP,
   getLanguageFromPath,
   formatFilePath,
   truncateFilePath,
   type ShikiCodeViewerProps,
   type ShikiDiffViewerProps,
+  type UnifiedDiffViewerProps,
+  type DiffViewerControlsProps,
 } from './components/code-viewer'
 
 // Terminal components
@@ -131,6 +153,7 @@ export {
   JSONPreviewOverlay,
   DataTableOverlay,
   DocumentFormattedMarkdownOverlay,
+  detectLanguage,
   detectLanguageFromPath,
   type CodePreviewOverlayProps,
   type DiffPreviewOverlayProps,
@@ -178,11 +201,19 @@ export {
   type TerminalOverlayData,
   type GenericOverlayData,
   type JSONOverlayData,
+  type DocumentOverlayData,
   type OverlayData,
 } from './lib/tool-parsers'
 
 // Turn utilities (pure functions)
 export * from './components/chat/turn-utils'
+
+// Action Cards
+export {
+  ActionCard,
+  type ActionCardProps,
+  type ActionCardAction,
+} from './components/cards/ActionCard'
 
 // Icons
 export {

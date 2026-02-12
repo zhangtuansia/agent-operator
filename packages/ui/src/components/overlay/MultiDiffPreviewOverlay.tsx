@@ -302,7 +302,7 @@ export function MultiDiffPreviewOverlay({
   theme = 'light',
   onOpenFile,
   translations,
-}: MultiDiffPreviewOverlayProps) {
+}: MultiDiffPreviewOverlayProps): React.ReactElement | null {
   const t = {
     changes: translations?.changes ?? 'Changes',
     snippet: translations?.snippet ?? 'Snippet',

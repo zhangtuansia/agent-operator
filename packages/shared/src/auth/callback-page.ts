@@ -4,7 +4,7 @@
  * in both the callback server and the playground preview.
  */
 
-import { OPERATOR_LOGO_HTML } from '../branding.ts';
+import { COWORK_LOGO_HTML } from '../branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 
@@ -115,6 +115,23 @@ export function generateCallbackPage(options: {
       color: rgba(0, 0, 0, 0.4);
     }
 
+    .return-link {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      background-color: #8b5fb3;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background-color 0.15s ease;
+    }
+
+    .return-link:hover {
+      background-color: #7a4fa3;
+    }
+
     @media (prefers-color-scheme: dark) {
       body {
         background-color: #1a1a1a;
@@ -153,11 +170,12 @@ export function generateCallbackPage(options: {
 </head>
 <body>
   <div class="content">
-    <pre class="logo">${OPERATOR_LOGO_HTML}</pre>
+    <pre class="logo">${COWORK_LOGO_HTML}</pre>
     <div class="card">
       <div class="status">${statusMessage}</div>
     </div>
-    <div class="hint">You can now return to the application.</div>
+    <div class="hint">${isSuccess ? 'You can now return to the application.' : 'Please close this window and try again.'}</div>
+    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">Cowork</a>` : ''}
   </div>
   <script>${autoCloseScript}</script>
 </body>

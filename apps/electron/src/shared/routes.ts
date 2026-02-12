@@ -15,6 +15,8 @@
  *   navigate(routes.view.settings('shortcuts'))
  */
 
+import type { SettingsSubpage } from './settings-registry'
+
 // Helper to build query strings from params
 function toQueryString(params?: Record<string, string | undefined>): string {
   if (!params) return ''
@@ -123,7 +125,7 @@ export const routes = {
         : 'skills' as const,
 
     /** Settings view (settings navigator) */
-    settings: (subpage?: 'app' | 'workspace' | 'api' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import') =>
+    settings: (subpage?: SettingsSubpage) =>
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,

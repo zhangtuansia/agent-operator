@@ -110,6 +110,8 @@ export interface StoredConfig {
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const CONFIG_DEFAULTS_FILE = join(CONFIG_DIR, 'config-defaults.json');
+const DEEPSEEK_PROVIDER_ID = 'deepseek';
+const DEEPSEEK_ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic';
 
 /**
  * Load config defaults from file, or use bundled defaults as fallback.
@@ -245,10 +247,29 @@ function formatProviderName(provider: string): string {
     .join(' ');
 }
 
+function normalizeProviderConfig(providerConfig: ProviderConfig): ProviderConfig {
+  const providerId = providerConfig.provider.toLowerCase();
+  if (providerId !== DEEPSEEK_PROVIDER_ID) {
+    return providerConfig;
+  }
+
+  const trimmedBaseUrl = providerConfig.baseURL.trim();
+  const isLegacyDeepseekBaseUrl = /^https:\/\/api\.deepseek\.com(?:\/v1)?\/?$/i.test(trimmedBaseUrl);
+  const normalizedBaseUrl = !trimmedBaseUrl || isLegacyDeepseekBaseUrl
+    ? DEEPSEEK_ANTHROPIC_BASE_URL
+    : trimmedBaseUrl;
+
+  return {
+    ...providerConfig,
+    baseURL: normalizedBaseUrl,
+    apiFormat: 'anthropic',
+  };
+}
+
 function derivePrimaryLlmConnection(config: StoredConfig): LlmConnection {
   const now = Date.now();
   const existing = config.llmConnections ?? [];
-  const providerConfig = config.providerConfig;
+  const providerConfig = config.providerConfig ? normalizeProviderConfig(config.providerConfig) : undefined;
   const agentType = config.agentType ?? 'claude';
 
   let slug = 'anthropic-api';
@@ -376,9 +397,17 @@ function backfillConnectionModels(config: StoredConfig): boolean {
 }
 
 function syncPrimaryLlmConnection(config: StoredConfig): boolean {
+  let changed = false;
+  if (config.providerConfig) {
+    const normalizedProviderConfig = normalizeProviderConfig(config.providerConfig);
+    if (JSON.stringify(normalizedProviderConfig) !== JSON.stringify(config.providerConfig)) {
+      config.providerConfig = normalizedProviderConfig;
+      changed = true;
+    }
+  }
+
   const primary = derivePrimaryLlmConnection(config);
   const existingConnections = config.llmConnections ?? [];
-  let changed = false;
 
   const index = existingConnections.findIndex(connection => connection.slug === primary.slug);
   if (index >= 0) {
@@ -593,11 +622,12 @@ export function setProviderConfig(providerConfig: ProviderConfig | null): void {
   const config = loadStoredConfig();
   if (!config) return;
   if (providerConfig) {
+    const normalizedConfig = normalizeProviderConfig(providerConfig);
     // Preserve existing customModels if not provided in the new config
     const existingCustomModels = config.providerConfig?.customModels;
     config.providerConfig = {
-      ...providerConfig,
-      customModels: providerConfig.customModels ?? existingCustomModels,
+      ...normalizedConfig,
+      customModels: normalizedConfig.customModels ?? existingCustomModels,
     };
   } else {
     delete config.providerConfig;
@@ -1104,7 +1134,7 @@ export function setActiveWorkspace(workspaceId: string): void {
  * @param workspaceId The ID of the workspace to switch to
  * @returns The workspace and session, or null if workspace not found
  */
-export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspace; session: SessionConfig } | null {
+export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ workspace: Workspace; session: SessionConfig } | null> {
   const config = loadStoredConfig();
   if (!config) return null;
 
@@ -1112,7 +1142,7 @@ export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspa
   if (!workspace) return null;
 
   // Get or create the latest session for this workspace
-  const session = getOrCreateLatestSession(workspace.rootPath);
+  const session = await getOrCreateLatestSession(workspace.rootPath);
 
   // Update active workspace in config
   config.activeWorkspaceId = workspaceId;

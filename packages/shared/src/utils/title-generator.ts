@@ -11,6 +11,58 @@ const FALLBACK_MIN_LENGTH = 8;
 const FALLBACK_MAX_LENGTH = 20;
 const FALLBACK_DEFAULT_TITLE = '处理当前任务内容';
 
+/**
+ * Build a prompt for generating a short task-focused title.
+ */
+export function buildTitlePrompt(message: string): string {
+  const userSnippet = message.slice(0, 500);
+  return [
+    'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
+    'Start with a verb. Use plain text only - no markdown.',
+    'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+    '',
+    'User: ' + userSnippet,
+    '',
+    'Task:',
+  ].join('\n');
+}
+
+/**
+ * Build a prompt for regenerating a title from recent context.
+ */
+export function buildRegenerateTitlePrompt(
+  recentUserMessages: string[],
+  lastAssistantResponse: string
+): string {
+  const userContext = recentUserMessages
+    .map((msg) => msg.slice(0, 300))
+    .join('\n\n');
+  const assistantSnippet = lastAssistantResponse.slice(0, 500);
+
+  return [
+    'Based on these recent messages, what is the current focus of this conversation?',
+    'Reply with ONLY a short task description (2-5 words).',
+    'Start with a verb. Use plain text only - no markdown.',
+    'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+    '',
+    'Recent user messages:',
+    userContext,
+    '',
+    'Latest assistant response:',
+    assistantSnippet,
+    '',
+    'Current focus:',
+  ].join('\n');
+}
+
+/**
+ * Validate and normalize a generated title.
+ */
+export function validateTitle(title: string | null | undefined): string | null {
+  const normalized = normalizeTitle(title ?? '');
+  return normalized.length > 0 ? normalized : null;
+}
+
 function normalizeTitle(raw: string): string {
   // Keep first line and collapse whitespace so we don't reject otherwise good output.
   const singleLine = raw.split('\n')[0]?.trim() ?? '';
@@ -137,17 +189,7 @@ export async function generateSessionTitle(
   userMessage: string
 ): Promise<string | null> {
   try {
-    const userSnippet = userMessage.slice(0, 500);
-
-    const prompt = [
-      'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
-      '',
-      'User: ' + userSnippet,
-      '',
-      'Task:',
-    ].join('\n');
+    const prompt = buildTitlePrompt(userMessage);
 
     return await queryTitle(prompt);
   } catch (error) {
@@ -172,26 +214,7 @@ export async function regenerateSessionTitle(
   lastAssistantResponse: string
 ): Promise<string | null> {
   try {
-    // Combine recent user messages, taking up to 300 chars from each
-    const userContext = recentUserMessages
-      .map((msg) => msg.slice(0, 300))
-      .join('\n\n');
-    const assistantSnippet = lastAssistantResponse.slice(0, 500);
-
-    const prompt = [
-      'Based on these recent messages, what is the current focus of this conversation?',
-      'Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
-      '',
-      'Recent user messages:',
-      userContext,
-      '',
-      'Latest assistant response:',
-      assistantSnippet,
-      '',
-      'Current focus:',
-    ].join('\n');
+    const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse);
 
     return await queryTitle(prompt);
   } catch (error) {

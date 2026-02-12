@@ -975,6 +975,8 @@ export default function App() {
   const platformActions = useMemo(() => ({
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
+    // Read file contents as UTF-8 string (used by datatable/spreadsheet src field)
+    onReadFile: (path: string) => window.electronAPI.readFile(path),
     onRevealInFinder: handleRevealInFinder,
     // Hide/show macOS traffic lights when fullscreen overlays are open
     onSetTrafficLightsVisible: (visible: boolean) => {

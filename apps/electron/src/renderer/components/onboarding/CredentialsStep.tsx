@@ -50,9 +50,9 @@ export const PROVIDER_DEFAULTS: Record<string, {
   },
   deepseek: {
     name: 'DeepSeek',
-    baseURL: 'https://api.deepseek.com/v1',
+    baseURL: 'https://api.deepseek.com/anthropic',
     docsUrl: 'platform.deepseek.com',
-    apiFormat: 'openai',
+    apiFormat: 'anthropic',
     placeholder: 'sk-...',
   },
   custom: {
