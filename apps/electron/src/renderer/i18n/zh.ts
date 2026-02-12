@@ -112,6 +112,15 @@ export const zh: TranslationKeys = {
     colorTheme: '颜色主题',
     colorThemeDefault: '默认',
     font: '字体',
+    defaultTheme: '默认主题',
+    workspaceThemes: '工作区主题',
+    workspaceThemesDescription: '按工作区覆盖主题设置',
+    interface: '界面',
+    connectionIcons: '连接图标',
+    connectionIconsDescription: '在模型控件和会话元信息中显示提供商图标',
+    richToolDescriptions: '工具详细描述',
+    richToolDescriptionsDescription: '为工具调用附加动作名和意图描述，提供更丰富的活动上下文',
+    useDefault: '使用默认',
 
     // Language
     language: '语言',
@@ -522,6 +531,7 @@ export const zh: TranslationKeys = {
     unflag: '取消标记',
     markAsUnread: '标记为未读',
     status: '状态',
+    labels: '标签',
     share: '分享',
     shared: '已分享',
     openInBrowser: '在浏览器中打开',

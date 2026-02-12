@@ -9,7 +9,7 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import {
   getAuthType,
@@ -37,6 +37,11 @@ import {
   setDefaultLlmConnection,
   touchLlmConnection,
   isCopilotProvider,
+  isCompatProvider,
+  isAnthropicProvider,
+  isOpenAIProvider,
+  getDefaultModelsForConnection,
+  getDefaultModelForConnection,
   type Workspace,
   type AgentType,
   type LlmConnection,
@@ -165,6 +170,59 @@ async function fetchAndStoreCopilotModels(slug: string, accessToken: string): Pr
     models: modelDefs,
     defaultModel: defaultStillValid ? currentDefault : modelDefs[0].id,
   })
+}
+
+/**
+ * Creates a built-in LLM connection object for first-time setup flows.
+ */
+function createBuiltInConnection(slug: string, baseUrl?: string | null): LlmConnection | null {
+  const now = Date.now()
+  const hasCustomEndpoint = typeof baseUrl === 'string' && baseUrl.trim().length > 0
+
+  const createConnection = (
+    providerType: LlmConnection['providerType'],
+    authType: LlmConnection['authType'],
+    name: string,
+  ): LlmConnection => ({
+    slug,
+    name,
+    providerType,
+    authType,
+    baseUrl: hasCustomEndpoint ? baseUrl!.trim() : undefined,
+    models: getDefaultModelsForConnection(providerType),
+    defaultModel: getDefaultModelForConnection(providerType),
+    createdAt: now,
+  })
+
+  switch (slug) {
+    case 'anthropic-api':
+      return createConnection(
+        hasCustomEndpoint ? 'anthropic_compat' : 'anthropic',
+        hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
+        'Anthropic API',
+      )
+    case 'claude-max':
+      return createConnection('anthropic', 'oauth', 'Claude Max')
+    case 'codex':
+      return createConnection('openai', 'oauth', 'Codex')
+    case 'codex-api':
+      return createConnection(
+        hasCustomEndpoint ? 'openai_compat' : 'openai',
+        hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
+        'Codex API',
+      )
+    case 'copilot':
+      return {
+        slug,
+        name: 'GitHub Copilot',
+        providerType: 'copilot',
+        authType: 'oauth',
+        models: [],
+        createdAt: now,
+      }
+    default:
+      return null
+  }
 }
 
 /**
@@ -684,7 +742,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
         return sessionManager.setSessionThinkingLevel(validatedSessionId, validatedCommand.level)
       case 'setConnection':
-        return sessionManager.updateSessionConnection(validatedSessionId, validatedCommand.connectionSlug)
+        return sessionManager.setSessionConnection(validatedSessionId, validatedCommand.connectionSlug)
       case 'updateWorkingDirectory':
         return sessionManager.updateWorkingDirectory(validatedSessionId, validatedCommand.dir)
       case 'setSources':
@@ -1030,6 +1088,62 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return !app.isPackaged
   })
 
+  // Git Bash detection and configuration (Windows only)
+  ipcMain.handle(IPC_CHANNELS.GITBASH_CHECK, async () => {
+    const platform = process.platform as 'win32' | 'darwin' | 'linux'
+
+    // Non-Windows platforms don't need Git Bash
+    if (platform !== 'win32') {
+      return { found: true, path: null, platform }
+    }
+
+    const commonPaths = [
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+      join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+      join(process.env.PROGRAMFILES || '', 'Git', 'bin', 'bash.exe'),
+    ]
+
+    for (const bashPath of commonPaths) {
+      if (existsSync(bashPath)) {
+        return { found: true, path: bashPath, platform }
+      }
+    }
+
+    return { found: false, path: null, platform }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITBASH_BROWSE, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Select bash.exe',
+      filters: [{ name: 'Executable', extensions: ['exe'] }],
+      properties: ['openFile'],
+      defaultPath: 'C:\\Program Files\\Git\\bin',
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITBASH_SET_PATH, async (_event, bashPath: string) => {
+    try {
+      if (!existsSync(bashPath)) {
+        return { success: false, error: 'File does not exist at the specified path' }
+      }
+      if (!bashPath.toLowerCase().endsWith('.exe')) {
+        return { success: false, error: 'Path must be an executable (.exe) file' }
+      }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Failed to validate Git Bash path' }
+    }
+  })
+
   // Get app version and system info
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     return {
@@ -1275,6 +1389,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Credential health check - validates credential store usability
+  ipcMain.handle(IPC_CHANNELS.CREDENTIAL_HEALTH_CHECK, async () => {
+    const manager = getCredentialManager()
+    return manager.checkHealth()
+  })
+
   // ============================================================
   // Settings - Billing Method
   // ============================================================
@@ -1410,6 +1530,96 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.CHATGPT_START_OAUTH, async (_event, connectionSlug: string): Promise<{
+    success: boolean
+    error?: string
+  }> => {
+    try {
+      const { startChatGptOAuth, exchangeChatGptCode } = await import('@agent-operator/shared/auth')
+      const credentialManager = getCredentialManager()
+
+      ipcLog.info(`Starting ChatGPT OAuth flow for connection: ${connectionSlug}`)
+
+      const code = await startChatGptOAuth((status) => {
+        ipcLog.info(`[ChatGPT OAuth] ${status}`)
+      })
+
+      const tokens = await exchangeChatGptCode(code, (status) => {
+        ipcLog.info(`[ChatGPT OAuth] ${status}`)
+      })
+
+      await credentialManager.setLlmOAuth(connectionSlug, {
+        accessToken: tokens.accessToken,
+        idToken: tokens.idToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+      })
+
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('ChatGPT OAuth failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'OAuth authentication failed',
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CHATGPT_CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
+    try {
+      const { cancelChatGptOAuth } = await import('@agent-operator/shared/auth')
+      cancelChatGptOAuth()
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to cancel ChatGPT OAuth:', error)
+      return { success: false }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CHATGPT_GET_AUTH_STATUS, async (_event, connectionSlug: string): Promise<{
+    authenticated: boolean
+    expiresAt?: number
+    hasRefreshToken?: boolean
+  }> => {
+    try {
+      const credentialManager = getCredentialManager()
+      const oauth = await credentialManager.getLlmOAuth(connectionSlug)
+      if (!oauth) {
+        return { authenticated: false }
+      }
+
+      const isExpired = oauth.expiresAt !== undefined
+        ? Date.now() > oauth.expiresAt - 5 * 60 * 1000
+        : false
+      const hasRefreshToken = !!oauth.refreshToken
+      const authenticated = !!oauth.accessToken && !!oauth.idToken && (!isExpired || hasRefreshToken)
+
+      return {
+        authenticated,
+        expiresAt: oauth.expiresAt,
+        hasRefreshToken,
+      }
+    } catch (error) {
+      ipcLog.error('Failed to get ChatGPT auth status:', error)
+      return { authenticated: false }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CHATGPT_LOGOUT, async (_event, connectionSlug: string): Promise<{ success: boolean }> => {
+    try {
+      const credentialManager = getCredentialManager()
+      await credentialManager.deleteLlmCredentials(connectionSlug)
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to clear ChatGPT credentials:', error)
+      return { success: false }
+    }
+  })
+
+  // ============================================================
   // GitHub Copilot OAuth (device flow)
   // ============================================================
 
@@ -1481,6 +1691,264 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Settings - API Setup (Unified Connection Bootstrap)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.SETUP_LLM_CONNECTION, async (_event, setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const manager = getCredentialManager()
+
+      let connection = getLlmConnection(setup.slug)
+      let isNewConnection = false
+
+      if (!connection) {
+        connection = createBuiltInConnection(setup.slug, setup.baseUrl)
+        if (!connection) {
+          return { success: false, error: `Unknown connection slug: ${setup.slug}` }
+        }
+        isNewConnection = true
+      }
+
+      const updates: Partial<LlmConnection> = {}
+      if (setup.baseUrl !== undefined) {
+        const hasCustomEndpoint = !!setup.baseUrl
+        updates.baseUrl = setup.baseUrl ?? undefined
+
+        if (isAnthropicProvider(connection.providerType) && connection.authType !== 'oauth') {
+          const providerType = hasCustomEndpoint ? 'anthropic_compat' as const : 'anthropic' as const
+          updates.providerType = providerType
+          updates.authType = hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key'
+          if (!hasCustomEndpoint) {
+            updates.models = getDefaultModelsForConnection(providerType)
+            updates.defaultModel = getDefaultModelForConnection(providerType)
+          }
+        }
+
+        if (isOpenAIProvider(connection.providerType) && connection.authType !== 'oauth') {
+          const providerType = hasCustomEndpoint ? 'openai_compat' as const : 'openai' as const
+          updates.providerType = providerType
+          updates.authType = hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key'
+          if (!hasCustomEndpoint) {
+            updates.models = getDefaultModelsForConnection(providerType)
+            updates.defaultModel = getDefaultModelForConnection(providerType)
+          }
+        }
+      }
+
+      if (setup.defaultModel !== undefined) {
+        updates.defaultModel = setup.defaultModel ?? undefined
+      }
+      if (setup.models !== undefined) {
+        updates.models = setup.models ?? undefined
+      }
+
+      const pendingConnection: LlmConnection = {
+        ...connection,
+        ...updates,
+      }
+
+      if (updates.models && updates.models.length > 0) {
+        const updateModelIds = updates.models
+          .map(model => typeof model === 'string' ? model : model.id)
+          .filter(Boolean)
+
+        if (pendingConnection.defaultModel && !updateModelIds.includes(pendingConnection.defaultModel)) {
+          return { success: false, error: `Default model "${pendingConnection.defaultModel}" is not in the provided model list.` }
+        }
+        if (!pendingConnection.defaultModel) {
+          const firstModelId = updateModelIds[0]
+          pendingConnection.defaultModel = firstModelId
+          updates.defaultModel = firstModelId
+        }
+      }
+
+      if (isCompatProvider(pendingConnection.providerType)) {
+        const compatModelIds = (pendingConnection.models ?? [])
+          .map(model => typeof model === 'string' ? model : model.id)
+          .filter(Boolean)
+
+        if (!pendingConnection.defaultModel) {
+          return { success: false, error: 'Default model is required for compatible endpoints.' }
+        }
+        if (compatModelIds.length === 0) {
+          return { success: false, error: 'At least one model is required for compatible endpoints.' }
+        }
+        if (!compatModelIds.includes(pendingConnection.defaultModel)) {
+          return {
+            success: false,
+            error: `Default model "${pendingConnection.defaultModel}" is not in the compatible model list.`,
+          }
+        }
+      }
+
+      if (isNewConnection) {
+        const added = addLlmConnection(pendingConnection)
+        if (!added) {
+          return { success: false, error: 'Connection already exists' }
+        }
+        ipcLog.info(`Created LLM connection: ${setup.slug}`)
+      } else if (Object.keys(updates).length > 0) {
+        const updated = updateLlmConnection(setup.slug, updates)
+        if (!updated) {
+          return { success: false, error: 'Failed to update connection' }
+        }
+        ipcLog.info(`Updated LLM connection settings: ${setup.slug}`)
+      }
+
+      if (setup.credential) {
+        if (pendingConnection.authType === 'oauth') {
+          await manager.setLlmOAuth(setup.slug, { accessToken: setup.credential })
+          ipcLog.info('Saved OAuth token to LLM connection')
+        } else {
+          await manager.setLlmApiKey(setup.slug, setup.credential)
+          ipcLog.info('Saved API key to LLM connection')
+        }
+      }
+
+      if (!getDefaultLlmConnection()) {
+        setDefaultLlmConnection(setup.slug)
+      }
+
+      if (isCopilotProvider(pendingConnection.providerType)) {
+        const oauth = await manager.getLlmOAuth(setup.slug)
+        if (oauth?.accessToken) {
+          await fetchAndStoreCopilotModels(setup.slug, oauth.accessToken)
+        }
+      }
+
+      await sessionManager.reinitializeAuth(getDefaultLlmConnection() || setup.slug)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('Failed to setup LLM connection:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  // Test Anthropic-compatible API connection (key, endpoint, model, and tool support).
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, async (_event, apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string; modelCount?: number }> => {
+    const trimmedKey = apiKey?.trim()
+    const trimmedUrl = baseUrl?.trim()
+    const normalizedModels = (models ?? []).map(m => m.trim()).filter(Boolean)
+
+    if (!trimmedKey && !trimmedUrl) {
+      return { success: false, error: 'API key is required' }
+    }
+
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const client = new Anthropic({
+        ...(trimmedUrl ? { baseURL: trimmedUrl } : {}),
+        ...(trimmedUrl
+          ? { authToken: trimmedKey || 'ollama', apiKey: null }
+          : { apiKey: trimmedKey, authToken: null }),
+      })
+
+      if (normalizedModels.length > 0) {
+        for (const modelId of normalizedModels) {
+          await client.messages.create({
+            model: modelId,
+            max_tokens: 16,
+            messages: [{ role: 'user', content: 'hi' }],
+            tools: [{ name: 'test_tool', description: 'Test tool', input_schema: { type: 'object' as const, properties: {} } }],
+          })
+        }
+        return { success: true, modelCount: normalizedModels.length }
+      }
+
+      let testModel: string
+      if (!trimmedUrl || trimmedUrl.includes('openrouter.ai') || trimmedUrl.includes('ai-gateway.vercel.sh')) {
+        testModel = getDefaultModelForConnection('anthropic')
+      } else {
+        return { success: false, error: 'Please specify a model for custom endpoints' }
+      }
+
+      await client.messages.create({
+        model: testModel,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ name: 'test_tool', description: 'Test tool', input_schema: { type: 'object' as const, properties: {} } }],
+      })
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const lower = message.toLowerCase()
+      ipcLog.info(`[testApiConnection] Error: ${message.slice(0, 500)}`)
+
+      if (lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('fetch failed')) {
+        return { success: false, error: 'Cannot connect to API server. Check the URL and ensure the server is running.' }
+      }
+      if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('authentication')) {
+        return { success: false, error: 'Invalid API key' }
+      }
+      if (lower.includes('404') && !lower.includes('model')) {
+        return { success: false, error: 'Endpoint not found. Ensure the server supports Anthropic Messages API (/v1/messages).' }
+      }
+      if (lower.includes('model not found') || lower.includes('invalid model') || (lower.includes('404') && lower.includes('model'))) {
+        return { success: false, error: normalizedModels[0] ? `Model "${normalizedModels[0]}" not found.` : 'Could not access the default model.' }
+      }
+      if (lower.includes('tool') && lower.includes('support')) {
+        return { success: false, error: 'Selected model does not support tool/function calling.' }
+      }
+      return { success: false, error: message.slice(0, 300) }
+    }
+  })
+
+  // Test OpenAI API connection against /v1/models endpoint.
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_TEST_OPENAI_CONNECTION, async (_event, apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string }> => {
+    const trimmedKey = apiKey?.trim()
+    const trimmedUrl = baseUrl?.trim()
+    const normalizedModels = (models ?? []).map(m => m.trim()).filter(Boolean)
+
+    if (!trimmedKey) {
+      return { success: false, error: 'API key is required' }
+    }
+
+    try {
+      const effectiveBaseUrl = trimmedUrl || 'https://api.openai.com'
+      const modelsUrl = `${effectiveBaseUrl.replace(/\/$/, '')}/v1/models`
+
+      const response = await fetch(modelsUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${trimmedKey}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        if (normalizedModels.length > 0) {
+          const payload = await response.json()
+          const available = new Set((payload?.data ?? []).map((item: { id?: string }) => item.id).filter(Boolean))
+          const missing = normalizedModels.find(model => !available.has(model))
+          if (missing) {
+            return { success: false, error: `Model "${missing}" not found.` }
+          }
+        }
+        return { success: true }
+      }
+
+      if (response.status === 401) return { success: false, error: 'Invalid API key' }
+      if (response.status === 403) return { success: false, error: 'Access denied. Check API key permissions.' }
+      if (response.status === 404) return { success: false, error: 'Endpoint not found. Check base URL.' }
+      if (response.status === 429) return { success: false, error: 'Rate limited or quota exceeded.' }
+
+      const text = await response.text().catch(() => '')
+      return { success: false, error: text.slice(0, 300) || `API error: ${response.status} ${response.statusText}` }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const lower = message.toLowerCase()
+      ipcLog.info(`[testOpenAiConnection] Error: ${message.slice(0, 500)}`)
+
+      if (lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('fetch failed')) {
+        return { success: false, error: 'Cannot connect to API server. Check the URL and network.' }
+      }
+      return { success: false, error: message.slice(0, 300) }
+    }
+  })
+
+  // ============================================================
   // Settings - Provider Config
   // ============================================================
 
@@ -1532,7 +2000,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Set session-specific model.
   // Backward compatibility: optional connection is still accepted and routed
-  // through SessionManager.updateSessionConnection.
+  // through SessionManager.setSessionConnection (pre-first-message only).
   ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, sessionId: string, workspaceId: string, model: string | null, connection?: string) => {
     await sessionManager.updateSessionModel(sessionId, workspaceId, model, connection)
     ipcLog.info(`Session ${sessionId} model updated to: ${model}`)
@@ -2907,6 +3375,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return listStatuses(workspace.rootPath)
   })
 
+  // Reorder statuses (drag-and-drop). Receives new ordered array of status IDs.
+  // Config watcher will detect the file change and broadcast STATUSES_CHANGED.
+  ipcMain.handle(IPC_CHANNELS.STATUSES_REORDER, async (_event, workspaceId: string, orderedIds: string[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { reorderStatuses } = await import('@agent-operator/shared/statuses')
+    reorderStatuses(workspace.rootPath, orderedIds)
+  })
+
   // ============================================================
   // Labels Management (Workspace-scoped)
   // ============================================================
@@ -2920,6 +3398,28 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return listLabels(workspace.rootPath)
   })
 
+  // Create a new label in a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_CREATE, async (_event, workspaceId: string, input: import('@agent-operator/shared/labels').CreateLabelInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { createLabel } = await import('@agent-operator/shared/labels/crud')
+    const label = createLabel(workspace.rootPath, input)
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+    return label
+  })
+
+  // Delete a label (and descendants) from a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_DELETE, async (_event, workspaceId: string, labelId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteLabel } = await import('@agent-operator/shared/labels/crud')
+    const result = deleteLabel(workspace.rootPath, labelId)
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+    return result
+  })
+
   // ============================================================
   // Views Management (Workspace-scoped)
   // ============================================================
@@ -2931,6 +3431,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { listViews } = await import('@agent-operator/shared/views/storage')
     return listViews(workspace.rootPath)
+  })
+
+  // Save views (replaces full array)
+  ipcMain.handle(IPC_CHANNELS.VIEWS_SAVE, async (_event, workspaceId: string, views: import('@agent-operator/shared/views').ViewConfig[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { saveViews } = await import('@agent-operator/shared/views/storage')
+    saveViews(workspace.rootPath, views)
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
   })
 
   // Generic workspace image loading (for source icons, status icons, etc.)
@@ -3112,6 +3622,23 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Workspace-level theme overrides
+  ipcMain.handle(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME, async (_event, workspaceId: string, themeId: string | null) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return
+    const { setWorkspaceColorTheme } = await import('@agent-operator/shared/workspaces/storage')
+    setWorkspaceColorTheme(workspace.rootPath, themeId ?? undefined)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES, async () => {
+    const { getWorkspaceColorTheme } = await import('@agent-operator/shared/workspaces/storage')
+    const themes: Record<string, string | undefined> = {}
+    for (const workspace of sessionManager.getWorkspaces()) {
+      themes[workspace.id] = getWorkspaceColorTheme(workspace.rootPath)
+    }
+    return themes
+  })
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
     const { getLogoUrl } = await import('@agent-operator/shared/utils/logo')
@@ -3147,6 +3674,17 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
       })
       .filter(Boolean)
+  })
+
+  // Appearance settings
+  ipcMain.handle(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS, async () => {
+    const { getRichToolDescriptions } = await import('@agent-operator/shared/config/storage')
+    return getRichToolDescriptions()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, async (_event, enabled: boolean) => {
+    const { setRichToolDescriptions } = await import('@agent-operator/shared/config/storage')
+    setRichToolDescriptions(enabled)
   })
 
   // ============================================================

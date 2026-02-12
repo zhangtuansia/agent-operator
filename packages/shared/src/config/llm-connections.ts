@@ -289,6 +289,10 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
  * Default model ID for a provider type.
  */
 export function getDefaultModelForConnection(providerType: LlmProviderType): string {
+  if (providerType === 'copilot') {
+    // Copilot models are dynamic; use a stable placeholder until listModels() refreshes.
+    return 'gpt-5';
+  }
   const models = getDefaultModelsForConnection(providerType);
   const first = models[0];
   if (!first) return CLAUDE_MODELS[0]!.id;

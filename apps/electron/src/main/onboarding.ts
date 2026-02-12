@@ -324,7 +324,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   })
 
   // Exchange authorization code for tokens
-  ipcMain.handle(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, async (_event, authorizationCode: string) => {
+  ipcMain.handle(
+    IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE,
+    async (_event, authorizationCode: string, connectionSlug?: string) => {
     try {
       mainLog.info('[Onboarding] Exchanging Claude authorization code...')
 
@@ -346,6 +348,15 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         expiresAt: tokens.expiresAt,
       })
 
+      // New flow: persist OAuth tokens on a specific LLM connection when provided.
+      if (connectionSlug) {
+        await manager.setLlmOAuth(connectionSlug, {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+        })
+      }
+
       mainLog.info('[Onboarding] Claude OAuth successful')
       return { success: true, token: tokens.accessToken }
     } catch (error) {
@@ -353,7 +364,8 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       mainLog.error('[Onboarding] Exchange Claude code error:', message)
       return { success: false, error: message }
     }
-  })
+    },
+  )
 
   // Check if there's a valid OAuth state in progress
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE, async () => {

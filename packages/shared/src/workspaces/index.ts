@@ -36,6 +36,9 @@ export {
   renameWorkspaceFolder,
   // Auto-discovery
   discoverWorkspacesInDefaultLocation,
+  // Workspace theme overrides
+  getWorkspaceColorTheme,
+  setWorkspaceColorTheme,
   // Constants
   CONFIG_DIR,
   DEFAULT_WORKSPACES_DIR,

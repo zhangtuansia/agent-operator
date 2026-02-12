@@ -103,6 +103,7 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
+  richToolDescriptions?: boolean;  // Include tool intent/display names in intercepted tool calls. Default: true
   // UI Language
   uiLanguage?: 'en' | 'zh';  // UI display language. Default: system language
   // Auto-update
@@ -1913,6 +1914,28 @@ export function setColorTheme(themeId: string): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.colorTheme = themeId;
+  saveConfig(config);
+}
+
+/**
+ * Get rich tool descriptions setting.
+ * Defaults to true when unset or config missing.
+ */
+export function getRichToolDescriptions(): boolean {
+  const config = loadStoredConfig();
+  if (config?.richToolDescriptions !== undefined) {
+    return config.richToolDescriptions;
+  }
+  return true;
+}
+
+/**
+ * Set rich tool descriptions setting.
+ */
+export function setRichToolDescriptions(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.richToolDescriptions = enabled;
   saveConfig(config);
 }
 

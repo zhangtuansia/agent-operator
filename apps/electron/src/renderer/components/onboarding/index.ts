@@ -1,4 +1,3 @@
-// Shared primitives for building step components
 export {
   StepIcon,
   StepHeader,
@@ -9,25 +8,23 @@ export {
   type StepIconVariant,
 } from './primitives'
 
-// Individual steps
 export { WelcomeStep } from './WelcomeStep'
-export { BillingMethodStep, type BillingMethod } from './BillingMethodStep'
-export { CredentialsStep, type CredentialStatus, type ProviderCredentials, type ApiFormat, PROVIDER_DEFAULTS } from './CredentialsStep'
+export { APISetupStep, type ApiSetupMethod } from './APISetupStep'
+export { CredentialsStep, type CredentialStatus } from './CredentialsStep'
 export { CompletionStep } from './CompletionStep'
 export { ReauthScreen } from './ReauthScreen'
+export { GitBashWarning, type GitBashStatus } from './GitBashWarning'
 
-// Main wizard container
 export { OnboardingWizard, type OnboardingState, type OnboardingStep, type LoginStatus } from './OnboardingWizard'
 
-// Re-export all types for convenient import
 export type {
   OnboardingStep as OnboardingStepType,
   OnboardingState as OnboardingStateType,
 } from './OnboardingWizard'
 
 export type {
-  BillingMethod as BillingMethodType,
-} from './BillingMethodStep'
+  ApiSetupMethod as ApiSetupMethodType,
+} from './APISetupStep'
 
 export type {
   CredentialStatus as CredentialStatusType,

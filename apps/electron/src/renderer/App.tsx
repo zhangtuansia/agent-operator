@@ -1019,17 +1019,18 @@ export default function App() {
           state={onboarding.state}
           onContinue={onboarding.handleContinue}
           onBack={onboarding.handleBack}
-          onSelectBillingMethod={onboarding.handleSelectBillingMethod}
+          onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
           onSubmitCredential={onboarding.handleSubmitCredential}
-          onSubmitProvider={onboarding.handleSubmitProvider}
           onStartOAuth={onboarding.handleStartOAuth}
           onFinish={onboarding.handleFinish}
-          existingClaudeToken={onboarding.existingClaudeToken}
-          isClaudeCliInstalled={onboarding.isClaudeCliInstalled}
-          onUseExistingClaudeToken={onboarding.handleUseExistingClaudeToken}
           isWaitingForCode={onboarding.isWaitingForCode}
           onSubmitAuthCode={onboarding.handleSubmitAuthCode}
           onCancelOAuth={onboarding.handleCancelOAuth}
+          copilotDeviceCode={onboarding.copilotDeviceCode}
+          onBrowseGitBash={onboarding.handleBrowseGitBash}
+          onUseGitBashPath={onboarding.handleUseGitBashPath}
+          onRecheckGitBash={onboarding.handleRecheckGitBash}
+          onClearError={onboarding.handleClearError}
         />
       </ModalProvider>
       </LanguageProvider>

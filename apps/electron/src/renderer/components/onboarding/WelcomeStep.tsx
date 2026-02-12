@@ -6,6 +6,8 @@ interface WelcomeStepProps {
   onContinue: () => void
   /** Whether this is an existing user updating settings */
   isExistingUser?: boolean
+  /** Whether the app is preparing prerequisites */
+  isLoading?: boolean
 }
 
 /**
@@ -17,7 +19,8 @@ interface WelcomeStepProps {
  */
 export function WelcomeStep({
   onContinue,
-  isExistingUser = false
+  isExistingUser = false,
+  isLoading = false,
 }: WelcomeStepProps) {
   const { t } = useTranslation()
   return (
@@ -34,7 +37,7 @@ export function WelcomeStep({
           : t('onboarding.welcomeDescription')
       }
       actions={
-        <ContinueButton onClick={onContinue} className="w-full">
+        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText={t('common.loading')}>
           {isExistingUser ? t('onboarding.continue') : t('onboarding.getStarted')}
         </ContinueButton>
       }

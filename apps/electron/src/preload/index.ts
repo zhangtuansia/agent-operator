@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
+import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType, type LlmConnectionSetup } from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -146,6 +146,7 @@ const api: ElectronAPI = {
   showLogoutConfirmation: () => ipcRenderer.invoke(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION),
   showDeleteSessionConfirmation: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, name),
   logout: () => ipcRenderer.invoke(IPC_CHANNELS.LOGOUT),
+  getCredentialHealth: () => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIAL_HEALTH_CHECK),
 
   // Onboarding
   getAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE).then(r => r.authState),
@@ -168,19 +169,34 @@ const api: ElectronAPI = {
   runClaudeSetupToken: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_RUN_CLAUDE_SETUP_TOKEN),
   // Native Claude OAuth (two-step flow)
   startClaudeOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_CLAUDE_OAUTH),
-  exchangeClaudeCode: (code: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, code),
+  exchangeClaudeCode: (code: string, connectionSlug?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, code, connectionSlug),
   hasClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE),
+  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
+  startChatGptOAuth: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_START_OAUTH, connectionSlug),
+  cancelChatGptOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_CANCEL_OAUTH),
+  getChatGptAuthStatus: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_GET_AUTH_STATUS, connectionSlug),
+  chatGptLogout: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_LOGOUT, connectionSlug),
   // GitHub Copilot OAuth (device flow)
   startCopilotOAuth: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_START_OAUTH, connectionSlug),
   cancelCopilotOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_CANCEL_OAUTH),
   getCopilotAuthStatus: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_GET_AUTH_STATUS, connectionSlug),
   logoutCopilot: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_LOGOUT, connectionSlug),
+  copilotLogout: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.COPILOT_LOGOUT, connectionSlug),
   onCopilotDeviceCode: (callback: (deviceCode: { userCode: string; verificationUri: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, deviceCode: { userCode: string; verificationUri: string }) => callback(deviceCode)
     ipcRenderer.on(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.COPILOT_DEVICE_CODE, handler)
   },
+
+  // Settings - API setup (unified connection bootstrap)
+  setupLlmConnection: (setup: LlmConnectionSetup) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETUP_LLM_CONNECTION, setup),
+  testApiConnection: (apiKey: string, baseUrl?: string, models?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, apiKey, baseUrl, models),
+  testOpenAiConnection: (apiKey: string, baseUrl?: string, models?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_OPENAI_CONNECTION, apiKey, baseUrl, models),
 
   // LLM Connections (provider configurations)
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
@@ -299,6 +315,8 @@ const api: ElectronAPI = {
   // Status management
   listStatuses: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.STATUSES_LIST, workspaceId),
+  reorderStatuses: (workspaceId: string, orderedIds: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_REORDER, workspaceId, orderedIds),
 
   // Generic workspace image loading/saving
   readWorkspaceImage: (workspaceId: string, relativePath: string) =>
@@ -358,6 +376,10 @@ const api: ElectronAPI = {
   // Labels
   listLabels: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),
+  createLabel: (workspaceId: string, input: import('@agent-operator/shared/labels').CreateLabelInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_CREATE, workspaceId, input),
+  deleteLabel: (workspaceId: string, labelId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_DELETE, workspaceId, labelId),
 
   // Labels change listener (live updates when labels config changes)
   onLabelsChanged: (callback: (workspaceId: string) => void) => {
@@ -373,6 +395,8 @@ const api: ElectronAPI = {
   // Views
   listViews: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.VIEWS_LIST, workspaceId),
+  saveViews: (workspaceId: string, views: import('@agent-operator/shared/views').ViewConfig[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWS_SAVE, workspaceId, views),
 
   // Theme (app-level only)
   getAppTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_APP),
@@ -381,6 +405,10 @@ const api: ElectronAPI = {
   loadPresetTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_LOAD_PRESET, themeId),
   getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
+  setWorkspaceColorTheme: (workspaceId: string, themeId: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME, workspaceId, themeId),
+  getAllWorkspaceThemes: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES),
 
   // Fonts (local font files path)
   // In development: relative to app root
@@ -394,6 +422,11 @@ const api: ElectronAPI = {
   // Tool icon mappings (for Appearance settings page)
   getToolIconMappings: () =>
     ipcRenderer.invoke(IPC_CHANNELS.TOOL_ICONS_GET_MAPPINGS) as Promise<import('@agent-operator/shared/ipc').ToolIconMapping[]>,
+  // Appearance settings
+  getRichToolDescriptions: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS) as Promise<boolean>,
+  setRichToolDescriptions: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS, enabled),
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange: (callback: (theme: import('@agent-operator/shared/config').ThemeOverrides | null) => void) => {
@@ -445,6 +478,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.INPUT_GET_SPELL_CHECK) as Promise<boolean>,
   setSpellCheck: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, enabled),
+  // Git Bash (Windows)
+  checkGitBash: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITBASH_CHECK) as Promise<import('../shared/types').GitBashStatus>,
+  browseForGitBash: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITBASH_BROWSE) as Promise<string | null>,
+  setGitBashPath: (path: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITBASH_SET_PATH, path) as Promise<{ success: boolean; error?: string }>,
 
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),

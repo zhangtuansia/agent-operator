@@ -39,6 +39,9 @@ export const KEYS = {
 
   // TurnCard expansion state (persisted across session switches)
   turnCardExpansion: 'turn-card-expansion',
+
+  // UI preferences
+  showConnectionIcons: 'show-connection-icons',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

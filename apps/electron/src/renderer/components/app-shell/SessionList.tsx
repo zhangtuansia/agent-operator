@@ -46,6 +46,7 @@ import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/sha
 import type { SessionSearchResult } from "../../../shared/types"
 import { useLanguage } from "@/context/LanguageContext"
 import { getDateFnsLocale } from "@/i18n"
+import type { LabelConfig } from "@agent-operator/shared/labels"
 
 
 /**
@@ -169,6 +170,10 @@ interface SessionItemProps {
   contentMatch?: SessionSearchResult
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
+  /** Full label tree for labels submenu */
+  labels: LabelConfig[]
+  /** Callback when labels are toggled */
+  onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Translation function */
   t: (key: string) => string
   /** Current language for date formatting */
@@ -201,6 +206,8 @@ const SessionItem = memo(function SessionItem({
   searchQuery,
   contentMatch,
   todoStates,
+  labels,
+  onLabelsChange,
   t,
   language,
 }: SessionItemProps) {
@@ -452,6 +459,9 @@ const SessionItem = memo(function SessionItem({
                     hasUnreadMessages={hasUnreadMessages(item)}
                     currentTodoState={currentTodoState}
                     todoStates={todoStates}
+                    sessionLabels={item.labels ?? []}
+                    labels={labels}
+                    onLabelsChange={onLabelsChange ? (nextLabels) => onLabelsChange(item.id, nextLabels) : undefined}
                     onRename={() => onRenameClick(item.id, getSessionTitle(item, t('chat.newChat')))}
                     onFlag={() => onFlag?.(item.id)}
                     onUnflag={() => onUnflag?.(item.id)}
@@ -479,6 +489,9 @@ const SessionItem = memo(function SessionItem({
               hasUnreadMessages={hasUnreadMessages(item)}
               currentTodoState={currentTodoState}
               todoStates={todoStates}
+              sessionLabels={item.labels ?? []}
+              labels={labels}
+              onLabelsChange={onLabelsChange ? (nextLabels) => onLabelsChange(item.id, nextLabels) : undefined}
               onRename={() => onRenameClick(item.id, getSessionTitle(item, t('chat.newChat')))}
               onFlag={() => onFlag?.(item.id)}
               onUnflag={() => onUnflag?.(item.id)}
@@ -502,6 +515,7 @@ const SessionItem = memo(function SessionItem({
     prevProps.item.isProcessing === nextProps.item.isProcessing &&
     prevProps.item.isFlagged === nextProps.item.isFlagged &&
     prevProps.item.todoState === nextProps.item.todoState &&
+    prevProps.item.labels === nextProps.item.labels &&
     prevProps.item.isAsyncOperationOngoing === nextProps.item.isAsyncOperationOngoing &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
@@ -553,6 +567,10 @@ interface SessionListProps {
   onSearchClose?: () => void
   /** Dynamic todo states from workspace config */
   todoStates?: TodoState[]
+  /** Label configs for labels submenu in session menu */
+  labels?: LabelConfig[]
+  /** Callback when session labels are toggled */
+  onLabelsChange?: (sessionId: string, labels: string[]) => void
 }
 
 // Re-export TodoStateId for use by parent components
@@ -586,6 +604,8 @@ export function SessionList({
   onSearchChange,
   onSearchClose,
   todoStates = [],
+  labels = [],
+  onLabelsChange,
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
@@ -958,6 +978,8 @@ export function SessionList({
                           searchQuery={searchQuery}
                           contentMatch={contentResults.get(item.id)}
                           todoStates={todoStates}
+                          labels={labels}
+                          onLabelsChange={onLabelsChange}
                           t={t}
                           language={language}
                         />

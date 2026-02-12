@@ -860,6 +860,16 @@ export default function AiSettingsPage() {
   const handleReauthenticateConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     if (!window.electronAPI) return
 
+    if (connection.providerType === 'openai' && connection.authType === 'oauth') {
+      try {
+        await window.electronAPI.startChatGptOAuth(connection.slug)
+        await refreshLlmConnections?.()
+      } catch (error) {
+        console.error('Failed to start ChatGPT OAuth:', error)
+      }
+      return
+    }
+
     if (connection.providerType === 'copilot' && connection.authType === 'oauth') {
       try {
         await window.electronAPI.startCopilotOAuth(connection.slug)

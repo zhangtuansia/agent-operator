@@ -166,6 +166,17 @@ export interface GitBashStatus {
   platform: 'win32' | 'darwin' | 'linux'
 }
 
+/**
+ * Setup data for creating/updating an LLM connection via IPC.
+ */
+export interface LlmConnectionSetup {
+  slug: string
+  credential?: string
+  baseUrl?: string | null
+  defaultModel?: string | null
+  models?: string[] | null
+}
+
 // Import types needed for ElectronAPI
 import type { Message } from '@agent-operator/core/types';
 import type {
@@ -286,6 +297,7 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
+  // Legacy onboarding config save (kept for backward compatibility)
   saveOnboardingConfig(config: {
     authType?: AuthType
     workspace?: { name: string; iconUrl?: string; mcpUrl?: string }
@@ -303,15 +315,29 @@ export interface ElectronAPI {
   runClaudeSetupToken(): Promise<ClaudeOAuthResult>
   // Native Claude OAuth (two-step flow)
   startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
+  exchangeClaudeCode(code: string, connectionSlug?: string): Promise<ClaudeOAuthResult>
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
+
+  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
+  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
+  cancelChatGptOAuth(): Promise<{ success: boolean }>
+  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
+  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
+
   // GitHub Copilot OAuth (device flow)
   startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
   cancelCopilotOAuth(): Promise<{ success: boolean }>
   getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
+  // Legacy alias kept for compatibility
   logoutCopilot(connectionSlug: string): Promise<{ success: boolean }>
+  copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
   onCopilotDeviceCode(callback: (deviceCode: { userCode: string; verificationUri: string }) => void): () => void
+
+  // Unified API setup flow
+  setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
+  testApiConnection(apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string; modelCount?: number }>
+  testOpenAiConnection(apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string }>
 
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>
@@ -414,16 +440,20 @@ export interface ElectronAPI {
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@agent-operator/shared/statuses').StatusConfig[]>
+  reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
 
   // Labels (workspace-scoped)
   listLabels(workspaceId: string): Promise<import('@agent-operator/shared/labels').LabelConfig[]>
+  createLabel(workspaceId: string, input: import('@agent-operator/shared/labels').CreateLabelInput): Promise<import('@agent-operator/shared/labels').LabelConfig>
+  deleteLabel(workspaceId: string, labelId: string): Promise<{ stripped: number }>
   // Labels change listener (live updates when labels config changes)
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
   // Views (workspace-scoped)
   listViews(workspaceId: string): Promise<import('@agent-operator/shared/views').ViewConfig[]>
+  saveViews(workspaceId: string, views: import('@agent-operator/shared/views').ViewConfig[]): Promise<void>
 
   // Generic workspace image loading/saving (returns data URL for images, raw string for SVG)
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
@@ -441,6 +471,9 @@ export interface ElectronAPI {
   getAllWorkspaceThemes(): Promise<Record<string, string | undefined>>
   // Tool icon mappings (CLI command → icon)
   getToolIconMappings(): Promise<ToolIconMapping[]>
+  // Appearance settings
+  getRichToolDescriptions(): Promise<boolean>
+  setRichToolDescriptions(enabled: boolean): Promise<void>
   // Credential health check
   getCredentialHealth(): Promise<CredentialHealthStatus>
 
@@ -469,6 +502,10 @@ export interface ElectronAPI {
   setSendMessageKey(key: 'enter' | 'cmd-enter'): Promise<void>
   getSpellCheck(): Promise<boolean>
   setSpellCheck(enabled: boolean): Promise<void>
+  // Git Bash (Windows onboarding)
+  checkGitBash(): Promise<GitBashStatus>
+  browseForGitBash(): Promise<string | null>
+  setGitBashPath(path: string): Promise<{ success: boolean; error?: string }>
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

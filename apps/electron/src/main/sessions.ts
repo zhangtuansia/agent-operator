@@ -448,6 +448,8 @@ interface LegacyBedrockCompatState {
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private windowManager: WindowManager | null = null
+  private copilotCliPath: string | undefined
+  private copilotInterceptorPath: string | undefined
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
@@ -931,6 +933,20 @@ export class SessionManager {
     sessionLog.info('Setting pathToClaudeCodeExecutable:', cliPath)
     setPathToClaudeCodeExecutable(cliPath)
 
+    // Resolve Copilot CLI path for CopilotAgent.
+    const copilotRelativePath = join('node_modules', '@github', 'copilot', 'index.js')
+    let copilotPath = join(basePath, copilotRelativePath)
+    if (!existsSync(copilotPath) && !app.isPackaged) {
+      const monorepoRoot = join(basePath, '..', '..')
+      copilotPath = join(monorepoRoot, copilotRelativePath)
+    }
+    if (existsSync(copilotPath)) {
+      this.copilotCliPath = copilotPath
+      sessionLog.info('Resolved Copilot CLI path:', copilotPath)
+    } else {
+      sessionLog.warn('Copilot CLI not found; Copilot sessions will use SDK default resolution')
+    }
+
     // Set path to fetch interceptor for SDK subprocess
     // This interceptor captures API errors and adds metadata to MCP tool schemas
     // In monorepo, packages folder is at root level
@@ -955,6 +971,18 @@ export class SessionManager {
       setInterceptorPath(interceptorPath)
     } else {
       sessionLog.info('Skipping interceptor on Windows dev (node does not support --preload)')
+    }
+
+    // Resolve Copilot network interceptor (CJS required by NODE_OPTIONS --require).
+    let copilotInterceptorPath = join(basePath, 'dist', 'copilot-interceptor.cjs')
+    if (!existsSync(copilotInterceptorPath) && !app.isPackaged) {
+      copilotInterceptorPath = join(basePath, 'apps', 'electron', 'dist', 'copilot-interceptor.cjs')
+    }
+    if (existsSync(copilotInterceptorPath)) {
+      this.copilotInterceptorPath = copilotInterceptorPath
+      sessionLog.info('Resolved Copilot interceptor path:', copilotInterceptorPath)
+    } else {
+      sessionLog.warn('Copilot interceptor not found; run `bun run electron:build` to build it')
     }
 
     // In packaged app: use bundled Bun binary
@@ -1781,6 +1809,8 @@ export class SessionManager {
           thinkingLevel: managed.thinkingLevel,
           isHeadless: !AGENT_FLAGS.defaultModesEnabled,
           connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+          copilotCliPath: this.copilotCliPath,
+          copilotInterceptorPath: this.copilotInterceptorPath,
           session: sessionConfig,
           onSdkSessionIdUpdate: (sdkSessionId: string) => {
             managed.sdkSessionId = sdkSessionId
@@ -2597,31 +2627,43 @@ export class SessionManager {
   }
 
   /**
-   * Update the LLM connection for a session.
-   * Switching connections resets provider-bound conversation state.
+   * Set the LLM connection for a session.
+   * Connection can only be changed before the first message is sent.
    */
-  async updateSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
+  async setSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (!managed) return
+    if (!managed) {
+      sessionLog.warn(`setSessionConnection: session ${sessionId} not found`)
+      throw new Error(`Session ${sessionId} not found`)
+    }
 
     if (connectionSlug === managed.llmConnection) return
 
     const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-    const previousResolvedConnection = resolveSessionConnection(
-      managed.llmConnection,
-      workspaceConfig?.defaults?.defaultLlmConnection,
-    )
     const nextResolvedConnection = resolveSessionConnection(
       connectionSlug,
       workspaceConfig?.defaults?.defaultLlmConnection,
     )
+    if (!nextResolvedConnection) {
+      sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
+      throw new Error(`LLM connection "${connectionSlug}" not found`)
+    }
+
+    // Connection is locked after first message. Legacy sessions may miss
+    // connectionLocked, so also guard by message count after lazy-load.
+    await this.ensureMessagesLoaded(managed)
+    if (managed.connectionLocked || managed.messages.length > 0) {
+      sessionLog.warn(`setSessionConnection: cannot change connection for started session ${sessionId}`)
+      throw new Error('Cannot change connection after session has started')
+    }
 
     managed.llmConnection = connectionSlug
+
     let modelChanged = false
     if (managed.model) {
       const nextModelIds = getConnectionModelIds(nextResolvedConnection)
       if (nextModelIds.length > 0 && !nextModelIds.includes(managed.model)) {
-        const fallbackModel = nextResolvedConnection?.defaultModel ?? nextModelIds[0]
+        const fallbackModel = nextResolvedConnection.defaultModel ?? nextModelIds[0]
         managed.model = fallbackModel
         modelChanged = true
         sessionLog.info(
@@ -2630,26 +2672,11 @@ export class SessionManager {
       }
     }
 
-    // Switching LLM connections mid-session must reset provider conversation state.
-    // Otherwise the next turn may try to resume a transcript bound to a different
-    // endpoint/provider and fail unexpectedly.
+    // Safety: clear pre-created backend state (should normally be absent before first message).
     managed.sdkSessionId = undefined
     if (managed.agent) {
-      const previousProvider = resolveSessionProvider(previousResolvedConnection, managed.agentType)
-      const nextProvider = resolveSessionProvider(nextResolvedConnection, managed.agentType)
-      const previousProviderType = previousResolvedConnection?.providerType
-      const nextProviderType = nextResolvedConnection?.providerType
-      const providerTypeChanged = previousProviderType !== nextProviderType
-
-      if (previousProvider !== nextProvider || providerTypeChanged) {
-        managed.agent.dispose()
-        managed.agent = null
-      } else {
-        managed.agent.clearHistory()
-        if (modelChanged && managed.model) {
-          managed.agent.setModel(managed.model)
-        }
-      }
+      managed.agent.dispose()
+      managed.agent = null
     }
 
     await updateSessionMetadata(managed.workspace.rootPath, sessionId, {
@@ -2685,12 +2712,18 @@ export class SessionManager {
    * Pass null to clear the session-specific model (will use global config)
    */
   async updateSessionModel(sessionId: string, _workspaceId: string, model: string | null, connection?: string): Promise<void> {
-    if (connection) {
-      await this.updateSessionConnection(sessionId, connection)
-    }
-
     const managed = this.sessions.get(sessionId)
     if (!managed) return
+
+    if (connection && connection !== managed.llmConnection) {
+      try {
+        await this.setSessionConnection(sessionId, connection)
+      } catch (error) {
+        sessionLog.warn(
+          `Ignoring setSessionModel connection update for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    }
 
     const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
     managed.model = model ?? undefined

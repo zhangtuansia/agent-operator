@@ -1,117 +1,145 @@
-/**
- * useOnboarding Hook
- *
- * Manages the state machine for the onboarding wizard.
- * Simplified billing-only flow:
- * 1. Welcome
- * 2. Billing Method (API Key / Claude OAuth)
- * 3. Credentials (API Key or Claude OAuth)
- * 4. Complete
- */
 import { useState, useCallback, useEffect } from 'react'
 import type {
   OnboardingState,
   OnboardingStep,
-  LoginStatus,
-  CredentialStatus,
-  BillingMethod,
-  ProviderCredentials,
+  ApiSetupMethod,
 } from '@/components/onboarding'
-import type { AuthType, SetupNeeds } from '../../shared/types'
+import type { ApiKeySubmitData } from '@/components/apisetup'
+import type { SetupNeeds, GitBashStatus, LlmConnectionSetup } from '../../shared/types'
 
 interface UseOnboardingOptions {
-  /** Called when onboarding is complete */
   onComplete: () => void
-  /** Initial setup needs from auth state check */
   initialSetupNeeds?: SetupNeeds
+  initialStep?: OnboardingStep
+  initialApiSetupMethod?: ApiSetupMethod
+  onDismiss?: () => void
+  onConfigSaved?: () => void
 }
 
 interface UseOnboardingReturn {
-  // State
   state: OnboardingState
-
-  // Wizard actions
   handleContinue: () => void
   handleBack: () => void
-
-  // Billing
-  handleSelectBillingMethod: (method: BillingMethod) => void
-
-  // Credentials
-  handleSubmitCredential: (credential: string) => void
-  handleSubmitProvider: (credentials: ProviderCredentials) => void
-  handleStartOAuth: () => void
-
-  // Claude OAuth
-  existingClaudeToken: string | null
-  isClaudeCliInstalled: boolean
-  handleUseExistingClaudeToken: () => void
-  // Two-step OAuth flow
+  handleSelectApiSetupMethod: (method: ApiSetupMethod) => void
+  handleSubmitCredential: (data: ApiKeySubmitData) => void
+  handleStartOAuth: (methodOverride?: ApiSetupMethod) => void
   isWaitingForCode: boolean
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
-
-  // Completion
+  copilotDeviceCode?: { userCode: string; verificationUri: string }
+  handleBrowseGitBash: () => Promise<string | null>
+  handleUseGitBashPath: (path: string) => void
+  handleRecheckGitBash: () => void
+  handleClearError: () => void
   handleFinish: () => void
   handleCancel: () => void
-
-  // Reset
   reset: () => void
 }
 
-// Map BillingMethod to AuthType
-function billingMethodToAuthType(method: BillingMethod): AuthType {
+function getPlatform(): GitBashStatus['platform'] {
+  const value = navigator.platform.toLowerCase()
+  if (value.includes('win')) return 'win32'
+  if (value.includes('mac')) return 'darwin'
+  return 'linux'
+}
+
+function apiSetupMethodToConnectionSetup(
+  method: ApiSetupMethod,
+  options: { credential?: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[] }
+): LlmConnectionSetup {
   switch (method) {
-    case 'api_key': return 'api_key'
-    case 'claude_oauth': return 'oauth_token'
-    case 'codex': return 'api_key' // Codex uses its own auth system
-    case 'minimax':
-    case 'glm':
-    case 'deepseek':
-    case 'custom':
-      return 'api_key' // Provider APIs use api_key auth type
-    default:
-      return 'api_key'
+    case 'anthropic_api_key':
+      return {
+        slug: 'anthropic-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
+    case 'claude_oauth':
+      return {
+        slug: 'claude-max',
+        credential: options.credential,
+      }
+    case 'chatgpt_oauth':
+      return {
+        slug: 'codex',
+        credential: options.credential,
+      }
+    case 'openai_api_key':
+      return {
+        slug: 'codex-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
+    case 'copilot_oauth':
+      return {
+        slug: 'copilot',
+        credential: options.credential,
+      }
   }
 }
 
 export function useOnboarding({
   onComplete,
   initialSetupNeeds,
+  initialStep = 'welcome',
+  initialApiSetupMethod,
+  onDismiss,
+  onConfigSaved,
 }: UseOnboardingOptions): UseOnboardingReturn {
-  // Main wizard state
   const [state, setState] = useState<OnboardingState>({
-    step: 'welcome',
+    step: initialStep,
     loginStatus: 'idle',
     credentialStatus: 'idle',
     completionStatus: 'saving',
-    billingMethod: null,
-    isExistingUser: (initialSetupNeeds?.needsBillingConfig && !initialSetupNeeds?.needsAuth) ?? false,
+    apiSetupMethod: initialApiSetupMethod ?? null,
+    isExistingUser: initialSetupNeeds?.needsBillingConfig ?? false,
+    gitBashStatus: undefined,
+    isRecheckingGitBash: false,
+    isCheckingGitBash: true,
   })
 
-  // Save configuration
-  const handleSaveConfig = useCallback(async (credential?: string) => {
-    if (!state.billingMethod) {
-      console.log('[Onboarding] No billing method, returning early')
-      return
+  useEffect(() => {
+    const checkGitBash = async () => {
+      try {
+        const status = await window.electronAPI.checkGitBash()
+        setState(s => ({ ...s, gitBashStatus: status, isCheckingGitBash: false }))
+      } catch (error) {
+        console.error('[Onboarding] Failed to check Git Bash:', error)
+        setState(s => ({
+          ...s,
+          gitBashStatus: { found: true, path: null, platform: getPlatform() },
+          isCheckingGitBash: false,
+        }))
+      }
     }
+    checkGitBash()
+  }, [])
+
+  const handleSaveConfig = useCallback(async (
+    credential?: string,
+    options?: { baseUrl?: string; connectionDefaultModel?: string; models?: string[] }
+  ) => {
+    if (!state.apiSetupMethod) return
 
     setState(s => ({ ...s, completionStatus: 'saving' }))
 
     try {
-      const authType = billingMethodToAuthType(state.billingMethod)
-      console.log('[Onboarding] Saving config with authType:', authType)
-
-      const result = await window.electronAPI.saveOnboardingConfig({
-        authType,
+      const setup = apiSetupMethodToConnectionSetup(state.apiSetupMethod, {
         credential,
+        baseUrl: options?.baseUrl,
+        connectionDefaultModel: options?.connectionDefaultModel,
+        models: options?.models,
       })
+      const result = await window.electronAPI.setupLlmConnection(setup)
 
       if (result.success) {
-        console.log('[Onboarding] Save successful')
         setState(s => ({ ...s, completionStatus: 'complete' }))
+        onConfigSaved?.()
       } else {
-        console.error('[Onboarding] Save failed:', result.error)
         setState(s => ({
           ...s,
           completionStatus: 'saving',
@@ -119,89 +147,79 @@ export function useOnboarding({
         }))
       }
     } catch (error) {
-      console.error('[Onboarding] handleSaveConfig error:', error)
       setState(s => ({
         ...s,
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }
-  }, [state.billingMethod])
+  }, [state.apiSetupMethod, onConfigSaved])
 
-  // Continue to next step
   const handleContinue = useCallback(async () => {
     switch (state.step) {
       case 'welcome':
-        setState(s => ({ ...s, step: 'billing-method' }))
-        break
-
-      case 'billing-method':
-        // Handle Codex specially - trigger login flow directly
-        if (state.billingMethod === 'codex') {
-          setState(s => ({ ...s, credentialStatus: 'validating' }))
-          try {
-            const result = await window.electronAPI.startCodexLogin?.()
-            if (result?.success) {
-              // Set agent type to codex
-              await window.electronAPI.setAgentType?.('codex')
-              setState(s => ({
-                ...s,
-                credentialStatus: 'success',
-                completionStatus: 'complete',
-                step: 'complete',
-              }))
-            } else {
-              setState(s => ({
-                ...s,
-                credentialStatus: 'error',
-                errorMessage: result?.error || 'Codex login failed',
-              }))
-            }
-          } catch (error) {
-            setState(s => ({
-              ...s,
-              credentialStatus: 'error',
-              errorMessage: error instanceof Error ? error.message : 'Codex login failed',
-            }))
-          }
-          return
+        if (state.gitBashStatus?.platform === 'win32' && !state.gitBashStatus?.found) {
+          setState(s => ({ ...s, step: 'git-bash' }))
+        } else {
+          setState(s => ({ ...s, step: 'api-setup' }))
         }
-        // Go to credentials step for API Key or Claude OAuth
+        break
+      case 'git-bash':
+        setState(s => ({ ...s, step: 'api-setup' }))
+        break
+      case 'api-setup':
         setState(s => ({ ...s, step: 'credentials' }))
         break
-
       case 'credentials':
-        // Handled by handleSubmitCredential
         break
-
       case 'complete':
         onComplete()
         break
     }
-  }, [state.step, state.billingMethod, onComplete])
+  }, [state.step, state.gitBashStatus, onComplete])
 
-  // Go back to previous step
   const handleBack = useCallback(() => {
+    if (state.step === initialStep && onDismiss) {
+      onDismiss()
+      return
+    }
+
     switch (state.step) {
-      case 'billing-method':
+      case 'git-bash':
         setState(s => ({ ...s, step: 'welcome' }))
         break
+      case 'api-setup':
+        if (state.gitBashStatus?.platform === 'win32' && state.gitBashStatus?.found === false) {
+          setState(s => ({ ...s, step: 'git-bash' }))
+        } else {
+          setState(s => ({ ...s, step: 'welcome' }))
+        }
+        break
       case 'credentials':
-        setState(s => ({ ...s, step: 'billing-method', credentialStatus: 'idle', errorMessage: undefined }))
+        setState(s => ({ ...s, step: 'api-setup', credentialStatus: 'idle', errorMessage: undefined }))
         break
     }
-  }, [state.step])
+  }, [state.step, state.gitBashStatus, initialStep, onDismiss])
 
-  // Select billing method
-  const handleSelectBillingMethod = useCallback((method: BillingMethod) => {
-    setState(s => ({ ...s, billingMethod: method }))
+  const handleSelectApiSetupMethod = useCallback((method: ApiSetupMethod) => {
+    setState(s => ({ ...s, apiSetupMethod: method }))
   }, [])
 
-  // Submit credential (API key)
-  const handleSubmitCredential = useCallback(async (credential: string) => {
+  const handleSubmitCredential = useCallback(async (data: ApiKeySubmitData) => {
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
+    const isOpenAiFlow = state.apiSetupMethod === 'openai_api_key'
+
     try {
-      if (!credential.trim()) {
+      if (isOpenAiFlow && !data.apiKey.trim()) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'Please enter a valid OpenAI API key',
+        }))
+        return
+      }
+
+      if (!isOpenAiFlow && !data.apiKey.trim() && !data.baseUrl) {
         setState(s => ({
           ...s,
           credentialStatus: 'error',
@@ -210,116 +228,31 @@ export function useOnboarding({
         return
       }
 
-      await handleSaveConfig(credential)
+      const models = data.models ?? (
+        data.customModel
+          ? data.customModel.split(',').map(m => m.trim()).filter(Boolean)
+          : undefined
+      )
 
-      setState(s => ({
-        ...s,
-        credentialStatus: 'success',
-        step: 'complete',
-      }))
-    } catch (error) {
-      setState(s => ({
-        ...s,
-        credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Validation failed',
-      }))
-    }
-  }, [handleSaveConfig])
+      const testResult = isOpenAiFlow
+        ? await window.electronAPI.testOpenAiConnection(data.apiKey, data.baseUrl, models)
+        : await window.electronAPI.testApiConnection(data.apiKey, data.baseUrl, models)
 
-  // Submit provider credentials (API key + baseURL + format)
-  const handleSubmitProvider = useCallback(async (credentials: ProviderCredentials) => {
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
-
-    try {
-      if (!credentials.apiKey.trim()) {
+      if (!testResult.success) {
         setState(s => ({
           ...s,
           credentialStatus: 'error',
-          errorMessage: 'Please enter a valid API key',
+          errorMessage: testResult.error || 'Connection test failed',
         }))
         return
       }
 
-      if (!credentials.baseURL.trim()) {
-        setState(s => ({
-          ...s,
-          credentialStatus: 'error',
-          errorMessage: 'Please enter a valid API Base URL',
-        }))
-        return
-      }
-
-      // Save provider config with extended info
-      const result = await window.electronAPI.saveOnboardingConfig({
-        authType: billingMethodToAuthType(state.billingMethod!),
-        credential: credentials.apiKey,
-        providerConfig: {
-          provider: state.billingMethod!,
-          baseURL: credentials.baseURL,
-          apiFormat: credentials.apiFormat,
-        },
+      await handleSaveConfig(data.apiKey, {
+        baseUrl: data.baseUrl,
+        connectionDefaultModel: data.connectionDefaultModel ?? models?.[0],
+        models,
       })
 
-      if (result.success) {
-        setState(s => ({
-          ...s,
-          credentialStatus: 'success',
-          completionStatus: 'complete',
-          step: 'complete',
-        }))
-      } else {
-        setState(s => ({
-          ...s,
-          credentialStatus: 'error',
-          errorMessage: result.error || 'Failed to save configuration',
-        }))
-      }
-    } catch (error) {
-      setState(s => ({
-        ...s,
-        credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Validation failed',
-      }))
-    }
-  }, [state.billingMethod])
-
-  // Claude OAuth state
-  const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
-  const [isClaudeCliInstalled, setIsClaudeCliInstalled] = useState(false)
-  const [claudeOAuthChecked, setClaudeOAuthChecked] = useState(false)
-  // Two-step OAuth flow state
-  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
-
-  // Check for existing Claude token when reaching credentials step with oauth billing
-  useEffect(() => {
-    if (state.step === 'credentials' && state.billingMethod === 'claude_oauth' && !claudeOAuthChecked) {
-      const checkClaudeAuth = async () => {
-        try {
-          const [token, cliInstalled] = await Promise.all([
-            window.electronAPI.getExistingClaudeToken(),
-            window.electronAPI.isClaudeCliInstalled(),
-          ])
-          setExistingClaudeToken(token)
-          setIsClaudeCliInstalled(cliInstalled)
-          setClaudeOAuthChecked(true)
-        } catch (error) {
-          console.error('Failed to check Claude auth:', error)
-          setClaudeOAuthChecked(true)
-        }
-      }
-      checkClaudeAuth()
-    }
-  }, [state.step, state.billingMethod, claudeOAuthChecked])
-
-  // Use existing Claude token (from keychain)
-  const handleUseExistingClaudeToken = useCallback(async () => {
-    if (!existingClaudeToken) return
-
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
-
-    try {
-      await handleSaveConfig(existingClaudeToken)
-
       setState(s => ({
         ...s,
         credentialStatus: 'success',
@@ -329,22 +262,93 @@ export function useOnboarding({
       setState(s => ({
         ...s,
         credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Failed to save token',
+        errorMessage: error instanceof Error ? error.message : 'Validation failed',
       }))
     }
-  }, [existingClaudeToken, handleSaveConfig])
+  }, [handleSaveConfig, state.apiSetupMethod])
 
-  // Start Claude OAuth (native browser-based OAuth with PKCE - two-step flow)
-  const handleStartOAuth = useCallback(async () => {
-    setState(s => ({ ...s, errorMessage: undefined }))
+  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
+  const [copilotDeviceCode, setCopilotDeviceCode] = useState<{ userCode: string; verificationUri: string } | undefined>()
+
+  const handleStartOAuth = useCallback(async (methodOverride?: ApiSetupMethod) => {
+    const effectiveMethod = methodOverride ?? state.apiSetupMethod
+
+    if (methodOverride && methodOverride !== state.apiSetupMethod) {
+      setState(s => ({
+        ...s,
+        apiSetupMethod: methodOverride,
+        step: 'credentials',
+        credentialStatus: 'validating',
+        errorMessage: undefined,
+      }))
+    } else {
+      setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+    }
+
+    if (!effectiveMethod) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: 'Select an authentication method first.',
+      }))
+      return
+    }
 
     try {
-      // Start OAuth flow - this opens the browser
-      const result = await window.electronAPI.startClaudeOAuth()
+      if (effectiveMethod === 'chatgpt_oauth') {
+        const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}).slug
+        const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
+        if (result.success) {
+          await handleSaveConfig(undefined)
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({
+            ...s,
+            credentialStatus: 'error',
+            errorMessage: result.error || 'ChatGPT authentication failed',
+          }))
+        }
+        return
+      }
 
+      if (effectiveMethod === 'copilot_oauth') {
+        const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}).slug
+        const cleanup = window.electronAPI.onCopilotDeviceCode((data) => {
+          setCopilotDeviceCode(data)
+        })
+
+        try {
+          const result = await window.electronAPI.startCopilotOAuth(connectionSlug)
+          if (result.success) {
+            await handleSaveConfig(undefined)
+            setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+          } else {
+            setState(s => ({
+              ...s,
+              credentialStatus: 'error',
+              errorMessage: result.error || 'GitHub authentication failed',
+            }))
+          }
+        } finally {
+          cleanup()
+          setCopilotDeviceCode(undefined)
+        }
+        return
+      }
+
+      if (effectiveMethod !== 'claude_oauth') {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'This connection uses API keys, not OAuth.',
+        }))
+        return
+      }
+
+      const result = await window.electronAPI.startClaudeOAuth()
       if (result.success) {
-        // Browser opened successfully, now waiting for user to copy the code
         setIsWaitingForCode(true)
+        setState(s => ({ ...s, credentialStatus: 'idle' }))
       } else {
         setState(s => ({
           ...s,
@@ -359,9 +363,8 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'OAuth failed',
       }))
     }
-  }, [])
+  }, [state.apiSetupMethod, handleSaveConfig])
 
-  // Submit authorization code (second step of OAuth flow)
   const handleSubmitAuthCode = useCallback(async (code: string) => {
     if (!code.trim()) {
       setState(s => ({
@@ -375,18 +378,13 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
+      const connectionSlug = apiSetupMethodToConnectionSetup('claude_oauth', {}).slug
+      const result = await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
 
       if (result.success && result.token) {
-        setExistingClaudeToken(result.token)
         setIsWaitingForCode(false)
         await handleSaveConfig(result.token)
-
-        setState(s => ({
-          ...s,
-          credentialStatus: 'success',
-          step: 'complete',
-        }))
+        setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
       } else {
         setState(s => ({
           ...s,
@@ -403,56 +401,90 @@ export function useOnboarding({
     }
   }, [handleSaveConfig])
 
-  // Cancel OAuth flow
   const handleCancelOAuth = useCallback(async () => {
     setIsWaitingForCode(false)
     setState(s => ({ ...s, credentialStatus: 'idle', errorMessage: undefined }))
-    // Clear OAuth state on backend
     await window.electronAPI.clearClaudeOAuthState()
   }, [])
 
-  // Finish onboarding
+  const handleBrowseGitBash = useCallback(async () => {
+    return window.electronAPI.browseForGitBash()
+  }, [])
+
+  const handleUseGitBashPath = useCallback(async (path: string) => {
+    const result = await window.electronAPI.setGitBashPath(path)
+    if (result.success) {
+      setState(s => ({
+        ...s,
+        gitBashStatus: { ...(s.gitBashStatus ?? { platform: 'win32', found: false, path: null }), found: true, path },
+        step: 'api-setup',
+      }))
+    } else {
+      setState(s => ({ ...s, errorMessage: result.error || 'Invalid path' }))
+    }
+  }, [])
+
+  const handleRecheckGitBash = useCallback(async () => {
+    setState(s => ({ ...s, isRecheckingGitBash: true }))
+    try {
+      const status = await window.electronAPI.checkGitBash()
+      setState(s => ({
+        ...s,
+        gitBashStatus: status,
+        isRecheckingGitBash: false,
+        step: status.found ? 'api-setup' : s.step,
+      }))
+    } catch (error) {
+      console.error('[Onboarding] Failed to recheck Git Bash:', error)
+      setState(s => ({ ...s, isRecheckingGitBash: false }))
+    }
+  }, [])
+
+  const handleClearError = useCallback(() => {
+    setState(s => ({ ...s, errorMessage: undefined }))
+  }, [])
+
   const handleFinish = useCallback(() => {
     onComplete()
   }, [onComplete])
 
-  // Cancel onboarding
   const handleCancel = useCallback(() => {
     setState(s => ({ ...s, step: 'welcome' }))
   }, [])
 
-  // Reset onboarding to initial state (used after logout)
   const reset = useCallback(() => {
     setState({
-      step: 'welcome',
+      step: initialStep,
       loginStatus: 'idle',
       credentialStatus: 'idle',
       completionStatus: 'saving',
-      billingMethod: null,
+      apiSetupMethod: initialApiSetupMethod ?? null,
       isExistingUser: false,
       errorMessage: undefined,
+      gitBashStatus: undefined,
+      isRecheckingGitBash: false,
+      isCheckingGitBash: false,
     })
-    setExistingClaudeToken(null)
-    setIsClaudeCliInstalled(false)
-    setClaudeOAuthChecked(false)
     setIsWaitingForCode(false)
-  }, [])
+    setCopilotDeviceCode(undefined)
+    window.electronAPI.clearClaudeOAuthState().catch(() => {})
+  }, [initialStep, initialApiSetupMethod])
 
   return {
     state,
     handleContinue,
     handleBack,
-    handleSelectBillingMethod,
+    handleSelectApiSetupMethod,
     handleSubmitCredential,
-    handleSubmitProvider,
     handleStartOAuth,
-    existingClaudeToken,
-    isClaudeCliInstalled,
-    handleUseExistingClaudeToken,
-    // Two-step OAuth flow
     isWaitingForCode,
     handleSubmitAuthCode,
     handleCancelOAuth,
+    copilotDeviceCode,
+    handleBrowseGitBash,
+    handleUseGitBashPath,
+    handleRecheckGitBash,
+    handleClearError,
     handleFinish,
     handleCancel,
     reset,

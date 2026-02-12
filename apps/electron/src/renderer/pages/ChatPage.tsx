@@ -158,7 +158,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     void (async () => {
       const currentConnection = session?.llmConnection ?? sessionMeta?.llmConnection
       if (connection && connection !== currentConnection) {
-        await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug: connection })
+        try {
+          await window.electronAPI.sessionCommand(sessionId, { type: 'setConnection', connectionSlug: connection })
+        } catch (error) {
+          console.warn('Failed to switch connection:', error)
+          return
+        }
       }
 
       await window.electronAPI.setSessionModel(sessionId, activeWorkspaceId, model)
@@ -337,6 +342,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       hasUnreadMessages={hasUnreadMessages}
       currentTodoState={currentTodoState}
       todoStates={todoStates ?? []}
+      sessionLabels={session?.labels ?? sessionMeta?.labels ?? []}
+      labels={labels}
+      onLabelsChange={handleLabelsChange}
       onRename={handleRename}
       onFlag={handleFlag}
       onUnflag={handleUnflag}
@@ -354,6 +362,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     hasUnreadMessages,
     currentTodoState,
     todoStates,
+    session?.labels,
+    sessionMeta?.labels,
+    labels,
+    handleLabelsChange,
     handleRename,
     handleFlag,
     handleUnflag,

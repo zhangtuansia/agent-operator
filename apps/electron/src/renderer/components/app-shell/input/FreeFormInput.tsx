@@ -28,6 +28,7 @@ import {
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import * as storage from '@/lib/local-storage'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -48,6 +49,7 @@ import { AttachmentPreview } from '../AttachmentPreview'
 import { getModelShortName, getModelDisplayName } from '@config/models'
 import { resolveEffectiveConnectionSlug, isCompatProvider, getDefaultModelsForConnection } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
+import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { WorkingDirectoryBadge, getRecentDirs, addRecentDir } from './WorkingDirectoryBadge'
 import { SourceSelectorBadge } from './SourceSelectorBadge'
@@ -224,7 +226,6 @@ export function FreeFormInput({
   const appShellCtx = useOptionalAppShellContext()
   const llmConnections = appShellCtx?.llmConnections ?? []
   const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
-  const canSwitchConnections = llmConnections.length > 1
 
   const { t } = useTranslation()
   const modKey = isMac ? '⌘' : 'Ctrl'
@@ -370,7 +371,9 @@ export function FreeFormInput({
     if (!model) return getModelDisplayName(modelToDisplay)
     return typeof model === 'string' ? getModelShortName(model) : model.name
   }, [availableModels, connectionDefaultModel, currentModel])
-  const modelSelectorLocked = Boolean(connectionDefaultModel) && !canSwitchConnections
+  const modelSelectorLocked = Boolean(connectionDefaultModel)
+  const showConnectionPicker = isEmptySession && llmConnections.length > 1
+  const showConnectionIcons = storage.get(storage.KEYS.showConnectionIcons, true)
 
   const modelButtonLabel = React.useMemo(() => {
     if (connectionUnavailable) return 'Unavailable'
@@ -1329,6 +1332,9 @@ export function FreeFormInput({
                       connectionUnavailable && "text-destructive",
                     )}
                   >
+                    {effectiveConnectionDetails && llmConnections.length > 1 && showConnectionIcons && (
+                      <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />
+                    )}
                     <span className="max-w-[220px] truncate">{modelButtonLabel}</span>
                     {!connectionUnavailable && !modelSelectorLocked && (
                       <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
@@ -1346,7 +1352,20 @@ export function FreeFormInput({
                     This session connection was removed. Create a new session to continue.
                   </div>
                 </div>
-              ) : canSwitchConnections ? (
+              ) : connectionDefaultModel ? (
+                <StyledDropdownMenuItem
+                  disabled
+                  className="flex items-center justify-between px-2 py-2 rounded-lg"
+                >
+                  <div className="text-left">
+                    <div className="font-medium text-sm">{getModelDisplayName(connectionDefaultModel)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {effectiveConnectionDetails ? `${effectiveConnectionDetails.name} default` : 'Connection default'}
+                    </div>
+                  </div>
+                  <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                </StyledDropdownMenuItem>
+              ) : showConnectionPicker ? (
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
@@ -1366,6 +1385,7 @@ export function FreeFormInput({
                           >
                             <div className="text-left flex-1">
                               <div className="font-medium text-sm flex items-center gap-1.5">
+                                {showConnectionIcons && <ConnectionIcon connection={conn} size={14} />}
                                 {conn.name}
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
@@ -1403,24 +1423,12 @@ export function FreeFormInput({
                     )}
                   </React.Fragment>
                 ))
-              ) : connectionDefaultModel ? (
-                <StyledDropdownMenuItem
-                  disabled
-                  className="flex items-center justify-between px-2 py-2 rounded-lg"
-                >
-                  <div className="text-left">
-                    <div className="font-medium text-sm">{getModelDisplayName(connectionDefaultModel)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {effectiveConnectionDetails ? `${effectiveConnectionDetails.name} default` : 'Connection default'}
-                    </div>
-                  </div>
-                  <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                </StyledDropdownMenuItem>
               ) : (
                 <>
-                  {!isEmptySession && currentConnectionDetails && (
+                  {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
                       <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
+                        {showConnectionIcons && <ConnectionIcon connection={currentConnectionDetails} size={14} />}
                         <span>Using {currentConnectionDetails.name}</span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />

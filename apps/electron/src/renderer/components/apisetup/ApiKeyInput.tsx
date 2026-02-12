@@ -1,15 +1,3 @@
-/**
- * ApiKeyInput - Reusable API key entry form control
- *
- * Renders a password input for the API key, a preset selector for Base URL,
- * and an optional Model override field.
- *
- * Does NOT include layout wrappers or action buttons — the parent
- * controls placement via the form ID ("api-key-form") for submit binding.
- *
- * Used in: Onboarding CredentialsStep, Settings API dialog
- */
-
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +8,6 @@ import {
   StyledDropdownMenuItem,
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
-import { useLanguage } from "@/context/LanguageContext"
 import { Check, ChevronDown, Eye, EyeOff } from "lucide-react"
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
@@ -28,41 +15,58 @@ export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 export interface ApiKeySubmitData {
   apiKey: string
   baseUrl?: string
+  connectionDefaultModel?: string
+  models?: string[]
+  // Legacy field kept for backward compatibility with older callers.
   customModel?: string
 }
 
 export interface ApiKeyInputProps {
-  /** Current validation status */
   status: ApiKeyStatus
-  /** Error message to display when status is 'error' */
   errorMessage?: string
-  /** Called when the form is submitted with the key and optional endpoint config */
   onSubmit: (data: ApiKeySubmitData) => void
-  /** Form ID for external submit button binding (default: "api-key-form") */
   formId?: string
-  /** Disable the input (e.g. during validation) */
   disabled?: boolean
+  providerType?: 'anthropic' | 'openai'
 }
 
-type PresetKey = 'anthropic' | 'openrouter' | 'vercel' | 'ollama' | 'custom'
+type PresetKey = 'anthropic' | 'openai' | 'openrouter' | 'vercel' | 'ollama' | 'custom'
 
 interface Preset {
   key: PresetKey
-  labelKey: string
+  label: string
   url: string
 }
 
-const PRESETS: Preset[] = [
-  { key: 'anthropic', labelKey: 'apiKeyInput.presets.anthropic', url: 'https://api.anthropic.com' },
-  { key: 'openrouter', labelKey: 'apiKeyInput.presets.openrouter', url: 'https://openrouter.ai/api' },
-  { key: 'vercel', labelKey: 'apiKeyInput.presets.vercel', url: 'https://ai-gateway.vercel.sh' },
-  { key: 'ollama', labelKey: 'apiKeyInput.presets.ollama', url: 'http://localhost:11434' },
-  { key: 'custom', labelKey: 'apiKeyInput.presets.custom', url: '' },
+const ANTHROPIC_PRESETS: Preset[] = [
+  { key: 'anthropic', label: 'Anthropic', url: 'https://api.anthropic.com' },
+  { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api' },
+  { key: 'vercel', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh' },
+  { key: 'ollama', label: 'Ollama', url: 'http://localhost:11434' },
+  { key: 'custom', label: 'Custom', url: '' },
 ]
 
-function getPresetForUrl(url: string): PresetKey {
-  const match = PRESETS.find(p => p.key !== 'custom' && p.url === url)
+const OPENAI_PRESETS: Preset[] = [
+  { key: 'openai', label: 'OpenAI', url: '' },
+]
+
+const COMPAT_ANTHROPIC_DEFAULTS = 'anthropic/claude-opus-4.5, anthropic/claude-sonnet-4.5, anthropic/claude-haiku-4.5'
+const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.3-codex, openai/gpt-5.1-codex-mini'
+
+function getPresetsForProvider(providerType: 'anthropic' | 'openai'): Preset[] {
+  return providerType === 'openai' ? OPENAI_PRESETS : ANTHROPIC_PRESETS
+}
+
+function getPresetForUrl(url: string, presets: Preset[]): PresetKey {
+  const match = presets.find(p => p.key !== 'custom' && p.url === url)
   return match?.key ?? 'custom'
+}
+
+function parseModelList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
 }
 
 export function ApiKeyInput({
@@ -71,15 +75,21 @@ export function ApiKeyInput({
   onSubmit,
   formId = "api-key-form",
   disabled,
+  providerType = 'anthropic',
 }: ApiKeyInputProps) {
-  const { t } = useLanguage()
+  const presets = getPresetsForProvider(providerType)
+  const defaultPreset = presets[0]
+
   const [apiKey, setApiKey] = useState('')
   const [showValue, setShowValue] = useState(false)
-  const [baseUrl, setBaseUrl] = useState(PRESETS[0].url)
-  const [activePreset, setActivePreset] = useState<PresetKey>('anthropic')
-  const [customModel, setCustomModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState(defaultPreset.url)
+  const [activePreset, setActivePreset] = useState<PresetKey>(defaultPreset.key)
+  const [connectionDefaultModel, setConnectionDefaultModel] = useState('')
+  const [modelError, setModelError] = useState<string | null>(null)
 
   const isDisabled = disabled || status === 'validating'
+  const isDefaultProviderPreset = activePreset === 'anthropic' || activePreset === 'openai'
+  const apiKeyPlaceholder = providerType === 'openai' ? 'sk-...' : 'sk-ant-...'
 
   const handlePresetSelect = (preset: Preset) => {
     setActivePreset(preset.key)
@@ -88,38 +98,53 @@ export function ApiKeyInput({
     } else {
       setBaseUrl(preset.url)
     }
-    // Pre-fill recommended model for Ollama; clear for all others
-    // (Anthropic hides the field entirely, others default to Claude model IDs when empty)
+    setModelError(null)
     if (preset.key === 'ollama') {
-      setCustomModel('qwen3-coder')
+      setConnectionDefaultModel('qwen3-coder')
+    } else if (preset.key === 'openrouter' || preset.key === 'vercel' || preset.key === 'custom') {
+      setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
     } else {
-      setCustomModel('')
+      setConnectionDefaultModel('')
     }
   }
 
   const handleBaseUrlChange = (value: string) => {
     setBaseUrl(value)
-    setActivePreset(getPresetForUrl(value))
+    const presetKey = getPresetForUrl(value, presets)
+    setActivePreset(presetKey)
+    setModelError(null)
+    if (!connectionDefaultModel.trim()) {
+      if (presetKey === 'ollama') {
+        setConnectionDefaultModel('qwen3-coder')
+      } else if (presetKey === 'openrouter' || presetKey === 'vercel' || presetKey === 'custom') {
+        setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
+      }
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Always call onSubmit — the hook decides whether an empty key is valid
-    // (custom endpoints like Ollama don't require API keys)
     const effectiveBaseUrl = baseUrl.trim()
-    const isDefault = effectiveBaseUrl === PRESETS[0].url || !effectiveBaseUrl
+    const parsedModels = parseModelList(connectionDefaultModel)
+    const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
+    if (requiresModel && parsedModels.length === 0) {
+      setModelError('Default model is required for compatible endpoints.')
+      return
+    }
+    const isDefault = isDefaultProviderPreset || !effectiveBaseUrl
     onSubmit({
       apiKey: apiKey.trim(),
       baseUrl: isDefault ? undefined : effectiveBaseUrl,
-      customModel: customModel.trim() || undefined,
+      connectionDefaultModel: parsedModels[0],
+      models: parsedModels.length > 0 ? parsedModels : undefined,
+      customModel: connectionDefaultModel.trim() || undefined,
     })
   }
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
-      {/* API Key */}
       <div className="space-y-2">
-        <Label htmlFor="api-key">{t('auth.apiKey')}</Label>
+        <Label htmlFor="api-key">API Key</Label>
         <div className={cn(
           "relative rounded-md shadow-minimal transition-colors",
           "bg-foreground-2 focus-within:bg-background"
@@ -129,7 +154,7 @@ export function ApiKeyInput({
             type={showValue ? 'text' : 'password'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={t('apiKeyInput.apiKeyPlaceholder')}
+            placeholder={apiKeyPlaceholder}
             className={cn(
               "pr-10 border-0 bg-transparent shadow-none",
               status === 'error' && "focus-visible:ring-destructive"
@@ -152,103 +177,83 @@ export function ApiKeyInput({
         </div>
       </div>
 
-      {/* Base URL with Preset Dropdown */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="base-url">{t('auth.apiBaseUrl')}</Label>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={isDisabled}
-              className="flex h-6 items-center gap-1 rounded-[6px] bg-background shadow-minimal pl-2.5 pr-2 text-[12px] font-medium text-foreground/50 hover:bg-foreground/5 hover:text-foreground focus:outline-none"
-            >
-              {t(PRESETS.find(p => p.key === activePreset)?.labelKey ?? 'apiKeyInput.presets.custom')}
-              <ChevronDown className="size-2.5 opacity-50" />
-            </DropdownMenuTrigger>
-            <StyledDropdownMenuContent align="end" className="z-floating-menu">
-              {PRESETS.map((preset) => (
-                <StyledDropdownMenuItem
-                  key={preset.key}
-                  onClick={() => handlePresetSelect(preset)}
-                  className="justify-between"
-                >
-                  {t(preset.labelKey)}
-                  <Check className={cn("size-3", activePreset === preset.key ? "opacity-100" : "opacity-0")} />
-                </StyledDropdownMenuItem>
-              ))}
-            </StyledDropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div className={cn(
-          "rounded-md shadow-minimal transition-colors",
-          "bg-foreground-2 focus-within:bg-background"
-        )}>
-          <Input
-            id="base-url"
-            type="text"
-            value={baseUrl}
-            onChange={(e) => handleBaseUrlChange(e.target.value)}
-            placeholder={t('apiKeyInput.baseUrlPlaceholder')}
-            className="border-0 bg-transparent shadow-none"
-            disabled={isDisabled}
-          />
-        </div>
-      </div>
-
-      {/* Custom Model (optional) — hidden for Anthropic since it uses its own model routing */}
-      {activePreset !== 'anthropic' && (
+      {presets.length > 1 && (
         <div className="space-y-2">
-          <Label htmlFor="custom-model" className="text-muted-foreground font-normal">
-            {t('apiKeyInput.modelLabel')} <span className="text-foreground/30">· {t('apiKeyInput.optional')}</span>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="base-url">Endpoint</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                disabled={isDisabled}
+                className="flex h-6 items-center gap-1 rounded-[6px] bg-background shadow-minimal pl-2.5 pr-2 text-[12px] font-medium text-foreground/50 hover:bg-foreground/5 hover:text-foreground focus:outline-none"
+              >
+                {presets.find(p => p.key === activePreset)?.label ?? 'Custom'}
+                <ChevronDown className="size-2.5 opacity-50" />
+              </DropdownMenuTrigger>
+              <StyledDropdownMenuContent align="end" className="z-floating-menu">
+                {presets.map((preset) => (
+                  <StyledDropdownMenuItem
+                    key={preset.key}
+                    onClick={() => handlePresetSelect(preset)}
+                    className="justify-between"
+                  >
+                    {preset.label}
+                    <Check className={cn("size-3", activePreset === preset.key ? "opacity-100" : "opacity-0")} />
+                  </StyledDropdownMenuItem>
+                ))}
+              </StyledDropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div className={cn(
+            "rounded-md shadow-minimal transition-colors",
+            "bg-foreground-2 focus-within:bg-background"
+          )}>
+            <Input
+              id="base-url"
+              type="text"
+              value={baseUrl}
+              onChange={(e) => handleBaseUrlChange(e.target.value)}
+              placeholder="https://api.anthropic.com"
+              className="border-0 bg-transparent shadow-none"
+              disabled={isDisabled}
+            />
+          </div>
+        </div>
+      )}
+
+      {!isDefaultProviderPreset && (
+        <div className="space-y-2">
+          <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">
+            Default Model <span className="text-foreground/30">required</span>
           </Label>
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
           )}>
             <Input
-              id="custom-model"
+              id="connection-default-model"
               type="text"
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              placeholder={t('apiKeyInput.modelPlaceholder')}
-              className="border-0 bg-transparent shadow-none"
+              value={connectionDefaultModel}
+              onChange={(e) => {
+                setConnectionDefaultModel(e.target.value)
+                if (modelError) setModelError(null)
+              }}
+              placeholder="provider/model-id[, provider/model-id...]"
+              className={cn(
+                "border-0 bg-transparent shadow-none",
+                modelError && "focus-visible:ring-destructive"
+              )}
               disabled={isDisabled}
             />
           </div>
-          {/* Contextual help links for providers that need model format guidance */}
-          {activePreset === 'openrouter' && (
-            <p className="text-xs text-foreground/30">
-              {t('apiKeyInput.modelHint.keepEmptyForClaude')}
-              <br />
-              {t('apiKeyInput.modelHint.formatPrefix')} <code className="text-foreground/40">provider/model-name</code>.{' '}
-              <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
-                {t('apiKeyInput.modelHint.browseModels')}
-              </a>
-            </p>
-          )}
-          {activePreset === 'vercel' && (
-            <p className="text-xs text-foreground/30">
-              {t('apiKeyInput.modelHint.keepEmptyForClaude')}
-              <br />
-              {t('apiKeyInput.modelHint.formatPrefix')} <code className="text-foreground/40">provider/model-name</code>.{' '}
-              <a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
-                {t('apiKeyInput.modelHint.viewSupportedModels')}
-              </a>
-            </p>
-          )}
-          {activePreset === 'ollama' && (
-            <p className="text-xs text-foreground/30">
-              {t('apiKeyInput.modelHint.ollamaPrefix')} <code className="text-foreground/40">ollama pull</code>. {t('apiKeyInput.modelHint.ollamaSuffix')}
-            </p>
-          )}
-          {(activePreset === 'custom' || !activePreset) && (
-            <p className="text-xs text-foreground/30">
-              {t('apiKeyInput.modelHint.customDefault')}
-            </p>
+          <p className="text-xs text-foreground/30">
+            Use comma-separated model IDs for compatible endpoints.
+          </p>
+          {modelError && (
+            <p className="text-sm text-destructive">{modelError}</p>
           )}
         </div>
       )}
 
-      {/* Error message */}
       {status === 'error' && errorMessage && (
         <p className="text-sm text-destructive">{errorMessage}</p>
       )}

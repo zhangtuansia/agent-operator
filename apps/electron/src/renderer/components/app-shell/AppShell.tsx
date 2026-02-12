@@ -1620,6 +1620,8 @@ function AppShellContent({
                     setSearchQuery('')
                   }}
                   todoStates={todoStates}
+                  labels={labelConfigs}
+                  onLabelsChange={handleSessionLabelsChange}
                 />
                 </ErrorBoundary>
               </>

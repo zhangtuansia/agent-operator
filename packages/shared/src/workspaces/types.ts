@@ -40,6 +40,7 @@ export interface WorkspaceConfig {
    */
   defaults?: {
     model?: string;
+    colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
     enabledSourceSlugs?: string[]; // Sources to enable by default
     permissionMode?: PermissionMode; // Default permission mode ('safe', 'ask', 'allow-all')
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: all 3)

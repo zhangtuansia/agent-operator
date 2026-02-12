@@ -104,6 +104,7 @@ export const IPC_CHANNELS = {
   LOGOUT: 'auth:logout',
   SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
   SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
+  CREDENTIAL_HEALTH_CHECK: 'credentials:healthCheck',
 
   // Onboarding
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
@@ -120,12 +121,23 @@ export const IPC_CHANNELS = {
   ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
   ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
+  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
+  CHATGPT_START_OAUTH: 'chatgpt:startOAuth',
+  CHATGPT_CANCEL_OAUTH: 'chatgpt:cancelOAuth',
+  CHATGPT_GET_AUTH_STATUS: 'chatgpt:getAuthStatus',
+  CHATGPT_LOGOUT: 'chatgpt:logout',
+
   // GitHub Copilot OAuth (device flow)
   COPILOT_START_OAUTH: 'copilot:startOAuth',
   COPILOT_CANCEL_OAUTH: 'copilot:cancelOAuth',
   COPILOT_GET_AUTH_STATUS: 'copilot:getAuthStatus',
   COPILOT_LOGOUT: 'copilot:logout',
   COPILOT_DEVICE_CODE: 'copilot:deviceCode',
+
+  // Settings - API Setup
+  SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
+  SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
+  SETTINGS_TEST_OPENAI_CONNECTION: 'settings:testOpenAiConnection',
 
   // LLM Connections (provider configurations)
   LLM_CONNECTION_LIST: 'LLM_Connection:list',
@@ -210,14 +222,18 @@ export const IPC_CHANNELS = {
 
   // Status management (workspace-scoped)
   STATUSES_LIST: 'statuses:list',
+  STATUSES_REORDER: 'statuses:reorder',
   STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
 
   // Labels management (workspace-scoped)
   LABELS_LIST: 'labels:list',
+  LABELS_CREATE: 'labels:create',
+  LABELS_DELETE: 'labels:delete',
   LABELS_CHANGED: 'labels:changed',  // Broadcast event
 
   // Views management (workspace-scoped)
   VIEWS_LIST: 'views:list',
+  VIEWS_SAVE: 'views:save',
 
   // Theme management (cascading: app → workspace)
   THEME_APP_CHANGED: 'theme:appChanged',        // Broadcast event
@@ -238,12 +254,18 @@ export const IPC_CHANNELS = {
   THEME_SET_COLOR_THEME: 'theme:setColorTheme',
   THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
   THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
+  // Workspace-level theme overrides
+  THEME_SET_WORKSPACE_COLOR_THEME: 'theme:setWorkspaceColorTheme',
+  THEME_GET_ALL_WORKSPACE_THEMES: 'theme:getAllWorkspaceThemes',
 
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
 
   // Tool icon mappings (for Appearance settings)
   TOOL_ICONS_GET_MAPPINGS: 'toolIcons:getMappings',
+  // Appearance settings
+  APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
+  APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
 
   // Notifications
   NOTIFICATION_SHOW: 'notification:show',
@@ -262,6 +284,11 @@ export const IPC_CHANNELS = {
   INPUT_SET_SEND_MESSAGE_KEY: 'input:setSendMessageKey',
   INPUT_GET_SPELL_CHECK: 'input:getSpellCheck',
   INPUT_SET_SPELL_CHECK: 'input:setSpellCheck',
+
+  // Git Bash (Windows)
+  GITBASH_CHECK: 'gitbash:check',
+  GITBASH_BROWSE: 'gitbash:browse',
+  GITBASH_SET_PATH: 'gitbash:setPath',
 
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
