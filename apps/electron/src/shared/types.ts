@@ -602,6 +602,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   const f = state.filter
   let base: string
   if (f.kind === 'state') base = `state:${f.stateId}`
+  else if (f.kind === 'label') base = `label:${f.labelId}`
   else base = f.kind
   if (state.details) {
     return `${base}/chat/${state.details.sessionId}`
@@ -653,6 +654,10 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       const stateId = filterKey.slice(6)
       if (!stateId) return null
       filter = { kind: 'state', stateId }
+    } else if (filterKey.startsWith('label:')) {
+      const labelId = filterKey.slice(6)
+      if (!labelId) return null
+      filter = { kind: 'label', labelId }
     } else {
       return null
     }
@@ -661,6 +666,15 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       filter,
       details: sessionId ? { type: 'chat', sessionId } : null,
     }
+  }
+
+  // Handle label routes: label/{labelId}[/chat/{sessionId}]
+  if (key.startsWith('label/')) {
+    const parts = key.split('/')
+    const labelId = parts[1]
+    if (!labelId) return null
+    const sessionId = parts[2] === 'chat' ? parts[3] : undefined
+    return parseChatsKey(`label:${labelId}`, sessionId)
   }
 
   // Check for chat details

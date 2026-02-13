@@ -79,6 +79,16 @@ function apiSetupMethodToConnectionSetup(
         slug: 'copilot',
         credential: options.credential,
       }
+    case 'deepseek_api_key':
+    case 'glm_api_key':
+    case 'minimax_api_key':
+      return {
+        slug: 'anthropic-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
   }
 }
 
@@ -142,13 +152,14 @@ export function useOnboarding({
       } else {
         setState(s => ({
           ...s,
-          completionStatus: 'saving',
+          completionStatus: 'complete',
           errorMessage: result.error || 'Failed to save configuration',
         }))
       }
     } catch (error) {
       setState(s => ({
         ...s,
+        completionStatus: 'complete',
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }

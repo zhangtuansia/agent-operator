@@ -19,6 +19,22 @@ import { debug } from '../utils/debug.ts';
 const LABEL_CONFIG_DIR = 'labels';
 const LABEL_CONFIG_FILE = 'labels/config.json';
 
+/** Label name translations per locale */
+const LABEL_NAMES: Record<string, Record<string, string>> = {
+  zh: {
+    development: '开发',
+    code: '代码',
+    bug: '缺陷',
+    automation: '自动化',
+    content: '内容',
+    writing: '写作',
+    research: '研究',
+    design: '设计',
+    priority: '优先级',
+    project: '项目',
+  },
+};
+
 /**
  * Get default label configuration.
  * Provides a starter set of labels organized into two complementary color families:
@@ -27,64 +43,68 @@ const LABEL_CONFIG_FILE = 'labels/config.json';
  * Plus flat valued labels: Priority (number), Project (string)
  *
  * Children use hue-shifted shades of their parent color to show visual hierarchy.
+ * Label names are localized based on the provided locale.
  */
-export function getDefaultLabelConfig(): WorkspaceLabelConfig {
+export function getDefaultLabelConfig(locale?: string): WorkspaceLabelConfig {
+  const names = (locale && LABEL_NAMES[locale]) || {};
+  const n = (id: string, fallback: string) => names[id] || fallback;
+
   return {
     version: 1,
     labels: [
       {
         id: 'development',
-        name: 'Development',
+        name: n('development', 'Development'),
         color: { light: '#3B82F6', dark: '#60A5FA' },
         children: [
           {
             id: 'code',
-            name: 'Code',
+            name: n('code', 'Code'),
             color: { light: '#4F46E5', dark: '#818CF8' }, // indigo shift
           },
           {
             id: 'bug',
-            name: 'Bug',
+            name: n('bug', 'Bug'),
             color: { light: '#0EA5E9', dark: '#38BDF8' }, // sky shift
           },
           {
             id: 'automation',
-            name: 'Automation',
+            name: n('automation', 'Automation'),
             color: { light: '#06B6D4', dark: '#22D3EE' }, // cyan shift
           },
         ],
       },
       {
         id: 'content',
-        name: 'Content',
+        name: n('content', 'Content'),
         color: { light: '#8B5CF6', dark: '#A78BFA' },
         children: [
           {
             id: 'writing',
-            name: 'Writing',
+            name: n('writing', 'Writing'),
             color: { light: '#7C3AED', dark: '#C4B5FD' }, // deeper violet
           },
           {
             id: 'research',
-            name: 'Research',
+            name: n('research', 'Research'),
             color: { light: '#A855F7', dark: '#C084FC' }, // lighter purple
           },
           {
             id: 'design',
-            name: 'Design',
+            name: n('design', 'Design'),
             color: { light: '#D946EF', dark: '#E879F9' }, // fuchsia shift
           },
         ],
       },
       {
         id: 'priority',
-        name: 'Priority',
+        name: n('priority', 'Priority'),
         color: { light: '#F59E0B', dark: '#FBBF24' },
         valueType: 'number',
       },
       {
         id: 'project',
-        name: 'Project',
+        name: n('project', 'Project'),
         color: 'foreground/50',
         valueType: 'string',
       },
@@ -96,14 +116,15 @@ export function getDefaultLabelConfig(): WorkspaceLabelConfig {
  * Load workspace label configuration.
  * Returns empty config if no file exists or parsing fails.
  * Auto-migrates old Tailwind color format to EntityColor on first load.
+ * @param locale - Optional locale for seeding default labels with localized names
  */
-export function loadLabelConfig(workspaceRootPath: string): WorkspaceLabelConfig {
+export function loadLabelConfig(workspaceRootPath: string, locale?: string): WorkspaceLabelConfig {
   const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
 
   // If no config file exists, seed with defaults and persist to disk.
   // This ensures existing workspaces (created before default labels existed) get populated.
   if (!existsSync(configPath)) {
-    const defaults = getDefaultLabelConfig();
+    const defaults = getDefaultLabelConfig(locale);
     debug('[loadLabelConfig] No config found, seeding with default labels');
     saveLabelConfig(workspaceRootPath, defaults);
     return defaults;
@@ -154,8 +175,8 @@ export function saveLabelConfig(
  * Get the label tree (root-level labels with nested children).
  * Primary accessor for the UI — returns the tree structure as-is from config.
  */
-export function listLabels(workspaceRootPath: string): LabelConfig[] {
-  const config = loadLabelConfig(workspaceRootPath);
+export function listLabels(workspaceRootPath: string, locale?: string): LabelConfig[] {
+  const config = loadLabelConfig(workspaceRootPath, locale);
   return config.labels;
 }
 

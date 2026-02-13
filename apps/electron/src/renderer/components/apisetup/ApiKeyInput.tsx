@@ -28,6 +28,10 @@ export interface ApiKeyInputProps {
   formId?: string
   disabled?: boolean
   providerType?: 'anthropic' | 'openai'
+  /** Pre-fill base URL (for third-party providers) */
+  initialBaseUrl?: string
+  /** Pre-fill model list (for third-party providers, comma-separated) */
+  initialModel?: string
 }
 
 type PresetKey = 'anthropic' | 'openai' | 'openrouter' | 'vercel' | 'ollama' | 'custom'
@@ -76,15 +80,17 @@ export function ApiKeyInput({
   formId = "api-key-form",
   disabled,
   providerType = 'anthropic',
+  initialBaseUrl,
+  initialModel,
 }: ApiKeyInputProps) {
   const presets = getPresetsForProvider(providerType)
   const defaultPreset = presets[0]
 
   const [apiKey, setApiKey] = useState('')
   const [showValue, setShowValue] = useState(false)
-  const [baseUrl, setBaseUrl] = useState(defaultPreset.url)
-  const [activePreset, setActivePreset] = useState<PresetKey>(defaultPreset.key)
-  const [connectionDefaultModel, setConnectionDefaultModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState(initialBaseUrl ?? defaultPreset.url)
+  const [activePreset, setActivePreset] = useState<PresetKey>(initialBaseUrl ? 'custom' : defaultPreset.key)
+  const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialModel ?? '')
   const [modelError, setModelError] = useState<string | null>(null)
 
   const isDisabled = disabled || status === 'validating'

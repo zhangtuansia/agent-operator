@@ -698,6 +698,10 @@ export function SessionList({
       navigate(routes.view.flagged(item.id))
     } else if (currentFilter.kind === 'state') {
       navigate(routes.view.state(currentFilter.stateId, item.id))
+    } else if (currentFilter.kind === 'label') {
+      navigate(routes.view.label(currentFilter.labelId, item.id))
+    } else if (currentFilter.kind === 'imported') {
+      navigate(routes.view.imported(currentFilter.source, item.id))
     }
   }, [navigate, currentFilter])
 
@@ -917,6 +921,10 @@ export function SessionList({
                               navigate(routes.view.flagged(item.id))
                             } else if (currentFilter.kind === 'state') {
                               navigate(routes.view.state(currentFilter.stateId, item.id))
+                            } else if (currentFilter.kind === 'label') {
+                              navigate(routes.view.label(currentFilter.labelId, item.id))
+                            } else if (currentFilter.kind === 'imported') {
+                              navigate(routes.view.imported(currentFilter.source, item.id))
                             }
                             // Notify parent
                             onSessionSelect?.(item)

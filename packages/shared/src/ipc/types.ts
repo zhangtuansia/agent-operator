@@ -439,12 +439,14 @@ export type RightSidebarPanel =
  * - 'allChats': All sessions regardless of status
  * - 'flagged': Only flagged sessions
  * - 'state': Sessions with specific status ID
+ * - 'label': Sessions with specific label (includes descendants via tree hierarchy)
  * - 'imported': Imported sessions from external platforms
  */
 export type ChatFilter =
   | { kind: 'allChats' }
   | { kind: 'flagged' }
   | { kind: 'state'; stateId: string }
+  | { kind: 'label'; labelId: string }
   | { kind: 'imported'; source: 'openai' | 'anthropic' }
 
 /**

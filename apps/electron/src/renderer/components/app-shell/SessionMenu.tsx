@@ -29,6 +29,7 @@ import {
   AppWindow,
   RefreshCw,
   Tag,
+  Copy,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, isHexColor } from '@/lib/utils'

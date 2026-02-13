@@ -4,6 +4,7 @@ import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
   discoverWorkspacesInDefaultLocation,
+  getDefaultWorkspacesDir,
   loadWorkspaceConfig,
   createWorkspaceAtPath,
   isValidWorkspace,
@@ -12,6 +13,7 @@ import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { isSafeHttpHeaderValue } from '../utils/mask.ts';
+import { debug } from '../utils/debug.ts';
 import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@agent-operator/core/types';
 import type { Plan } from '../agent/plan-types.ts';
@@ -581,6 +583,158 @@ function syncPrimaryLlmConnection(config: StoredConfig): boolean {
   }
 
   return changed;
+}
+
+/**
+ * Auto-detect external credentials (Claude Code/CLI, ANTHROPIC_API_KEY env, AWS Bedrock).
+ * If no config exists yet, creates one with the detected connection so onboarding is skipped.
+ * Must be called BEFORE migrateLegacyLlmConnectionsConfig.
+ */
+export async function autoDetectExternalCredentials(): Promise<void> {
+  // Only run for fresh installs (no config file yet)
+  const existing = loadStoredConfig();
+  if (existing) return;
+
+  const manager = getCredentialManager();
+
+  // Priority 1: Check for Claude Code/CLI OAuth credentials (~/.claude/.credentials.json)
+  try {
+    // Dynamic import to avoid circular dependencies (auth → config → auth)
+    const compat = await import('../auth/compat.ts');
+    const cliCreds = compat.getExistingClaudeCredentials();
+    if (cliCreds?.accessToken) {
+      const slug = 'claude-max';
+      const connection: LlmConnection = {
+        slug,
+        name: 'Claude Max',
+        providerType: 'anthropic',
+        authType: 'oauth',
+        models: getDefaultModelsForConnection('anthropic'),
+        defaultModel: getDefaultModelForConnection('anthropic'),
+        createdAt: Date.now(),
+      };
+
+      const workspaceId = generateWorkspaceId();
+      const config: StoredConfig = {
+        authType: 'oauth_token',
+        llmConnections: [connection],
+        defaultLlmConnection: slug,
+        workspaces: [{
+          id: workspaceId,
+          name: 'Default',
+          rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+          createdAt: Date.now(),
+        }],
+        activeWorkspaceId: workspaceId,
+        activeSessionId: null,
+      };
+
+      ensureConfigDir();
+      saveConfig(config);
+
+      // Import credentials
+      await manager.setLlmOAuth(slug, {
+        accessToken: cliCreds.accessToken,
+        refreshToken: cliCreds.refreshToken,
+        expiresAt: cliCreds.expiresAt,
+      });
+      // Also save to legacy location for backwards compatibility
+      await manager.setClaudeOAuthCredentials({
+        accessToken: cliCreds.accessToken,
+        refreshToken: cliCreds.refreshToken,
+        expiresAt: cliCreds.expiresAt,
+        source: 'cli',
+      });
+
+      debug('[autoDetect] Imported Claude Code/CLI OAuth credentials');
+      return;
+    }
+  } catch {
+    // Ignore errors reading Claude CLI credentials
+  }
+
+  // Priority 2: Check for ANTHROPIC_API_KEY environment variable
+  const envApiKey = process.env.COWORK_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (envApiKey && envApiKey.trim()) {
+    const slug = 'anthropic-api';
+    const connection: LlmConnection = {
+      slug,
+      name: 'Anthropic (API Key)',
+      providerType: 'anthropic',
+      authType: 'api_key',
+      models: getDefaultModelsForConnection('anthropic'),
+      defaultModel: getDefaultModelForConnection('anthropic'),
+      createdAt: Date.now(),
+    };
+
+    const workspaceId = generateWorkspaceId();
+    const config: StoredConfig = {
+      authType: 'api_key',
+      llmConnections: [connection],
+      defaultLlmConnection: slug,
+      workspaces: [{
+        id: workspaceId,
+        name: 'Default',
+        rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+        createdAt: Date.now(),
+      }],
+      activeWorkspaceId: workspaceId,
+      activeSessionId: null,
+    };
+
+    ensureConfigDir();
+    saveConfig(config);
+
+    // Store the key in connection-scoped credential store
+    await manager.setLlmApiKey(slug, envApiKey.trim());
+    // Also store in legacy location
+    await manager.setApiKey(envApiKey.trim());
+
+    debug('[autoDetect] Imported ANTHROPIC_API_KEY from environment');
+    return;
+  }
+
+  // Priority 3: Check for AWS Bedrock credentials (environment-based)
+  const bedrockSignal = Boolean(
+    process.env.CLAUDE_CODE_USE_BEDROCK === '1'
+    || process.env.AWS_REGION
+    || process.env.AWS_PROFILE
+    || process.env.CLAUDE_CODE_AWS_PROFILE
+  );
+  if (bedrockSignal) {
+    const slug = 'bedrock';
+    const connection: LlmConnection = {
+      slug,
+      name: 'AWS Bedrock',
+      providerType: 'bedrock',
+      authType: 'environment',
+      models: getDefaultModelsForConnection('bedrock'),
+      defaultModel: getDefaultModelForConnection('bedrock'),
+      awsRegion: process.env.AWS_REGION,
+      createdAt: Date.now(),
+    };
+
+    const workspaceId = generateWorkspaceId();
+    const config: StoredConfig = {
+      authType: 'bedrock',
+      llmConnections: [connection],
+      defaultLlmConnection: slug,
+      workspaces: [{
+        id: workspaceId,
+        name: 'Default',
+        rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+        createdAt: Date.now(),
+      }],
+      activeWorkspaceId: workspaceId,
+      activeSessionId: null,
+    };
+
+    ensureConfigDir();
+    saveConfig(config);
+
+    debug('[autoDetect] Created Bedrock connection from environment');
+    return;
+  }
 }
 
 /**

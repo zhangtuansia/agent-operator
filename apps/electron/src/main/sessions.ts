@@ -20,6 +20,7 @@ import {
   resolveEffectiveConnectionSlug,
   getAgentType,
   isAnthropicProvider,
+  autoDetectExternalCredentials,
   migrateLegacyLlmConnectionCredentials,
   migrateLegacyLlmConnectionsConfig,
   isBedrockArn,
@@ -74,6 +75,8 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { generateSessionTitle, regenerateSessionTitle, buildFallbackTitleFromMessages, formatPathsToRelative, formatToolInputPaths, perf, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import { DEFAULT_MODEL, getDefaultModelForProvider } from '@agent-operator/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shared/agent/thinking-levels'
+import { evaluateAutoLabels } from '@agent-operator/shared/labels/auto'
+import { listLabels } from '@agent-operator/shared/labels/storage'
 
 /**
  * Feature flags for agent behavior
@@ -655,6 +658,7 @@ export class SessionManager {
 
       // Clear auth env vars to avoid cross-session/provider leakage.
       delete process.env.ANTHROPIC_API_KEY
+      delete process.env.ANTHROPIC_AUTH_TOKEN
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
       delete process.env.CLAUDE_CODE_USE_BEDROCK
@@ -745,12 +749,21 @@ export class SessionManager {
           const apiKey = validLlmApiKey ?? validGlobalApiKey
           if (apiKey) {
             process.env.ANTHROPIC_API_KEY = apiKey
+            // For Anthropic-compatible providers (DeepSeek, GLM, MiniMax, etc.),
+            // also set ANTHROPIC_AUTH_TOKEN so both x-api-key and Bearer auth headers
+            // are available. Different providers expect different auth mechanisms:
+            // - GLM uses x-api-key (ANTHROPIC_API_KEY)
+            // - DeepSeek uses Authorization: Bearer (ANTHROPIC_AUTH_TOKEN)
+            if (targetConnection.providerType === 'anthropic_compat') {
+              process.env.ANTHROPIC_AUTH_TOKEN = apiKey
+            }
             if (targetConnection.baseUrl) {
               process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
             }
             sessionLog.info('Set Anthropic API key from LLM connection', {
               connection: targetConnection.slug,
               hasCustomBaseUrl: !!targetConnection.baseUrl,
+              isCompat: targetConnection.providerType === 'anthropic_compat',
             })
             return
           }
@@ -1007,6 +1020,10 @@ export class SessionManager {
       sessionLog.info('Using node executable for Windows development')
       setExecutable('node')
     }
+
+    // Auto-detect external credentials (Claude Code/CLI, ANTHROPIC_API_KEY, Bedrock)
+    // This creates a config with appropriate connection for fresh installs.
+    await autoDetectExternalCredentials()
 
     // Backfill/sync LLM connections from legacy auth/provider config.
     // This keeps new connection-based config available without breaking legacy flows.
@@ -2951,6 +2968,31 @@ export class SessionManager {
         // This avoids running a second model call in parallel with the main reply.
         managed.pendingInitialTitleMessage = message
       }
+    }
+
+    // Evaluate auto-label rules against the user message.
+    // Scans regex patterns configured on labels, then merges any new matches
+    // into the session's label array.
+    try {
+      const labelTree = listLabels(managed.workspace.rootPath)
+      const autoMatches = evaluateAutoLabels(message, labelTree)
+      if (autoMatches.length > 0) {
+        const existingLabels = managed.labels ?? []
+        const newEntries = autoMatches
+          .map(m => `${m.labelId}::${m.value}`)
+          .filter(entry => !existingLabels.includes(entry))
+        if (newEntries.length > 0) {
+          managed.labels = [...existingLabels, ...newEntries]
+          this.persistSession(managed)
+          this.sendEvent({
+            type: 'labels_changed',
+            sessionId,
+            labels: managed.labels,
+          }, managed.workspace.id)
+        }
+      }
+    } catch (e) {
+      sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
     }
 
     managed.lastMessageAt = Date.now()

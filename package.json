@@ -1,6 +1,6 @@
 {
   "name": "agent-operator",
-  "version": "0.1.5g",
+  "version": "0.1.6",
   "description": "Cowork - AI-powered agent interface",
   "type": "module",
   "private": true,

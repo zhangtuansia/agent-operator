@@ -89,6 +89,10 @@ function getTranslatedStatusLabel(stateId: string, label: string, t: (key: strin
 }
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
+import { getDescendantIds, extractLabelId, flattenLabels, findLabelById } from "@agent-operator/shared/labels"
+import type { LabelConfig } from "@agent-operator/shared/labels"
+import { LabelIcon } from "@/components/ui/label-icon"
+import { Tag } from "lucide-react"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { routes } from "@/lib/navigate"
@@ -704,6 +708,21 @@ function AppShellContent({
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
   const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
 
+  // Count sessions per label (includes descendants for hierarchical counting)
+  const labelCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const label of flattenLabels(labelConfigs)) {
+      const targetIds = new Set([label.id])
+      for (const did of getDescendantIds(labelConfigs, label.id)) {
+        targetIds.add(did)
+      }
+      counts[label.id] = workspaceSessionMetas.filter(s =>
+        s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
+      ).length
+    }
+    return counts
+  }, [workspaceSessionMetas, labelConfigs])
+
   // Count sessions by individual todo state (dynamic based on todoStates)
   const todoStateCounts = useMemo(() => {
     const counts: Record<TodoStateId, number> = {}
@@ -741,6 +760,19 @@ function AppShellContent({
         // Filter by specific todo state
         result = workspaceSessionMetas.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
         break
+      case 'label':
+        // Filter by label (includes descendants for hierarchical filtering)
+        {
+          const targetIds = new Set([chatFilter.labelId])
+          // Add all descendant IDs so clicking a parent label shows child-tagged sessions too
+          for (const did of getDescendantIds(labelConfigs, chatFilter.labelId)) {
+            targetIds.add(did)
+          }
+          result = workspaceSessionMetas.filter(s =>
+            s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
+          )
+        }
+        break
       case 'imported':
         // Filter by import source
         result = workspaceSessionMetas.filter(s => s.labels?.includes(`imported:${chatFilter.source}`))
@@ -755,7 +787,7 @@ function AppShellContent({
     }
 
     return result
-  }, [workspaceSessionMetas, chatFilter, listFilter])
+  }, [workspaceSessionMetas, chatFilter, listFilter, labelConfigs])
 
   // Ensure session messages are loaded when selected
   React.useEffect(() => {
@@ -902,6 +934,41 @@ function AppShellContent({
     navigate(routes.view.imported('anthropic'))
   }, [navigate])
 
+  // Handler for label filter views
+  const handleLabelClick = useCallback((labelId: string) => {
+    navigate(routes.view.label(labelId))
+  }, [navigate])
+
+  // Build hierarchical label sidebar items (recursive)
+  const buildLabelSidebarItems = useCallback((labels: LabelConfig[]): any[] => {
+    const sorted = [...labels].sort((a, b) =>
+      (a.name || a.id).toLowerCase().localeCompare((b.name || b.id).toLowerCase())
+    )
+    return sorted.map(label => {
+      const hasChildren = !!(label.children && label.children.length > 0)
+      const isActive = chatFilter?.kind === 'label' && chatFilter.labelId === label.id
+      const count = labelCounts[label.id] || 0
+
+      const item: any = {
+        id: `nav:label:${label.id}`,
+        title: label.name,
+        label: count > 0 ? String(count) : undefined,
+        icon: <LabelIcon label={label} size="sm" hasChildren={hasChildren} />,
+        variant: isActive ? "default" : "ghost",
+        onClick: () => handleLabelClick(label.id),
+      }
+
+      if (hasChildren) {
+        item.expandable = true
+        item.expanded = isExpanded(`nav:label:${label.id}`)
+        item.onToggle = () => toggleExpanded(`nav:label:${label.id}`)
+        item.items = buildLabelSidebarItems(label.children!)
+      }
+
+      return item
+    })
+  }, [chatFilter, labelCounts, handleLabelClick, isExpanded, toggleExpanded])
+
   // Handler for individual todo state views
   const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
     navigate(routes.view.state(stateId))
@@ -1011,7 +1078,12 @@ function AppShellContent({
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
     }
 
-    // 2.5. Sources nav item
+    // 2.5. Label nav items (dynamic from labelConfigs)
+    for (const label of flattenLabels(labelConfigs)) {
+      result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
+    }
+
+    // 3. Sources nav item
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
 
     // 2.6. Skills nav item
@@ -1021,7 +1093,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1152,10 +1224,16 @@ function AppShellContent({
       case 'state':
         const state = todoStates.find(s => s.id === chatFilter.stateId)
         return state?.label || t('sessionList.allChats')
+      case 'label': {
+        const labelConfig = findLabelById(labelConfigs, chatFilter.labelId)
+        return labelConfig?.name || chatFilter.labelId
+      }
+      case 'imported':
+        return chatFilter.source === 'openai' ? 'OpenAI' : 'Anthropic'
       default:
         return t('sessionList.allChats')
     }
-  }, [navState, chatFilter, todoStates, t])
+  }, [navState, chatFilter, todoStates, labelConfigs, t])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1336,6 +1414,17 @@ function AppShellContent({
                         }] : []),
                       ],
                     },
+                    // Labels: top-level expandable section with hierarchical label tree
+                    ...(labelConfigs.length > 0 ? [{
+                      id: "nav:labels",
+                      title: t('sidebar.labels'),
+                      icon: Tag,
+                      variant: (chatFilter?.kind === 'label' ? "default" : "ghost") as "default" | "ghost",
+                      expandable: true,
+                      expanded: isExpanded('nav:labels'),
+                      onToggle: () => toggleExpanded('nav:labels'),
+                      items: buildLabelSidebarItems(labelConfigs),
+                    }] : []),
                     {
                       id: "nav:sources",
                       title: t('sidebar.sources'),
@@ -1597,6 +1686,10 @@ function AppShellContent({
                       navigate(routes.view.flagged(selectedMeta.id))
                     } else if (chatFilter.kind === 'state') {
                       navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
+                    } else if (chatFilter.kind === 'label') {
+                      navigate(routes.view.label(chatFilter.labelId, selectedMeta.id))
+                    } else if (chatFilter.kind === 'imported') {
+                      navigate(routes.view.imported(chatFilter.source, selectedMeta.id))
                     }
                   }}
                   onOpenInNewWindow={(selectedMeta) => {

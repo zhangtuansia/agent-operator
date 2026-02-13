@@ -103,6 +103,12 @@ export const routes = {
         ? `state/${stateId}/chat/${sessionId}` as const
         : `state/${stateId}` as const,
 
+    /** Label filter view (chats navigator, label filter) */
+    label: (labelId: string, sessionId?: string) =>
+      sessionId
+        ? `label/${labelId}/chat/${sessionId}` as const
+        : `label/${labelId}` as const,
+
     /** Imported sessions view (chats navigator, imported filter) */
     imported: (source: 'openai' | 'anthropic', sessionId?: string) =>
       sessionId

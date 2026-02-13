@@ -1,30 +1,61 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Cpu } from "lucide-react"
+import { Check, CreditCard, Key, Cpu, Globe } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@agent-operator/shared/config/llm-connections"
+import { useTranslation } from "@/i18n"
 
-export type ProviderSegment = 'anthropic' | 'openai' | 'copilot'
+export type ProviderSegment = 'anthropic' | 'openai' | 'copilot' | 'other'
 
 const SEGMENT_LABELS: Record<ProviderSegment, string> = {
   anthropic: 'Claude',
   openai: 'Codex',
-  copilot: 'GitHub Copilot',
+  copilot: 'Copilot',
+  other: '其他',
 }
 
-const BetaBadge = () => (
-  <span className="inline px-1.5 pt-[2px] pb-[3px] text-[10px] font-accent font-bold rounded-[4px] bg-accent text-background ml-1 relative -top-[1px]">
-    Beta
-  </span>
-)
+export type ApiSetupMethod =
+  | 'anthropic_api_key'
+  | 'claude_oauth'
+  | 'chatgpt_oauth'
+  | 'openai_api_key'
+  | 'copilot_oauth'
+  | 'deepseek_api_key'
+  | 'glm_api_key'
+  | 'minimax_api_key'
 
-const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
-  anthropic: <>Use Claude Agent SDK as the main agent.<br />Configure with your Claude subscription or API key.</>,
-  openai: <>Use Codex CLI as the main agent.<BetaBadge /><br />Configure with your ChatGPT subscription or OpenAI API key.</>,
-  copilot: <>Use Copilot Agent as the main agent.<BetaBadge /><br />Configure with your GitHub Copilot subscription.</>,
+/** Pre-configured provider info for third-party API providers */
+export interface ThirdPartyProviderInfo {
+  baseUrl: string
+  defaultModel: string
+  models: string[]
 }
 
-export type ApiSetupMethod = 'anthropic_api_key' | 'claude_oauth' | 'chatgpt_oauth' | 'openai_api_key' | 'copilot_oauth'
+/** Get provider info for third-party API methods (returns null for non-third-party methods) */
+export function getThirdPartyProviderInfo(method: ApiSetupMethod): ThirdPartyProviderInfo | null {
+  switch (method) {
+    case 'deepseek_api_key':
+      return {
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        defaultModel: 'deepseek-chat',
+        models: ['deepseek-chat', 'deepseek-reasoner'],
+      }
+    case 'glm_api_key':
+      return {
+        baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+        defaultModel: 'glm-4.7',
+        models: ['glm-4.7', 'glm-4-plus', 'glm-4-air', 'glm-4-airx', 'glm-4-flash'],
+      }
+    case 'minimax_api_key':
+      return {
+        baseUrl: 'https://api.minimaxi.com/anthropic',
+        defaultModel: 'MiniMax-M2.1',
+        models: ['MiniMax-M2.1', 'MiniMax-M2'],
+      }
+    default:
+      return null
+  }
+}
 
 export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
   providerType: LlmProviderType;
@@ -41,52 +72,77 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
       return { providerType: 'openai', authType: 'api_key' }
     case 'copilot_oauth':
       return { providerType: 'copilot', authType: 'oauth' }
+    case 'deepseek_api_key':
+    case 'glm_api_key':
+    case 'minimax_api_key':
+      return { providerType: 'anthropic_compat', authType: 'api_key_with_endpoint' }
   }
 }
 
 interface ApiSetupOption {
   id: ApiSetupMethod
-  name: string
-  description: string
+  nameKey: string
+  descriptionKey: string
   icon: React.ReactNode
-  providerType: LlmProviderType
+  segment: ProviderSegment
 }
 
 const API_SETUP_OPTIONS: ApiSetupOption[] = [
   {
     id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
+    nameKey: 'onboarding.optClaudeOAuth',
+    descriptionKey: 'onboarding.optClaudeOAuthDesc',
     icon: <CreditCard className="size-4" />,
-    providerType: 'anthropic',
+    segment: 'anthropic',
   },
   {
     id: 'anthropic_api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go via Anthropic, OpenRouter, or compatible APIs.',
+    nameKey: 'onboarding.optAnthropicApiKey',
+    descriptionKey: 'onboarding.optAnthropicApiKeyDesc',
     icon: <Key className="size-4" />,
-    providerType: 'anthropic',
+    segment: 'anthropic',
   },
   {
     id: 'chatgpt_oauth',
-    name: 'Codex · ChatGPT Plus/Pro',
-    description: 'Use your ChatGPT Plus or Pro subscription with Codex.',
+    nameKey: 'onboarding.optChatGptOAuth',
+    descriptionKey: 'onboarding.optChatGptOAuthDesc',
     icon: <Cpu className="size-4" />,
-    providerType: 'openai',
+    segment: 'openai',
   },
   {
     id: 'openai_api_key',
-    name: 'Codex · OpenAI API Key',
-    description: 'Pay-as-you-go via the OpenAI Platform API.',
+    nameKey: 'onboarding.optOpenAiApiKey',
+    descriptionKey: 'onboarding.optOpenAiApiKeyDesc',
     icon: <Key className="size-4" />,
-    providerType: 'openai',
+    segment: 'openai',
   },
   {
     id: 'copilot_oauth',
-    name: 'Copilot · GitHub',
-    description: 'Use your GitHub Copilot subscription.',
+    nameKey: 'onboarding.optCopilotOAuth',
+    descriptionKey: 'onboarding.optCopilotOAuthDesc',
     icon: <Cpu className="size-4" />,
-    providerType: 'copilot',
+    segment: 'copilot',
+  },
+  {
+    id: 'deepseek_api_key',
+    nameKey: 'onboarding.optDeepSeek',
+    descriptionKey: 'onboarding.optDeepSeekDesc',
+    icon: <Globe className="size-4" />,
+    segment: 'other',
+  },
+  {
+    id: 'glm_api_key',
+    nameKey: 'onboarding.optGlm',
+    descriptionKey: 'onboarding.optGlmDesc',
+    icon: <Globe className="size-4" />,
+    segment: 'other',
+  },
+  {
+    id: 'minimax_api_key',
+    nameKey: 'onboarding.optMiniMax',
+    descriptionKey: 'onboarding.optMiniMaxDesc',
+    icon: <Globe className="size-4" />,
+    segment: 'other',
   },
 ]
 
@@ -102,10 +158,12 @@ function OptionButton({
   option,
   isSelected,
   onSelect,
+  t,
 }: {
   option: ApiSetupOption
   isSelected: boolean
   onSelect: (method: ApiSetupMethod) => void
+  t: (key: string) => string
 }) {
   return (
     <button
@@ -128,10 +186,10 @@ function OptionButton({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{option.name}</span>
+          <span className="font-medium text-sm">{t(option.nameKey)}</span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {option.description}
+          {t(option.descriptionKey)}
         </p>
       </div>
 
@@ -149,14 +207,24 @@ function OptionButton({
   )
 }
 
+function BetaBadge({ t }: { t: (key: string) => string }) {
+  return (
+    <span className="inline px-1.5 pt-[2px] pb-[3px] text-[10px] font-accent font-bold rounded-[4px] bg-accent text-background ml-1 relative -top-[1px]">
+      {t('onboarding.beta')}
+    </span>
+  )
+}
+
 function ProviderSegmentedControl({
   activeSegment,
   onSegmentChange,
+  t,
 }: {
   activeSegment: ProviderSegment
   onSegmentChange: (segment: ProviderSegment) => void
+  t: (key: string) => string
 }) {
-  const segments: ProviderSegment[] = ['anthropic', 'openai', 'copilot']
+  const segments: ProviderSegment[] = ['anthropic', 'openai', 'copilot', 'other']
 
   return (
     <div className="flex rounded-xl bg-foreground/[0.03] p-1 mb-4">
@@ -165,17 +233,24 @@ function ProviderSegmentedControl({
           key={segment}
           onClick={() => onSegmentChange(segment)}
           className={cn(
-            "flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all",
+            "flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all",
             activeSegment === segment
               ? "bg-background shadow-minimal text-foreground"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {SEGMENT_LABELS[segment]}
+          {segment === 'other' ? t('onboarding.segmentOther') : SEGMENT_LABELS[segment]}
         </button>
       ))}
     </div>
   )
+}
+
+const SEGMENT_DESC_KEYS: Record<ProviderSegment, { main: string; sub: string; hasBeta?: boolean }> = {
+  anthropic: { main: 'onboarding.segmentDescClaude', sub: 'onboarding.segmentDescClaudeSub' },
+  openai: { main: 'onboarding.segmentDescCodex', sub: 'onboarding.segmentDescCodexSub', hasBeta: true },
+  copilot: { main: 'onboarding.segmentDescCopilot', sub: 'onboarding.segmentDescCopilotSub', hasBeta: true },
+  other: { main: 'onboarding.segmentDescOther', sub: 'onboarding.segmentDescOtherSub' },
 }
 
 export function APISetupStep({
@@ -185,32 +260,36 @@ export function APISetupStep({
   onBack,
   initialSegment = 'anthropic',
 }: APISetupStepProps) {
+  const { t } = useTranslation()
   const [activeSegment, setActiveSegment] = useState<ProviderSegment>(initialSegment)
-  const filteredOptions = API_SETUP_OPTIONS.filter(o => o.providerType === activeSegment)
+  const filteredOptions = API_SETUP_OPTIONS.filter(o => o.segment === activeSegment)
 
   const handleSegmentChange = (segment: ProviderSegment) => {
     setActiveSegment(segment)
   }
 
+  const descKeys = SEGMENT_DESC_KEYS[activeSegment]
+
   return (
     <StepFormLayout
-      title="Set up your Agent"
-      description={<>Select how you'd like to power your AI agents.<br />You can add more connections later.</>}
+      title={t('onboarding.setupAgent')}
+      description={<>{t('onboarding.setupAgentDescription')}<br />{t('onboarding.setupAgentDescriptionMore')}</>}
       actions={
         <>
-          <BackButton onClick={onBack} />
-          <ContinueButton onClick={onContinue} disabled={!selectedMethod} />
+          <BackButton onClick={onBack}>{t('onboarding.back')}</BackButton>
+          <ContinueButton onClick={onContinue} disabled={!selectedMethod}>{t('onboarding.continue')}</ContinueButton>
         </>
       }
     >
       <ProviderSegmentedControl
         activeSegment={activeSegment}
         onSegmentChange={handleSegmentChange}
+        t={t}
       />
 
       <div className="bg-foreground-2 rounded-[8px] p-4 mb-3">
         <p className="text-sm text-muted-foreground text-center">
-          {SEGMENT_DESCRIPTIONS[activeSegment]}
+          {t(descKeys.main)}{descKeys.hasBeta && <BetaBadge t={t} />}<br />{t(descKeys.sub)}
         </p>
       </div>
 
@@ -221,6 +300,7 @@ export function APISetupStep({
             option={option}
             isSelected={option.id === selectedMethod}
             onSelect={onSelect}
+            t={t}
           />
         ))}
       </div>

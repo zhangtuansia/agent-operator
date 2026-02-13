@@ -55,7 +55,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'imported', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'label', 'imported', 'sources', 'skills', 'settings'
 ]
 
 const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
@@ -160,6 +160,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       chatFilter = { kind: 'state', stateId: segments[1] as ChatFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
       detailsStartIndex = 2
       break
+    case 'label':
+      if (!segments[1]) return null
+      chatFilter = { kind: 'label', labelId: segments[1] }
+      detailsStartIndex = 2
+      break
     case 'imported':
       if (!segments[1]) return null
       const source = segments[1] as 'openai' | 'anthropic'
@@ -224,6 +229,9 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       break
     case 'state':
       base = `state/${filter.stateId}`
+      break
+    case 'label':
+      base = `label/${filter.labelId}`
       break
     case 'imported':
       base = `imported/${filter.source}`
@@ -537,6 +545,15 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+    case 'label':
+      if (parsed.id) {
+        return {
+          navigator: 'chats',
+          filter: { kind: 'label', labelId: parsed.id },
+          details: null,
+        }
+      }
+      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
     default:
       return null
   }
@@ -576,6 +593,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       break
     case 'state':
       base = `state/${filter.stateId}`
+      break
+    case 'label':
+      base = `label/${filter.labelId}`
       break
     case 'imported':
       base = `imported/${filter.source}`

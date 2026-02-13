@@ -16,7 +16,6 @@ import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
-import { getDocUrl } from '@agent-operator/shared/docs/doc-links'
 import { Loader2 } from 'lucide-react'
 import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
 import { useLabels } from '@/hooks/useLabels'
@@ -73,28 +72,8 @@ export default function LabelsSettingsPage() {
                   {/* About Section */}
                   <SettingsSection title={t('labelsSettings.aboutLabels')}>
                     <SettingsCard className="px-4 py-3.5">
-                      <div className="text-sm text-muted-foreground leading-relaxed space-y-1.5">
-                        <p>
-                          {t('labelsSettings.aboutDescription1')}
-                        </p>
-                        <p>
-                          {t('labelsSettings.aboutDescription2')}
-                        </p>
-                        <p className="font-bold text-foreground/80">
-                          {t('labelsSettings.aboutDescription3')}
-                        </p>
-                        <p>
-                          {t('labelsSettings.aboutDescription4')}
-                        </p>
-                        <p>
-                          <button
-                            type="button"
-                            onClick={() => window.electronAPI?.openUrl(getDocUrl('labels'))}
-                            className="text-foreground/70 hover:text-foreground underline underline-offset-2"
-                          >
-                            {t('labelsSettings.learnMore')}
-                          </button>
-                        </p>
+                      <div className="text-sm text-muted-foreground leading-relaxed">
+                        <p>{t('labelsSettings.aboutDescription')}</p>
                       </div>
                     </SettingsCard>
                   </SettingsSection>

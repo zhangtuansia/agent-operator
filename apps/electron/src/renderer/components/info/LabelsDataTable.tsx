@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ColumnDef, Row } from '@tanstack/react-table'
 import { ChevronRight, Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -15,6 +15,7 @@ import { Info_Badge } from './Info_Badge'
 import { DataTableOverlay } from '@agent-operator/ui'
 import { LabelIcon } from '@/components/ui/label-icon'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 
 interface LabelsDataTableProps {
@@ -71,47 +72,49 @@ function ExpandableNameCell({ row }: { row: Row<LabelConfig> }) {
   )
 }
 
-// Column definitions for the labels tree table
-const columns: ColumnDef<LabelConfig>[] = [
-  {
-    id: 'color',
-    header: () => <span className="p-1.5 pl-2.5">Color</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <LabelIcon
-          label={row.original}
-          size="sm"
-          hasChildren={!!row.original.children?.length}
-        />
-      </div>
-    ),
-    minSize: 60,
-    maxSize: 60,
-  },
-  {
-    accessorKey: 'name',
-    header: ({ column }) => <SortableHeader column={column} title="Name" />,
-    cell: ({ row }) => <ExpandableNameCell row={row} />,
-    meta: { fillWidth: true },
-  },
-  {
-    id: 'valueType',
-    accessorKey: 'valueType',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        {row.original.valueType ? (
-          <Info_Badge color="muted" className="capitalize whitespace-nowrap">
-            {row.original.valueType}
-          </Info_Badge>
-        ) : (
-          <span className="text-muted-foreground/50 text-sm">—</span>
-        )}
-      </div>
-    ),
-    minSize: 160,
-  },
-]
+// Column definitions as a function to support i18n
+function getColumns(t: (key: string) => string): ColumnDef<LabelConfig>[] {
+  return [
+    {
+      id: 'color',
+      header: () => <span className="p-1.5 pl-2.5">{t('labelsSettings.columnColor')}</span>,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <LabelIcon
+            label={row.original}
+            size="sm"
+            hasChildren={!!row.original.children?.length}
+          />
+        </div>
+      ),
+      minSize: 60,
+      maxSize: 60,
+    },
+    {
+      accessorKey: 'name',
+      header: ({ column }) => <SortableHeader column={column} title={t('labelsSettings.columnName')} />,
+      cell: ({ row }) => <ExpandableNameCell row={row} />,
+      meta: { fillWidth: true },
+    },
+    {
+      id: 'valueType',
+      accessorKey: 'valueType',
+      header: ({ column }) => <SortableHeader column={column} title={t('labelsSettings.columnType')} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          {row.original.valueType ? (
+            <Info_Badge color="muted" className="capitalize whitespace-nowrap">
+              {row.original.valueType}
+            </Info_Badge>
+          ) : (
+            <span className="text-muted-foreground/50 text-sm">—</span>
+          )}
+        </div>
+      ),
+      minSize: 160,
+    },
+  ]
+}
 
 /**
  * Extract children from a LabelConfig for tree expansion.
@@ -126,10 +129,14 @@ export function LabelsDataTable({
   searchable = false,
   maxHeight = 400,
   fullscreen = false,
-  fullscreenTitle = 'Labels',
+  fullscreenTitle,
   className,
 }: LabelsDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const columns = useMemo(() => getColumns(t), [t])
+
+  const resolvedTitle = fullscreenTitle ?? t('labelsSettings.labelHierarchy')
 
   // Fullscreen button (shown on hover via group class)
   const fullscreenButton = fullscreen ? (
@@ -142,7 +149,7 @@ export function LabelsDataTable({
         'text-muted-foreground/50 hover:text-foreground',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
       )}
-      title="View Fullscreen"
+      title={t('labelsSettings.viewFullscreen')}
     >
       <Maximize2 className="w-3.5 h-3.5" />
     </button>
@@ -152,15 +159,18 @@ export function LabelsDataTable({
   const countLabels = (labels: LabelConfig[]): number =>
     labels.reduce((sum, l) => sum + 1 + countLabels(l.children || []), 0)
   const totalCount = countLabels(data)
+  const countText = totalCount === 1
+    ? t('labelsSettings.labelCount').replace('{count}', '1')
+    : t('labelsSettings.labelsCount').replace('{count}', String(totalCount))
 
   return (
     <>
       <Info_DataTable
         columns={columns}
         data={data}
-        searchable={searchable ? { placeholder: 'Search labels...' } : false}
+        searchable={searchable ? { placeholder: t('labelsSettings.searchLabels') } : false}
         maxHeight={maxHeight}
-        emptyContent="No labels configured"
+        emptyContent={t('labelsSettings.noLabelsConfigured')}
         floatingAction={fullscreenButton}
         className={cn(fullscreen && 'group', className)}
         getSubRows={getSubRows}
@@ -171,14 +181,14 @@ export function LabelsDataTable({
         <DataTableOverlay
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
-          title={fullscreenTitle}
-          subtitle={`${totalCount} ${totalCount === 1 ? 'label' : 'labels'}`}
+          title={resolvedTitle}
+          subtitle={countText}
         >
           <Info_DataTable
             columns={columns}
             data={data}
-            searchable={searchable ? { placeholder: 'Search labels...' } : false}
-            emptyContent="No labels configured"
+            searchable={searchable ? { placeholder: t('labelsSettings.searchLabels') } : false}
+            emptyContent={t('labelsSettings.noLabelsConfigured')}
             getSubRows={getSubRows}
           />
         </DataTableOverlay>

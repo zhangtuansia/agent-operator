@@ -47,8 +47,11 @@ import {
   type LlmConnection,
   type LlmConnectionWithStatus,
   CONFIG_DIR,
+  ensureConfigDir,
+  saveConfig,
+  generateWorkspaceId,
 } from '@agent-operator/shared/config'
-import { getWorkspaceSessionsPath } from '@agent-operator/shared/workspaces'
+import { getWorkspaceSessionsPath, getDefaultWorkspacesDir, createWorkspaceAtPath } from '@agent-operator/shared/workspaces'
 import { searchSessions } from './search'
 import { isCodexAuthenticated, startCodexOAuth } from '@agent-operator/shared/auth'
 import { getSessionAttachmentsPath } from '@agent-operator/shared/sessions'
@@ -1782,6 +1785,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       if (isNewConnection) {
+        // Ensure config exists (for fresh installs where onboarding runs before any config is created)
+        if (!loadStoredConfig()) {
+          ensureConfigDir()
+          const workspaceId = generateWorkspaceId()
+          const rootPath = `${getDefaultWorkspacesDir()}/${workspaceId}`
+          saveConfig({
+            workspaces: [{
+              id: workspaceId,
+              name: 'Default',
+              rootPath,
+              createdAt: Date.now(),
+            }],
+            activeWorkspaceId: workspaceId,
+            activeSessionId: null,
+            llmConnections: [],
+          })
+          createWorkspaceAtPath(rootPath, 'Default')
+          ipcLog.info('Created initial config and workspace for fresh install')
+        }
         const added = addLlmConnection(pendingConnection)
         if (!added) {
           return { success: false, error: 'Connection already exists' }
@@ -1837,22 +1859,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default
+      // Auth strategy for custom endpoints:
+      // - With API key + custom URL: set BOTH apiKey (x-api-key) and authToken (Bearer)
+      //   because different providers expect different headers:
+      //   GLM uses x-api-key, DeepSeek uses Authorization: Bearer
+      // - Without key (Ollama): use authToken placeholder
+      // - Standard Anthropic: use apiKey only
+      const hasRealKey = !!trimmedKey
       const client = new Anthropic({
         ...(trimmedUrl ? { baseURL: trimmedUrl } : {}),
         ...(trimmedUrl
-          ? { authToken: trimmedKey || 'ollama', apiKey: null }
+          ? (hasRealKey
+              ? { apiKey: trimmedKey, authToken: trimmedKey }
+              : { authToken: 'ollama', apiKey: null })
           : { apiKey: trimmedKey, authToken: null }),
       })
 
       if (normalizedModels.length > 0) {
-        for (const modelId of normalizedModels) {
-          await client.messages.create({
-            model: modelId,
-            max_tokens: 16,
-            messages: [{ role: 'user', content: 'hi' }],
-            tools: [{ name: 'test_tool', description: 'Test tool', input_schema: { type: 'object' as const, properties: {} } }],
-          })
-        }
+        // Only test the first (default) model to avoid unnecessary API calls
+        const testModelId = normalizedModels[0]!
+        await client.messages.create({
+          model: testModelId,
+          max_tokens: 16,
+          messages: [{ role: 'user', content: 'hi' }],
+        })
         return { success: true, modelCount: normalizedModels.length }
       }
 
@@ -3395,7 +3425,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     if (!workspace) throw new Error('Workspace not found')
 
     const { listLabels } = await import('@agent-operator/shared/labels/storage')
-    return listLabels(workspace.rootPath)
+    const { loadStoredConfig } = await import('@agent-operator/shared/config/storage')
+    // Resolve locale: explicit setting > system locale > fallback to 'en'
+    const storedLang = loadStoredConfig()?.uiLanguage
+    const systemLang = app.getLocale()?.startsWith('zh') ? 'zh' : undefined
+    const locale = storedLang || systemLang
+    return listLabels(workspace.rootPath, locale)
   })
 
   // Create a new label in a workspace

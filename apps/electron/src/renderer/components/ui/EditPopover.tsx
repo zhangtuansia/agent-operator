@@ -20,6 +20,7 @@ import { useActiveWorkspace, useAppShellContext, useSession } from '@/context/Ap
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { ChatDisplay } from '../app-shell/ChatDisplay'
 import { useLanguage } from '@/context/LanguageContext'
+import { useTranslation } from '@/i18n'
 
 /**
  * Context passed to the new chat session so the agent knows exactly
@@ -1035,7 +1036,8 @@ export function EditPopover({
 export const EditButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof Button>
->(function EditButton({ className, ...props }, ref) {
+>(function EditButton({ className, children, ...props }, ref) {
+  const { t } = useTranslation()
   return (
     <Button
       ref={ref}
@@ -1045,7 +1047,7 @@ export const EditButton = React.forwardRef<
       className={cn("h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground", className)}
       {...props}
     >
-      Edit
+      {children ?? t('common.edit')}
     </Button>
   )
 })
