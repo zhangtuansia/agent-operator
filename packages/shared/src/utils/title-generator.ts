@@ -9,13 +9,31 @@ import { SUMMARIZATION_MODEL } from '../config/models.ts';
 
 const FALLBACK_MIN_LENGTH = 8;
 const FALLBACK_MAX_LENGTH = 20;
-const FALLBACK_DEFAULT_TITLE = '处理当前任务内容';
+const FALLBACK_DEFAULT_TITLE: Record<TitleGenerationLanguage, string> = {
+  en: 'Handle current task',
+  zh: '处理当前任务内容',
+};
+
+export type TitleGenerationLanguage = 'en' | 'zh';
 
 /**
  * Build a prompt for generating a short task-focused title.
  */
-export function buildTitlePrompt(message: string): string {
+export function buildTitlePrompt(message: string, language: TitleGenerationLanguage = 'en'): string {
   const userSnippet = message.slice(0, 500);
+  if (language === 'zh') {
+    return [
+      '请判断用户当前想完成的任务。',
+      '只回复一个简短任务标题（4-12个中文字符，或2-5个英文单词）。',
+      '尽量用动词开头，只输出纯文本，不要 Markdown，不要解释。',
+      '示例："修复登录报错"、"添加深色模式"、"重构接口层"、"梳理代码结构"',
+      '',
+      '用户消息：' + userSnippet,
+      '',
+      '任务标题：',
+    ].join('\n');
+  }
+
   return [
     'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
     'Start with a verb. Use plain text only - no markdown.',
@@ -32,12 +50,30 @@ export function buildTitlePrompt(message: string): string {
  */
 export function buildRegenerateTitlePrompt(
   recentUserMessages: string[],
-  lastAssistantResponse: string
+  lastAssistantResponse: string,
+  language: TitleGenerationLanguage = 'en',
 ): string {
   const userContext = recentUserMessages
     .map((msg) => msg.slice(0, 300))
     .join('\n\n');
   const assistantSnippet = lastAssistantResponse.slice(0, 500);
+
+  if (language === 'zh') {
+    return [
+      '根据以下最近对话，判断当前会话的核心任务。',
+      '只回复一个简短任务标题（4-12个中文字符，或2-5个英文单词）。',
+      '尽量用动词开头，只输出纯文本，不要 Markdown，不要解释。',
+      '示例："修复登录报错"、"添加深色模式"、"重构接口层"、"梳理代码结构"',
+      '',
+      '最近用户消息：',
+      userContext,
+      '',
+      '最新助手回复：',
+      assistantSnippet,
+      '',
+      '当前任务：',
+    ].join('\n');
+  }
 
   return [
     'Based on these recent messages, what is the current focus of this conversation?',
@@ -101,15 +137,18 @@ function sanitizeFallbackCandidate(raw: string): string {
   return strippedPrefix;
 }
 
-function padFallbackTitle(value: string): string {
+function padFallbackTitle(value: string, language: TitleGenerationLanguage): string {
   if (value.length >= FALLBACK_MIN_LENGTH) return value;
-  const suffix = isLikelyCJK(value) ? '相关任务' : ' task';
+  const suffix = language === 'zh' || isLikelyCJK(value) ? '相关任务' : ' task';
   const padded = trimToFallbackMaxLength(`${value}${suffix}`.trim());
   if (padded.length >= FALLBACK_MIN_LENGTH) return padded;
-  return FALLBACK_DEFAULT_TITLE;
+  return FALLBACK_DEFAULT_TITLE[language];
 }
 
-export function buildFallbackTitleFromMessages(candidates: string[]): string {
+export function buildFallbackTitleFromMessages(
+  candidates: string[],
+  language: TitleGenerationLanguage = 'en',
+): string {
   let shortCandidate = '';
 
   for (const rawCandidate of [...candidates].reverse()) {
@@ -125,10 +164,10 @@ export function buildFallbackTitleFromMessages(candidates: string[]): string {
   }
 
   if (shortCandidate) {
-    return padFallbackTitle(shortCandidate);
+    return padFallbackTitle(shortCandidate, language);
   }
 
-  return FALLBACK_DEFAULT_TITLE;
+  return FALLBACK_DEFAULT_TITLE[language];
 }
 
 async function queryTitle(prompt: string): Promise<string> {
@@ -186,15 +225,16 @@ async function queryTitle(prompt: string): Promise<string> {
  * @returns Generated task title, or null if generation fails
  */
 export async function generateSessionTitle(
-  userMessage: string
+  userMessage: string,
+  language: TitleGenerationLanguage = 'en',
 ): Promise<string | null> {
   try {
-    const prompt = buildTitlePrompt(userMessage);
+    const prompt = buildTitlePrompt(userMessage, language);
 
     return await queryTitle(prompt);
   } catch (error) {
     console.error('[title-generator] Failed to generate title:', error);
-    const fallbackTitle = buildFallbackTitleFromMessages([userMessage]);
+    const fallbackTitle = buildFallbackTitleFromMessages([userMessage], language);
     console.warn('[title-generator] Using fallback title:', fallbackTitle);
     return fallbackTitle;
   }
@@ -211,10 +251,11 @@ export async function generateSessionTitle(
  */
 export async function regenerateSessionTitle(
   recentUserMessages: string[],
-  lastAssistantResponse: string
+  lastAssistantResponse: string,
+  language: TitleGenerationLanguage = 'en',
 ): Promise<string | null> {
   try {
-    const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse);
+    const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse, language);
 
     return await queryTitle(prompt);
   } catch (error) {
@@ -222,7 +263,7 @@ export async function regenerateSessionTitle(
     const fallbackCandidates = recentUserMessages.length > 0
       ? recentUserMessages
       : [lastAssistantResponse];
-    const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates);
+    const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates, language);
     console.warn('[title-generator] Using fallback regenerated title:', fallbackTitle);
     return fallbackTitle;
   }

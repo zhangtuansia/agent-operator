@@ -2524,6 +2524,15 @@ export class SessionManager {
   }
 
   /**
+   * Resolve language for title generation from UI language setting.
+   * Falls back to English when unset.
+   */
+  private getTitleLanguage(): 'en' | 'zh' {
+    const uiLanguage = loadStoredConfig()?.uiLanguage
+    return uiLanguage === 'zh' ? 'zh' : 'en'
+  }
+
+  /**
    * Regenerate the session title based on recent messages.
    * Uses the last few user messages to capture what the session has evolved into.
    */
@@ -2555,6 +2564,7 @@ export class SessionManager {
 
     const assistantResponse = lastAssistantMsg?.content ?? ''
     sessionLog.info(`refreshTitle: Calling regenerateSessionTitle...`)
+    const titleLanguage = this.getTitleLanguage()
 
     // Notify renderer that title regeneration has started (for shimmer effect)
     managed.isAsyncOperationOngoing = true
@@ -2563,12 +2573,12 @@ export class SessionManager {
     this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: true }, managed.workspace.id)
 
     try {
-      const generatedTitle = await regenerateSessionTitle(userMessages, assistantResponse)
+      const generatedTitle = await regenerateSessionTitle(userMessages, assistantResponse, titleLanguage)
       let title = generatedTitle?.trim() || ''
 
       if (!title) {
         const fallbackCandidates = userMessages.length > 0 ? userMessages : [assistantResponse]
-        title = buildFallbackTitleFromMessages(fallbackCandidates)
+        title = buildFallbackTitleFromMessages(fallbackCandidates, titleLanguage)
         sessionLog.warn(
           `refreshTitle: regenerateSessionTitle returned empty, using local fallback "${title}"`
         )
@@ -2588,7 +2598,7 @@ export class SessionManager {
         : assistantResponse
           ? [assistantResponse]
           : [managed.preview ?? managed.name ?? '']
-      const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates)
+      const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates, titleLanguage)
       if (fallbackTitle) {
         managed.name = fallbackTitle
         this.persistSession(managed)
@@ -3556,8 +3566,9 @@ To view this task's output:
   private async generateTitle(managed: ManagedSession, userMessage: string): Promise<void> {
     sessionLog.info(`Starting title generation for session ${managed.id}`)
     try {
-      const generatedTitle = await generateSessionTitle(userMessage)
-      const title = generatedTitle?.trim() || buildFallbackTitleFromMessages([userMessage])
+      const titleLanguage = this.getTitleLanguage()
+      const generatedTitle = await generateSessionTitle(userMessage, titleLanguage)
+      const title = generatedTitle?.trim() || buildFallbackTitleFromMessages([userMessage], titleLanguage)
       if (!generatedTitle?.trim()) {
         sessionLog.warn(`Title generation returned empty for session ${managed.id}; using fallback "${title}"`)
       }

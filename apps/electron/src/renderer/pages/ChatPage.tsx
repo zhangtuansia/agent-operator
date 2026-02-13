@@ -218,13 +218,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const headerModelBadge = React.useMemo(() => {
     if (connectionUnavailable) return null
     const modelLabel = getModelDisplayName(effectiveModel || currentModel)
-    const label = effectiveConnection ? `${effectiveConnection.name} · ${modelLabel}` : modelLabel
     return (
       <span className="max-w-[220px] truncate text-[11px] font-medium text-muted-foreground">
-        {label}
+        {modelLabel}
       </span>
     )
-  }, [connectionUnavailable, effectiveConnection, effectiveModel, currentModel])
+  }, [connectionUnavailable, effectiveModel, currentModel])
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
@@ -270,7 +269,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Priority: name > first user message > preview > "New chat"
   const displayTitle = session ? getSessionTitle(session) : (sessionMeta ? getSessionTitle(sessionMeta) : t('chat.title'))
   const isFlagged = session?.isFlagged || sessionMeta?.isFlagged || false
-  const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
   const currentTodoState = session?.todoState || sessionMeta?.todoState || 'todo'
   const hasMessages = !!(session?.messages?.length || sessionMeta?.lastFinalMessageId)
   const hasUnreadMessages = sessionMeta
@@ -337,7 +335,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       sessionId={sessionId}
       sessionName={displayTitle}
       isFlagged={isFlagged}
-      sharedUrl={sharedUrl}
       hasMessages={hasMessages}
       hasUnreadMessages={hasUnreadMessages}
       currentTodoState={currentTodoState}
@@ -357,7 +354,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     sessionId,
     displayTitle,
     isFlagged,
-    sharedUrl,
     hasMessages,
     hasUnreadMessages,
     currentTodoState,

@@ -22,6 +22,16 @@ function addRecentDir(path: string): void {
   storage.set(storage.KEYS.recentWorkingDirs, updated)
 }
 
+const FOLDER_LABEL_MAX_CHARS = 5
+
+function truncateFolderLabel(name: string): string {
+  const chars = Array.from(name.trim())
+  if (chars.length <= FOLDER_LABEL_MAX_CHARS) {
+    return name
+  }
+  return `${chars.slice(0, FOLDER_LABEL_MAX_CHARS).join('')}...`
+}
+
 /**
  * Format path for display, with home directory shortened
  */
@@ -116,7 +126,9 @@ export function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : t('input.workInFolder')
+  const folderName = hasFolder
+    ? truncateFolderLabel(workingDirectory.split('/').pop() || 'Folder')
+    : t('input.workInFolder')
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory

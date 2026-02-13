@@ -377,11 +377,8 @@ export function FreeFormInput({
 
   const modelButtonLabel = React.useMemo(() => {
     if (connectionUnavailable) return 'Unavailable'
-    if (effectiveConnectionDetails) {
-      return `${effectiveConnectionDetails.name} · ${currentModelDisplayName}`
-    }
     return currentModelDisplayName
-  }, [connectionUnavailable, effectiveConnectionDetails, currentModelDisplayName])
+  }, [connectionUnavailable, currentModelDisplayName])
 
   const connectionsByProvider = React.useMemo(() => {
     const groups: Record<string, typeof llmConnections> = {
@@ -1327,14 +1324,11 @@ export function FreeFormInput({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className={cn(
+                  className={cn(
                       "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5",
                       connectionUnavailable && "text-destructive",
                     )}
                   >
-                    {effectiveConnectionDetails && llmConnections.length > 1 && showConnectionIcons && (
-                      <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />
-                    )}
                     <span className="max-w-[220px] truncate">{modelButtonLabel}</span>
                     {!connectionUnavailable && !modelSelectorLocked && (
                       <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />

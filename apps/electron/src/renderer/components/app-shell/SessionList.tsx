@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
-import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
+import { MoreHorizontal, Flag, Search, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn, isHexColor } from "@/lib/utils"
@@ -17,8 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-  StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import {
   ContextMenu,
@@ -377,54 +375,6 @@ const SessionItem = memo(function SessionItem({
                    t('permissionModes.allowAll')}
                 </span>
               )}
-              {item.sharedUrl && (
-                <DropdownMenu modal={true}>
-                  <DropdownMenuTrigger asChild>
-                    <span
-                      className="shrink-0 px-1.5 py-0.5 h-[18px] text-[10px] font-medium rounded flex items-center bg-foreground/5 text-foreground/70 cursor-pointer hover:bg-foreground/10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <CloudUpload className="h-[10px] w-[10px]" />
-                    </span>
-                  </DropdownMenuTrigger>
-                  <StyledDropdownMenuContent align="start">
-                    <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(item.sharedUrl!)}>
-                      <Globe />
-                      {t('sessionMenu.openInBrowser')}
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      await navigator.clipboard.writeText(item.sharedUrl!)
-                      toast.success(t('sessionMenu.linkCopied'))
-                    }}>
-                      <Copy />
-                      {t('sessionMenu.copyLink')}
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
-                      if (result?.success) {
-                        toast.success(t('sessionMenu.shareUpdated'))
-                      } else {
-                        toast.error(t('sessionMenu.failedToUpdateShare'), { description: result?.error })
-                      }
-                    }}>
-                      <RefreshCw />
-                      {t('sessionMenu.updateShare')}
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuSeparator />
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
-                      if (result?.success) {
-                        toast.success(t('sessionMenu.sharingStopped'))
-                      } else {
-                        toast.error(t('sessionMenu.failedToStopSharing'), { description: result?.error })
-                      }
-                    }} variant="destructive">
-                      <Link2Off />
-                      {t('sessionMenu.stopSharing')}
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuContent>
-                </DropdownMenu>
-              )}
               <span className="truncate">
                 {item.lastMessageAt && (
                   <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true, locale: getDateFnsLocale(language) })}</>
@@ -454,7 +404,6 @@ const SessionItem = memo(function SessionItem({
                     sessionId={item.id}
                     sessionName={getSessionTitle(item, t('chat.newChat'))}
                     isFlagged={item.isFlagged ?? false}
-                    sharedUrl={item.sharedUrl}
                     hasMessages={hasMessages(item)}
                     hasUnreadMessages={hasUnreadMessages(item)}
                     currentTodoState={currentTodoState}
@@ -484,7 +433,6 @@ const SessionItem = memo(function SessionItem({
               sessionId={item.id}
               sessionName={getSessionTitle(item, t('chat.newChat'))}
               isFlagged={item.isFlagged ?? false}
-              sharedUrl={item.sharedUrl}
               hasMessages={hasMessages(item)}
               hasUnreadMessages={hasUnreadMessages(item)}
               currentTodoState={currentTodoState}
