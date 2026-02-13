@@ -29,17 +29,13 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
+# Auto-update: electron-updater fetches YAML manifests from this URL
+publish:
+  provider: generic
+  url: https://download.aicowork.chat/electron/latest
+
 # Extra resources to bundle with the app (outside the app code)
 extraResources:
-  # macOS self-update script
-  - from: scripts/self-update.sh
-    to: self-update.sh
-  # Windows self-update script
-  - from: scripts/self-update.ps1
-    to: self-update.ps1
-  # Linux AppImage self-update script
-  - from: scripts/self-update-linux.sh
-    to: self-update-linux.sh
   # Local font files (TTF, OTF, WOFF, WOFF2)
   - from: resources/fonts
     to: fonts
@@ -61,10 +57,14 @@ mac:
   icon: resources/icon.icns
   # Note: Architecture is specified via CLI (--arm64 or --x64) to ensure
   # each build uses the correct platform-specific bun binary
-  target: dmg
+  target:
+    - target: dmg    # For first-time user installation
+    - target: zip    # For electron-updater auto-updates
   hardenedRuntime: false
   gatekeeperAssess: false
   identity: null
+  # Use predictable naming for ZIP (electron-updater uses this)
+  artifactName: "Cowork-${arch}.${ext}"
   # Exclude ripgrep binaries for other platforms
   files:
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"

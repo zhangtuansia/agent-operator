@@ -47,14 +47,6 @@ export type {
 // Import for local use
 import type { Workspace, AuthType } from '@agent-operator/core/types';
 
-/**
- * Pending update info for auto-install on next launch
- */
-export interface PendingUpdate {
-  version: string;
-  installerPath: string;
-  sha256: string;
-}
 
 /**
  * Custom model definition for user-defined models
@@ -108,7 +100,6 @@ export interface StoredConfig {
   uiLanguage?: 'en' | 'zh';  // UI display language. Default: system language
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
-  pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
   // Input settings
   autoCapitalisation?: boolean;  // Auto-capitalize first letter when typing (default: true)
   sendMessageKey?: 'enter' | 'cmd-enter';  // Key to send messages (default: 'enter')
@@ -1971,36 +1962,6 @@ export function clearDismissedUpdateVersion(): void {
   const config = loadStoredConfig();
   if (!config) return;
   delete config.dismissedUpdateVersion;
-  saveConfig(config);
-}
-
-/**
- * Get the pending update info for auto-install on next launch.
- * Returns null if no pending update.
- */
-export function getPendingUpdate(): PendingUpdate | null {
-  const config = loadStoredConfig();
-  return config?.pendingUpdate ?? null;
-}
-
-/**
- * Set the pending update info for auto-install on next launch.
- */
-export function setPendingUpdate(update: PendingUpdate): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.pendingUpdate = update;
-  saveConfig(config);
-}
-
-/**
- * Clear the pending update info.
- * Call this after successful install or if installer file is invalid.
- */
-export function clearPendingUpdate(): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  delete config.pendingUpdate;
   saveConfig(config);
 }
 

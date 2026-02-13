@@ -275,8 +275,6 @@ export interface UpdateInfo {
   currentVersion: string
   /** Latest available version (null if check failed) */
   latestVersion: string | null
-  /** Download URL for the update DMG */
-  downloadUrl: string | null
   /** Download state */
   downloadState: 'idle' | 'downloading' | 'ready' | 'installing' | 'error'
   /** Download progress (0-100) */
