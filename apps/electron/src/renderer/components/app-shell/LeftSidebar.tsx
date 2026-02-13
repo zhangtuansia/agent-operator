@@ -19,12 +19,20 @@ export interface SidebarContextMenuConfig {
   type: SidebarMenuType
   /** Status ID for status items (e.g., 'todo', 'done') - not currently used but kept for future */
   statusId?: string
+  /** Label ID — when set, this is an individual label item (enables Delete Label) */
+  labelId?: string
   /** Handler for "Configure Statuses" action - for allChats/status/flagged types */
   onConfigureStatuses?: () => void
   /** Handler for "Add Source" action - for sources type */
   onAddSource?: () => void
   /** Handler for "Add Skill" action - for skills type */
   onAddSkill?: () => void
+  /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
+  onConfigureLabels?: (labelId?: string) => void
+  /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
+  onAddLabel?: (parentId?: string) => void
+  /** Handler for "Delete Label" action - deletes the label identified by labelId */
+  onDeleteLabel?: (labelId: string) => void
 }
 
 export interface LinkItem {
@@ -366,9 +374,13 @@ function SidebarDropItem({
           <SidebarMenu
             type={link.contextMenu.type}
             statusId={link.contextMenu.statusId}
+            labelId={link.contextMenu.labelId}
             onConfigureStatuses={link.contextMenu.onConfigureStatuses}
             onAddSource={link.contextMenu.onAddSource}
             onAddSkill={link.contextMenu.onAddSkill}
+            onConfigureLabels={link.contextMenu.onConfigureLabels}
+            onAddLabel={link.contextMenu.onAddLabel}
+            onDeleteLabel={link.contextMenu.onDeleteLabel}
           />
         </ContextMenuProvider>
       </StyledContextMenuContent>

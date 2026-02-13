@@ -762,7 +762,10 @@ function AppShellContent({
         break
       case 'label':
         // Filter by label (includes descendants for hierarchical filtering)
-        {
+        if (chatFilter.labelId === '__all__') {
+          // "Labels" header: show all sessions that have at least one label
+          result = workspaceSessionMetas.filter(s => s.labels && s.labels.length > 0)
+        } else {
           const targetIds = new Set([chatFilter.labelId])
           // Add all descendant IDs so clicking a parent label shows child-tagged sessions too
           for (const did of getDescendantIds(labelConfigs, chatFilter.labelId)) {
@@ -956,6 +959,17 @@ function AppShellContent({
         icon: <LabelIcon label={label} size="sm" hasChildren={hasChildren} />,
         variant: isActive ? "default" : "ghost",
         onClick: () => handleLabelClick(label.id),
+        contextMenu: {
+          type: 'labels' as const,
+          labelId: label.id,
+          onConfigureLabels: () => navigate(routes.view.settings('labels')),
+          onAddLabel: () => navigate(routes.view.settings('labels')),
+          onDeleteLabel: (id: string) => {
+            if (activeWorkspaceId) {
+              window.electronAPI.deleteLabel(activeWorkspaceId, id)
+            }
+          },
+        },
       }
 
       if (hasChildren) {
@@ -967,7 +981,7 @@ function AppShellContent({
 
       return item
     })
-  }, [chatFilter, labelCounts, handleLabelClick, isExpanded, toggleExpanded])
+  }, [chatFilter, labelCounts, handleLabelClick, isExpanded, toggleExpanded, navigate, activeWorkspaceId])
 
   // Handler for individual todo state views
   const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
@@ -1419,11 +1433,17 @@ function AppShellContent({
                       id: "nav:labels",
                       title: t('sidebar.labels'),
                       icon: Tag,
-                      variant: (chatFilter?.kind === 'label' ? "default" : "ghost") as "default" | "ghost",
+                      variant: (chatFilter?.kind === 'label' && chatFilter.labelId === '__all__' ? "default" : "ghost") as "default" | "ghost",
+                      onClick: () => handleLabelClick('__all__'),
                       expandable: true,
                       expanded: isExpanded('nav:labels'),
                       onToggle: () => toggleExpanded('nav:labels'),
                       items: buildLabelSidebarItems(labelConfigs),
+                      contextMenu: {
+                        type: 'labels' as const,
+                        onConfigureLabels: () => navigate(routes.view.settings('labels')),
+                        onAddLabel: () => navigate(routes.view.settings('labels')),
+                      },
                     }] : []),
                     {
                       id: "nav:sources",

@@ -44,7 +44,11 @@ import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@agent-operator/sha
 import type { SessionSearchResult } from "../../../shared/types"
 import { useLanguage } from "@/context/LanguageContext"
 import { getDateFnsLocale } from "@/i18n"
-import type { LabelConfig } from "@agent-operator/shared/labels"
+import { parseLabelEntry, formatLabelEntry, formatDisplayValue, flattenLabels, type LabelConfig } from "@agent-operator/shared/labels"
+import { resolveEntityColor } from "@agent-operator/shared/colors"
+import { LabelValuePopover } from "@/components/ui/label-value-popover"
+import { LabelValueTypeIcon } from "@/components/ui/label-icon"
+import { useTheme } from "@/context/ThemeContext"
 
 
 /**
@@ -170,6 +174,8 @@ interface SessionItemProps {
   todoStates: TodoState[]
   /** Full label tree for labels submenu */
   labels: LabelConfig[]
+  /** Flat label list for badge resolution */
+  flatLabels: LabelConfig[]
   /** Callback when labels are toggled */
   onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Translation function */
@@ -205,6 +211,7 @@ const SessionItem = memo(function SessionItem({
   contentMatch,
   todoStates,
   labels,
+  flatLabels,
   onLabelsChange,
   t,
   language,
@@ -213,6 +220,21 @@ const SessionItem = memo(function SessionItem({
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [todoMenuOpen, setTodoMenuOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [openLabelIndex, setOpenLabelIndex] = useState<number | null>(null)
+  const { isDark } = useTheme()
+
+  // Resolve session labels to their configs for badge rendering
+  const resolvedLabels = useMemo(() => {
+    if (!item.labels || item.labels.length === 0 || flatLabels.length === 0) return []
+    return item.labels
+      .map(entry => {
+        const parsed = parseLabelEntry(entry)
+        const config = flatLabels.find(l => l.id === parsed.id)
+        if (!config) return null
+        return { config, rawValue: parsed.rawValue }
+      })
+      .filter((l): l is { config: LabelConfig; rawValue: string | undefined } => l != null)
+  }, [item.labels, flatLabels])
 
   // Get current todo state from session properties
   const currentTodoState = getSessionTodoState(item)
@@ -381,6 +403,66 @@ const SessionItem = memo(function SessionItem({
                 )}
               </span>
             </div>
+            {/* Label badges — each badge opens a LabelValuePopover for editing/removing */}
+            {resolvedLabels.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap pr-6">
+                {resolvedLabels.map(({ config: label, rawValue }, labelIndex) => {
+                  const color = label.color ? resolveEntityColor(label.color, isDark) : null
+                  const displayValue = rawValue ? formatDisplayValue(rawValue, label.valueType) : undefined
+                  return (
+                    <LabelValuePopover
+                      key={`${label.id}-${labelIndex}`}
+                      label={label}
+                      value={rawValue}
+                      open={openLabelIndex === labelIndex}
+                      onOpenChange={(open) => setOpenLabelIndex(open ? labelIndex : null)}
+                      onValueChange={(newValue) => {
+                        const updatedLabels = (item.labels || []).map(entry => {
+                          const parsed = parseLabelEntry(entry)
+                          if (parsed.id === label.id) return formatLabelEntry(label.id, newValue)
+                          return entry
+                        })
+                        onLabelsChange?.(item.id, updatedLabels)
+                      }}
+                      onRemove={() => {
+                        const updatedLabels = (item.labels || []).filter(entry => {
+                          const parsed = parseLabelEntry(entry)
+                          return parsed.id !== label.id
+                        })
+                        onLabelsChange?.(item.id, updatedLabels)
+                      }}
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="shrink-0 h-[18px] max-w-[120px] px-1.5 text-[10px] font-medium rounded flex items-center whitespace-nowrap gap-0.5 cursor-pointer"
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+                        style={color ? {
+                          backgroundColor: `color-mix(in srgb, ${color} 6%, transparent)`,
+                          color: `color-mix(in srgb, ${color} 75%, var(--foreground))`,
+                        } : {
+                          backgroundColor: 'rgba(var(--foreground-rgb), 0.05)',
+                          color: 'rgba(var(--foreground-rgb), 0.8)',
+                        }}
+                      >
+                        {label.name}
+                        {displayValue ? (
+                          <>
+                            <span style={{ opacity: 0.4 }}>·</span>
+                            <span className="font-normal truncate min-w-0" style={{ opacity: 0.75 }}>{displayValue}</span>
+                          </>
+                        ) : label.valueType && (
+                          <>
+                            <span style={{ opacity: 0.4 }}>·</span>
+                            <LabelValueTypeIcon valueType={label.valueType} size={10} />
+                          </>
+                        )}
+                      </div>
+                    </LabelValuePopover>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </button>
         {/* Action buttons - visible on hover or when menu is open */}
@@ -562,6 +644,9 @@ export function SessionList({
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
+
+  // Flatten label tree once for badge resolution in SessionItems
+  const flatLabelList = useMemo(() => flattenLabels(labels), [labels])
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
@@ -935,6 +1020,7 @@ export function SessionList({
                           contentMatch={contentResults.get(item.id)}
                           todoStates={todoStates}
                           labels={labels}
+                          flatLabels={flatLabelList}
                           onLabelsChange={onLabelsChange}
                           t={t}
                           language={language}

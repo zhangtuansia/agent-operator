@@ -1547,6 +1547,10 @@ export const en = {
     labelsCount: '{count} labels',
     ruleCount: '{count} rule',
     rulesCount: '{count} rules',
+    // Context menu actions
+    addLabel: 'Add Label',
+    editLabels: 'Edit Labels',
+    deleteLabel: 'Delete Label',
   },
 
   // Shortcuts page

@@ -20,23 +20,32 @@ import {
   AppWindow,
   Settings2,
   Plus,
+  Trash2,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useLanguage } from '@/context/LanguageContext'
 
-export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'newChat'
+export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'newChat'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
   type: SidebarMenuType
   /** Status ID for status items (e.g., 'todo', 'done') - not currently used but kept for future */
   statusId?: string
+  /** Label ID — when set, this is an individual label item (enables Delete Label) */
+  labelId?: string
   /** Handler for "Configure Statuses" action - only for allChats/status/flagged types */
   onConfigureStatuses?: () => void
   /** Handler for "Add Source" action - only for sources type */
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
+  /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
+  onConfigureLabels?: (labelId?: string) => void
+  /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
+  onAddLabel?: (parentId?: string) => void
+  /** Handler for "Delete Label" action - deletes the label identified by labelId */
+  onDeleteLabel?: (labelId: string) => void
 }
 
 /**
@@ -46,12 +55,16 @@ export interface SidebarMenuProps {
 export function SidebarMenu({
   type,
   statusId,
+  labelId,
   onConfigureStatuses,
   onAddSource,
   onAddSkill,
+  onConfigureLabels,
+  onAddLabel,
+  onDeleteLabel,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
-  const { MenuItem } = useMenuComponents()
+  const { MenuItem, Separator } = useMenuComponents()
   const { t } = useLanguage()
 
   // New Chat: only shows "Open in New Window"
@@ -91,6 +104,37 @@ export function SidebarMenu({
         <Plus className="h-3.5 w-3.5" />
         <span className="flex-1">{t('skills.addSkill')}</span>
       </MenuItem>
+    )
+  }
+
+  // Labels: show context-appropriate actions
+  // - Header ("Labels" parent): Configure Labels + Add New Label
+  // - Individual label items: Add New Label (as child) + Delete Label
+  if (type === 'labels') {
+    return (
+      <>
+        {onAddLabel && (
+          <MenuItem onClick={() => onAddLabel(labelId)}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('labelsSettings.addLabel')}</span>
+          </MenuItem>
+        )}
+        {onConfigureLabels && (
+          <MenuItem onClick={() => onConfigureLabels(labelId)}>
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('labelsSettings.editLabels')}</span>
+          </MenuItem>
+        )}
+        {labelId && onDeleteLabel && (
+          <>
+            <Separator />
+            <MenuItem onClick={() => onDeleteLabel(labelId)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="flex-1">{t('labelsSettings.deleteLabel')}</span>
+            </MenuItem>
+          </>
+        )}
+      </>
     )
   }
 

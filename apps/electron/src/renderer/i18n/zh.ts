@@ -1549,6 +1549,10 @@ export const zh: TranslationKeys = {
     labelsCount: '{count} 个标签',
     ruleCount: '{count} 条规则',
     rulesCount: '{count} 条规则',
+    // 右键菜单操作
+    addLabel: '添加标签',
+    editLabels: '编辑标签',
+    deleteLabel: '删除标签',
   },
 
   // Shortcuts page
