@@ -80,10 +80,40 @@ function apiSetupMethodToConnectionSetup(
         credential: options.credential,
       }
     case 'deepseek_api_key':
+      return {
+        slug: 'deepseek-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
     case 'glm_api_key':
+      return {
+        slug: 'glm-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
     case 'minimax_api_key':
       return {
-        slug: 'anthropic-api',
+        slug: 'minimax-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
+    case 'doubao_api_key':
+      return {
+        slug: 'doubao-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
+    case 'kimi_api_key':
+      return {
+        slug: 'kimi-api',
         credential: options.credential,
         baseUrl: options.baseUrl,
         defaultModel: options.connectionDefaultModel,

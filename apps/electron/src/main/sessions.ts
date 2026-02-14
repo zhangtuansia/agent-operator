@@ -1790,6 +1790,7 @@ export class SessionManager {
           provider: 'openai',
           providerType: resolvedConnection?.providerType,
           authType: resolvedConnection?.authType,
+          baseUrl: resolvedConnection?.baseUrl,
           workspace: managed.workspace,
           model: codexModel,
           thinkingLevel: managed.thinkingLevel,
@@ -4171,6 +4172,34 @@ To view this task's output:
       }, workspaceId)
       this.pendingDeltas.delete(sessionId)
     }
+  }
+
+  /**
+   * Abort all in-progress sessions and clear the session map.
+   * Called during logout/reset to prevent orphan sessions from sending events
+   * to workspaces that no longer exist.
+   */
+  clearAllSessions(): void {
+    sessionLog.info(`Clearing all sessions (${this.sessions.size} sessions)`)
+
+    for (const [sessionId, managed] of this.sessions) {
+      // Abort any in-progress agent
+      if (managed.isProcessing && managed.abortController) {
+        managed.abortController.abort()
+      }
+      // Clean up delta flush timers
+      const timer = this.deltaFlushTimers.get(sessionId)
+      if (timer) {
+        clearTimeout(timer)
+        this.deltaFlushTimers.delete(sessionId)
+      }
+      // Clean up session-scoped tool callbacks
+      unregisterSessionScopedToolCallbacks(sessionId)
+    }
+
+    this.sessions.clear()
+    this.pendingDeltas.clear()
+    sessionLog.info('All sessions cleared')
   }
 
   /**

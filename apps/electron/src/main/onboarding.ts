@@ -29,6 +29,14 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE, async () => {
     const authState = await getAuthState()
     const setupNeeds = getSetupNeeds(authState)
+    mainLog.info('[Onboarding] GET_AUTH_STATE →', JSON.stringify({
+      billingType: authState.billing.type,
+      hasCredentials: authState.billing.hasCredentials,
+      hasApiKey: !!authState.billing.apiKey,
+      hasOAuthToken: !!authState.billing.claudeOAuthToken,
+      hasWorkspace: authState.workspace.hasWorkspace,
+      setupNeeds,
+    }))
     return { authState, setupNeeds }
   })
 

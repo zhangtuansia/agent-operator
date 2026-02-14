@@ -264,8 +264,12 @@ export async function getAuthState(): Promise<AuthState> {
       effectiveAuthType = 'api_key';
     } else if (connection.authType === 'oauth') {
       effectiveAuthType = 'oauth_token';
+    } else if (connection.authType === 'environment' || connection.authType === 'iam_credentials' || connection.authType === 'service_account_file') {
+      // Bedrock / Vertex / environment-based auth — map to 'bedrock' legacy type
+      // so getSetupNeeds() considers billing configured (isFullyConfigured = true).
+      effectiveAuthType = 'bedrock';
     }
-    // Other auth types (iam_credentials, service_account_file, environment, none) don't map to legacy types
+    // 'none' stays null (intentionally unauthenticated)
   }
   // No fallback to legacy config.authType - if no connection, return unauthenticated state
 

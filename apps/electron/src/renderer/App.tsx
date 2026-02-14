@@ -786,14 +786,13 @@ export default function App() {
 
   // Execute reset after user confirms in dialog
   const executeReset = useCallback(async () => {
+    setShowResetDialog(false)
+
     try {
       await window.electronAPI.logout()
-      // Reset all state
-      // Clear session atoms - initialize with empty array clears all per-session atoms
       initializeSessions([])
       setWorkspaces([])
       setWindowWorkspaceId(null)
-      // Reset setupNeeds to force fresh onboarding start
       setSetupNeeds({
         needsAuth: true,
         needsReauth: false,
@@ -801,13 +800,19 @@ export default function App() {
         needsCredentials: true,
         isFullyConfigured: false,
       })
-      // Reset onboarding hook state
       onboarding.reset()
+
+      // Force-clean Radix Dialog body styles before switching appState.
+      // The dialog will be unmounted by the state switch (onboarding render path
+      // doesn't include it), which prevents Radix's own cleanup from running.
+      document.body.style.removeProperty('pointer-events')
+      document.body.style.removeProperty('overflow')
+      document.body.style.removeProperty('padding-right')
+      document.body.removeAttribute('data-scroll-locked')
+
       setAppState('onboarding')
     } catch (error) {
       console.error('Reset failed:', error)
-    } finally {
-      setShowResetDialog(false)
     }
   }, [onboarding, initializeSessions])
 

@@ -10,6 +10,11 @@ import {
   type ModelDefinition,
   CLAUDE_MODELS,
   BEDROCK_MODELS,
+  DEEPSEEK_MODELS,
+  GLM_MODELS,
+  MINIMAX_MODELS,
+  DOUBAO_MODELS,
+  KIMI_MODELS,
 } from './models.ts';
 
 // ============================================================
@@ -297,6 +302,30 @@ export function getDefaultModelForConnection(providerType: LlmProviderType): str
   const first = models[0];
   if (!first) return CLAUDE_MODELS[0]!.id;
   return typeof first === 'string' ? first : first.id;
+}
+
+/**
+ * Get default models for a specific built-in slug (third-party compat).
+ */
+export function getDefaultModelsForSlug(slug: string): Array<ModelDefinition | string> {
+  switch (slug) {
+    case 'deepseek-api': return DEEPSEEK_MODELS;
+    case 'glm-api': return GLM_MODELS;
+    case 'minimax-api': return MINIMAX_MODELS;
+    case 'doubao-api': return DOUBAO_MODELS;
+    case 'kimi-api': return KIMI_MODELS;
+    default: return [];
+  }
+}
+
+/**
+ * Get default model ID for a specific built-in slug.
+ */
+export function getDefaultModelForSlug(slug: string): string | undefined {
+  const models = getDefaultModelsForSlug(slug);
+  if (models.length === 0) return undefined;
+  const first = models[0];
+  return typeof first === 'string' ? first : first?.id;
 }
 
 /**

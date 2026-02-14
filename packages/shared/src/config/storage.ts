@@ -541,37 +541,47 @@ function syncPrimaryLlmConnection(config: StoredConfig): boolean {
     }
   }
 
-  const primary = derivePrimaryLlmConnection(config);
-  const existingConnections = config.llmConnections ?? [];
+  // Only derive and sync a primary connection from legacy config when there's
+  // something to migrate (authType or providerConfig is set). If neither is set
+  // and the user already has connections configured via onboarding, skip the
+  // derivation to avoid creating a phantom 'anthropic-api' connection.
+  const hasLegacyConfig = !!config.authType || !!config.providerConfig;
+  const hasExistingConnections = (config.llmConnections ?? []).length > 0;
 
-  const index = existingConnections.findIndex(connection => connection.slug === primary.slug);
-  if (index >= 0) {
-    const current = existingConnections[index]!;
-    const next: LlmConnection = {
-      ...current,
-      ...primary,
-      createdAt: current.createdAt || primary.createdAt,
-      lastUsedAt: current.lastUsedAt ?? primary.lastUsedAt,
-    };
-    if (JSON.stringify(current) !== JSON.stringify(next)) {
-      existingConnections[index] = next;
+  if (hasLegacyConfig || !hasExistingConnections) {
+    const primary = derivePrimaryLlmConnection(config);
+    const existingConnections = config.llmConnections ?? [];
+
+    const index = existingConnections.findIndex(connection => connection.slug === primary.slug);
+    if (index >= 0) {
+      const current = existingConnections[index]!;
+      const next: LlmConnection = {
+        ...current,
+        ...primary,
+        createdAt: current.createdAt || primary.createdAt,
+        lastUsedAt: current.lastUsedAt ?? primary.lastUsedAt,
+      };
+      if (JSON.stringify(current) !== JSON.stringify(next)) {
+        existingConnections[index] = next;
+        changed = true;
+      }
+    } else {
+      existingConnections.push(primary);
       changed = true;
     }
-  } else {
-    existingConnections.push(primary);
-    changed = true;
-  }
 
-  if (!config.llmConnections) {
-    config.llmConnections = existingConnections;
+    if (!config.llmConnections) {
+      config.llmConnections = existingConnections;
+    }
+
+    // Only set default to primary when no default exists yet
+    if (!config.defaultLlmConnection) {
+      config.defaultLlmConnection = primary.slug;
+      changed = true;
+    }
   }
 
   if (ensureLegacyBedrockConnection(config)) {
-    changed = true;
-  }
-
-  if (config.defaultLlmConnection !== primary.slug) {
-    config.defaultLlmConnection = primary.slug;
     changed = true;
   }
 

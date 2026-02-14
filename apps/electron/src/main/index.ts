@@ -12,7 +12,6 @@ import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces } from '@agent-operator/shared/config'
-import { getAuthState } from '@agent-operator/shared/auth'
 import { initializeDocs } from '@agent-operator/shared/docs'
 import { initializeReleaseNotes } from '@agent-operator/shared/release-notes'
 import { ensureDefaultPermissions } from '@agent-operator/shared/agent/permissions-config'
@@ -113,12 +112,8 @@ if (!gotTheLock) {
 async function createInitialWindows(): Promise<void> {
   if (!windowManager) return
 
-  // IMPORTANT: Trigger auth state check BEFORE getting workspaces
-  // This ensures ensureBedrockConfig() runs and auto-creates config for Bedrock users
-  // Otherwise getWorkspaces() returns empty and we show onboarding unnecessarily
-  await getAuthState()
-
   // Load saved window state
+  // Note: autoDetect + migration already ran in SessionManager.initialize() before this point.
   const savedState = loadWindowState()
   const workspaces = getWorkspaces()
   const validWorkspaceIds = workspaces.map(ws => ws.id)

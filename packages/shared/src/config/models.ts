@@ -29,12 +29,18 @@ export interface ModelDefinition {
 const PRICING_OPUS: ModelPricing = { inputCostPer1M: 15, outputCostPer1M: 75 };
 const PRICING_SONNET: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 15 };
 const PRICING_HAIKU: ModelPricing = { inputCostPer1M: 0.25, outputCostPer1M: 1.25 };
+const PRICING_GLM_5: ModelPricing = { inputCostPer1M: 5, outputCostPer1M: 20 };
 const PRICING_GLM_HIGH: ModelPricing = { inputCostPer1M: 5, outputCostPer1M: 15 };
 const PRICING_GLM_PLUS: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 9 };
 const PRICING_GLM_AIR: ModelPricing = { inputCostPer1M: 0.5, outputCostPer1M: 1.5 };
 const PRICING_GLM_FREE: ModelPricing = { inputCostPer1M: 0, outputCostPer1M: 0 };
 const PRICING_DEEPSEEK: ModelPricing = { inputCostPer1M: 0.14, outputCostPer1M: 0.28 };
+const PRICING_MINIMAX_M25: ModelPricing = { inputCostPer1M: 0.3, outputCostPer1M: 1.2 };
 const PRICING_MINIMAX: ModelPricing = { inputCostPer1M: 1, outputCostPer1M: 3 };
+const PRICING_KIMI: ModelPricing = { inputCostPer1M: 0.6, outputCostPer1M: 3 };
+const PRICING_DOUBAO: ModelPricing = { inputCostPer1M: 0.5, outputCostPer1M: 2 };
+const PRICING_GEMINI_PRO: ModelPricing = { inputCostPer1M: 1.25, outputCostPer1M: 10 };
+const PRICING_GEMINI_FLASH: ModelPricing = { inputCostPer1M: 0.15, outputCostPer1M: 0.6 };
 const PRICING_FREE: ModelPricing = { inputCostPer1M: 0, outputCostPer1M: 0 };
 const PRICING_DEFAULT: ModelPricing = { inputCostPer1M: 3, outputCostPer1M: 15 };
 
@@ -42,6 +48,7 @@ export const DEFAULT_PRICING = {
   opus: PRICING_OPUS,
   sonnet: PRICING_SONNET,
   haiku: PRICING_HAIKU,
+  'glm-5': PRICING_GLM_5,
   'glm-4.7': PRICING_GLM_HIGH,
   'glm-4-plus': PRICING_GLM_PLUS,
   'glm-4-air': PRICING_GLM_AIR,
@@ -49,6 +56,11 @@ export const DEFAULT_PRICING = {
   'glm-4-flash': PRICING_GLM_FREE,
   deepseek: PRICING_DEEPSEEK,
   minimax: PRICING_MINIMAX,
+  'minimax-m25': PRICING_MINIMAX_M25,
+  kimi: PRICING_KIMI,
+  doubao: PRICING_DOUBAO,
+  'gemini-pro': PRICING_GEMINI_PRO,
+  'gemini-flash': PRICING_GEMINI_FLASH,
   openrouter: PRICING_DEFAULT,
   ollama: PRICING_FREE,
   default: PRICING_DEFAULT,
@@ -56,7 +68,7 @@ export const DEFAULT_PRICING = {
 
 // Anthropic Claude models (default)
 export const CLAUDE_MODELS: ModelDefinition[] = [
-  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
+  { id: 'claude-opus-4-6', name: 'Opus 4.6', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
   { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced', pricing: DEFAULT_PRICING.sonnet },
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
@@ -69,17 +81,19 @@ export const CODEX_MODELS: ModelDefinition[] = [
 
 // 智谱 GLM models
 export const GLM_MODELS: ModelDefinition[] = [
-  { id: 'glm-4.7', name: 'GLM-4.7', shortName: 'GLM-4.7', description: 'Latest & most capable', pricing: DEFAULT_PRICING['glm-4.7'] },
+  { id: 'glm-5', name: 'GLM-5', shortName: 'GLM-5', description: 'Flagship 744B MoE, SOTA reasoning', pricing: DEFAULT_PRICING['glm-5'] },
+  { id: 'glm-4.7', name: 'GLM-4.7', shortName: 'GLM-4.7', description: 'Strong coding & reasoning', pricing: DEFAULT_PRICING['glm-4.7'] },
   { id: 'glm-4-plus', name: 'GLM-4 Plus', shortName: 'GLM-4+', description: 'Enhanced capabilities', pricing: DEFAULT_PRICING['glm-4-plus'] },
   { id: 'glm-4-air', name: 'GLM-4 Air', shortName: 'GLM-4 Air', description: 'Fast & efficient', pricing: DEFAULT_PRICING['glm-4-air'] },
   { id: 'glm-4-airx', name: 'GLM-4 AirX', shortName: 'GLM-4 AirX', description: 'Fastest inference', pricing: DEFAULT_PRICING['glm-4-airx'] },
   { id: 'glm-4-flash', name: 'GLM-4 Flash', shortName: 'GLM-4 Flash', description: 'Free tier model', pricing: DEFAULT_PRICING['glm-4-flash'] },
 ];
 
-// MiniMax models (2025 - M2.1 series)
+// MiniMax models (2026 - M2.5 series)
 export const MINIMAX_MODELS: ModelDefinition[] = [
-  { id: 'MiniMax-M2.1', name: 'MiniMax M2.1', shortName: 'M2.1', description: 'Latest flagship (229B), SOTA coding & agents', pricing: PRICING_MINIMAX },
-  { id: 'MiniMax-M2', name: 'MiniMax M2', shortName: 'M2', description: 'Previous generation', pricing: PRICING_MINIMAX },
+  { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', shortName: 'M2.5', description: 'Flagship, 80.2% SWE-bench', pricing: PRICING_MINIMAX_M25 },
+  { id: 'MiniMax-M2.5-Lightning', name: 'MiniMax M2.5 Lightning', shortName: 'M2.5⚡', description: 'Same quality, faster speed', pricing: PRICING_MINIMAX_M25 },
+  { id: 'MiniMax-M2.1', name: 'MiniMax M2.1', shortName: 'M2.1', description: 'Previous generation', pricing: PRICING_MINIMAX },
 ];
 
 // DeepSeek models (2025 - V3.2 series, 671B MoE)
@@ -88,31 +102,51 @@ export const DEEPSEEK_MODELS: ModelDefinition[] = [
   { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', shortName: 'Reasoner', description: 'V3.2 thinking mode with tool-use', pricing: DEFAULT_PRICING.deepseek },
 ];
 
+// 豆包 Doubao models (ByteDance/Volcano Engine)
+export const DOUBAO_MODELS: ModelDefinition[] = [
+  { id: 'doubao-seed-code-preview-latest', name: 'Doubao Seed Code', shortName: 'Seed Code', description: 'SOTA coding model, 256K context', pricing: PRICING_DOUBAO },
+];
+
+// Kimi models (Moonshot AI)
+export const KIMI_MODELS: ModelDefinition[] = [
+  { id: 'kimi-k2.5', name: 'Kimi K2.5', shortName: 'K2.5', description: 'Flagship multimodal + agent swarm', pricing: PRICING_KIMI },
+  { id: 'kimi-k2', name: 'Kimi K2', shortName: 'K2', description: '1T MoE, strong agentic coding', pricing: PRICING_KIMI },
+];
+
+// Google Gemini models
+export const GEMINI_MODELS: ModelDefinition[] = [
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', shortName: '3 Pro', description: 'Most capable, 1M context', pricing: PRICING_GEMINI_PRO },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', shortName: '3 Flash', description: 'Fast frontier-class', pricing: PRICING_GEMINI_FLASH },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', shortName: '2.5 Pro', description: 'Stable reasoning model', pricing: PRICING_GEMINI_PRO },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', shortName: '2.5 Flash', description: 'Fast & efficient', pricing: PRICING_GEMINI_FLASH },
+];
+
 // AWS Bedrock models (Claude via Bedrock)
 export const BEDROCK_MODELS: ModelDefinition[] = [
-  { id: 'us.anthropic.claude-opus-4-5-20251101-v1:0', name: 'Opus 4.5 (Bedrock)', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
+  { id: 'us.anthropic.claude-opus-4-6-v1:0', name: 'Opus 4.6 (Bedrock)', shortName: 'Opus', description: 'Most capable', pricing: DEFAULT_PRICING.opus },
   { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', name: 'Sonnet 4.5 (Bedrock)', shortName: 'Sonnet', description: 'Balanced', pricing: DEFAULT_PRICING.sonnet },
   { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
 
-// OpenRouter models (uses provider/model-name format, 2025 updated)
+// OpenRouter models (uses provider/model-name format, 2026 updated)
 export const OPENROUTER_MODELS: ModelDefinition[] = [
-  { id: 'anthropic/claude-opus-4.5', name: 'Claude Opus 4.5', shortName: 'Opus 4.5', description: 'Frontier reasoning model ($5/$25 per 1M)' },
-  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', shortName: 'Sonnet 4.5', description: 'Advanced Sonnet ($3/$15 per 1M)' },
-  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', shortName: 'Haiku 4.5', description: 'Fastest model, near-frontier' },
-  { id: 'anthropic/claude-opus-4', name: 'Claude Opus 4', shortName: 'Opus 4', description: 'World best coding model' },
-  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', shortName: 'Sonnet 4', description: 'Balanced performance' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o', shortName: 'GPT-4o', description: 'OpenAI via OpenRouter' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', shortName: 'Gemini 2.5', description: 'Google via OpenRouter' },
+  { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', shortName: 'Opus 4.6', description: 'Most capable ($15/$75 per 1M)' },
+  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', shortName: 'Sonnet 4.5', description: 'Balanced ($3/$15 per 1M)' },
+  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', shortName: 'Haiku 4.5', description: 'Fast & efficient' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', shortName: 'Gemini 3', description: 'Google via OpenRouter' },
+  { id: 'openai/gpt-5.3-codex', name: 'GPT-5.3 Codex', shortName: 'Codex', description: 'OpenAI via OpenRouter' },
+  { id: 'z-ai/glm-5', name: 'GLM-5', shortName: 'GLM-5', description: 'Zhipu via OpenRouter' },
+  { id: 'minimax/minimax-m2.5', name: 'MiniMax M2.5', shortName: 'M2.5', description: 'MiniMax via OpenRouter' },
 ];
 
-// Ollama models (local models - free, 2025 updated)
+// Ollama models (local models - free, 2026 updated)
 export const OLLAMA_MODELS: ModelDefinition[] = [
   { id: 'llama4:scout', name: 'Llama 4 Scout', shortName: 'Llama 4', description: 'Meta Llama 4 multimodal', pricing: DEFAULT_PRICING.ollama },
   { id: 'llama4:maverick', name: 'Llama 4 Maverick', shortName: 'Llama 4 Mav', description: 'Llama 4 advanced variant', pricing: DEFAULT_PRICING.ollama },
   { id: 'qwen3', name: 'Qwen 3', shortName: 'Qwen 3', description: 'Alibaba Qwen 3 (235B MoE flagship)', pricing: DEFAULT_PRICING.ollama },
-  { id: 'qwen3:30b', name: 'Qwen 3 30B', shortName: 'Qwen 3 30B', description: 'Qwen 3 efficient MoE', pricing: DEFAULT_PRICING.ollama },
   { id: 'deepseek-r1:32b', name: 'DeepSeek R1 32B', shortName: 'DS-R1', description: 'DeepSeek reasoning model', pricing: DEFAULT_PRICING.ollama },
+  { id: 'minimax-m2.5', name: 'MiniMax M2.5', shortName: 'M2.5', description: 'MiniMax M2.5 open-weight', pricing: DEFAULT_PRICING.ollama },
+  { id: 'glm-5', name: 'GLM-5', shortName: 'GLM-5', description: 'Zhipu GLM-5 open-weight', pricing: DEFAULT_PRICING.ollama },
   { id: 'mistral', name: 'Mistral', shortName: 'Mistral', description: 'Mistral AI', pricing: DEFAULT_PRICING.ollama },
 ];
 
@@ -127,6 +161,9 @@ export const PROVIDER_MODELS: Record<string, ModelDefinition[]> = {
   glm: GLM_MODELS,
   minimax: MINIMAX_MODELS,
   deepseek: DEEPSEEK_MODELS,
+  doubao: DOUBAO_MODELS,
+  kimi: KIMI_MODELS,
+  gemini: GEMINI_MODELS,
   bedrock: BEDROCK_MODELS,  // AWS Bedrock
   openrouter: OPENROUTER_MODELS,  // OpenRouter
   vercel: VERCEL_MODELS,  // Vercel AI Gateway
@@ -139,9 +176,12 @@ export const DEFAULT_PROVIDER_MODEL: Record<string, string> = {
   anthropic: 'claude-sonnet-4-5-20250929',
   api_key: 'claude-sonnet-4-5-20250929',
   claude_oauth: 'claude-sonnet-4-5-20250929',
-  glm: 'glm-4.7',
-  minimax: 'MiniMax-M2.1',
+  glm: 'glm-5',
+  minimax: 'MiniMax-M2.5',
   deepseek: 'deepseek-chat',
+  doubao: 'doubao-seed-code-preview-latest',
+  kimi: 'kimi-k2.5',
+  gemini: 'gemini-3-pro-preview',
   bedrock: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
   openrouter: 'anthropic/claude-sonnet-4.5',
   vercel: 'claude-sonnet-4-5-20250929',
@@ -228,13 +268,13 @@ export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 export const DEFAULT_CODEX_MODEL = CODEX_MODELS[0]!.id;
 
 /** Model for agent definition extraction (always high quality) */
-export const EXTRACTION_MODEL = 'claude-opus-4-5-20251101';
+export const EXTRACTION_MODEL = 'claude-opus-4-6';
 
 /** Model for API response summarization (cost efficient) */
 export const SUMMARIZATION_MODEL = 'claude-haiku-4-5-20251001';
 
 /** Model for instruction updates (high quality for accurate document editing) */
-export const INSTRUCTION_UPDATE_MODEL = 'claude-opus-4-5-20251101';
+export const INSTRUCTION_UPDATE_MODEL = 'claude-opus-4-6';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -247,6 +287,9 @@ const ALL_MODELS: ModelDefinition[] = [
   ...GLM_MODELS,
   ...MINIMAX_MODELS,
   ...DEEPSEEK_MODELS,
+  ...DOUBAO_MODELS,
+  ...KIMI_MODELS,
+  ...GEMINI_MODELS,
   ...BEDROCK_MODELS,
   ...OPENROUTER_MODELS,
   ...OLLAMA_MODELS,
@@ -318,6 +361,10 @@ export function getModelPricing(modelId: string): ModelPricing {
   if (lowerModelId.includes('sonnet')) return PRICING_SONNET;
   if (lowerModelId.includes('deepseek')) return PRICING_DEEPSEEK;
   if (lowerModelId.includes('glm')) return PRICING_GLM_AIR;
+  if (lowerModelId.includes('doubao')) return PRICING_DOUBAO;
+  if (lowerModelId.includes('kimi') || lowerModelId.includes('moonshot')) return PRICING_KIMI;
+  if (lowerModelId.includes('gemini')) return PRICING_GEMINI_PRO;
+  if (lowerModelId.includes('minimax')) return PRICING_MINIMAX_M25;
   if (lowerModelId.includes('llama') || lowerModelId.includes('mistral') || lowerModelId.includes('qwen')) {
     return PRICING_FREE;
   }

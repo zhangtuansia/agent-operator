@@ -407,4 +407,11 @@ export interface BackendConfig {
    * Used to read/write credentials under the correct key.
    */
   connectionSlug?: string;
+
+  /**
+   * Custom base URL for API requests (openai_compat providers).
+   * Passed as OPENAI_BASE_URL to the Codex app-server process so it
+   * routes requests to the third-party endpoint instead of OpenAI.
+   */
+  baseUrl?: string;
 }

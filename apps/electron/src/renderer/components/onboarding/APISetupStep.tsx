@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Cpu, Globe } from "lucide-react"
+import { Check } from "lucide-react"
+import { ProviderLogo } from "../icons/ProviderLogo"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
-import type { LlmAuthType, LlmProviderType } from "@agent-operator/shared/config/llm-connections"
+import { DEEPSEEK_MODELS, GLM_MODELS, MINIMAX_MODELS, DOUBAO_MODELS, KIMI_MODELS } from '@agent-operator/shared/config/models'
 import { useTranslation } from "@/i18n"
 
 export type ProviderSegment = 'anthropic' | 'openai' | 'copilot' | 'other'
@@ -11,7 +12,7 @@ const SEGMENT_LABELS: Record<ProviderSegment, string> = {
   anthropic: 'Claude',
   openai: 'Codex',
   copilot: 'Copilot',
-  other: '其他',
+  other: 'Other',
 }
 
 export type ApiSetupMethod =
@@ -23,6 +24,8 @@ export type ApiSetupMethod =
   | 'deepseek_api_key'
   | 'glm_api_key'
   | 'minimax_api_key'
+  | 'doubao_api_key'
+  | 'kimi_api_key'
 
 /** Pre-configured provider info for third-party API providers */
 export interface ThirdPartyProviderInfo {
@@ -37,47 +40,38 @@ export function getThirdPartyProviderInfo(method: ApiSetupMethod): ThirdPartyPro
     case 'deepseek_api_key':
       return {
         baseUrl: 'https://api.deepseek.com/anthropic',
-        defaultModel: 'deepseek-chat',
-        models: ['deepseek-chat', 'deepseek-reasoner'],
+        defaultModel: DEEPSEEK_MODELS[0]!.id,
+        models: DEEPSEEK_MODELS.map(m => m.id),
       }
     case 'glm_api_key':
       return {
         baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-        defaultModel: 'glm-4.7',
-        models: ['glm-4.7', 'glm-4-plus', 'glm-4-air', 'glm-4-airx', 'glm-4-flash'],
+        defaultModel: GLM_MODELS[0]!.id,
+        models: GLM_MODELS.map(m => m.id),
       }
     case 'minimax_api_key':
       return {
         baseUrl: 'https://api.minimaxi.com/anthropic',
-        defaultModel: 'MiniMax-M2.1',
-        models: ['MiniMax-M2.1', 'MiniMax-M2'],
+        defaultModel: MINIMAX_MODELS[0]!.id,
+        models: MINIMAX_MODELS.map(m => m.id),
+      }
+    case 'doubao_api_key':
+      return {
+        baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+        defaultModel: DOUBAO_MODELS[0]!.id,
+        models: DOUBAO_MODELS.map(m => m.id),
+      }
+    case 'kimi_api_key':
+      return {
+        baseUrl: 'https://api.moonshot.ai/anthropic/',
+        defaultModel: KIMI_MODELS[0]!.id,
+        models: KIMI_MODELS.map(m => m.id),
       }
     default:
       return null
   }
 }
 
-export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
-  providerType: LlmProviderType;
-  authType: LlmAuthType;
-} {
-  switch (method) {
-    case 'claude_oauth':
-      return { providerType: 'anthropic', authType: 'oauth' }
-    case 'anthropic_api_key':
-      return { providerType: 'anthropic', authType: 'api_key' }
-    case 'chatgpt_oauth':
-      return { providerType: 'openai', authType: 'oauth' }
-    case 'openai_api_key':
-      return { providerType: 'openai', authType: 'api_key' }
-    case 'copilot_oauth':
-      return { providerType: 'copilot', authType: 'oauth' }
-    case 'deepseek_api_key':
-    case 'glm_api_key':
-    case 'minimax_api_key':
-      return { providerType: 'anthropic_compat', authType: 'api_key_with_endpoint' }
-  }
-}
 
 interface ApiSetupOption {
   id: ApiSetupMethod
@@ -92,56 +86,70 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     id: 'claude_oauth',
     nameKey: 'onboarding.optClaudeOAuth',
     descriptionKey: 'onboarding.optClaudeOAuthDesc',
-    icon: <CreditCard className="size-4" />,
+    icon: <ProviderLogo provider="anthropic" size={16} />,
     segment: 'anthropic',
   },
   {
     id: 'anthropic_api_key',
     nameKey: 'onboarding.optAnthropicApiKey',
     descriptionKey: 'onboarding.optAnthropicApiKeyDesc',
-    icon: <Key className="size-4" />,
+    icon: <ProviderLogo provider="api_key" size={16} />,
     segment: 'anthropic',
   },
   {
     id: 'chatgpt_oauth',
     nameKey: 'onboarding.optChatGptOAuth',
     descriptionKey: 'onboarding.optChatGptOAuthDesc',
-    icon: <Cpu className="size-4" />,
+    icon: <ProviderLogo provider="openai" size={16} />,
     segment: 'openai',
   },
   {
     id: 'openai_api_key',
     nameKey: 'onboarding.optOpenAiApiKey',
     descriptionKey: 'onboarding.optOpenAiApiKeyDesc',
-    icon: <Key className="size-4" />,
+    icon: <ProviderLogo provider="openai" size={16} />,
     segment: 'openai',
   },
   {
     id: 'copilot_oauth',
     nameKey: 'onboarding.optCopilotOAuth',
     descriptionKey: 'onboarding.optCopilotOAuthDesc',
-    icon: <Cpu className="size-4" />,
+    icon: <ProviderLogo provider="copilot" size={16} />,
     segment: 'copilot',
   },
   {
     id: 'deepseek_api_key',
     nameKey: 'onboarding.optDeepSeek',
     descriptionKey: 'onboarding.optDeepSeekDesc',
-    icon: <Globe className="size-4" />,
+    icon: <ProviderLogo provider="deepseek" size={16} />,
     segment: 'other',
   },
   {
     id: 'glm_api_key',
     nameKey: 'onboarding.optGlm',
     descriptionKey: 'onboarding.optGlmDesc',
-    icon: <Globe className="size-4" />,
+    icon: <ProviderLogo provider="glm" size={16} />,
     segment: 'other',
   },
   {
     id: 'minimax_api_key',
     nameKey: 'onboarding.optMiniMax',
     descriptionKey: 'onboarding.optMiniMaxDesc',
-    icon: <Globe className="size-4" />,
+    icon: <ProviderLogo provider="minimax" size={16} />,
+    segment: 'other',
+  },
+  {
+    id: 'doubao_api_key',
+    nameKey: 'onboarding.optDoubao',
+    descriptionKey: 'onboarding.optDoubaoDesc',
+    icon: <ProviderLogo provider="doubao" size={16} />,
+    segment: 'other',
+  },
+  {
+    id: 'kimi_api_key',
+    nameKey: 'onboarding.optKimi',
+    descriptionKey: 'onboarding.optKimiDesc',
+    icon: <ProviderLogo provider="kimi" size={16} />,
     segment: 'other',
   },
 ]

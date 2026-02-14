@@ -42,6 +42,8 @@ import {
   isOpenAIProvider,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
+  getDefaultModelsForSlug,
+  getDefaultModelForSlug,
   type Workspace,
   type AgentType,
   type LlmConnection,
@@ -176,56 +178,99 @@ async function fetchAndStoreCopilotModels(slug: string, accessToken: string): Pr
 }
 
 /**
- * Creates a built-in LLM connection object for first-time setup flows.
+ * Built-in connection templates for first-time setup flows.
+ * Each entry maps a slug to its provider configuration.
+ * Functions receive `hasCustomEndpoint` to vary behavior.
  */
+interface BuiltInConnectionTemplate {
+  name: string | ((h: boolean) => string)
+  providerType: LlmConnection['providerType'] | ((h: boolean) => LlmConnection['providerType'])
+  authType: LlmConnection['authType'] | ((h: boolean) => LlmConnection['authType'])
+  baseUrl?: string
+}
+
+const BUILT_IN_CONNECTION_TEMPLATES: Record<string, BuiltInConnectionTemplate> = {
+  'anthropic-api': {
+    name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic API',
+    providerType: (h) => h ? 'anthropic_compat' : 'anthropic',
+    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
+  },
+  'claude-max': {
+    name: 'Claude Max',
+    providerType: 'anthropic',
+    authType: 'oauth',
+  },
+  'codex': {
+    name: 'Codex (ChatGPT Plus)',
+    providerType: 'openai',
+    authType: 'oauth',
+  },
+  'codex-api': {
+    name: (h) => h ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
+    providerType: (h) => h ? 'openai_compat' : 'openai',
+    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
+  },
+  'copilot': {
+    name: 'GitHub Copilot',
+    providerType: 'copilot',
+    authType: 'oauth',
+  },
+  'deepseek-api': {
+    name: 'DeepSeek',
+    providerType: 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+  },
+  'glm-api': {
+    name: '智谱 GLM',
+    providerType: 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+  },
+  'minimax-api': {
+    name: 'MiniMax',
+    providerType: 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://api.minimaxi.com/anthropic',
+  },
+  'doubao-api': {
+    name: '豆包 Doubao',
+    providerType: 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+  },
+  'kimi-api': {
+    name: 'Kimi',
+    providerType: 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://api.moonshot.ai/anthropic/',
+  },
+}
+
 function createBuiltInConnection(slug: string, baseUrl?: string | null): LlmConnection | null {
+  const template = BUILT_IN_CONNECTION_TEMPLATES[slug]
+  if (!template) return null
+
   const now = Date.now()
   const hasCustomEndpoint = typeof baseUrl === 'string' && baseUrl.trim().length > 0
 
-  const createConnection = (
-    providerType: LlmConnection['providerType'],
-    authType: LlmConnection['authType'],
-    name: string,
-  ): LlmConnection => ({
-    slug,
-    name,
-    providerType,
-    authType,
-    baseUrl: hasCustomEndpoint ? baseUrl!.trim() : undefined,
-    models: getDefaultModelsForConnection(providerType),
-    defaultModel: getDefaultModelForConnection(providerType),
-    createdAt: now,
-  })
+  const providerType = typeof template.providerType === 'function'
+    ? template.providerType(hasCustomEndpoint) : template.providerType
+  const authType = typeof template.authType === 'function'
+    ? template.authType(hasCustomEndpoint) : template.authType
+  const name = typeof template.name === 'function'
+    ? template.name(hasCustomEndpoint) : template.name
 
-  switch (slug) {
-    case 'anthropic-api':
-      return createConnection(
-        hasCustomEndpoint ? 'anthropic_compat' : 'anthropic',
-        hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        'Anthropic API',
-      )
-    case 'claude-max':
-      return createConnection('anthropic', 'oauth', 'Claude Max')
-    case 'codex':
-      return createConnection('openai', 'oauth', 'Codex')
-    case 'codex-api':
-      return createConnection(
-        hasCustomEndpoint ? 'openai_compat' : 'openai',
-        hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        'Codex API',
-      )
-    case 'copilot':
-      return {
-        slug,
-        name: 'GitHub Copilot',
-        providerType: 'copilot',
-        authType: 'oauth',
-        models: [],
-        createdAt: now,
-      }
-    default:
-      return null
-  }
+  // Slug-level models (third-party), fallback to providerType-level
+  const slugModels = getDefaultModelsForSlug(slug)
+  const models = slugModels.length > 0 ? slugModels : getDefaultModelsForConnection(providerType)
+  const defaultModel = getDefaultModelForSlug(slug) ?? getDefaultModelForConnection(providerType)
+
+  const effectiveBaseUrl = hasCustomEndpoint
+    ? baseUrl!.trim()
+    : template.baseUrl ?? undefined
+
+  return { slug, name, providerType, authType, baseUrl: effectiveBaseUrl, models, defaultModel, createdAt: now }
 }
 
 /**
@@ -1371,6 +1416,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     try {
+      // Abort all in-progress sessions and clear session map first
+      // to prevent orphan sessions from sending events to deleted workspaces
+      sessionManager.clearAllSessions()
+
       const manager = getCredentialManager()
 
       // List and delete all stored credentials
@@ -1385,7 +1434,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         // Ignore if file doesn't exist
       })
 
-      ipcLog.info('Logout complete - cleared all credentials and config')
+      ipcLog.info('Logout complete - cleared all sessions, credentials and config')
     } catch (error) {
       ipcLog.error('Logout error:', error)
       throw error
@@ -1827,9 +1876,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
       }
 
-      if (!getDefaultLlmConnection()) {
-        setDefaultLlmConnection(setup.slug)
-      }
+      // Always set the configured connection as default — the user explicitly chose it.
+      setDefaultLlmConnection(setup.slug)
 
       if (isCopilotProvider(pendingConnection.providerType)) {
         const oauth = await manager.getLlmOAuth(setup.slug)

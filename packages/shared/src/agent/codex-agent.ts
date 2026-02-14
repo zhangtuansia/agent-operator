@@ -327,6 +327,12 @@ export class CodexAgent extends BaseAgent {
       env.CODEX_HOME = this.config.codexHome;
       this.debug(`Using custom CODEX_HOME: ${this.config.codexHome}`);
     }
+    // For openai_compat providers, pass the custom base URL so the Codex CLI
+    // routes API requests to the third-party endpoint instead of OpenAI.
+    if (this.config.baseUrl) {
+      env.OPENAI_BASE_URL = this.config.baseUrl;
+      this.debug(`Using custom OPENAI_BASE_URL: ${this.config.baseUrl}`);
+    }
 
     const options: AppServerOptions = {
       workDir: this.workingDirectory,
