@@ -28,16 +28,19 @@ cd apps/electron && ./scripts/build-all.sh all
 - **Windows x64**: `Cowork-x64.exe`
 - **Linux x64**: `Cowork-x86_64.AppImage`
 
-同时生成 electron-updater YAML 清单（`--publish always` 已内置）：
+同时生成 electron-updater YAML 清单：
 - `latest-mac.yml` — macOS 自动更新清单
 - `latest.yml` — Windows 自动更新清单
 - `latest-linux.yml` — Linux 自动更新清单
+
+> **关键**: electron-builder 需要 `--publish always` 参数才会生成 YAML 清单和 ZIP 文件。
+> 脚本已内置此参数，无需手动添加。
 
 打包脚本会自动：
 1. 下载对应平台的 Bun 运行时到 `vendor/bun/`
 2. 安装依赖并复制 SDK
 3. 构建 Electron 应用
-4. 使用 electron-builder 打包（含 `--publish always` 生成自动更新清单）
+4. 使用 electron-builder 打包（含 `--publish always`）
 
 ### 4. 上传到 R2
 
@@ -69,7 +72,7 @@ cowork/
         └── Cowork-x86_64.AppImage ← Linux 自动更新包
 ```
 
-`electron/latest` (无斜杠路径) 是版本指针 JSON：`{"version": "x.x.x"}`
+`electron/latest` (无斜杠) 是版本指针 JSON：`{"version": "x.x.x"}`
 
 ### 5. 环境变量
 
@@ -80,6 +83,23 @@ R2_ACCOUNT_ID=xxx
 R2_ACCESS_KEY_ID=xxx
 R2_SECRET_ACCESS_KEY=xxx
 R2_BUCKET_NAME=cowork
+```
+
+## 自动更新原理
+
+应用使用 `electron-updater` 库实现自动更新：
+
+1. 启动时，`auto-update.ts` 调用 `autoUpdater.checkForUpdates()`
+2. electron-updater 从 `https://download.aicowork.chat/electron/latest/latest-mac.yml` 获取清单
+3. 清单包含最新版本号、文件名、SHA512 校验和
+4. 如果版本号高于当前版本，自动下载对应的 ZIP/EXE/AppImage
+5. 下载完成后通知用户可以安装更新
+
+**配置位置**: `electron-builder.yml` 中的 `publish` 字段：
+```yaml
+publish:
+  provider: generic
+  url: https://download.aicowork.chat/electron/latest
 ```
 
 ## 快速命令

@@ -130,13 +130,13 @@ package_app() {
 
     case "$platform" in
         mac)
-            npx electron-builder --mac --${arch}
+            npx electron-builder --mac --${arch} --publish always
             ;;
         win)
-            npx electron-builder --win --${arch}
+            npx electron-builder --win --${arch} --publish always
             ;;
         linux)
-            npx electron-builder --linux --${arch}
+            npx electron-builder --linux --${arch} --publish always
             ;;
     esac
 }
@@ -164,13 +164,85 @@ build_single() {
     log_info "=== ${platform} ${arch} build complete ==="
 }
 
+# Merge two latest-mac.yml files (arm64 + x64) into one with both architectures.
+# electron-builder overwrites latest-mac.yml on each build, so we need to
+# save the first arch's yml and merge the files entries after the second build.
+merge_mac_yml() {
+    local yml="$ELECTRON_DIR/release/latest-mac.yml"
+    local yml_arm64="$ELECTRON_DIR/release/latest-mac-arm64.yml"
+
+    if [ ! -f "$yml_arm64" ] || [ ! -f "$yml" ]; then
+        log_warn "Cannot merge latest-mac.yml: missing arm64 or x64 yml"
+        return
+    fi
+
+    log_info "Merging latest-mac.yml (arm64 + x64)..."
+
+    # Use bun to merge the two YAML files
+    cd "$ROOT_DIR"
+    bun -e "
+const fs = require('fs');
+const arm64 = fs.readFileSync('$yml_arm64', 'utf8');
+const x64 = fs.readFileSync('$yml', 'utf8');
+
+// Simple YAML parser for electron-builder's latest-mac.yml format
+function parseFiles(yml) {
+  const files = [];
+  let inFiles = false;
+  let current = null;
+  for (const line of yml.split('\n')) {
+    if (line.startsWith('files:')) { inFiles = true; continue; }
+    if (inFiles && line.startsWith('  - ')) {
+      if (current) files.push(current);
+      current = {};
+    }
+    if (inFiles && current) {
+      const m = line.match(/^\s+-?\s*(\w+):\s*(.+)/);
+      if (m) current[m[1]] = m[2];
+    }
+    if (inFiles && !line.startsWith('  ') && !line.startsWith('files:') && line.trim()) {
+      inFiles = false;
+    }
+  }
+  if (current) files.push(current);
+  return files;
+}
+
+const arm64Files = parseFiles(arm64);
+const x64Files = parseFiles(x64);
+const allFiles = [...arm64Files, ...x64Files];
+
+// Rebuild the yml with merged files, using x64 yml as base (has latest version/date)
+let merged = x64.replace(/files:[\s\S]*?(?=\npath:)/,
+  'files:\n' + allFiles.map(f =>
+    '  - url: ' + f.url + '\n    sha512: ' + f.sha512 + '\n    size: ' + f.size +
+    (f.blockMapSize ? '\n    blockMapSize: ' + f.blockMapSize : '')
+  ).join('\n') + '\n');
+
+fs.writeFileSync('$yml', merged);
+console.log('Merged ' + allFiles.length + ' file entries into latest-mac.yml');
+"
+
+    # Clean up temp file
+    rm -f "$yml_arm64"
+}
+
 # Build all platforms
 build_all() {
     log_info "=== Building all platforms ==="
 
     # Build macOS first (current platform)
     build_single "mac" "arm64"
+
+    # Save arm64's latest-mac.yml before x64 build overwrites it
+    if [ -f "$ELECTRON_DIR/release/latest-mac.yml" ]; then
+        cp "$ELECTRON_DIR/release/latest-mac.yml" "$ELECTRON_DIR/release/latest-mac-arm64.yml"
+    fi
+
     build_single "mac" "x64"
+
+    # Merge arm64 + x64 into a single latest-mac.yml
+    merge_mac_yml
 
     # Build Windows
     build_single "win" "x64"
@@ -179,7 +251,7 @@ build_all() {
     build_single "linux" "x64"
 
     log_info "=== All builds complete ==="
-    ls -la "$ELECTRON_DIR/release/"*.{dmg,exe,AppImage} 2>/dev/null || true
+    ls -la "$ELECTRON_DIR/release/"*.{dmg,exe,AppImage,zip,yml} 2>/dev/null || true
 }
 
 # Main

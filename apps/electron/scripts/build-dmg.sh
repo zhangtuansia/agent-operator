@@ -154,7 +154,7 @@ cd "$ELECTRON_DIR"
 export CSC_IDENTITY_AUTO_DISCOVERY=true
 
 # Build electron-builder arguments
-BUILDER_ARGS="--mac --${ARCH}"
+BUILDER_ARGS="--mac --${ARCH} --publish always"
 
 # Add code signing if identity is available
 if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
@@ -181,8 +181,8 @@ fi
 npx electron-builder $BUILDER_ARGS
 
 # 8. Verify the DMG was built
-# electron-builder.yml uses artifactName to output: Agent-Operator-${arch}.dmg
-DMG_NAME="Agent-Operator-${ARCH}.dmg"
+# electron-builder.yml uses artifactName: Cowork-${arch}.dmg
+DMG_NAME="Cowork-${ARCH}.dmg"
 DMG_PATH="$ELECTRON_DIR/release/$DMG_NAME"
 
 if [ ! -f "$DMG_PATH" ]; then
