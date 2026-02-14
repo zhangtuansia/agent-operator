@@ -1,5 +1,34 @@
 # 更新日志
 
+## v0.1.6 (2025-02-14)
+
+### 新功能
+- **多 LLM 服务商支持**: 新增豆包 (Doubao)、Kimi (Moonshot) 服务商，现已支持 Anthropic、OpenAI、GitHub Copilot、DeepSeek、智谱 GLM、MiniMax、豆包、Kimi 共 8 大服务商
+- **API 设置页快捷模板**: 添加连接时显示服务商模板列表，选择即自动填充配置，无需手动输入技术参数
+- **连接列表 Logo 图标**: API 设置页的连接列表现在显示对应服务商的 Logo，一目了然
+- **标签系统**: 支持标签徽章、右键菜单操作、全部标签视图等完整标签管理功能
+- **自动更新**: 迁移至 electron-updater 标准方案，支持 macOS / Windows / Linux 三平台静默自动更新
+
+### 改进
+- **Onboarding 优化**: 第三方 API 服务商引导流程更清晰，模型列表自动填充
+- **迷你对话框模型修复**: 编辑弹窗不再硬编码默认模型，自动使用用户当前连接的模型
+- **聊天渲染修复**: 修复部分场景下消息渲染异常的问题
+- **国际化完善**: 标签系统、API 设置页等新功能全面支持中英文
+- **应用重命名**: 产品名称统一为 Cowork，安装包命名从 Agent-Operator 更新为 Cowork
+
+### 修复
+- 修复 API 设置页下拉菜单关闭后页面无法点击的问题
+- 修复设置页标题显示为 "AI" 而非 "API" 的问题
+- 修复 DeepSeek 等 Anthropic 兼容服务商的连接问题
+
+### 下载
+- macOS (Apple Silicon): [Cowork-arm64.dmg](https://download.aicowork.chat/downloads/0.1.6/Cowork-arm64.dmg)
+- macOS (Intel): [Cowork-x64.dmg](https://download.aicowork.chat/downloads/0.1.6/Cowork-x64.dmg)
+- Windows: [Cowork-x64.exe](https://download.aicowork.chat/downloads/0.1.6/Cowork-x64.exe)
+- Linux: [Cowork-x86_64.AppImage](https://download.aicowork.chat/downloads/0.1.6/Cowork-x86_64.AppImage)
+
+---
+
 ## v0.1.5c (2025-02-06)
 
 ### 新功能
