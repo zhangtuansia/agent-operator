@@ -279,8 +279,10 @@ export const zh: TranslationKeys = {
       noConnectionsConfigured: '尚未配置连接。请先添加连接。',
       addConnection: '添加连接',
       addConnectionTitle: '添加连接',
+      configureConnectionTitle: '配置连接',
       editConnectionTitle: '编辑连接',
       editConnection: '在当前设置页内直接更新连接配置。',
+      customConnection: '自定义连接...',
 
       connectionName: '连接名称',
       connectionNamePlaceholder: '例如：Anthropic 生产环境',

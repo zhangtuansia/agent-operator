@@ -277,8 +277,10 @@ export const en = {
       noConnectionsConfigured: 'No connections configured. Add a connection to get started.',
       addConnection: 'Add Connection',
       addConnectionTitle: 'Add Connection',
+      configureConnectionTitle: 'Configure Connection',
       editConnectionTitle: 'Edit Connection',
       editConnection: 'Update connection settings without leaving this page.',
+      customConnection: 'Custom Connection...',
 
       connectionName: 'Connection Name',
       connectionNamePlaceholder: 'e.g. Anthropic Production',

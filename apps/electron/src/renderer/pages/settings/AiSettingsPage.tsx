@@ -72,11 +72,15 @@ import {
   getModelsForProviderType,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
+  getDefaultModelsForSlug,
+  getDefaultModelForSlug,
   generateSlug,
   isValidProviderAuthCombination,
   type LlmProviderType,
   type LlmAuthType,
 } from '@config/llm-connections'
+import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
+import { ProviderLogo } from '@/components/icons/ProviderLogo'
 
 /**
  * Derive model dropdown options from a connection's models array,
@@ -111,6 +115,32 @@ export const meta: DetailsPageMeta = {
 }
 
 type ValidationState = 'idle' | 'validating' | 'success' | 'error'
+
+/**
+ * Quick templates for common providers.
+ * Mirrors BUILT_IN_CONNECTION_TEMPLATES in ipc.ts for the settings UI.
+ */
+interface QuickTemplate {
+  slug: string
+  name: string
+  provider: string  // ProviderLogo provider key
+  providerType: LlmProviderType
+  authType: LlmAuthType
+  baseUrl?: string
+}
+
+const QUICK_TEMPLATES: QuickTemplate[] = [
+  { slug: 'anthropic-api', name: 'Anthropic API', provider: 'anthropic', providerType: 'anthropic', authType: 'api_key' },
+  { slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', providerType: 'anthropic', authType: 'oauth' },
+  { slug: 'codex', name: 'Codex (ChatGPT Plus)', provider: 'openai', providerType: 'openai', authType: 'oauth' },
+  { slug: 'codex-api', name: 'Codex (OpenAI API)', provider: 'openai', providerType: 'openai', authType: 'api_key' },
+  { slug: 'copilot', name: 'GitHub Copilot', provider: 'openai', providerType: 'copilot', authType: 'oauth' },
+  { slug: 'deepseek-api', name: 'DeepSeek', provider: 'deepseek', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.deepseek.com/anthropic' },
+  { slug: 'glm-api', name: '智谱 GLM', provider: 'glm', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic' },
+  { slug: 'minimax-api', name: 'MiniMax', provider: 'minimax', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.minimaxi.com/anthropic' },
+  { slug: 'doubao-api', name: '豆包 Doubao', provider: 'doubao', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://ark.cn-beijing.volces.com/api/coding' },
+  { slug: 'kimi-api', name: 'Kimi', provider: 'kimi', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.moonshot.ai/anthropic/' },
+]
 
 const PROVIDER_TYPES: LlmProviderType[] = [
   'anthropic',
@@ -357,7 +387,8 @@ function ConnectionRow({
   return (
     <SettingsRow
       label={(
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          <ConnectionIcon connection={connection} size={16} />
           <span>{connection.name}</span>
           {connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
@@ -653,6 +684,8 @@ export default function AiSettingsPage() {
   const [connectionForm, setConnectionForm] = useState<ConnectionFormState>(createConnectionForm())
   const [connectionFormError, setConnectionFormError] = useState<string | null>(null)
   const [isSavingConnection, setIsSavingConnection] = useState(false)
+  const [dialogStep, setDialogStep] = useState<'template' | 'form'>('template')
+  const [selectedTemplateSlug, setSelectedTemplateSlug] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -683,6 +716,8 @@ export default function AiSettingsPage() {
     setEditingConnection(null)
     setConnectionForm(createConnectionForm())
     setConnectionFormError(null)
+    setSelectedTemplateSlug(null)
+    setDialogStep('template')
     setConnectionDialogOpen(true)
   }, [])
 
@@ -690,6 +725,7 @@ export default function AiSettingsPage() {
     setEditingConnection(connection)
     setConnectionForm(createConnectionForm(connection))
     setConnectionFormError(null)
+    setDialogStep('form')
     setConnectionDialogOpen(true)
   }, [])
 
@@ -769,7 +805,7 @@ export default function AiSettingsPage() {
     setConnectionFormError(null)
 
     try {
-      const slug = editingConnection?.slug ?? getUniqueSlug(generateSlug(trimmedName) || 'connection')
+      const slug = editingConnection?.slug ?? selectedTemplateSlug ?? getUniqueSlug(generateSlug(trimmedName) || 'connection')
 
       const isCompatProvider =
         connectionForm.providerType === 'anthropic_compat' || connectionForm.providerType === 'openai_compat'
@@ -986,6 +1022,32 @@ export default function AiSettingsPage() {
 
   const showModelListEditor = connectionForm.providerType === 'anthropic_compat' || connectionForm.providerType === 'openai_compat'
 
+  const handleSelectTemplate = useCallback((template: QuickTemplate) => {
+    const slugModels = getDefaultModelsForSlug(template.slug)
+    const fallbackModels = getDefaultModelsForConnection(template.providerType)
+    const effectiveModels = slugModels.length > 0 ? slugModels : fallbackModels
+    const defaultModel = getDefaultModelForSlug(template.slug) ?? getDefaultModelForConnection(template.providerType)
+
+    setSelectedTemplateSlug(template.slug)
+    setConnectionForm({
+      name: template.name,
+      providerType: template.providerType,
+      authType: template.authType,
+      baseUrl: template.baseUrl || defaultBaseUrlForProvider(template.providerType),
+      defaultModel: defaultModel,
+      modelsText: modelsToMultiline(effectiveModels),
+      awsRegion: '',
+      codexPath: '',
+      apiKey: '',
+    })
+    setDialogStep('form')
+  }, [])
+
+  const availableTemplates = useMemo(() => {
+    const existingSlugs = new Set(llmConnections.map(c => c.slug))
+    return QUICK_TEMPLATES.filter(t => !existingSlugs.has(t.slug))
+  }, [llmConnections])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title={t('workspaceSettings.ai')} actions={<HeaderMenu route={routes.view.settings('api')} />} />
@@ -1119,124 +1181,158 @@ export default function AiSettingsPage() {
             <DialogTitle>
               {editingConnection
                 ? t('apiSettings.aiPage.editConnectionTitle')
-                : t('apiSettings.aiPage.addConnectionTitle')}
+                : dialogStep === 'template'
+                  ? t('apiSettings.aiPage.addConnectionTitle')
+                  : t('apiSettings.aiPage.configureConnectionTitle')}
             </DialogTitle>
-            <DialogDescription>
-              {editingConnection
-                ? t('apiSettings.aiPage.editConnection')
-                : t('apiSettings.aiPage.addConnection')}
-            </DialogDescription>
+            {(editingConnection || dialogStep === 'form') && (
+              <DialogDescription>
+                {editingConnection
+                  ? t('apiSettings.aiPage.editConnection')
+                  : t('apiSettings.aiPage.addConnection')}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
-          <div className="space-y-4">
-            <SettingsCard>
-              <SettingsInput
-                label={t('apiSettings.aiPage.connectionName')}
-                placeholder={t('apiSettings.aiPage.connectionNamePlaceholder')}
-                value={connectionForm.name}
-                onChange={(value) => setConnectionForm(prev => ({ ...prev, name: value }))}
-                inCard={true}
-              />
+          {!editingConnection && dialogStep === 'template' ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                {availableTemplates.map((template) => (
+                  <button
+                    key={template.slug}
+                    onClick={() => handleSelectTemplate(template)}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-foreground-2 hover:bg-foreground/[0.04] transition-colors text-left"
+                  >
+                    <ProviderLogo provider={template.provider} size={20} />
+                    <span className="text-sm font-medium">{template.name}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => { setSelectedTemplateSlug(null); setDialogStep('form') }}
+                className="w-full text-sm text-muted-foreground hover:text-foreground p-2 text-center transition-colors"
+              >
+                {t('apiSettings.aiPage.customConnection')}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <SettingsCard>
+                  <SettingsInput
+                    label={t('apiSettings.aiPage.connectionName')}
+                    placeholder={t('apiSettings.aiPage.connectionNamePlaceholder')}
+                    value={connectionForm.name}
+                    onChange={(value) => setConnectionForm(prev => ({ ...prev, name: value }))}
+                    inCard={true}
+                  />
 
-              <SettingsMenuSelectRow
-                label={t('apiSettings.aiPage.providerType')}
-                description={t('apiSettings.aiPage.providerTypeDescription')}
-                value={connectionForm.providerType}
-                onValueChange={(value) => handleProviderTypeChange(value as LlmProviderType)}
-                options={connectionDialogProviderOptions}
-              />
+                  <SettingsMenuSelectRow
+                    label={t('apiSettings.aiPage.providerType')}
+                    description={t('apiSettings.aiPage.providerTypeDescription')}
+                    value={connectionForm.providerType}
+                    onValueChange={(value) => handleProviderTypeChange(value as LlmProviderType)}
+                    options={connectionDialogProviderOptions}
+                  />
 
-              <SettingsMenuSelectRow
-                label={t('apiSettings.aiPage.authType')}
-                description={t('apiSettings.aiPage.authTypeDescription')}
-                value={connectionForm.authType}
-                onValueChange={(value) => handleAuthTypeChange(value as LlmAuthType)}
-                options={connectionDialogAuthOptions}
-              />
+                  <SettingsMenuSelectRow
+                    label={t('apiSettings.aiPage.authType')}
+                    description={t('apiSettings.aiPage.authTypeDescription')}
+                    value={connectionForm.authType}
+                    onValueChange={(value) => handleAuthTypeChange(value as LlmAuthType)}
+                    options={connectionDialogAuthOptions}
+                  />
 
-              <SettingsInput
-                label={t('apiSettings.aiPage.baseUrl')}
-                description={t('apiSettings.aiPage.baseUrlDescription')}
-                placeholder={t('apiSettings.aiPage.baseUrlPlaceholder')}
-                value={connectionForm.baseUrl}
-                onChange={(value) => setConnectionForm(prev => ({ ...prev, baseUrl: value }))}
-                inCard={true}
-              />
+                  <SettingsInput
+                    label={t('apiSettings.aiPage.baseUrl')}
+                    description={t('apiSettings.aiPage.baseUrlDescription')}
+                    placeholder={t('apiSettings.aiPage.baseUrlPlaceholder')}
+                    value={connectionForm.baseUrl}
+                    onChange={(value) => setConnectionForm(prev => ({ ...prev, baseUrl: value }))}
+                    inCard={true}
+                  />
 
-              <SettingsInput
-                label={t('apiSettings.aiPage.defaultModel')}
-                description={t('apiSettings.aiPage.defaultModelDescription')}
-                placeholder={t('apiSettings.aiPage.defaultModelPlaceholder')}
-                value={connectionForm.defaultModel}
-                onChange={(value) => setConnectionForm(prev => ({ ...prev, defaultModel: value }))}
-                inCard={true}
-              />
+                  <SettingsInput
+                    label={t('apiSettings.aiPage.defaultModel')}
+                    description={t('apiSettings.aiPage.defaultModelDescription')}
+                    placeholder={t('apiSettings.aiPage.defaultModelPlaceholder')}
+                    value={connectionForm.defaultModel}
+                    onChange={(value) => setConnectionForm(prev => ({ ...prev, defaultModel: value }))}
+                    inCard={true}
+                  />
 
-              {showModelListEditor && (
-                <SettingsTextarea
-                  label={t('apiSettings.aiPage.customModels')}
-                  description={t('apiSettings.aiPage.customModelsDescription')}
-                  placeholder={t('apiSettings.aiPage.customModelsPlaceholder')}
-                  value={connectionForm.modelsText}
-                  onChange={(value) => setConnectionForm(prev => ({ ...prev, modelsText: value }))}
-                  rows={5}
-                  inCard={true}
-                />
-              )}
+                  {showModelListEditor && (
+                    <SettingsTextarea
+                      label={t('apiSettings.aiPage.customModels')}
+                      description={t('apiSettings.aiPage.customModelsDescription')}
+                      placeholder={t('apiSettings.aiPage.customModelsPlaceholder')}
+                      value={connectionForm.modelsText}
+                      onChange={(value) => setConnectionForm(prev => ({ ...prev, modelsText: value }))}
+                      rows={5}
+                      inCard={true}
+                    />
+                  )}
 
-              {connectionForm.providerType === 'bedrock' && (
-                <SettingsInput
-                  label={t('apiSettings.aiPage.awsRegion')}
-                  description={t('apiSettings.aiPage.awsRegionDescription')}
-                  value={connectionForm.awsRegion}
-                  onChange={(value) => setConnectionForm(prev => ({ ...prev, awsRegion: value }))}
-                  inCard={true}
-                />
-              )}
+                  {connectionForm.providerType === 'bedrock' && (
+                    <SettingsInput
+                      label={t('apiSettings.aiPage.awsRegion')}
+                      description={t('apiSettings.aiPage.awsRegionDescription')}
+                      value={connectionForm.awsRegion}
+                      onChange={(value) => setConnectionForm(prev => ({ ...prev, awsRegion: value }))}
+                      inCard={true}
+                    />
+                  )}
 
-              {connectionForm.providerType === 'openai' && (
-                <SettingsInput
-                  label={t('apiSettings.aiPage.codexPath')}
-                  description={t('apiSettings.aiPage.codexPathDescription')}
-                  value={connectionForm.codexPath}
-                  onChange={(value) => setConnectionForm(prev => ({ ...prev, codexPath: value }))}
-                  inCard={true}
-                />
-              )}
+                  {connectionForm.providerType === 'openai' && (
+                    <SettingsInput
+                      label={t('apiSettings.aiPage.codexPath')}
+                      description={t('apiSettings.aiPage.codexPathDescription')}
+                      value={connectionForm.codexPath}
+                      onChange={(value) => setConnectionForm(prev => ({ ...prev, codexPath: value }))}
+                      inCard={true}
+                    />
+                  )}
 
-              {authRequiresApiKey(connectionForm.authType) && (
-                <SettingsSecretInput
-                  label={t('apiSettings.aiPage.apiKey')}
-                  description={t('apiSettings.aiPage.apiKeyDescription')}
-                  placeholder={t('apiSettings.aiPage.apiKeyPlaceholder')}
-                  value={connectionForm.apiKey}
-                  onChange={(value) => setConnectionForm(prev => ({ ...prev, apiKey: value }))}
-                  hasExistingValue={Boolean(editingConnection?.isAuthenticated)}
-                  inCard={true}
-                />
-              )}
-            </SettingsCard>
+                  {authRequiresApiKey(connectionForm.authType) && (
+                    <SettingsSecretInput
+                      label={t('apiSettings.aiPage.apiKey')}
+                      description={t('apiSettings.aiPage.apiKeyDescription')}
+                      placeholder={t('apiSettings.aiPage.apiKeyPlaceholder')}
+                      value={connectionForm.apiKey}
+                      onChange={(value) => setConnectionForm(prev => ({ ...prev, apiKey: value }))}
+                      hasExistingValue={Boolean(editingConnection?.isAuthenticated)}
+                      inCard={true}
+                    />
+                  )}
+                </SettingsCard>
 
-            {connectionFormError && (
-              <p className="text-sm text-destructive">{connectionFormError}</p>
-            )}
-          </div>
+                {connectionFormError && (
+                  <p className="text-sm text-destructive">{connectionFormError}</p>
+                )}
+              </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={closeConnectionDialog}>
-              {t('common.cancel')}
-            </Button>
-            <Button onClick={handleSaveConnection} disabled={isSavingConnection}>
-              {isSavingConnection ? (
-                <>
-                  <Spinner className="size-4 mr-2" />
-                  {t('apiSettings.aiPage.savingConnection')}
-                </>
-              ) : (
-                t('apiSettings.aiPage.saveConnection')
-              )}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                {!editingConnection && (
+                  <Button variant="ghost" onClick={() => { setDialogStep('template'); setSelectedTemplateSlug(null) }} className="mr-auto">
+                    {t('common.back')}
+                  </Button>
+                )}
+                <Button variant="outline" onClick={closeConnectionDialog}>
+                  {t('common.cancel')}
+                </Button>
+                <Button onClick={handleSaveConnection} disabled={isSavingConnection}>
+                  {isSavingConnection ? (
+                    <>
+                      <Spinner className="size-4 mr-2" />
+                      {t('apiSettings.aiPage.savingConnection')}
+                    </>
+                  ) : (
+                    t('apiSettings.aiPage.saveConnection')
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
