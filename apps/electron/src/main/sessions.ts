@@ -966,8 +966,9 @@ export class SessionManager {
     // Check if we're already at monorepo root (running from project root) or need to go up (running from apps/electron)
     let monorepoRoot = basePath
     if (!app.isPackaged) {
-      // Check if packages/shared exists at basePath (we're at monorepo root)
-      if (!existsSync(join(basePath, 'packages', 'shared'))) {
+      // Check for the actual interceptor file (not just the directory) to avoid
+      // stale/partial copies under apps/electron/packages/shared/
+      if (!existsSync(join(basePath, 'packages', 'shared', 'src', 'config', 'paths.ts'))) {
         // Not at root, go up two levels (from apps/electron)
         monorepoRoot = join(basePath, '..', '..')
       }
@@ -2542,8 +2543,8 @@ export class SessionManager {
   }
 
   /**
-   * Resolve language for title generation from UI language setting.
-   * Falls back to English when unset.
+   * Resolve language for title generation from the app display language
+   * setting (Settings > App > Language). Defaults to English when unset.
    */
   private getTitleLanguage(): 'en' | 'zh' {
     const uiLanguage = loadStoredConfig()?.uiLanguage

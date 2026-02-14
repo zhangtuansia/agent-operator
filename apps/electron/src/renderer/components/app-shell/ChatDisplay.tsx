@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect, useState, useMemo, useCallback, useDeferredValue } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -477,11 +477,14 @@ export function ChatDisplay({
   }, [pendingPermission, pendingCredential])
 
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
+  // Uses session.messages directly (no useDeferredValue) so that streaming-to-complete
+  // state transitions are visible immediately. useDeferredValue caused stale messages
+  // where isPending was still true, making groupMessagesByTurn classify the final
+  // response as an intermediate activity instead of the turn response.
   const sessionMessages = session?.messages
-  const deferredSessionMessages = useDeferredValue(sessionMessages)
   const allTurns = React.useMemo(() => {
-    if (!deferredSessionMessages) return []
-    const groupedTurns = groupMessagesByTurn(deferredSessionMessages)
+    if (!sessionMessages) return []
+    const groupedTurns = groupMessagesByTurn(sessionMessages)
 
     // Post-stream cleanup:
     // If a turn finished but some non-tool activities are still marked running
@@ -504,8 +507,7 @@ export function ChatDisplay({
       const hasRunning = normalizedActivities.some(
         (activity) => activity.status === 'running' || activity.status === 'pending'
       )
-      const responseStreaming = !!turn.response?.isStreaming
-      const shouldMarkComplete = !turn.isComplete && !hasRunning && !responseStreaming
+      const shouldMarkComplete = !turn.isComplete && !hasRunning
 
       if (!activitiesChanged && !shouldMarkComplete) return turn
 
@@ -513,10 +515,10 @@ export function ChatDisplay({
         ...turn,
         activities: normalizedActivities,
         isComplete: shouldMarkComplete ? true : turn.isComplete,
-        isStreaming: responseStreaming ? turn.isStreaming : false,
+        isStreaming: false,
       }
     })
-  }, [deferredSessionMessages, session?.isProcessing])
+  }, [sessionMessages, session?.isProcessing])
 
   // Helper to count occurrences of a substring.
   const countOccurrences = useCallback((text: string, query: string): number => {

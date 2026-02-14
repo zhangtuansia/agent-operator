@@ -91,7 +91,7 @@ export interface EditConfig {
   example: string
   /** Optional custom placeholder text - overrides the default "Describe what you'd like to change" */
   overridePlaceholder?: string
-  /** Optional model for mini agent (e.g., 'haiku', 'sonnet') */
+  /** Optional model override for mini agent (defaults to user's current model) */
   model?: string
   /** Optional system prompt preset for mini agent (e.g., 'mini' for focused edits) */
   systemPromptPreset?: 'default' | 'mini'
@@ -117,7 +117,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: "Allow running 'make build' in Explore mode",
-    model: 'sonnet',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -136,7 +135,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow git fetch command',
-    model: 'sonnet',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -155,7 +153,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add error handling guidelines',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -172,7 +169,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the skill description',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -189,7 +185,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add rate limit documentation',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -206,7 +201,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the display name',
-    model: 'sonnet',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -223,7 +217,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow list operations in Explore mode',
-    model: 'sonnet',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -242,7 +235,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Only allow read operations (list, get, search)',
-    model: 'sonnet',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -260,7 +252,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add coding style preferences',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -366,7 +357,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Blocked" status',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -387,7 +377,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Bug" label with red color',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -407,7 +396,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a rule to detect GitHub issue URLs',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -428,7 +416,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'A red "Bug" label',
     overridePlaceholder: 'What label would you like to create?',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -449,7 +436,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Stale" view for sessions inactive > 7 days',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -470,7 +456,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add an icon for my custom CLI tool "deploy"',
-    model: 'haiku',
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
@@ -725,7 +710,7 @@ export function EditPopover({
   }, [controlledOnOpenChange, isControlled])
 
   // Use App context for session management (same code path as main chat)
-  const { onCreateSession, onSendMessage } = useAppShellContext()
+  const { onCreateSession, onSendMessage, currentModel: userModel } = useAppShellContext()
 
   // Session ID for inline execution (created on first message)
   const [inlineSessionId, setInlineSessionId] = useState<string | null>(null)
@@ -734,8 +719,8 @@ export function EditPopover({
   // Pass empty string when no session yet - atom returns null for unknown IDs
   const inlineSession = useSession(inlineSessionId || '')
 
-  // Model state for ChatDisplay (starts with prop value, can be changed by user)
-  const [currentModel, setCurrentModel] = useState(model || 'haiku')
+  // Model state for ChatDisplay (starts with prop or user's configured model)
+  const [currentModel, setCurrentModel] = useState(model || userModel)
 
   // Create a stub session for ChatDisplay when no real session exists yet
   // This allows showing the input before the first message is sent
@@ -895,10 +880,10 @@ export function EditPopover({
   // Reset state when popover opens
   useEffect(() => {
     if (open) {
-      setCurrentModel(model || 'haiku')
+      setCurrentModel(model || userModel)
       resetInlineSession()
     }
-  }, [open, model, resetInlineSession])
+  }, [open, model, userModel, resetInlineSession])
 
   // Handle sending message from ChatDisplay (inline mode)
   // Creates hidden session on first message, then uses App context for sending
@@ -909,7 +894,7 @@ export function EditPopover({
     let sessionId = inlineSessionId
     if (!sessionId && workspace?.id) {
       const createOptions: CreateSessionOptions = {
-        model: model || 'haiku',
+        model: model || userModel,
         systemPromptPreset: systemPromptPreset || 'mini',
         permissionMode,
         workingDirectory,
@@ -925,7 +910,7 @@ export function EditPopover({
     if (sessionId) {
       onSendMessage(sessionId, prompt, undefined, undefined, badges)
     }
-  }, [context, inlineSessionId, workspace?.id, model, systemPromptPreset, permissionMode, workingDirectory, onCreateSession, onSendMessage])
+  }, [context, inlineSessionId, workspace?.id, model, userModel, systemPromptPreset, permissionMode, workingDirectory, onCreateSession, onSendMessage])
 
   // Legacy mode: navigates to chat in the same window
   const handleLegacySendMessage = useCallback((message: string) => {
