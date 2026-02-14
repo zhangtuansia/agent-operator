@@ -399,7 +399,7 @@ function ConnectionRow({
       )}
       description={getDescription()}
     >
-      <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
+      <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <button
             className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
@@ -1050,7 +1050,7 @@ export default function AiSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('workspaceSettings.ai')} actions={<HeaderMenu route={routes.view.settings('api')} />} />
+      <PanelHeader title="API" actions={<HeaderMenu route={routes.view.settings('api')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
