@@ -9,9 +9,26 @@
  * - Adds _intent and _displayName metadata to MCP tool schemas
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { CONFIG_DIR } from './config/paths';
+import { homedir } from 'node:os';
+
+// Inline CONFIG_DIR resolution (this file is bundled standalone, cannot import from ./config/paths)
+const _DEFAULT_CONFIG_DIR = join(homedir(), '.cowork');
+const _LEGACY_CONFIG_DIR = join(homedir(), '.agent-operator');
+const _envConfigDir =
+  process.env.COWORK_CONFIG_DIR ||
+  process.env.OPERATOR_CONFIG_DIR ||
+  process.env.AGENT_OPERATOR_CONFIG_DIR;
+let CONFIG_DIR = _envConfigDir || _DEFAULT_CONFIG_DIR;
+if (!_envConfigDir && !existsSync(_DEFAULT_CONFIG_DIR) && existsSync(_LEGACY_CONFIG_DIR)) {
+  try {
+    renameSync(_LEGACY_CONFIG_DIR, _DEFAULT_CONFIG_DIR);
+    CONFIG_DIR = _DEFAULT_CONFIG_DIR;
+  } catch {
+    CONFIG_DIR = _LEGACY_CONFIG_DIR;
+  }
+}
 
 // Type alias for fetch's HeadersInit (not in ESNext lib, but available at runtime via Bun)
 type HeadersInitType = Headers | Record<string, string> | [string, string][];

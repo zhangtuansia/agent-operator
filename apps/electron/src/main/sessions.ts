@@ -713,19 +713,24 @@ export class SessionManager {
         }
 
         if (targetConnection.authType === 'oauth') {
+          // Always set base URL first — independent of credential availability
+          if (targetConnection.baseUrl) {
+            process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
+          }
+
           const llmOauth = await manager.getLlmOAuth(targetConnection.slug)
           const token = llmOauth?.accessToken ?? await manager.getClaudeOAuth()
           if (token) {
             process.env.CLAUDE_CODE_OAUTH_TOKEN = token
-            if (targetConnection.baseUrl) {
-              process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
-            }
             sessionLog.info('Set Claude OAuth token from LLM connection', {
               connection: targetConnection.slug,
+              hasCustomBaseUrl: !!targetConnection.baseUrl,
             })
             return
           }
-          sessionLog.warn(`No OAuth token available for connection: ${targetConnection.slug}`)
+          sessionLog.warn(`No OAuth token available for connection: ${targetConnection.slug}`, {
+            hasCustomBaseUrl: !!targetConnection.baseUrl,
+          })
           return
         }
 
@@ -734,6 +739,14 @@ export class SessionManager {
           || targetConnection.authType === 'api_key_with_endpoint'
           || targetConnection.authType === 'bearer_token'
         ) {
+          // Always set base URL first — it's a connection-level property independent
+          // of credential availability. Without this, failed credential retrieval
+          // leaves ANTHROPIC_BASE_URL cleared, causing the SDK to default to
+          // api.anthropic.com and return misleading "Endpoint Not Compatible" errors.
+          if (targetConnection.baseUrl) {
+            process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
+          }
+
           const llmApiKey = await manager.getLlmApiKey(targetConnection.slug)
           const globalApiKey = await manager.getApiKey()
           const validLlmApiKey = llmApiKey && isSafeHttpHeaderValue(llmApiKey) ? llmApiKey : null
@@ -757,9 +770,6 @@ export class SessionManager {
             if (targetConnection.providerType === 'anthropic_compat') {
               process.env.ANTHROPIC_AUTH_TOKEN = apiKey
             }
-            if (targetConnection.baseUrl) {
-              process.env.ANTHROPIC_BASE_URL = targetConnection.baseUrl
-            }
             sessionLog.info('Set Anthropic API key from LLM connection', {
               connection: targetConnection.slug,
               hasCustomBaseUrl: !!targetConnection.baseUrl,
@@ -767,7 +777,9 @@ export class SessionManager {
             })
             return
           }
-          sessionLog.warn(`No API key available for connection: ${targetConnection.slug}`)
+          sessionLog.warn(`No API key available for connection: ${targetConnection.slug}`, {
+            hasCustomBaseUrl: !!targetConnection.baseUrl,
+          })
           return
         }
 
