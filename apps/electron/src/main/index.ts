@@ -204,13 +204,19 @@ app.whenReady().then(async () => {
     // Initialize notification service
     initNotificationService(windowManager)
 
-    // Initialize session manager (load sessions from disk BEFORE window creation)
-    // This prevents race condition where renderer requests sessions before they're loaded
-    await sessionManager.initialize()
-
-    // Register IPC handlers (must happen before window creation)
-    // Note: registerIpcHandlers internally calls registerOnboardingHandlers
+    // Register IPC handlers BEFORE session initialization to ensure they are
+    // always available to the renderer even if initialization fails.
+    // This prevents "No handler registered" errors during onboarding on fresh installs.
     registerIpcHandlers(sessionManager, windowManager)
+
+    // Initialize session manager (load sessions from disk BEFORE window creation)
+    // Non-fatal: if initialization fails (e.g. corrupted config, missing files),
+    // the app should still launch so the user can fix settings via onboarding/UI.
+    try {
+      await sessionManager.initialize()
+    } catch (error) {
+      mainLog.error('Session manager initialization failed (non-fatal):', error)
+    }
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()

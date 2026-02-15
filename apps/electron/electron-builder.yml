@@ -16,15 +16,20 @@ files:
   - "!dist/renderer/src/**"
   - "!**/*.map"
   - package.json
-  # Include SDK for subprocess execution
-  - node_modules/@anthropic-ai/claude-agent-sdk/**/*
   # Include network interceptor for API error capture and MCP schema injection
   - packages/shared/src/network-interceptor.ts
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
-  # Exclude everything else from node_modules
-  - "!node_modules/**/*"
-  - node_modules/@anthropic-ai/**/*
+  # Include only the specific node_modules we need (SDK, Copilot).
+  # We use a FileSet with filter to include specific packages while excluding the rest.
+  - from: node_modules/@anthropic-ai
+    to: node_modules/@anthropic-ai
+    filter:
+      - "**/*"
+  - from: node_modules/@github
+    to: node_modules/@github
+    filter:
+      - "**/*"
 
 extraMetadata:
   main: dist/main.cjs
