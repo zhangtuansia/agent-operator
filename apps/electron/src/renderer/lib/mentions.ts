@@ -12,6 +12,7 @@ import type { ContentBadge } from '@agent-operator/core'
 import type { MentionItemType } from '@/components/ui/mention-menu'
 import type { LoadedSkill, LoadedSource } from '../../shared/types'
 import { getSourceIconSync, getSkillIconSync } from './icon-cache'
+import { WS_ID_CHARS } from '@agent-operator/shared/mentions'
 
 // ============================================================================
 // Types
@@ -69,8 +70,8 @@ export function parseMentions(
     }
   }
 
-  // Match skill mentions: [skill:slug]
-  const skillPattern = /\[skill:([\w-]+)\]/g
+  // Match skill mentions: [skill:slug] or [skill:workspaceId:slug]
+  const skillPattern = new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\]`, 'g')
   while ((match = skillPattern.exec(text)) !== null) {
     const slug = match[1]
     if (availableSkillSlugs.includes(slug) && !result.skills.includes(slug)) {
@@ -111,8 +112,8 @@ export function findMentionMatches(
     }
   }
 
-  // Match skill mentions: [skill:slug]
-  const skillPattern = /(\[skill:([\w-]+)\])/g
+  // Match skill mentions: [skill:slug] or [skill:workspaceId:slug]
+  const skillPattern = new RegExp(`(\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\])`, 'g')
   while ((match = skillPattern.exec(text)) !== null) {
     const slug = match[2]
     if (availableSkillSlugs.includes(slug)) {
@@ -146,7 +147,8 @@ export function removeMention(text: string, type: MentionItemType, id: string): 
       break
     case 'skill':
     default:
-      pattern = new RegExp(`\\[skill:${escapeRegExp(id)}\\]`, 'g')
+      // Match [skill:slug] or [skill:workspaceId:slug]
+      pattern = new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?${escapeRegExp(id)}\\]`, 'g')
       break
   }
 
@@ -166,8 +168,8 @@ export function stripAllMentions(text: string): string {
   return text
     // Remove [source:slug]
     .replace(/\[source:[\w-]+\]/g, '')
-    // Remove [skill:slug]
-    .replace(/\[skill:[\w-]+\]/g, '')
+    // Remove [skill:slug] or [skill:workspaceId:slug]
+    .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?[\\w-]+\\]`, 'g'), '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -250,10 +252,15 @@ export function extractBadges(
       iconDataUrl = getSourceIconSync(workspaceId, match.id) ?? undefined
     }
 
+    // For skills, qualify rawText with workspace ID (ensures consistent format)
+    const rawText = match.type === 'skill'
+      ? `[skill:${workspaceId}:${match.id}]`
+      : match.fullMatch
+
     return {
       type: match.type as 'source' | 'skill',
       label,
-      rawText: match.fullMatch,
+      rawText,
       iconDataUrl,
       start: match.startIndex,
       end: match.startIndex + match.fullMatch.length,

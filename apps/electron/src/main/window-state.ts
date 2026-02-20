@@ -54,6 +54,13 @@ function sanitizeUrl(url: string | undefined): string | undefined {
     return undefined
   }
 
+  // Remove file:// URLs that point to a release/packaged build path
+  // (e.g. .app/Contents/Resources/app/dist/) — these won't match the
+  // dev __dirname and cause the renderer to load stale code.
+  if (url.startsWith('file://') && url.includes('/release/')) {
+    return undefined
+  }
+
   return url
 }
 

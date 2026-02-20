@@ -17,6 +17,7 @@ import {
   Trash2,
   DatabaseZap,
   Zap,
+  Clock,
   Inbox,
   WifiOff,
   FolderOpen,
@@ -58,8 +59,10 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { LeftSidebar } from "./LeftSidebar"
+import { TaskList } from "@/components/scheduled-tasks/TaskList"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { useSession } from "@/hooks/useSession"
+import { useScheduledTasks } from "@/hooks/useScheduledTasks"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
@@ -327,9 +330,26 @@ function AppShellContent({
   const activeChatSessionId = isChatsNavigation(navState) && navState.details
     ? navState.details.sessionId
     : null
+  const isScheduledManagementView = isChatsNavigation(navState)
+    && !navState.details
+    && !!chatFilter
+    && (chatFilter.kind === 'scheduled' || chatFilter.kind === 'scheduledTask')
+  const showSessionListPanel = !isFocusedMode
 
   // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
   const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
+
+  // Scheduled task data (shared via Jotai atoms with ScheduledTasksView)
+  const {
+    tasks: scheduledTasks,
+    isLoading: scheduledTasksLoading,
+    setSelectedTaskId: setSelectedScheduledTaskId,
+    setViewMode: setScheduledTaskViewMode,
+    toggleTask: toggleScheduledTask,
+    runManually: runScheduledTaskManually,
+    deleteTask: deleteScheduledTask,
+  } = useScheduledTasks(activeWorkspaceId)
+  const [scheduledDeleteTarget, setScheduledDeleteTarget] = useState<{ id: string; name: string } | null>(null)
 
   // Handle right sidebar panel switch
   const handleSwitchPanel = useCallback((panel: RightSidebarPanel) => {
@@ -707,6 +727,7 @@ function AppShellContent({
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
   const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
+  const scheduledCount = workspaceSessionMetas.filter(s => s.labels?.some(l => l.startsWith('scheduled:'))).length
 
   // Count sessions per label (includes descendants for hierarchical counting)
   const labelCounts = useMemo(() => {
@@ -763,8 +784,14 @@ function AppShellContent({
       case 'label':
         // Filter by label (includes descendants for hierarchical filtering)
         if (chatFilter.labelId === '__all__') {
-          // "Labels" header: show all sessions that have at least one label
-          result = workspaceSessionMetas.filter(s => s.labels && s.labels.length > 0)
+          // "Labels" header: show only sessions with user-visible labels.
+          // Internal labels (scheduled:* / imported:*) should not appear in this view.
+          result = workspaceSessionMetas.filter(s =>
+            s.labels?.some(entry => {
+              const labelId = extractLabelId(entry)
+              return !labelId.startsWith('scheduled:') && !labelId.startsWith('imported:')
+            })
+          )
         } else {
           const targetIds = new Set([chatFilter.labelId])
           // Add all descendant IDs so clicking a parent label shows child-tagged sessions too
@@ -779,6 +806,18 @@ function AppShellContent({
       case 'imported':
         // Filter by import source
         result = workspaceSessionMetas.filter(s => s.labels?.includes(`imported:${chatFilter.source}`))
+        break
+      case 'scheduled':
+        // Filter all sessions created by any scheduled task
+        result = workspaceSessionMetas.filter(s =>
+          s.labels?.some(l => l.startsWith('scheduled:'))
+        )
+        break
+      case 'scheduledTask':
+        // Filter by specific scheduled task label
+        result = workspaceSessionMetas.filter(s =>
+          s.labels?.includes(`scheduled:${chatFilter.taskId}`)
+        )
         break
       default:
         result = workspaceSessionMetas
@@ -927,6 +966,33 @@ function AppShellContent({
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
   }, [navigate])
+
+  const handleScheduledClick = useCallback(() => {
+    navigate(routes.view.scheduled())
+  }, [navigate])
+
+  const handleCreateScheduledTask = useCallback(() => {
+    setSelectedScheduledTaskId(null)
+    setScheduledTaskViewMode('create')
+    navigate(routes.view.scheduled())
+  }, [navigate, setSelectedScheduledTaskId, setScheduledTaskViewMode])
+
+  const handleDeleteScheduledTaskConfirm = useCallback(async () => {
+    if (!scheduledDeleteTarget) return
+    try {
+      const deletedTaskId = scheduledDeleteTarget.id
+      await deleteScheduledTask(deletedTaskId)
+      toast.success(t('scheduledTasks.taskDeleted'))
+      if (chatFilter?.kind === 'scheduledTask' && chatFilter.taskId === deletedTaskId && !activeChatSessionId) {
+        navigate(routes.view.scheduled())
+      }
+    } catch (error) {
+      console.error('[AppShell] Failed to delete scheduled task:', error)
+      toast.error(t('scheduledTasks.taskDeleteFailed'))
+    } finally {
+      setScheduledDeleteTarget(null)
+    }
+  }, [scheduledDeleteTarget, deleteScheduledTask, t, chatFilter, activeChatSessionId, navigate])
 
   // Handlers for imported categories
   const handleOpenAIImportedClick = useCallback(() => {
@@ -1103,11 +1169,14 @@ function AppShellContent({
     // 2.6. Skills nav item
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
 
+    // 2.65. Scheduled tasks nav item
+    result.push({ id: 'nav:scheduled', type: 'nav', action: handleScheduledClick })
+
     // 2.7. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleScheduledClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1239,11 +1308,18 @@ function AppShellContent({
         const state = todoStates.find(s => s.id === chatFilter.stateId)
         return state?.label || t('sessionList.allChats')
       case 'label': {
+        if (chatFilter.labelId === '__all__') {
+          return t('sidebar.labels')
+        }
         const labelConfig = findLabelById(labelConfigs, chatFilter.labelId)
         return labelConfig?.name || chatFilter.labelId
       }
       case 'imported':
         return chatFilter.source === 'openai' ? 'OpenAI' : 'Anthropic'
+      case 'scheduled':
+        return t('sidebar.scheduledTasks')
+      case 'scheduledTask':
+        return t('sidebar.scheduledTasks')
       default:
         return t('sessionList.allChats')
     }
@@ -1428,6 +1504,15 @@ function AppShellContent({
                         }] : []),
                       ],
                     },
+                    // Scheduled Tasks - top-level group (same level as Flagged)
+                    {
+                      id: "nav:scheduled",
+                      title: t('sidebar.scheduledTasks'),
+                      label: String(scheduledCount),
+                      icon: Clock,
+                      variant: (chatFilter?.kind === 'scheduled' ? "default" : "ghost") as "default" | "ghost",
+                      onClick: handleScheduledClick,
+                    },
                     // Labels: top-level expandable section with hierarchical label tree
                     ...(labelConfigs.length > 0 ? [{
                       id: "nav:labels",
@@ -1535,7 +1620,7 @@ function AppShellContent({
           style={{ padding: PANEL_WINDOW_EDGE_SPACING, gap: PANEL_PANEL_SPACING / 2 }}
         >
           {/* === SESSION LIST PANEL === (hidden in focused mode) */}
-          {!isFocusedMode && (
+          {showSessionListPanel && (
           <div
             className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle overflow-hidden rounded-l-[14px] rounded-r-[10px]"
             style={{ width: sessionListWidth }}
@@ -1545,6 +1630,13 @@ function AppShellContent({
               compensateForStoplight={!isSidebarVisible}
               actions={
                 <>
+                  {isScheduledManagementView && (
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      onClick={handleCreateScheduledTask}
+                      tooltip={t('scheduledTasks.newTask')}
+                    />
+                  )}
                   {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
                   {chatFilter?.kind === 'allChats' && (
                     <DropdownMenu>
@@ -1611,7 +1703,7 @@ function AppShellContent({
                     </DropdownMenu>
                   )}
                   {/* More menu with Search for non-allChats views (only for chats mode) */}
-                  {isChatsNavigation(navState) && chatFilter?.kind !== 'allChats' && (
+                  {isChatsNavigation(navState) && chatFilter?.kind !== 'allChats' && !isScheduledManagementView && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <HeaderIconButton icon={<MoreHorizontal className="h-4 w-4" />} />
@@ -1682,7 +1774,46 @@ function AppShellContent({
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
               />
             )}
-            {isChatsNavigation(navState) && (
+            {isChatsNavigation(navState) && isScheduledManagementView && (
+              /* Scheduled Task List (middle column) */
+              <ErrorBoundary level="section">
+                <TaskList
+                  tasks={scheduledTasks}
+                  isLoading={scheduledTasksLoading}
+                  onSelectTask={(taskId) => {
+                    setSelectedScheduledTaskId(taskId)
+                    setScheduledTaskViewMode('detail')
+                    navigate(routes.view.scheduledTask(taskId))
+                  }}
+                  onToggleTask={async (taskId, enabled) => {
+                    const { warning } = await toggleScheduledTask(taskId, enabled)
+                    if (warning) {
+                      toast.warning(warning)
+                    }
+                  }}
+                  onRunManually={async (taskId) => {
+                    try {
+                      await runScheduledTaskManually(taskId)
+                      toast.success(t('scheduledTasks.taskStarted'))
+                    } catch (error) {
+                      console.error('[AppShell] Failed to run scheduled task:', error)
+                      toast.error(t('scheduledTasks.taskRunFailed'))
+                    }
+                  }}
+                  onDelete={(taskId) => {
+                    const task = scheduledTasks.find((item) => item.id === taskId)
+                    if (!task) return
+                    setScheduledDeleteTarget({ id: taskId, name: task.name })
+                  }}
+                  onEdit={(taskId) => {
+                    setSelectedScheduledTaskId(taskId)
+                    setScheduledTaskViewMode('edit')
+                    navigate(routes.view.scheduledTask(taskId))
+                  }}
+                />
+              </ErrorBoundary>
+            )}
+            {isChatsNavigation(navState) && !isScheduledManagementView && (
               /* Sessions List */
               <>
                 {/* SessionList: Scrollable list of session cards */}
@@ -1710,6 +1841,10 @@ function AppShellContent({
                       navigate(routes.view.label(chatFilter.labelId, selectedMeta.id))
                     } else if (chatFilter.kind === 'imported') {
                       navigate(routes.view.imported(chatFilter.source, selectedMeta.id))
+                    } else if (chatFilter.kind === 'scheduled') {
+                      navigate(routes.view.scheduled(selectedMeta.id))
+                    } else if (chatFilter.kind === 'scheduledTask') {
+                      navigate(routes.view.scheduledTask(chatFilter.taskId, selectedMeta.id))
                     }
                   }}
                   onOpenInNewWindow={(selectedMeta) => {
@@ -1743,7 +1878,7 @@ function AppShellContent({
           )}
 
           {/* Session List Resize Handle (hidden in focused mode) */}
-          {!isFocusedMode && (
+          {showSessionListPanel && (
           <div
             ref={sessionListHandleRef}
             onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -1769,7 +1904,9 @@ function AppShellContent({
           {/* === MAIN CONTENT PANEL === */}
           <div className={cn(
             "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
-            isFocusedMode ? "rounded-[14px]" : (isRightSidebarVisible ? "rounded-l-[10px] rounded-r-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
+            isFocusedMode || !showSessionListPanel
+              ? (isRightSidebarVisible && !isFocusedMode ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-[14px]")
+              : (isRightSidebarVisible ? "rounded-l-[10px] rounded-r-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
           )}>
             <MainContentPanel isFocusedMode={isFocusedMode} />
           </div>
@@ -1869,6 +2006,35 @@ function AppShellContent({
           )}
         </div>
       </div>
+
+      <Dialog open={!!scheduledDeleteTarget} onOpenChange={(open) => !open && setScheduledDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('scheduledTasks.deleteConfirm')}</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            {scheduledDeleteTarget
+              ? t('scheduledTasks.deleteConfirmMessage').replace('{name}', scheduledDeleteTarget.name)
+              : ''}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setScheduledDeleteTarget(null)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteScheduledTaskConfirm()}
+            >
+              {t('common.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ============================================================================
        * CONTEXT MENU TRIGGERED EDIT POPOVERS

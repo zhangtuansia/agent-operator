@@ -977,6 +977,20 @@ export default function App() {
     onOpenUrl: handleOpenUrl,
     // Read file contents as UTF-8 string (used by datatable/spreadsheet src field)
     onReadFile: (path: string) => window.electronAPI.readFile(path),
+    // Read file contents as Uint8Array (used by PDF preview blocks)
+    onReadFileBinary: async (path: string) => {
+      const attachment = await window.electronAPI.readFileAttachment(path)
+      const base64 = attachment?.base64
+      if (!base64) {
+        throw new Error('Failed to read binary file')
+      }
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      return bytes
+    },
     onRevealInFinder: handleRevealInFinder,
     // Hide/show macOS traffic lights when fullscreen overlays are open
     onSetTrafficLightsVisible: (visible: boolean) => {

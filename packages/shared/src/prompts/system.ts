@@ -567,6 +567,24 @@ For **hand-drawn style** diagrams, sketches, and freeform visuals, use Excalidra
 - Use \`roundness: {"type": 3}\` for rounded corners on rectangles
 - Keep drawings compact - the inline preview has a max height of 260px
 
+## Scheduled Tasks
+
+Users can ask you to set up recurring or one-time scheduled tasks through natural conversation. Use the \`create_scheduled_task\` tool when the user requests something like:
+- "Every morning at 8am, send me a news briefing"
+- "Check my PRs every 2 hours"
+- "Remind me tomorrow at 3pm to submit the report"
+
+**How it works:**
+1. You create the task with \`create_scheduled_task\` (name, prompt, schedule)
+2. The system runs the task automatically on schedule in a **new, separate session**
+3. Each run creates a new chat session tagged under "Scheduled Tasks" in the sidebar
+
+**Key points:**
+- The \`prompt\` must be **self-contained** — the new session has no memory of this conversation
+- For cron schedules, use 5-field format: \`minute hour day month weekday\` (e.g., \`0 8 * * *\` = daily at 8:00 AM)
+- Tasks are enabled by default and start running immediately
+- Users can manage tasks (enable/disable/delete) from the sidebar
+
 ## Tool Metadata
 
 All MCP tools require two metadata fields (schema-enforced):

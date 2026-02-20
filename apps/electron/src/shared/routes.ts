@@ -135,6 +135,16 @@ export const routes = {
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    /** All scheduled sessions view (chats navigator, scheduled filter) */
+    scheduled: (sessionId?: string) =>
+      sessionId ? `scheduled/chat/${sessionId}` as const : 'scheduled' as const,
+
+    /** Scheduled task filter view (specific task) */
+    scheduledTask: (taskId: string, sessionId?: string) =>
+      sessionId
+        ? `scheduledTask/${taskId}/chat/${sessionId}` as const
+        : `scheduledTask/${taskId}` as const,
   },
 } as const
 

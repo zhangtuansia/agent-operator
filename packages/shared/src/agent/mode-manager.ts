@@ -1756,6 +1756,8 @@ export function shouldAllowToolInMode(
         'mcp__session__mermaid_validate',
         'mcp__session__source_test',
         'mcp__session__transform_data',
+        'mcp__session__render_template',
+        'mcp__session__call_llm',
       ];
       if (readOnlySessionTools.includes(toolName)) {
         return { allowed: true };

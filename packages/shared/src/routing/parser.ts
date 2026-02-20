@@ -55,7 +55,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'imported', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'label', 'imported', 'scheduled', 'scheduledTask', 'sources', 'skills', 'settings'
 ]
 
 const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
@@ -141,7 +141,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
-  // Chats navigator (allChats, flagged, state)
+  // Chats navigator (allChats, flagged, state, scheduledTask)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
 
@@ -170,6 +170,15 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       const source = segments[1] as 'openai' | 'anthropic'
       if (source !== 'openai' && source !== 'anthropic') return null
       chatFilter = { kind: 'imported', source }
+      detailsStartIndex = 2
+      break
+    case 'scheduled':
+      chatFilter = { kind: 'scheduled' }
+      detailsStartIndex = 1
+      break
+    case 'scheduledTask':
+      if (!segments[1]) return null
+      chatFilter = { kind: 'scheduledTask', taskId: segments[1] }
       detailsStartIndex = 2
       break
     default:
@@ -235,6 +244,12 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       break
     case 'imported':
       base = `imported/${filter.source}`
+      break
+    case 'scheduled':
+      base = 'scheduled'
+      break
+    case 'scheduledTask':
+      base = `scheduledTask/${filter.taskId}`
       break
     default:
       base = 'allChats'
@@ -599,6 +614,12 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       break
     case 'imported':
       base = `imported/${filter.source}`
+      break
+    case 'scheduled':
+      base = 'scheduled'
+      break
+    case 'scheduledTask':
+      base = `scheduledTask/${filter.taskId}`
       break
   }
 

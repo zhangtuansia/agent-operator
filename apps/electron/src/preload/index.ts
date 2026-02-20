@@ -535,6 +535,56 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS),
   getAllPermissions: () =>
     ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_GET_ALL) as Promise<{ fullDiskAccess: boolean; accessibility: boolean }>,
+
+  // Scheduled Tasks
+  listScheduledTasks: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST, workspaceId),
+  getScheduledTask: (workspaceId: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_GET, workspaceId, taskId),
+  createScheduledTask: (workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_CREATE, workspaceId, input),
+  updateScheduledTask: (workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_UPDATE, workspaceId, taskId, input),
+  deleteScheduledTask: (workspaceId: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_DELETE, workspaceId, taskId),
+  toggleScheduledTask: (workspaceId: string, taskId: string, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_TOGGLE, workspaceId, taskId, enabled),
+  runScheduledTaskManually: (workspaceId: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_RUN_MANUALLY, workspaceId, taskId),
+  stopScheduledTask: (workspaceId: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_STOP, workspaceId, taskId),
+  listScheduledTaskRuns: (workspaceId: string, taskId: string, limit?: number, offset?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST_RUNS, workspaceId, taskId, limit, offset),
+  listAllScheduledTaskRuns: (workspaceId: string, limit?: number, offset?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST_ALL_RUNS, workspaceId, limit, offset),
+
+  onScheduledTaskStatusUpdate: (callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_STATUS_UPDATE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_STATUS_UPDATE, handler)
+    }
+  },
+  onScheduledTaskRunUpdate: (callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_RUN_UPDATE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_RUN_UPDATE, handler)
+    }
+  },
+  onScheduledTasksChanged: (callback: (workspaceId?: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId?: string) => {
+      callback(workspaceId)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

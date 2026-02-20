@@ -344,6 +344,13 @@ export function NavigationProvider({
     (newState: NavigationState): NavigationState => {
       // For chats: auto-select first session if no details provided
       if (isChatsNavigation(newState) && !newState.details) {
+        // Scheduled task management routes should open the task panel first.
+        if (newState.filter.kind === 'scheduled' || newState.filter.kind === 'scheduledTask') {
+          setSession({ selected: null })
+          setNavigationState(newState)
+          return newState
+        }
+
         const firstSessionId = getFirstSessionId(newState.filter)
         if (firstSessionId) {
           const stateWithSelection: NavigationState = {

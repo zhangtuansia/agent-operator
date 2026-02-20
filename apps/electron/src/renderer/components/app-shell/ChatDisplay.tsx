@@ -1183,7 +1183,7 @@ export function ChatDisplay({
                 onInsertMessage={onInputChange}
               />
             )}
-            {!compactMode && session.labels && session.labels.length > 0 && (
+            {!compactMode && session.labels && session.labels.some(l => !l.startsWith('scheduled:') && !l.startsWith('imported:')) && (
               <LabelBadgeRow
                 sessionLabels={session.labels}
                 labels={labels}

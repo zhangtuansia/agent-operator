@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { SessionManager } from './sessions'
+import type { TaskScheduler } from './scheduler'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
@@ -468,7 +469,11 @@ function withRateLimit<T extends unknown[], R>(
   }
 }
 
-export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
+export function registerIpcHandlers(
+  sessionManager: SessionManager,
+  windowManager: WindowManager,
+  getTaskScheduler?: () => TaskScheduler | null,
+): void {
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -3921,5 +3926,93 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const { getAllPermissionsStatus } = await import('./permissions')
     return getAllPermissionsStatus()
   })
+
+  // ============================================================
+  // Scheduled Tasks (Workspace-scoped)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listTasks } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    return listTasks(workspace.rootPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_GET, async (_event, workspaceId: string, taskId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { getTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    return getTask(workspace.rootPath, taskId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_CREATE, async (_event, workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { createTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    const task = createTask(workspace.rootPath, input)
+    getTaskScheduler?.()?.reschedule()
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
+    return task
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_UPDATE, async (_event, workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { updateTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    const task = updateTask(workspace.rootPath, taskId, input)
+    getTaskScheduler?.()?.reschedule()
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
+    return task
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_DELETE, async (_event, workspaceId: string, taskId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const scheduler = getTaskScheduler?.()
+    if (scheduler) {
+      await scheduler.stopTask(workspaceId, taskId)
+    }
+
+    const { deleteTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    const result = deleteTask(workspace.rootPath, taskId)
+    getTaskScheduler?.()?.reschedule()
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_TOGGLE, async (_event, workspaceId: string, taskId: string, enabled: boolean) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { toggleTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    const result = toggleTask(workspace.rootPath, taskId, enabled)
+    getTaskScheduler?.()?.reschedule()
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST_RUNS, async (_event, workspaceId: string, taskId: string, limit?: number, offset?: number) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listRuns } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    return listRuns(workspace.rootPath, taskId, limit, offset)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST_ALL_RUNS, async (_event, workspaceId: string, limit?: number, offset?: number) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listAllRuns } = await import('@agent-operator/shared/scheduled-tasks/crud')
+    return listAllRuns(workspace.rootPath, limit, offset)
+  })
+
+  // Run manually and Stop are handled by the scheduler instance.
+  // They are registered in index.ts after scheduler initialization.
 
 }

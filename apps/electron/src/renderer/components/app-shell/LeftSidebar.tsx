@@ -33,6 +33,15 @@ export interface SidebarContextMenuConfig {
   onAddLabel?: (parentId?: string) => void
   /** Handler for "Delete Label" action - deletes the label identified by labelId */
   onDeleteLabel?: (labelId: string) => void
+  // Scheduled task context menu fields
+  taskId?: string
+  taskEnabled?: boolean
+  taskRunning?: boolean
+  onNewTask?: () => void
+  onEditTask?: (taskId: string) => void
+  onRunTask?: (taskId: string) => void
+  onToggleTask?: (taskId: string, enabled: boolean) => void
+  onDeleteTask?: (taskId: string) => void
 }
 
 export interface LinkItem {
@@ -381,6 +390,14 @@ function SidebarDropItem({
             onConfigureLabels={link.contextMenu.onConfigureLabels}
             onAddLabel={link.contextMenu.onAddLabel}
             onDeleteLabel={link.contextMenu.onDeleteLabel}
+            taskId={link.contextMenu.taskId}
+            taskEnabled={link.contextMenu.taskEnabled}
+            taskRunning={link.contextMenu.taskRunning}
+            onNewTask={link.contextMenu.onNewTask}
+            onEditTask={link.contextMenu.onEditTask}
+            onRunTask={link.contextMenu.onRunTask}
+            onToggleTask={link.contextMenu.onToggleTask}
+            onDeleteTask={link.contextMenu.onDeleteTask}
           />
         </ContextMenuProvider>
       </StyledContextMenuContent>

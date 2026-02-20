@@ -13,17 +13,27 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
+import { ItemNavigator } from './ItemNavigator'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 type PdfModule = typeof import('react-pdf')
 
+interface PreviewItem {
+  src: string
+  label?: string
+}
+
 export interface PDFPreviewOverlayProps {
   isOpen: boolean
   onClose: () => void
   /** Absolute file path for the PDF */
   filePath: string
+  /** Optional multi-item navigation */
+  items?: PreviewItem[]
+  /** Initial selected item index for multi-item mode */
+  initialIndex?: number
   /** Async loader that returns PDF data as Uint8Array */
   loadPdfData: (path: string) => Promise<Uint8Array>
   theme?: 'light' | 'dark'
@@ -44,11 +54,22 @@ export function PDFPreviewOverlay({
   isOpen,
   onClose,
   filePath,
+  items,
+  initialIndex = 0,
   loadPdfData,
   theme = 'light',
   translations,
   headerTranslations,
 }: PDFPreviewOverlayProps) {
+  const resolvedItems = useMemo<PreviewItem[]>(
+    () => (items && items.length > 0 ? items : [{ src: filePath }]),
+    [items, filePath]
+  )
+  const [activeIndex, setActiveIndex] = useState(() =>
+    Math.min(Math.max(initialIndex, 0), Math.max(0, resolvedItems.length - 1))
+  )
+  const activeFilePath = resolvedItems[activeIndex]?.src ?? filePath
+
   const t = {
     previousPage: translations?.previousPage ?? 'Previous page',
     nextPage: translations?.nextPage ?? 'Next page',
@@ -66,6 +87,15 @@ export function PDFPreviewOverlay({
   const [isModuleLoading, setIsModuleLoading] = useState(false)
   const Document = pdfModule?.Document
   const Page = pdfModule?.Page
+
+  useEffect(() => {
+    setActiveIndex((prev) => Math.min(prev, Math.max(0, resolvedItems.length - 1)))
+  }, [resolvedItems.length])
+
+  useEffect(() => {
+    if (!isOpen) return
+    setActiveIndex(Math.min(Math.max(initialIndex, 0), Math.max(0, resolvedItems.length - 1)))
+  }, [isOpen, initialIndex, resolvedItems.length])
 
   // Lazy-load react-pdf + worker when overlay opens
   useEffect(() => {
@@ -97,7 +127,7 @@ export function PDFPreviewOverlay({
 
   // Load PDF data when overlay opens
   useEffect(() => {
-    if (!isOpen || !filePath) return
+    if (!isOpen || !activeFilePath) return
 
     let cancelled = false
     setIsLoading(true)
@@ -106,7 +136,7 @@ export function PDFPreviewOverlay({
     setPageNumber(1)
     setNumPages(0)
 
-    loadPdfData(filePath)
+    loadPdfData(activeFilePath)
       .then((data) => {
         if (!cancelled) {
           setPdfData(data)
@@ -121,7 +151,7 @@ export function PDFPreviewOverlay({
       })
 
     return () => { cancelled = true }
-  }, [isOpen, filePath, loadPdfData])
+  }, [isOpen, activeFilePath, loadPdfData])
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages)
@@ -148,6 +178,7 @@ export function PDFPreviewOverlay({
   // Header actions: page navigation + copy button
   const headerActions = (
     <div className="flex items-center gap-2">
+      <ItemNavigator items={resolvedItems} activeIndex={activeIndex} onSelect={setActiveIndex} size="md" />
       {numPages > 0 && (
         <>
           <button
@@ -172,7 +203,7 @@ export function PDFPreviewOverlay({
           <div className="w-px h-4 bg-foreground/10 mx-1" />
         </>
       )}
-      <CopyButton content={filePath} title={t.copyPath} />
+      <CopyButton content={activeFilePath} title={t.copyPath} />
     </div>
   )
 
@@ -186,7 +217,7 @@ export function PDFPreviewOverlay({
         label: 'PDF',
         variant: 'orange',
       }}
-      filePath={filePath}
+      filePath={activeFilePath}
       error={error ? { label: t.loadFailed, message: error } : undefined}
       headerActions={headerActions}
       headerTranslations={headerTranslations}

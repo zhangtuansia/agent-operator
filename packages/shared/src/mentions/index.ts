@@ -26,6 +26,9 @@ export interface ParsedMentions {
   folders: string[]
 }
 
+/** Character class for workspace IDs (supports spaces, dots, hyphens) */
+export const WS_ID_CHARS = '[\\w .-]'
+
 // ============================================================================
 // Parsing Functions
 // ============================================================================
@@ -66,7 +69,8 @@ export function parseMentions(
 
   // Match skill mentions: [skill:slug] or [skill:workspaceId:slug]
   // The pattern captures the last component (slug) after any number of colons
-  const skillPattern = /\[skill:(?:[\w-]+:)?([\w-]+)\]/g
+  // WS_ID_CHARS allows workspace IDs with spaces, dots, hyphens
+  const skillPattern = new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?([\\w-]+)\\]`, 'g')
   while ((match = skillPattern.exec(text)) !== null) {
     const slug = match[1]!
     if (availableSkillSlugs.includes(slug) && !result.skills.includes(slug)) {
@@ -106,7 +110,7 @@ export function stripAllMentions(text: string): string {
     // Remove [source:slug]
     .replace(/\[source:[\w-]+\]/g, '')
     // Remove [skill:slug] or [skill:workspaceId:slug]
-    .replace(/\[skill:(?:[\w-]+:)?[\w-]+\]/g, '')
+    .replace(new RegExp(`\\[skill:(?:${WS_ID_CHARS}+:)?[\\w-]+\\]`, 'g'), '')
     // Remove [file:path]
     .replace(/\[file:[^\]]+\]/g, '')
     // Remove [folder:path]

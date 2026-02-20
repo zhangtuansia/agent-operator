@@ -441,6 +441,8 @@ export type RightSidebarPanel =
  * - 'state': Sessions with specific status ID
  * - 'label': Sessions with specific label (includes descendants via tree hierarchy)
  * - 'imported': Imported sessions from external platforms
+ * - 'scheduled': All sessions created by any scheduled task
+ * - 'scheduledTask': Sessions created by a specific scheduled task
  */
 export type ChatFilter =
   | { kind: 'allChats' }
@@ -448,6 +450,8 @@ export type ChatFilter =
   | { kind: 'state'; stateId: string }
   | { kind: 'label'; labelId: string }
   | { kind: 'imported'; source: 'openai' | 'anthropic' }
+  | { kind: 'scheduled' }
+  | { kind: 'scheduledTask'; taskId: string }
 
 /**
  * Settings subpage options

@@ -24,14 +24,7 @@ export type TestEngineType = 'svg' | 'svg_elk' | 'ascii'
 const VALID_ENGINES: TestEngineType[] = ['svg', 'svg_elk', 'ascii']
 
 export const TEST_ENGINE: TestEngineType = (() => {
-  const env = process.env.TEST_ENGINE?.toLowerCase()
-  if (!env) {
-    throw new Error(
-      'TEST_ENGINE environment variable is required.\n' +
-        'Please set TEST_ENGINE=svg or TEST_ENGINE=ascii before running tests.\n' +
-        'Example: TEST_ENGINE=svg bun test'
-    )
-  }
+  const env = (process.env.TEST_ENGINE ?? 'svg').toLowerCase()
   if (!VALID_ENGINES.includes(env as TestEngineType)) {
     throw new Error(
       `Invalid TEST_ENGINE="${env}". Must be one of: ${VALID_ENGINES.join(', ')}`

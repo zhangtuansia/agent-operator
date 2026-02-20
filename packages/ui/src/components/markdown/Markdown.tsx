@@ -10,6 +10,8 @@ import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
 import { MarkdownDatatableBlock } from './MarkdownDatatableBlock'
 import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { MarkdownExcalidrawBlock } from './MarkdownExcalidrawBlock'
+import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
+import { MarkdownPdfBlock } from './MarkdownPdfBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -322,7 +324,7 @@ function createComponents(
       ...baseComponents,
       // Inline code
       code: ({ className, children, ...props }) => {
-        const match = /language-(\w+)/.exec(className || '')
+        const match = /language-([\w-]+)/.exec(className || '')
         const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
         // Block code
@@ -345,6 +347,14 @@ function createComponents(
           // Spreadsheet code blocks → Excel-style grid
           if (lower === 'spreadsheet') {
             return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+          }
+          // HTML preview blocks → sandboxed iframe
+          if (lower === 'html-preview') {
+            return <MarkdownHtmlBlock code={code} className="my-1" />
+          }
+          // PDF preview blocks → inline first-page preview with fullscreen
+          if (lower === 'pdf-preview') {
+            return <MarkdownPdfBlock code={code} className="my-1" />
           }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
@@ -420,7 +430,7 @@ function createComponents(
     ...baseComponents,
     // Full code blocks with copy button
     code: ({ className, children, ...props }) => {
-      const match = /language-(\w+)/.exec(className || '')
+      const match = /language-([\w-]+)/.exec(className || '')
       const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
       if (match || isBlock) {
@@ -442,6 +452,14 @@ function createComponents(
         // Spreadsheet code blocks → Excel-style grid
         if (lower === 'spreadsheet') {
           return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+        }
+        // HTML preview blocks → sandboxed iframe
+        if (lower === 'html-preview') {
+          return <MarkdownHtmlBlock code={code} className="my-1" />
+        }
+        // PDF preview blocks → inline first-page preview with fullscreen
+        if (lower === 'pdf-preview') {
+          return <MarkdownPdfBlock code={code} className="my-1" />
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)

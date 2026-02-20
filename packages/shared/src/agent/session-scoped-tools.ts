@@ -19,11 +19,15 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { existsSync, readFileSync } from 'fs';
-import { basename } from 'path';
-import { getSessionPlansPath } from '../sessions/storage.ts';
+import { spawn } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { basename, join, normalize, resolve } from 'path';
+import { getSessionDataPath, getSessionPath, getSessionPlansPath } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import { createTask as createScheduledTask } from '../scheduled-tasks/crud.ts';
+import type { ScheduledTask } from '../scheduled-tasks/types.ts';
 import {
   validateConfig,
   validateSource,
@@ -60,6 +64,9 @@ import { buildAuthorizationHeader } from '../sources/api-tools.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { renderMermaid } from '@agent-operator/mermaid';
 import { createLLMTool } from './llm-tool.ts';
+import { FEATURE_FLAGS } from '../feature-flags.ts';
+import { loadTemplate, validateTemplateData } from '../templates/loader.ts';
+import { renderMustache } from '../templates/mustache.ts';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -178,6 +185,8 @@ export interface SessionScopedToolCallbacks {
    * 5. Agent resumes and processes the result
    */
   onAuthRequest?: (request: AuthRequest) => void;
+  /** Called when a scheduled task is created - tags session with label and triggers IPC broadcast */
+  onScheduledTaskCreated?: (task: ScheduledTask, sessionId: string) => void;
 }
 
 /**
@@ -1822,6 +1831,443 @@ source_credential_prompt({
 }
 
 // ============================================================
+// Scheduled Task Tool
+// ============================================================
+
+/**
+ * Compute intervalMs from unit and value for ScheduleInterval.
+ */
+function computeIntervalMs(unit: 'minutes' | 'hours' | 'days', value: number): number {
+  const multipliers = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
+  return value * multipliers[unit];
+}
+
+/**
+ * Create a session-scoped create_scheduled_task tool.
+ * Allows the agent to create scheduled tasks from natural language requests.
+ */
+export function createScheduledTaskCreateTool(sessionId: string, workspaceRootPath: string) {
+  return tool(
+    'create_scheduled_task',
+    `Create a scheduled task that runs automatically on a schedule.
+
+Use this when the user asks for recurring or one-time scheduled operations, such as:
+- "Every morning at 8am, give me a news briefing"
+- "Every 2 hours, check my GitHub PRs"
+- "Tomorrow at 3pm, remind me to submit the report"
+
+**Schedule types:**
+- \`cron\`: Standard 5-field cron expression (minute hour day month weekday)
+  - \`0 8 * * *\` = every day at 8:00 AM
+  - \`0 9 * * 1-5\` = weekdays at 9:00 AM
+  - \`*/30 * * * *\` = every 30 minutes
+- \`interval\`: Repeat at fixed intervals (minutes, hours, days)
+- \`at\`: One-time execution at a specific datetime (ISO 8601)
+
+**IMPORTANT:** The \`prompt\` field is the instruction that will be sent to a NEW session when the task runs. Write it as a complete, standalone instruction - the new session has no context from this conversation.
+
+**Returns:** The created task object with its ID and schedule details.`,
+    {
+      name: z.string().describe('Short name for the task (e.g., "Morning Briefing", "PR Check")'),
+      prompt: z.string().describe('The full instruction to execute when the task runs. Must be self-contained - no references to current conversation.'),
+      schedule: z.preprocess(
+        // LLMs sometimes pass nested objects as JSON strings via MCP
+        (val) => {
+          if (typeof val === 'string') {
+            try { return JSON.parse(val); } catch { return val; }
+          }
+          return val;
+        },
+        z.union([
+          z.object({
+            type: z.literal('cron'),
+            expression: z.string().describe('5-field cron expression: minute hour day month weekday'),
+          }),
+          z.object({
+            type: z.literal('interval'),
+            unit: z.enum(['minutes', 'hours', 'days']),
+            value: z.number().min(1).describe('Interval value (e.g., 2 for "every 2 hours")'),
+          }),
+          z.object({
+            type: z.literal('at'),
+            datetime: z.string().describe('ISO 8601 datetime for one-time execution'),
+          }),
+        ])
+      ).describe('Schedule configuration (object or JSON string). Example: {"type": "cron", "expression": "0 8 * * *"}'),
+      description: z.string().optional().describe('Longer description of what this task does'),
+      systemPrompt: z.string().optional().describe('Custom system prompt for the task session (usually not needed)'),
+      expiresAt: z.string().optional().describe('ISO 8601 date (YYYY-MM-DD) after which the task stops running'),
+    },
+    async (args) => {
+      debug('[create_scheduled_task] Creating task:', args.name);
+
+      try {
+        // Build the schedule object with computed intervalMs for interval type
+        let schedule: import('../scheduled-tasks/types.ts').Schedule;
+        if (args.schedule.type === 'interval') {
+          schedule = {
+            type: 'interval',
+            unit: args.schedule.unit,
+            value: args.schedule.value,
+            intervalMs: computeIntervalMs(args.schedule.unit, args.schedule.value),
+          };
+        } else {
+          schedule = args.schedule;
+        }
+
+        // Create the task, bound to the current session
+        const task = createScheduledTask(workspaceRootPath, {
+          name: args.name,
+          description: args.description || '',
+          schedule,
+          prompt: args.prompt,
+          workingDirectory: workspaceRootPath,
+          systemPrompt: args.systemPrompt || '',
+          expiresAt: args.expiresAt || null,
+          enabled: true,
+          notify: true,
+          sessionId,
+        });
+
+        // Notify UI: tag session with label + refresh scheduled tasks list
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        if (callbacks?.onScheduledTaskCreated) {
+          callbacks.onScheduledTaskCreated(task, sessionId);
+        }
+
+        // Format schedule for display
+        let scheduleDesc: string;
+        if (task.schedule.type === 'cron') {
+          scheduleDesc = `Cron: ${task.schedule.expression}`;
+        } else if (task.schedule.type === 'interval') {
+          scheduleDesc = `Every ${task.schedule.value} ${task.schedule.unit}`;
+        } else {
+          scheduleDesc = `One-time at ${task.schedule.datetime}`;
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: [
+              `Scheduled task created successfully.`,
+              ``,
+              `- **Name:** ${task.name}`,
+              `- **ID:** ${task.id}`,
+              `- **Schedule:** ${scheduleDesc}`,
+              `- **Enabled:** ${task.enabled}`,
+              task.state.nextRunAtMs
+                ? `- **Next run:** ${new Date(task.state.nextRunAtMs).toLocaleString()}`
+                : '',
+              task.expiresAt ? `- **Expires:** ${task.expiresAt}` : '',
+            ].filter(Boolean).join('\n'),
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        debug('[create_scheduled_task] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error creating scheduled task: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+// ============================================================
+// Data Transform Tool
+// ============================================================
+
+const BLOCKED_ENV_VARS = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'OPENAI_API_KEY',
+  'GOOGLE_API_KEY',
+  'STRIPE_SECRET_KEY',
+  'NPM_TOKEN',
+];
+
+const TRANSFORM_DATA_TIMEOUT_MS = 30_000;
+
+export function createTransformDataTool(sessionId: string, workspaceRootPath: string) {
+  return tool(
+    'transform_data',
+    `Transform data files using a script and write structured output for datatable/spreadsheet blocks, or extract HTML/PDF content for html-preview/pdf-preview blocks.
+
+Use this when you need to transform large datasets (20+ rows) into structured JSON for display, or build HTML/PDF files for preview blocks.
+
+Workflow:
+1. Call transform_data with a script that reads input files and writes output
+2. Output a datatable/spreadsheet/html-preview/pdf-preview block using the returned absolute "src" path
+
+Security:
+- Runs in an isolated subprocess with sensitive env vars stripped
+- Input files must stay inside the session directory
+- Output file must stay inside the session data directory
+- 30-second timeout`,
+    {
+      language: z.enum(['python3', 'node', 'bun']).describe('Script runtime to use'),
+      script: z.string().describe('Transform script source code'),
+      inputFiles: z.array(z.string()).describe('Input file paths relative to session dir (e.g., "long_responses/result.txt")'),
+      outputFile: z.string().describe('Output file name relative to session data dir (e.g., "transactions.json")'),
+    },
+    async (args) => {
+      const sessionDir = getSessionPath(workspaceRootPath, sessionId);
+      const dataDir = getSessionDataPath(workspaceRootPath, sessionId);
+
+      const normalizedSessionDir = normalize(sessionDir);
+      const normalizedDataDir = normalize(dataDir);
+      const resolvedOutput = resolve(dataDir, args.outputFile);
+
+      if (!resolvedOutput.startsWith(normalizedDataDir)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error: outputFile must be within the session data directory. Got: ${args.outputFile}`,
+          }],
+          isError: true,
+        };
+      }
+
+      const resolvedInputs: string[] = [];
+      for (const inputFile of args.inputFiles) {
+        const resolvedInput = resolve(sessionDir, inputFile);
+        if (!resolvedInput.startsWith(normalizedSessionDir)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Error: inputFile must be within the session directory. Got: ${inputFile}`,
+            }],
+            isError: true,
+          };
+        }
+        if (!existsSync(resolvedInput)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Error: input file not found: ${inputFile}`,
+            }],
+            isError: true,
+          };
+        }
+        resolvedInputs.push(resolvedInput);
+      }
+
+      if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+      }
+
+      const ext = args.language === 'python3' ? '.py' : '.js';
+      const tempScript = join(tmpdir(), `cowork-transform-${sessionId}-${Date.now()}${ext}`);
+      writeFileSync(tempScript, args.script, 'utf-8');
+
+      try {
+        const cmd = args.language === 'python3' ? 'python3' : args.language;
+        const spawnArgs = [tempScript, ...resolvedInputs, resolvedOutput];
+
+        const env = { ...process.env };
+        for (const key of BLOCKED_ENV_VARS) {
+          delete env[key];
+        }
+
+        const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolvePromise, reject) => {
+          const child = spawn(cmd, spawnArgs, {
+            cwd: dataDir,
+            env,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+
+          let stdout = '';
+          let stderr = '';
+          let timedOut = false;
+
+          const killTimer = setTimeout(() => {
+            timedOut = true;
+            child.kill('SIGKILL');
+          }, TRANSFORM_DATA_TIMEOUT_MS);
+
+          child.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString();
+          });
+          child.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString();
+          });
+
+          child.on('close', (code) => {
+            clearTimeout(killTimer);
+            if (timedOut) {
+              resolvePromise({
+                stdout,
+                stderr: `Script timed out after ${TRANSFORM_DATA_TIMEOUT_MS / 1000}s and was killed`,
+                code,
+              });
+            } else {
+              resolvePromise({ stdout, stderr, code });
+            }
+          });
+
+          child.on('error', (err) => {
+            clearTimeout(killTimer);
+            reject(err);
+          });
+        });
+
+        if (result.code !== 0) {
+          const errorOutput = result.stderr || result.stdout || 'Script exited with non-zero code';
+          debug('[transform_data] failed', { code: result.code, errorPreview: errorOutput.slice(0, 200) });
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Script failed (exit code ${result.code}):\n${errorOutput.slice(0, 2000)}`,
+            }],
+            isError: true,
+          };
+        }
+
+        if (!existsSync(resolvedOutput)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Script completed but output file was not created: ${args.outputFile}\n\nStdout: ${result.stdout.slice(0, 500)}`,
+            }],
+            isError: true,
+          };
+        }
+
+        const lines = [`Output written to: ${resolvedOutput}`];
+        lines.push('\nUse this absolute path as the "src" value in your datatable, spreadsheet, html-preview, or pdf-preview block.');
+        if (result.stdout.trim()) {
+          lines.push(`\nStdout:\n${result.stdout.slice(0, 500)}`);
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: lines.join(''),
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error running script: ${error instanceof Error ? error.message : String(error)}`,
+          }],
+          isError: true,
+        };
+      } finally {
+        try {
+          unlinkSync(tempScript);
+        } catch {
+          // noop
+        }
+      }
+    }
+  );
+}
+
+// ============================================================
+// Source Template Render Tool
+// ============================================================
+
+export function createRenderTemplateTool(sessionId: string, workspaceRootPath: string) {
+  return tool(
+    'render_template',
+    `Render a source's HTML template with data.
+
+Use this when a source provides HTML templates for richer content rendering.
+
+Workflow:
+1. Fetch data from source tools
+2. Call render_template with source slug + template ID + data
+3. Output an html-preview block with the returned absolute "src" path`,
+    {
+      source: z.string().describe('Source slug (e.g., "linear", "gmail")'),
+      template: z.string().describe('Template ID (e.g., "issue-detail")'),
+      data: z.record(z.string(), z.unknown()).describe('JSON data to render into the template'),
+    },
+    async (args) => {
+      const sourcePath = join(workspaceRootPath, 'sources', args.source);
+
+      if (!existsSync(sourcePath)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error: Source "${args.source}" not found at ${sourcePath}`,
+          }],
+          isError: true,
+        };
+      }
+
+      const template = loadTemplate(sourcePath, args.template);
+      if (!template) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error: Template "${args.template}" not found for source "${args.source}".\n\nExpected file: ${join(sourcePath, 'templates', `${args.template}.html`)}`,
+          }],
+          isError: true,
+        };
+      }
+
+      const warnings = validateTemplateData(template.meta, args.data);
+
+      let rendered: string;
+      try {
+        rendered = renderMustache(template.content, args.data);
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error rendering template "${args.template}": ${error instanceof Error ? error.message : String(error)}`,
+          }],
+          isError: true,
+        };
+      }
+
+      const dataDir = getSessionDataPath(workspaceRootPath, sessionId);
+      if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+      }
+
+      const outputFileName = `${args.source}-${args.template}-${Date.now()}.html`;
+      const outputPath = join(dataDir, outputFileName);
+      writeFileSync(outputPath, rendered, 'utf-8');
+
+      const lines: string[] = [];
+      lines.push(`Rendered template: ${template.meta.name || args.template}`);
+      lines.push(`Output: ${outputPath}`);
+      lines.push('');
+      lines.push('Use this absolute path as the "src" value in your html-preview block.');
+
+      if (warnings.length > 0) {
+        lines.push('');
+        lines.push('Warnings:');
+        for (const warning of warnings) {
+          lines.push(`- ${warning.message}`);
+        }
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: lines.join('\n'),
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+// ============================================================
 // Mermaid Validation Tool
 // ============================================================
 
@@ -1923,6 +2369,10 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
         createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
         createCredentialPromptTool(sessionId, workspaceRootPath),
+        createTransformDataTool(sessionId, workspaceRootPath),
+        ...(FEATURE_FLAGS.sourceTemplates ? [createRenderTemplateTool(sessionId, workspaceRootPath)] : []),
+        // Scheduled task creation tool
+        createScheduledTaskCreateTool(sessionId, workspaceRootPath),
         // LLM tool - invoke secondary Claude calls for subtasks
         createLLMTool({ sessionId }),
       ],

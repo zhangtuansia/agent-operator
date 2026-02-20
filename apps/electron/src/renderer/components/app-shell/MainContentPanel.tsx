@@ -18,16 +18,19 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import {
+  useNavigation,
   useNavigationState,
   isChatsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
 } from '@/contexts/NavigationContext'
+import { routes } from '@/lib/navigate'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { useLanguage } from '@/context/LanguageContext'
+import { ScheduledTasksView } from '@/components/scheduled-tasks/ScheduledTasksView'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -41,6 +44,7 @@ export function MainContentPanel({
   className,
 }: MainContentPanelProps) {
   const navState = useNavigationState()
+  const { navigate } = useNavigation()
   const { activeWorkspaceId } = useAppShellContext()
   const { t } = useLanguage()
 
@@ -111,6 +115,29 @@ export function MainContentPanel({
 
   // Chats navigator - show chat or empty state
   if (isChatsNavigation(navState)) {
+    if (!navState.details && (navState.filter.kind === 'scheduled' || navState.filter.kind === 'scheduledTask')) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ScheduledTasksView
+            workspaceId={activeWorkspaceId}
+            filterKind={navState.filter.kind}
+            filterTaskId={navState.filter.kind === 'scheduledTask' ? navState.filter.taskId : null}
+            onViewSession={(sessionId, taskId) => {
+              if (taskId) {
+                navigate(routes.view.scheduledTask(taskId, sessionId))
+                return
+              }
+              if (navState.filter.kind === 'scheduledTask') {
+                navigate(routes.view.scheduledTask(navState.filter.taskId, sessionId))
+                return
+              }
+              navigate(routes.view.scheduled(sessionId))
+            }}
+          />
+        </Panel>
+      )
+    }
+
     if (navState.details) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>

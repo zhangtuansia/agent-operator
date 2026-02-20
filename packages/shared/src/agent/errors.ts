@@ -8,6 +8,7 @@
 export type ErrorCode =
   | 'invalid_api_key'
   | 'invalid_credentials'    // Generic credential issue (from diagnostics)
+  | 'response_too_large'     // Response exceeded max size
   | 'expired_oauth_token'
   | 'token_expired'          // Workspace token expired (from diagnostics)
   | 'rate_limited'
@@ -22,6 +23,7 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'image_too_large'        // Image exceeds size limit
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -73,6 +75,14 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],
     canRetry: false,
+  },
+  response_too_large: {
+    title: 'Response Too Large',
+    message: 'The response exceeded the maximum allowed size. Try a simpler request.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
   },
   expired_oauth_token: {
     title: 'Session Expired',
@@ -194,6 +204,14 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: true,
   },
+  image_too_large: {
+    title: 'Image Too Large',
+    message: 'The image exceeds the maximum allowed size. Please use a smaller image.',
+    actions: [
+      { key: 'r', label: 'Retry with smaller image', action: 'retry' },
+    ],
+    canRetry: false,
+  },
   unknown_error: {
     title: 'Error',
     message: 'An unexpected error occurred.',
@@ -280,6 +298,10 @@ export function parseError(error: unknown): AgentError {
     code = 'network_error';
   } else if (lowerMessage.includes('mcp') && (lowerMessage.includes('auth') || lowerMessage.includes('401'))) {
     code = 'mcp_auth_required';
+  } else if (lowerMessage.includes('response too large') || lowerMessage.includes('response_too_large') || lowerMessage.includes('output too long')) {
+    code = 'response_too_large';
+  } else if (lowerMessage.includes('image too large') || lowerMessage.includes('image_too_large') || lowerMessage.includes('image exceeds')) {
+    code = 'image_too_large';
   } else if (lowerMessage.includes('invalid request') || lowerMessage.includes('invalid_request_error')) {
     code = 'invalid_request';
   } else if (lowerMessage.includes('exited with code') || lowerMessage.includes('process exited')) {

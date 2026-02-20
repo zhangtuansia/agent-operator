@@ -304,6 +304,21 @@ export const IPC_CHANNELS = {
   PERMISSIONS_CHECK_ACCESSIBILITY: 'permissions:checkAccessibility',
   PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS: 'permissions:openAccessibilitySettings',
   PERMISSIONS_GET_ALL: 'permissions:getAll',
+
+  // Scheduled Tasks (workspace-scoped)
+  SCHEDULED_TASKS_LIST: 'scheduledTasks:list',
+  SCHEDULED_TASKS_GET: 'scheduledTasks:get',
+  SCHEDULED_TASKS_CREATE: 'scheduledTasks:create',
+  SCHEDULED_TASKS_UPDATE: 'scheduledTasks:update',
+  SCHEDULED_TASKS_DELETE: 'scheduledTasks:delete',
+  SCHEDULED_TASKS_TOGGLE: 'scheduledTasks:toggle',
+  SCHEDULED_TASKS_RUN_MANUALLY: 'scheduledTasks:runManually',
+  SCHEDULED_TASKS_STOP: 'scheduledTasks:stop',
+  SCHEDULED_TASKS_LIST_RUNS: 'scheduledTasks:listRuns',
+  SCHEDULED_TASKS_LIST_ALL_RUNS: 'scheduledTasks:listAllRuns',
+  SCHEDULED_TASKS_STATUS_UPDATE: 'scheduledTasks:statusUpdate',  // Broadcast: task state changed
+  SCHEDULED_TASKS_RUN_UPDATE: 'scheduledTasks:runUpdate',        // Broadcast: run record updated
+  SCHEDULED_TASKS_CHANGED: 'scheduledTasks:changed',              // Broadcast: task list changed
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

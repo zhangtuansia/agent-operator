@@ -7,6 +7,7 @@ export { ContentFrame, type ContentFrameProps } from './ContentFrame'
 // Helper components
 export { CopyButton, type CopyButtonProps } from './CopyButton'
 export { OverlayErrorBanner, type OverlayErrorBannerProps } from './OverlayErrorBanner'
+export { ItemNavigator, type ItemNavigatorProps } from './ItemNavigator'
 
 // Specialized overlays
 export { CodePreviewOverlay, type CodePreviewOverlayProps } from './CodePreviewOverlay'
@@ -19,5 +20,6 @@ export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay
 export { DocumentFormattedMarkdownOverlay, type DocumentFormattedMarkdownOverlayProps } from './DocumentFormattedMarkdownOverlay'
 export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
 export { ExcalidrawPreviewOverlay, type ExcalidrawPreviewOverlayProps } from './ExcalidrawPreviewOverlay'
+export { HTMLPreviewOverlay, type HTMLPreviewOverlayProps } from './HTMLPreviewOverlay'
 export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
 export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePreviewOverlay'

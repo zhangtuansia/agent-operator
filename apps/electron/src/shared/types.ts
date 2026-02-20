@@ -603,6 +603,8 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   let base: string
   if (f.kind === 'state') base = `state:${f.stateId}`
   else if (f.kind === 'label') base = `label:${f.labelId}`
+  else if (f.kind === 'scheduledTask') base = `scheduledTask:${f.taskId}`
+  else if (f.kind === 'imported') base = `imported:${f.source}`
   else base = f.kind
   if (state.details) {
     return `${base}/chat/${state.details.sessionId}`
@@ -658,6 +660,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       const labelId = filterKey.slice(6)
       if (!labelId) return null
       filter = { kind: 'label', labelId }
+    } else if (filterKey === 'scheduled') {
+      filter = { kind: 'scheduled' }
+    } else if (filterKey.startsWith('scheduledTask:')) {
+      const taskId = filterKey.slice(14)
+      if (!taskId) return null
+      filter = { kind: 'scheduledTask', taskId }
+    } else if (filterKey.startsWith('imported:')) {
+      const source = filterKey.slice(9) as 'openai' | 'anthropic'
+      if (!source) return null
+      filter = { kind: 'imported', source }
     } else {
       return null
     }

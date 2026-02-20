@@ -2,20 +2,20 @@
  * Tests for HookSystem.buildSdkHooks()
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, jest, mock } from 'bun:test';
 import { HookSystem } from './hook-system.ts';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Mock command-executor to avoid real shell execution
-vi.mock('./command-executor.ts', () => ({
-  executeCommand: vi.fn().mockResolvedValue({ success: true, stdout: 'ok', stderr: '', blocked: false }),
-  resolvePermissionsConfig: vi.fn().mockReturnValue({}),
+mock.module('./command-executor.ts', () => ({
+  executeCommand: jest.fn().mockResolvedValue({ success: true, stdout: 'ok', stderr: '', blocked: false }),
+  resolvePermissionsConfig: jest.fn().mockReturnValue({}),
 }));
 
 import { executeCommand } from './command-executor.ts';
-const mockedExecuteCommand = vi.mocked(executeCommand);
+const mockedExecuteCommand = executeCommand as jest.Mock;
 
 describe('HookSystem.buildSdkHooks', () => {
   let testDir: string;
@@ -23,7 +23,7 @@ describe('HookSystem.buildSdkHooks', () => {
   beforeEach(() => {
     testDir = join(tmpdir(), `buildSdkHooks-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {

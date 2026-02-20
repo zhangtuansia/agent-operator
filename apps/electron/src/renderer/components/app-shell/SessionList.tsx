@@ -224,9 +224,11 @@ const SessionItem = memo(function SessionItem({
   const { isDark } = useTheme()
 
   // Resolve session labels to their configs for badge rendering
+  // Filter out internal labels (scheduled:*, imported:*) — these are for sidebar filtering, not display
   const resolvedLabels = useMemo(() => {
     if (!item.labels || item.labels.length === 0 || flatLabels.length === 0) return []
     return item.labels
+      .filter(l => !l.startsWith('scheduled:') && !l.startsWith('imported:'))
       .map(entry => {
         const parsed = parseLabelEntry(entry)
         const config = flatLabels.find(l => l.id === parsed.id)
@@ -787,6 +789,10 @@ export function SessionList({
       navigate(routes.view.label(currentFilter.labelId, item.id))
     } else if (currentFilter.kind === 'imported') {
       navigate(routes.view.imported(currentFilter.source, item.id))
+    } else if (currentFilter.kind === 'scheduled') {
+      navigate(routes.view.scheduled(item.id))
+    } else if (currentFilter.kind === 'scheduledTask') {
+      navigate(routes.view.scheduledTask(currentFilter.taskId, item.id))
     }
   }, [navigate, currentFilter])
 
@@ -1010,6 +1016,10 @@ export function SessionList({
                               navigate(routes.view.label(currentFilter.labelId, item.id))
                             } else if (currentFilter.kind === 'imported') {
                               navigate(routes.view.imported(currentFilter.source, item.id))
+                            } else if (currentFilter.kind === 'scheduled') {
+                              navigate(routes.view.scheduled(item.id))
+                            } else if (currentFilter.kind === 'scheduledTask') {
+                              navigate(routes.view.scheduledTask(currentFilter.taskId, item.id))
                             }
                             // Notify parent
                             onSessionSelect?.(item)

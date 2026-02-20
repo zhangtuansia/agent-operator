@@ -82,6 +82,12 @@ export interface PlatformActions {
   onReadFile?: (path: string) => Promise<string>
 
   /**
+   * Read a file's binary contents as Uint8Array.
+   * Used by PDF preview blocks and PDF overlays.
+   */
+  onReadFileBinary?: (path: string) => Promise<Uint8Array>
+
+  /**
    * Show/hide macOS traffic light buttons (close/minimize/maximize).
    * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
    * No-op on non-macOS platforms or in web viewer.

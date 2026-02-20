@@ -60,25 +60,35 @@ export function LabelBadgeRow({
   // Memoize flat lookup map (only recompute when labels config changes)
   const labelMap = React.useMemo(() => flattenLabelTree(labels), [labels])
 
-  // Don't render if no labels applied
-  if (sessionLabels.length === 0) return null
+  // Filter out internal labels (scheduled:*, imported:*) - these are for sidebar filtering, not display
+  const visibleLabels = React.useMemo(
+    () => sessionLabels.filter(l => !l.startsWith('scheduled:') && !l.startsWith('imported:')),
+    [sessionLabels]
+  )
 
-  /** Update a specific label entry's value */
-  const handleValueChange = (index: number, labelId: string, newValue: string | undefined) => {
+  // Don't render if no visible labels
+  if (visibleLabels.length === 0) return null
+
+  /** Update a label entry's value by finding its real index in sessionLabels */
+  const handleValueChange = (entry: string, labelId: string, newValue: string | undefined) => {
+    const realIndex = sessionLabels.indexOf(entry)
+    if (realIndex === -1) return
     const updated = [...sessionLabels]
-    updated[index] = formatLabelEntry(labelId, newValue)
+    updated[realIndex] = formatLabelEntry(labelId, newValue)
     onLabelsChange?.(updated)
   }
 
-  /** Remove a label at a specific index */
-  const handleRemove = (index: number) => {
-    const updated = sessionLabels.filter((_, i) => i !== index)
+  /** Remove a label by finding its real index in sessionLabels */
+  const handleRemove = (entry: string) => {
+    const realIndex = sessionLabels.indexOf(entry)
+    if (realIndex === -1) return
+    const updated = sessionLabels.filter((_, i) => i !== realIndex)
     onLabelsChange?.(updated)
   }
 
   return (
     <div className={cn('flex flex-wrap gap-1 px-4 pt-3 pb-1', className)}>
-      {sessionLabels.map((entry, index) => {
+      {visibleLabels.map((entry, index) => {
         const parsed = parseLabelEntry(entry)
         const config = labelMap.get(parsed.id)
 
@@ -92,8 +102,8 @@ export function LabelBadgeRow({
             value={parsed.rawValue}
             open={openIndex === index}
             onOpenChange={(open) => setOpenIndex(open ? index : null)}
-            onValueChange={(newValue) => handleValueChange(index, parsed.id, newValue)}
-            onRemove={() => handleRemove(index)}
+            onValueChange={(newValue) => handleValueChange(entry, parsed.id, newValue)}
+            onRemove={() => handleRemove(entry)}
           >
             <LabelBadge
               label={resolvedConfig}
