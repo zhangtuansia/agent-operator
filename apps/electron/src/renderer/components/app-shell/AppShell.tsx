@@ -122,7 +122,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
-import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
+import { EditPopover, getEditConfig, useTranslatedEditConfig } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -342,6 +342,7 @@ function AppShellContent({
   // Scheduled task data (shared via Jotai atoms with ScheduledTasksView)
   const {
     tasks: scheduledTasks,
+    selectedTaskId: selectedScheduledTaskId,
     isLoading: scheduledTasksLoading,
     setSelectedTaskId: setSelectedScheduledTaskId,
     setViewMode: setScheduledTaskViewMode,
@@ -560,6 +561,10 @@ function AppShellContent({
   }, [])
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+  const addScheduledTaskEditConfig = useTranslatedEditConfig(
+    'add-scheduled-task',
+    activeWorkspace?.rootPath || ''
+  )
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
@@ -970,12 +975,6 @@ function AppShellContent({
   const handleScheduledClick = useCallback(() => {
     navigate(routes.view.scheduled())
   }, [navigate])
-
-  const handleCreateScheduledTask = useCallback(() => {
-    setSelectedScheduledTaskId(null)
-    setScheduledTaskViewMode('create')
-    navigate(routes.view.scheduled())
-  }, [navigate, setSelectedScheduledTaskId, setScheduledTaskViewMode])
 
   const handleDeleteScheduledTaskConfirm = useCallback(async () => {
     if (!scheduledDeleteTarget) return
@@ -1630,11 +1629,15 @@ function AppShellContent({
               compensateForStoplight={!isSidebarVisible}
               actions={
                 <>
-                  {isScheduledManagementView && (
-                    <HeaderIconButton
-                      icon={<Plus className="h-4 w-4" />}
-                      onClick={handleCreateScheduledTask}
-                      tooltip={t('scheduledTasks.newTask')}
+                  {isScheduledManagementView && activeWorkspace && (
+                    <EditPopover
+                      trigger={
+                        <HeaderIconButton
+                          icon={<Plus className="h-4 w-4" />}
+                          tooltip={t('scheduledTasks.newTask')}
+                        />
+                      }
+                      {...addScheduledTaskEditConfig}
                     />
                   )}
                   {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
@@ -1779,6 +1782,10 @@ function AppShellContent({
               <ErrorBoundary level="section">
                 <TaskList
                   tasks={scheduledTasks}
+                  selectedTaskId={
+                    selectedScheduledTaskId
+                    ?? (chatFilter?.kind === 'scheduledTask' ? chatFilter.taskId : null)
+                  }
                   isLoading={scheduledTasksLoading}
                   onSelectTask={(taskId) => {
                     setSelectedScheduledTaskId(taskId)

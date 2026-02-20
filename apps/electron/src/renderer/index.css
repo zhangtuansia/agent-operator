@@ -823,6 +823,24 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 }
 
 /* =============================================================================
+   TASK LIST - SEPARATOR VISIBILITY
+
+   Hide separators when task items are hovered or selected.
+============================================================================= */
+
+/* Hide own separator when item is hovered or selected */
+.task-item:hover > .task-separator,
+.task-item[data-selected] > .task-separator {
+  opacity: 0;
+}
+
+/* Hide next item's separator when current item is hovered or selected */
+.task-item:hover + .task-item > .task-separator,
+.task-item[data-selected] + .task-item > .task-separator {
+  opacity: 0;
+}
+
+/* =============================================================================
    IMPORT LIST - SEPARATOR VISIBILITY
 
    Hide separators when import items are hovered or selected.

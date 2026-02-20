@@ -73,6 +73,7 @@ export type EditContextKey =
   | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
   | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
+  | 'add-scheduled-task'
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
@@ -342,6 +343,24 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     overridePlaceholder: 'What should I learn to do?',
   }),
 
+  'add-scheduled-task': (location) => ({
+    context: {
+      label: 'Add Scheduled Task',
+      filePath: `${location}/scheduled-tasks/config.json`,
+      context:
+        'The user wants to create a scheduled task via conversation. ' +
+        'Use the create_scheduled_task tool to create it. Do not edit files manually for this workflow. ' +
+        'Ask brief clarifying questions only when required fields are missing (task intent, schedule, timing). ' +
+        'When schedule.type is "at", use local wall-clock ISO datetime format (YYYY-MM-DDTHH:mm:ss) without trailing Z. ' +
+        'Write the task prompt as a complete standalone instruction because runs execute in a separate session with no context from this chat. ' +
+        'After successful creation, summarize the created task name and schedule clearly.',
+    },
+    example: 'Create a daily 9:00 AM technology news briefing',
+    overridePlaceholder: 'What task should I schedule?',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
+  }),
+
   // Status configuration context
   'edit-statuses': (location) => ({
     context: {
@@ -497,6 +516,7 @@ const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; examp
   'add-source-mcp': { labelKey: 'editPopover.addMcp', exampleKey: 'editPopover.exampleAddMcp', placeholderKey: 'editPopover.placeholderAddMcp' },
   'add-source-local': { labelKey: 'editPopover.addLocalFolder', exampleKey: 'editPopover.exampleAddLocal', placeholderKey: 'editPopover.placeholderAddLocal' },
   'add-skill': { labelKey: 'editPopover.addSkill', exampleKey: 'editPopover.exampleAddSkill', placeholderKey: 'editPopover.placeholderAddSkill' },
+  'add-scheduled-task': { labelKey: 'editPopover.addScheduledTask', exampleKey: 'editPopover.exampleAddScheduledTask', placeholderKey: 'editPopover.placeholderAddScheduledTask' },
   'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
   'edit-labels': { labelKey: 'editPopover.labelConfiguration', exampleKey: 'editPopover.exampleLabel' },
   'edit-auto-rules': { labelKey: 'editPopover.autoApplyRules', exampleKey: 'editPopover.exampleAutoRule' },
