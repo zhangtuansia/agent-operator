@@ -210,6 +210,44 @@ export function getDateTimeContext(): string {
   return `**USER'S DATE AND TIME: ${formatted}** - ALWAYS use this as the authoritative current date/time. Ignore any other date information.`;
 }
 
+/**
+ * Format available skills into a system prompt section.
+ * Uses LobsterAI's auto-routing pattern: lists skills with locations,
+ * instructs the AI to Read the SKILL.md and follow its instructions.
+ *
+ * @param skills - Array of skill metadata with paths
+ */
+export function formatAvailableSkillsPrompt(
+  skills: Array<{ slug: string; name: string; description: string; location: string }>
+): string {
+  if (skills.length === 0) return '';
+
+  const skillEntries = skills
+    .map(
+      (s) =>
+        `  <skill>
+    <id>${s.slug}</id>
+    <name>${s.name}</name>
+    <description>${s.description}</description>
+    <location>${s.location}</location>
+  </skill>`
+    )
+    .join('\n');
+
+  return `
+
+## Available Skills
+
+<available_skills>
+${skillEntries}
+</available_skills>
+
+**How to use skills:**
+When the user's request matches a skill's description, read its SKILL.md file (at the \`<location>\` path) using the Read tool. The SKILL.md contains detailed instructions, available scripts, and usage examples. Follow those instructions to complete the task.
+${skills.some((s) => s.slug === 'web-search') ? `\n**IMPORTANT — Web Search:**\nDo NOT use the built-in WebSearch tool. ALWAYS use the \`web-search\` skill instead — it launches a real browser and is more reliable. When you need to search the web, immediately read the web-search SKILL.md and follow its instructions.\n` : ''}
+`;
+}
+
 /** Debug mode configuration for system prompt */
 export interface DebugModeConfig {
   enabled: boolean;
@@ -508,6 +546,8 @@ Never try to execute a plan without submitting it first - it will fail, especial
 You have access to web search for up-to-date information. Use it proactively to get up-to-date information and best practices.
 Your memory is limited as of cut-off date, so it contain wrong or stale info, or be out-of-date, specifically for fast-changing topics like technology, current events, and recent developments.
 I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your training data!
+
+**IMPORTANT:** If the \`web-search\` skill is available (check <available_skills>), ALWAYS prefer it over the built-in WebSearch tool. The skill uses a real browser and has no rate limits.
 
 ## Code Diffs and Visualization
 Cowork renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.

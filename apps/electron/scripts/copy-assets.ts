@@ -45,6 +45,21 @@ function syncMcpServer(server: McpServerName): void {
 syncMcpServer('bridge-mcp-server');
 syncMcpServer('session-mcp-server');
 
+// Copy bundled skills (web-search, playwright, develop-web-game)
+// In dev mode, skill-services.ts reads from SKILLs/ directly.
+// For packaged builds, we need them in dist/ so electron-builder includes them.
+if (existsSync('SKILLs')) {
+  cpSync('SKILLs', 'dist/SKILLs', {
+    recursive: true,
+    filter: (src) => {
+      // Exclude build artifacts and runtime files
+      const base = src.split('/').pop() ?? '';
+      return !['node_modules', '.server.pid', '.server.log', '.connection', '.DS_Store'].includes(base);
+    },
+  });
+  console.log('[copy-assets] Copied SKILLs/ -> dist/SKILLs/');
+}
+
 // Copy PowerShell parser script (for Windows command validation in Explore mode)
 // Source: packages/shared/src/agent/powershell-parser.ps1
 // Destination: dist/resources/powershell-parser.ps1

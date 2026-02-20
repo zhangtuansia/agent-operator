@@ -58,3 +58,12 @@ id_ed25519*
 # Credentials files
 credentials.enc
 *.credentials
+
+# SKILLs runtime files (web-search bridge server)
+apps/electron/SKILLs/web-search/.server.pid
+apps/electron/SKILLs/web-search/.server.log
+apps/electron/SKILLs/web-search/.connection
+apps/electron/SKILLs/web-search/dist/
+apps/electron/SKILLs/web-search/node_modules/
+apps/electron/SKILLs/imap-smtp-email/node_modules/
+apps/electron/SKILLs/pptx/node_modules/

@@ -732,7 +732,7 @@ function AppShellContent({
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
   const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
-  const scheduledCount = workspaceSessionMetas.filter(s => s.labels?.some(l => l.startsWith('scheduled:'))).length
+  const scheduledCount = scheduledTasks.length
 
   // Count sessions per label (includes descendants for hierarchical counting)
   const labelCounts = useMemo(() => {

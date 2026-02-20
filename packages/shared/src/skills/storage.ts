@@ -147,13 +147,40 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
 }
 
 /**
- * Load a single skill from a workspace
+ * Load a single skill by slug, searching all sources (highest priority wins).
+ * Search order: project > workspace > global > bundled
+ *
  * @param workspaceRoot - Absolute path to workspace root
  * @param slug - Skill directory name
+ * @param projectRoot - Optional project root for project-level skills
  */
-export function loadSkill(workspaceRoot: string, slug: string): LoadedSkill | null {
-  const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
-  return loadSkillFromDir(skillsDir, slug, 'workspace');
+export function loadSkill(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  // Search in priority order (highest first) — return the first match
+
+  // 1. Project skills: {projectRoot}/.agents/skills/
+  if (projectRoot) {
+    const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
+    const skill = loadSkillFromDir(projectSkillsDir, slug, 'project');
+    if (skill) return skill;
+  }
+
+  // 2. Workspace skills
+  const workspaceSkillsDir = getWorkspaceSkillsPath(workspaceRoot);
+  const wsSkill = loadSkillFromDir(workspaceSkillsDir, slug, 'workspace');
+  if (wsSkill) return wsSkill;
+
+  // 3. Global skills: ~/.agents/skills/
+  const globalSkill = loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+  if (globalSkill) return globalSkill;
+
+  // 4. Bundled skills: $SKILLS_ROOT
+  const bundledSkillsRoot = process.env.SKILLS_ROOT;
+  if (bundledSkillsRoot) {
+    const bundledSkill = loadSkillFromDir(bundledSkillsRoot, slug, 'global');
+    if (bundledSkill) return bundledSkill;
+  }
+
+  return null;
 }
 
 /**
@@ -166,9 +193,9 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 }
 
 /**
- * Load all skills from all sources (global, workspace, project)
+ * Load all skills from all sources (bundled, global, workspace, project)
  * Skills with the same slug are overridden by higher-priority sources.
- * Priority: global (lowest) < workspace < project (highest)
+ * Priority: bundled (lowest) < global < workspace < project (highest)
  *
  * @param workspaceRoot - Absolute path to workspace root
  * @param projectRoot - Optional project root (working directory) for project-level skills
@@ -176,7 +203,15 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 export function loadAllSkills(workspaceRoot: string, projectRoot?: string): LoadedSkill[] {
   const skillsBySlug = new Map<string, LoadedSkill>();
 
-  // 1. Global skills (lowest priority): ~/.agents/skills/
+  // 0. Bundled skills (lowest priority): $SKILLS_ROOT (web-search, playwright, etc.)
+  const bundledSkillsRoot = process.env.SKILLS_ROOT;
+  if (bundledSkillsRoot) {
+    for (const skill of loadSkillsFromDir(bundledSkillsRoot, 'global')) {
+      skillsBySlug.set(skill.slug, skill);
+    }
+  }
+
+  // 1. Global skills: ~/.agents/skills/
   for (const skill of loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global')) {
     skillsBySlug.set(skill.slug, skill);
   }

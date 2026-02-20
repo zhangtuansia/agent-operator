@@ -37,7 +37,7 @@ import {
 import { permissionsConfigCache, getAppPermissionsDir } from '@agent-operator/shared/agent';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@agent-operator/shared/workspaces';
 import type { LoadedSkill } from '@agent-operator/shared/skills';
-import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '@agent-operator/shared/skills';
+import { loadSkill, loadAllSkills, skillNeedsIconDownload, downloadSkillIcon } from '@agent-operator/shared/skills';
 import {
   loadStatusConfig,
   statusNeedsIconDownload,
@@ -697,7 +697,7 @@ export class ConfigWatcher {
       }
 
       // Notify list change
-      const allSkills = loadWorkspaceSkills(this.workspaceDir);
+      const allSkills = loadAllSkills(this.workspaceDir);
       this.callbacks.onSkillsListChange?.(allSkills);
     } catch (error) {
       debug('[ConfigWatcher] Error handling skills dir change:', error);

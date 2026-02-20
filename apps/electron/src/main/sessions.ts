@@ -709,8 +709,8 @@ export class SessionManager {
       onSkillChange: async (slug, skill) => {
         sessionLog.info(`Skill '${slug}' changed:`, skill ? 'updated' : 'deleted')
         // Broadcast updated list to UI
-        const { loadWorkspaceSkills } = await import('@agent-operator/shared/skills')
-        const skills = loadWorkspaceSkills(workspaceRootPath)
+        const { loadAllSkills } = await import('@agent-operator/shared/skills')
+        const skills = loadAllSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
     }

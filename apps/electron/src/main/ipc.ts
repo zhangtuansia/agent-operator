@@ -3301,8 +3301,8 @@ export function registerIpcHandlers(
       ipcLog.error(`SKILLS_GET: Workspace not found: ${workspaceId}`)
       return []
     }
-    const { loadWorkspaceSkills } = await import('@agent-operator/shared/skills')
-    const skills = loadWorkspaceSkills(workspace.rootPath)
+    const { loadAllSkills } = await import('@agent-operator/shared/skills')
+    const skills = loadAllSkills(workspace.rootPath)
     ipcLog.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
   })

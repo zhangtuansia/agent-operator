@@ -2,7 +2,9 @@ import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessag
 import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
-import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
+import { join } from 'path';
+import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext, formatAvailableSkillsPrompt } from '../prompts/system.ts';
+import { loadAllSkills } from '../skills/storage.ts';
 // Plan types are used by UI components; not needed in agent-operator.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
@@ -915,7 +917,7 @@ export class OperatorAgent {
                 this.pinnedPreferencesPrompt ?? undefined,
                 this.config.debugMode,
                 this.workspaceRootPath
-              ),
+              ) + this.getAvailableSkillsPrompt(),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
@@ -3349,6 +3351,27 @@ Please continue the conversation naturally from where we left off.
    */
   setTemporaryClarifications(text: string | null): void {
     this.temporaryClarifications = text;
+  }
+
+  /**
+   * Get available skills prompt section for the system prompt.
+   * Lists all installed skills so the AI knows what's available.
+   */
+  private getAvailableSkillsPrompt(): string {
+    try {
+      const skills = loadAllSkills(this.workspaceRootPath);
+      return formatAvailableSkillsPrompt(
+        skills.map((s) => ({
+          slug: s.slug,
+          name: s.metadata.name,
+          description: s.metadata.description,
+          location: join(s.path, 'SKILL.md'),
+        }))
+      );
+    } catch (e) {
+      debug('[getAvailableSkillsPrompt] Failed to load skills:', e);
+      return '';
+    }
   }
 
   /**

@@ -21,6 +21,7 @@ import { setPerfEnabled, enableDebug, setBundledAssetsRoot } from '@agent-operat
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { TaskScheduler } from './scheduler'
+import { getSkillServiceManager } from './skill-services'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -231,6 +232,12 @@ app.whenReady().then(async () => {
     })
     taskScheduler.start()
 
+    // Start skill services (web-search Bridge Server, etc.)
+    const skillServices = getSkillServiceManager()
+    skillServices.startAll().catch(error => {
+      mainLog.error('Failed to start skill services:', error)
+    })
+
     // Register scheduler IPC handlers (runManually/stop need the scheduler instance)
     const { ipcMain } = await import('electron')
     const { IPC_CHANNELS } = await import('../shared/types')
@@ -326,6 +333,11 @@ app.on('before-quit', async (event) => {
     })
     mainLog.info('Saved window state:', windows.length, 'windows')
   }
+
+  // Stop skill services (web-search Bridge Server, etc.)
+  getSkillServiceManager().stopAll().catch(error => {
+    mainLog.error('Failed to stop skill services:', error)
+  })
 
   // Flush all pending session writes before quitting
   if (sessionManager) {
