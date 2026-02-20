@@ -74,6 +74,54 @@ export const en = {
     preferencesDescription: 'Your personal preferences',
     import: 'Import',
     importDescription: 'Import chat history',
+    im: 'IM',
+    imDescription: 'Feishu, Telegram integration',
+  },
+
+  // IM Settings
+  imSettings: {
+    title: 'IM Integration',
+
+    // Feishu
+    feishu: 'Feishu',
+    feishuDescription: 'Feishu / Lark bot integration',
+    enabled: 'Enabled',
+    enabledDesc: 'Enable this IM channel',
+    appId: 'App ID',
+    appSecret: 'App Secret',
+    domain: 'Domain',
+    domainFeishu: 'Feishu (feishu.cn)',
+    domainLark: 'Lark (larksuite.com)',
+    renderMode: 'Render Mode',
+    renderModeText: 'Text',
+    renderModeCard: 'Card',
+
+    // Telegram
+    telegram: 'Telegram',
+    telegramDescription: 'Telegram bot integration',
+    botToken: 'Bot Token',
+
+    // Common
+    requireMention: 'Require @mention in groups',
+    requireMentionDesc: 'Bot only responds when @mentioned in group chats',
+    testConnection: 'Test Connection',
+    testing: 'Testing...',
+    testSuccess: 'Connected',
+    testFailed: 'Connection failed',
+    start: 'Start',
+    stop: 'Stop',
+    starting: 'Starting...',
+    stopping: 'Stopping...',
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    error: 'Error',
+    botName: 'Bot',
+
+    // General
+    general: 'General',
+    generalDescription: 'Common IM settings',
+    debug: 'Debug Logging',
+    debugDesc: 'Enable verbose logging for troubleshooting',
   },
 
   // Import Settings

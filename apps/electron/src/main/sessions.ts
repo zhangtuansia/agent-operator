@@ -632,6 +632,9 @@ export class SessionManager {
   // Snapshot of legacy Bedrock shell config before runtime env gets normalized.
   private legacyBedrockCompatSnapshot: LegacyBedrockCompatState = { enabled: false }
   private cachedClaudeSettingsModel: string | null | undefined = undefined
+  // Internal event listeners for main-process consumers (e.g., IM handler)
+  // Keyed by sessionId → Set of callbacks
+  private sessionEventListeners: Map<string, Set<(event: SessionEvent) => void>> = new Map()
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -2803,6 +2806,34 @@ export class SessionManager {
   }
 
   /**
+   * Check if a session is currently processing a message.
+   */
+  isSessionProcessing(sessionId: string): boolean {
+    const managed = this.sessions.get(sessionId)
+    return managed?.isProcessing ?? false
+  }
+
+  /**
+   * Subscribe to session events from within the main process.
+   * Used by IM handler to listen for agent responses without going through IPC.
+   * Returns an unsubscribe function.
+   */
+  addSessionEventListener(sessionId: string, callback: (event: SessionEvent) => void): () => void {
+    let listeners = this.sessionEventListeners.get(sessionId)
+    if (!listeners) {
+      listeners = new Set()
+      this.sessionEventListeners.set(sessionId, listeners)
+    }
+    listeners.add(callback)
+    return () => {
+      listeners!.delete(callback)
+      if (listeners!.size === 0) {
+        this.sessionEventListeners.delete(sessionId)
+      }
+    }
+  }
+
+  /**
    * Get labels for a session.
    */
   getSessionLabels(sessionId: string): string[] {
@@ -4470,6 +4501,16 @@ To view this task's output:
   }
 
   private sendEvent(event: SessionEvent, workspaceId?: string): void {
+    // Notify main-process listeners (e.g., IM handler)
+    if ('sessionId' in event && event.sessionId) {
+      const listeners = this.sessionEventListeners.get(event.sessionId)
+      if (listeners) {
+        for (const listener of listeners) {
+          try { listener(event) } catch { /* ignore listener errors */ }
+        }
+      }
+    }
+
     if (!this.windowManager) {
       sessionLog.warn('Cannot send event - no window manager')
       return

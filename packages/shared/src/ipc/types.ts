@@ -456,7 +456,7 @@ export type ChatFilter =
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import'
+export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import' | 'im'
 
 /**
  * Chats navigation state - shows SessionList in navigator

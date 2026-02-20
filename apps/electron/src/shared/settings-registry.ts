@@ -41,6 +41,7 @@ export const SETTINGS_PAGES = [
   { id: 'shortcuts', label: 'Shortcuts', description: 'Keyboard shortcuts' },
   { id: 'preferences', label: 'Preferences', description: 'User preferences' },
   { id: 'import', label: 'Import', description: 'Import chat history' },
+  { id: 'im', label: 'IM', description: 'Feishu, Telegram integration' },
 ] as const satisfies readonly SettingsPageDefinition[]
 
 /**

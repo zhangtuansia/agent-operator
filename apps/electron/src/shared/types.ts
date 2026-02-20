@@ -476,6 +476,8 @@ export interface ElectronAPI {
   setRichToolDescriptions(enabled: boolean): Promise<void>
   // Credential health check
   getCredentialHealth(): Promise<CredentialHealthStatus>
+  // Get plaintext API key for an LLM connection (for settings display)
+  getLlmApiKey(connectionSlug: string): Promise<string | null>
 
   // Fonts (local font files)
   getFontsPath(): Promise<string>
@@ -526,6 +528,19 @@ export interface ElectronAPI {
   checkAccessibilityAccess(): Promise<boolean>
   openAccessibilitySettings(): Promise<void>
   getAllPermissions(): Promise<{ fullDiskAccess: boolean; accessibility: boolean }>
+
+  // IM Integration (Feishu, Telegram)
+  imGetConfig(): Promise<import('@agent-operator/shared/im').IMConfigMap>
+  imSetConfig(config: import('@agent-operator/shared/im').IMConfigMap): Promise<void>
+  imGetSettings(): Promise<import('@agent-operator/shared/im').IMSettings>
+  imSetSettings(settings: import('@agent-operator/shared/im').IMSettings): Promise<void>
+  imStartChannel(platform: import('@agent-operator/shared/im').IMPlatform): Promise<void>
+  imStopChannel(platform: import('@agent-operator/shared/im').IMPlatform): Promise<void>
+  imTestChannel(platform: import('@agent-operator/shared/im').IMPlatform, config?: import('@agent-operator/shared/im').ChannelConfig): Promise<import('@agent-operator/shared/im').IMConnectivityTestResult>
+  imGetStatus(): Promise<import('@agent-operator/shared/im').IMGatewayStatus[]>
+  onImStatusChanged(callback: (statuses: import('@agent-operator/shared/im').IMGatewayStatus[]) => void): () => void
+  imGetSessionMappings(platform?: import('@agent-operator/shared/im').IMPlatform): Promise<import('@agent-operator/shared/im').IMSessionMapping[]>
+  imDeleteSessionMapping(conversationId: string, platform: import('@agent-operator/shared/im').IMPlatform): Promise<void>
 }
 
 // ============================================

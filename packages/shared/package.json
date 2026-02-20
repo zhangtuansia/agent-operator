@@ -76,7 +76,8 @@
     "./skills": "./src/skills/index.ts",
     "./scheduled-tasks": "./src/scheduled-tasks/index.ts",
     "./scheduled-tasks/storage": "./src/scheduled-tasks/storage.ts",
-    "./scheduled-tasks/crud": "./src/scheduled-tasks/crud.ts"
+    "./scheduled-tasks/crud": "./src/scheduled-tasks/crud.ts",
+    "./im": "./src/im/index.ts"
   },
   "dependencies": {
     "@agent-operator/core": "workspace:*",

@@ -17,6 +17,7 @@ import PermissionsSettingsPage from './PermissionsSettingsPage'
 import ShortcutsPage from './ShortcutsPage'
 import PreferencesPage from './PreferencesPage'
 import ImportSettingsPage from './ImportSettingsPage'
+import IMSettingsPage from './IMSettingsPage'
 
 export const SETTINGS_PAGE_COMPONENTS: Record<SettingsSubpage, ComponentType> = {
   app: AppSettingsPage,
@@ -28,6 +29,7 @@ export const SETTINGS_PAGE_COMPONENTS: Record<SettingsSubpage, ComponentType> = 
   shortcuts: ShortcutsPage,
   preferences: PreferencesPage,
   import: ImportSettingsPage,
+  im: IMSettingsPage,
 }
 
 export function getSettingsPageComponent(subpage: SettingsSubpage): ComponentType {

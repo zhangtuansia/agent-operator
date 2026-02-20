@@ -105,6 +105,7 @@ export const IPC_CHANNELS = {
   SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
   SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
   CREDENTIAL_HEALTH_CHECK: 'credentials:healthCheck',
+  GET_LLM_API_KEY: 'credentials:getLlmApiKey',
 
   // Onboarding
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
@@ -319,6 +320,20 @@ export const IPC_CHANNELS = {
   SCHEDULED_TASKS_STATUS_UPDATE: 'scheduledTasks:statusUpdate',  // Broadcast: task state changed
   SCHEDULED_TASKS_RUN_UPDATE: 'scheduledTasks:runUpdate',        // Broadcast: run record updated
   SCHEDULED_TASKS_CHANGED: 'scheduledTasks:changed',              // Broadcast: task list changed
+
+  // IM Integration (Feishu, Telegram)
+  IM_GET_CONFIG: 'im:config:get',
+  IM_SET_CONFIG: 'im:config:set',
+  IM_GET_SETTINGS: 'im:settings:get',
+  IM_SET_SETTINGS: 'im:settings:set',
+  IM_START_CHANNEL: 'im:channel:start',
+  IM_STOP_CHANNEL: 'im:channel:stop',
+  IM_TEST_CHANNEL: 'im:channel:test',
+  IM_GET_STATUS: 'im:status:get',
+  IM_STATUS_CHANGED: 'im:status:changed',        // Broadcast: main → renderer
+  IM_MESSAGE_RECEIVED: 'im:message:received',     // Broadcast: main → renderer (activity log)
+  IM_GET_SESSION_MAPPINGS: 'im:sessions:list',
+  IM_DELETE_SESSION_MAPPING: 'im:sessions:delete',
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

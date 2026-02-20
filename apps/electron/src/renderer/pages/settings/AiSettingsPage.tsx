@@ -53,7 +53,6 @@ import {
   SettingsRow,
   SettingsMenuSelectRow,
   SettingsInput,
-  SettingsSecretInput,
   SettingsTextarea,
 } from '@/components/settings'
 import {
@@ -721,9 +720,15 @@ export default function AiSettingsPage() {
     setConnectionDialogOpen(true)
   }, [])
 
-  const openEditConnectionDialog = useCallback((connection: LlmConnectionWithStatus) => {
+  const openEditConnectionDialog = useCallback(async (connection: LlmConnectionWithStatus) => {
     setEditingConnection(connection)
-    setConnectionForm(createConnectionForm(connection))
+    const form = createConnectionForm(connection)
+    // Load plaintext API key for display
+    if (connection.isAuthenticated && window.electronAPI?.getLlmApiKey) {
+      const key = await window.electronAPI.getLlmApiKey(connection.slug)
+      if (key) form.apiKey = key
+    }
+    setConnectionForm(form)
     setConnectionFormError(null)
     setDialogStep('form')
     setConnectionDialogOpen(true)
@@ -796,7 +801,7 @@ export default function AiSettingsPage() {
     }
 
     const requiresApiKey = authRequiresApiKey(connectionForm.authType)
-    if (requiresApiKey && !trimmedApiKey && !editingConnection?.isAuthenticated) {
+    if (requiresApiKey && !trimmedApiKey) {
       setConnectionFormError(t('apiSettings.aiPage.validationApiKeyRequired'))
       return
     }
@@ -1294,13 +1299,12 @@ export default function AiSettingsPage() {
                   )}
 
                   {authRequiresApiKey(connectionForm.authType) && (
-                    <SettingsSecretInput
+                    <SettingsInput
                       label={t('apiSettings.aiPage.apiKey')}
                       description={t('apiSettings.aiPage.apiKeyDescription')}
                       placeholder={t('apiSettings.aiPage.apiKeyPlaceholder')}
                       value={connectionForm.apiKey}
                       onChange={(value) => setConnectionForm(prev => ({ ...prev, apiKey: value }))}
-                      hasExistingValue={Boolean(editingConnection?.isAuthenticated)}
                       inCard={true}
                     />
                   )}

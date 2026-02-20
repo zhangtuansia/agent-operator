@@ -1452,6 +1452,11 @@ export function registerIpcHandlers(
     return manager.checkHealth()
   })
 
+  ipcMain.handle(IPC_CHANNELS.GET_LLM_API_KEY, async (_event, connectionSlug: string) => {
+    const manager = getCredentialManager()
+    return manager.getLlmApiKey(connectionSlug)
+  })
+
   // ============================================================
   // Settings - Billing Method
   // ============================================================

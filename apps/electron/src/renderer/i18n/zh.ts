@@ -76,6 +76,54 @@ export const zh: TranslationKeys = {
     preferencesDescription: '您的个人偏好设置',
     import: '导入',
     importDescription: '导入聊天记录',
+    im: '即时通讯',
+    imDescription: '飞书、Telegram 集成',
+  },
+
+  // IM Settings
+  imSettings: {
+    title: '即时通讯集成',
+
+    // Feishu
+    feishu: '飞书',
+    feishuDescription: '飞书 / Lark 机器人集成',
+    enabled: '启用',
+    enabledDesc: '启用此 IM 通道',
+    appId: 'App ID',
+    appSecret: 'App Secret',
+    domain: '域名',
+    domainFeishu: '飞书 (feishu.cn)',
+    domainLark: 'Lark (larksuite.com)',
+    renderMode: '渲染模式',
+    renderModeText: '纯文本',
+    renderModeCard: '卡片',
+
+    // Telegram
+    telegram: 'Telegram',
+    telegramDescription: 'Telegram 机器人集成',
+    botToken: 'Bot Token',
+
+    // Common
+    requireMention: '群聊中需要 @提及',
+    requireMentionDesc: '仅在群聊中被 @提及时才响应',
+    testConnection: '测试连接',
+    testing: '测试中...',
+    testSuccess: '连接成功',
+    testFailed: '连接失败',
+    start: '启动',
+    stop: '停止',
+    starting: '启动中...',
+    stopping: '停止中...',
+    connected: '已连接',
+    disconnected: '未连接',
+    error: '错误',
+    botName: '机器人',
+
+    // General
+    general: '通用',
+    generalDescription: '通用 IM 设置',
+    debug: '调试日志',
+    debugDesc: '启用详细日志以排查问题',
   },
 
   // Import Settings

@@ -22,6 +22,7 @@ import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBa
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { TaskScheduler } from './scheduler'
 import { getSkillServiceManager } from './skill-services'
+import { createIMServiceManager, getIMServiceManager } from './im-services'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -238,6 +239,13 @@ app.whenReady().then(async () => {
       mainLog.error('Failed to start skill services:', error)
     })
 
+    // Initialize IM services (Feishu, Telegram)
+    const imServices = createIMServiceManager(sessionManager, windowManager)
+    imServices.registerIpcHandlers()
+    imServices.initialize().catch(error => {
+      mainLog.error('Failed to initialize IM services:', error)
+    })
+
     // Register scheduler IPC handlers (runManually/stop need the scheduler instance)
     const { ipcMain } = await import('electron')
     const { IPC_CHANNELS } = await import('../shared/types')
@@ -337,6 +345,11 @@ app.on('before-quit', async (event) => {
   // Stop skill services (web-search Bridge Server, etc.)
   getSkillServiceManager().stopAll().catch(error => {
     mainLog.error('Failed to stop skill services:', error)
+  })
+
+  // Stop IM services (Feishu, Telegram gateways)
+  getIMServiceManager()?.shutdown().catch(error => {
+    mainLog.error('Failed to stop IM services:', error)
   })
 
   // Flush all pending session writes before quitting

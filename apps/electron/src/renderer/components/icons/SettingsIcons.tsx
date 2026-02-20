@@ -194,6 +194,23 @@ export const ImportIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+/** Chat bubble icon for IM integration */
+export const IMIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.47715 2 2 6.47715 2 12C2 13.8153 2.48451 15.5196 3.33021 16.9883L2.10557 20.6584C1.90228 21.2677 2.47328 21.8573 3.08885 21.6731L6.94054 20.5196C8.44882 21.4665 10.1615 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM8 11C7.44772 11 7 11.4477 7 12C7 12.5523 7.44772 13 8 13H16C16.5523 13 17 12.5523 17 12C17 11.4477 16.5523 11 16 11H8ZM8 7.5C7.44772 7.5 7 7.94772 7 8.5C7 9.05228 7.44772 9.5 8 9.5H14C14.5523 9.5 15 9.05228 15 8.5C15 7.94772 14.5523 7.5 14 7.5H8ZM8 14.5C7.44772 14.5 7 14.9477 7 15.5C7 16.0523 7.44772 16.5 8 16.5H12C12.5523 16.5 13 16.0523 13 15.5C13 14.9477 12.5523 14.5 12 14.5H8Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /**
  * Map of settings subpage IDs to their icon components.
  * Used by both AppMenu and SettingsNavigator for consistent icons.
@@ -208,4 +225,5 @@ export const SETTINGS_ICONS: Partial<Record<SettingsSubpage, React.ComponentType
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,
   import: ImportIcon,
+  im: IMIcon,
 }

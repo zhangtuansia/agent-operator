@@ -14,8 +14,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --define:process.env.GOOGLE_OAUTH_CLIENT_ID=\\\"${GOOGLE_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=\\\"${GOOGLE_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_ID=\\\"${SLACK_OAUTH_CLIENT_ID:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_SECRET=\\\"${SLACK_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_ID=\\\"${MICROSOFT_OAUTH_CLIENT_ID:-}\\\"",
-    "build:main:win": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron",
+    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@larksuiteoapi/node-sdk --external:grammy --external:@grammyjs/runner --define:process.env.GOOGLE_OAUTH_CLIENT_ID=\\\"${GOOGLE_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=\\\"${GOOGLE_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_ID=\\\"${SLACK_OAUTH_CLIENT_ID:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_SECRET=\\\"${SLACK_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_ID=\\\"${MICROSOFT_OAUTH_CLIENT_ID:-}\\\"",
+    "build:main:win": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@larksuiteoapi/node-sdk --external:grammy --external:@grammyjs/runner",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
     "build:renderer": "vite build",
     "build:resources": "bun scripts/copy-assets.ts",
@@ -57,6 +57,9 @@
     "dompurify": "^3.3.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.7.3",
+    "@larksuiteoapi/node-sdk": "^1.58.0",
+    "grammy": "^1.21.0",
+    "@grammyjs/runner": "^2.0.3",
     "jotai-family": "^1.0.1",
     "motion": "^12.23.26",
     "next-themes": "^0.4.6",

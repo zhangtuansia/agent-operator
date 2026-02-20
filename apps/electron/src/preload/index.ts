@@ -147,6 +147,7 @@ const api: ElectronAPI = {
   showDeleteSessionConfirmation: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, name),
   logout: () => ipcRenderer.invoke(IPC_CHANNELS.LOGOUT),
   getCredentialHealth: () => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIAL_HEALTH_CHECK),
+  getLlmApiKey: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_LLM_API_KEY, connectionSlug),
 
   // Onboarding
   getAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE).then(r => r.authState),
@@ -585,6 +586,37 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, handler)
     }
   },
+
+  // IM Integration (Feishu, Telegram)
+  imGetConfig: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_GET_CONFIG),
+  imSetConfig: (config: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_SET_CONFIG, config),
+  imGetSettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_GET_SETTINGS),
+  imSetSettings: (settings: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_SET_SETTINGS, settings),
+  imStartChannel: (platform: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_START_CHANNEL, platform),
+  imStopChannel: (platform: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_STOP_CHANNEL, platform),
+  imTestChannel: (platform: string, config?: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_TEST_CHANNEL, platform, config),
+  imGetStatus: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_GET_STATUS),
+  onImStatusChanged: (callback: (statuses: unknown[]) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, statuses: unknown[]) => {
+      callback(statuses)
+    }
+    ipcRenderer.on(IPC_CHANNELS.IM_STATUS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.IM_STATUS_CHANGED, handler)
+    }
+  },
+  imGetSessionMappings: (platform?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_GET_SESSION_MAPPINGS, platform),
+  imDeleteSessionMapping: (conversationId: string, platform: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.IM_DELETE_SESSION_MAPPING, conversationId, platform),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

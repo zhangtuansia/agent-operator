@@ -68,6 +68,7 @@ const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
   'shortcuts',
   'preferences',
   'import',
+  'im',
 ]
 
 /**
