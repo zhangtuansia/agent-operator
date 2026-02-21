@@ -16,8 +16,11 @@ files:
   - "!dist/renderer/src/**"
   - "!**/*.map"
   - package.json
-  # Include network interceptor for API error capture and MCP schema injection
+  # Include network interceptor and its dependencies for API error capture and MCP schema injection
   - packages/shared/src/network-interceptor.ts
+  - packages/shared/src/interceptor-common.ts
+  - packages/shared/src/feature-flags.ts
+  - packages/shared/src/config/paths.ts
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
   # Include only the specific node_modules we need (SDK, Copilot).

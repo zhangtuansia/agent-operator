@@ -100,14 +100,18 @@ setup_dependencies() {
     mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
     cp -r "$sdk_source" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
-    # Copy interceptor
-    local interceptor_source="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
-    if [ ! -f "$interceptor_source" ]; then
-        log_error "Interceptor not found at $interceptor_source"
+    # Copy interceptor and its dependencies
+    local shared_src="$ROOT_DIR/packages/shared/src"
+    local dest_src="$ELECTRON_DIR/packages/shared/src"
+    if [ ! -f "$shared_src/network-interceptor.ts" ]; then
+        log_error "Interceptor not found at $shared_src/network-interceptor.ts"
         exit 1
     fi
-    mkdir -p "$ELECTRON_DIR/packages/shared/src"
-    cp "$interceptor_source" "$ELECTRON_DIR/packages/shared/src/"
+    mkdir -p "$dest_src/config"
+    cp "$shared_src/network-interceptor.ts" "$dest_src/"
+    cp "$shared_src/interceptor-common.ts" "$dest_src/"
+    cp "$shared_src/feature-flags.ts" "$dest_src/"
+    cp "$shared_src/config/paths.ts" "$dest_src/config/"
 
     log_info "Dependencies ready"
 }

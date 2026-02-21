@@ -497,9 +497,16 @@ export function ChatDisplay({
 
       let activitiesChanged = false
       const normalizedActivities = turn.activities.map((activity) => {
+        // Normalize stale intermediate/status activities from 'running' to 'completed'
         if ((activity.type === 'intermediate' || activity.type === 'status') && activity.status === 'running') {
           activitiesChanged = true
           return { ...activity, status: 'completed' as const }
+        }
+        // Normalize stale tool activities that were persisted mid-execution
+        // (e.g., tool_start saved to disk before tool_result arrived)
+        if (activity.type === 'tool' && (activity.status === 'pending' || activity.status === 'running')) {
+          activitiesChanged = true
+          return { ...activity, status: 'error' as const, error: 'Interrupted' }
         }
         return activity
       })

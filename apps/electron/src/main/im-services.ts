@@ -217,8 +217,9 @@ export class IMServiceManager {
           const session = await this.sessionManager.createSession(workspace.id, {
             permissionMode: 'allow-all',
             workingDirectory: options.workingDirectory || workingDirectory,
-            hidden: true,
-          })
+            name: options.title,
+            labels: ['im'],
+          } as any)
           return session.id
         },
 

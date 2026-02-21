@@ -515,7 +515,13 @@ function messageToStored(msg: Message): StoredMessage {
     toolStatus: msg.toolStatus,
     toolDuration: msg.toolDuration,
     toolIntent: msg.toolIntent,
+    toolDisplayName: msg.toolDisplayName,
     parentToolUseId: msg.parentToolUseId,
+    // Background task fields
+    taskId: msg.taskId,
+    shellId: msg.shellId,
+    elapsedSeconds: msg.elapsedSeconds,
+    isBackground: msg.isBackground,
     isError: msg.isError,
     attachments: msg.attachments,
     badges: msg.badges,  // Content badges for inline display (sources, skills, context)
@@ -530,6 +536,8 @@ function messageToStored(msg: Message): StoredMessage {
     errorCanRetry: msg.errorCanRetry,
     // Ultrathink
     ultrathink: msg.ultrathink,
+    // Plan fields
+    planPath: msg.planPath,
     // Auth request fields
     authRequestId: msg.authRequestId,
     authRequestType: msg.authRequestType,
@@ -562,7 +570,13 @@ function storedToMessage(stored: StoredMessage): Message {
     toolStatus: stored.toolStatus,
     toolDuration: stored.toolDuration,
     toolIntent: stored.toolIntent,
+    toolDisplayName: stored.toolDisplayName,
     parentToolUseId: stored.parentToolUseId,
+    // Background task fields
+    taskId: stored.taskId,
+    shellId: stored.shellId,
+    elapsedSeconds: stored.elapsedSeconds,
+    isBackground: stored.isBackground,
     isError: stored.isError,
     attachments: stored.attachments,
     badges: stored.badges,  // Content badges for inline display (sources, skills, context)
@@ -577,6 +591,8 @@ function storedToMessage(stored: StoredMessage): Message {
     errorCanRetry: stored.errorCanRetry,
     // Ultrathink
     ultrathink: stored.ultrathink,
+    // Plan fields
+    planPath: stored.planPath,
     // Auth request fields
     authRequestId: stored.authRequestId,
     authRequestType: stored.authRequestType,
@@ -1395,8 +1411,24 @@ export class SessionManager {
   // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
     try {
+      // Capture any in-progress streaming text as a synthetic assistant message.
+      // During streaming, text accumulates in managed.streamingText but is only
+      // moved to managed.messages on text_complete. If the app quits mid-stream,
+      // this text would be lost without this preservation.
+      let allMessages = managed.messages
+      if (managed.streamingText) {
+        const streamingMessage: Message = {
+          id: `streaming-${managed.id}-${Date.now()}`,
+          role: 'assistant',
+          content: managed.streamingText,
+          timestamp: Date.now(),
+          isIntermediate: false,
+        }
+        allMessages = [...managed.messages, streamingMessage]
+      }
+
       // Filter out transient messages (error, status, system) that shouldn't be persisted
-      const persistableMessages = managed.messages.filter(m =>
+      const persistableMessages = allMessages.filter(m =>
         m.role !== 'error' && m.role !== 'status' && m.role !== 'system'
       )
 
@@ -1447,6 +1479,14 @@ export class SessionManager {
 
   // Flush all pending sessions (call on app quit)
   async flushAllSessions(): Promise<void> {
+    // Re-persist sessions with active streaming text so the latest
+    // snapshot (including any in-progress assistant response) is enqueued
+    // before the final flush writes everything to disk.
+    for (const [, managed] of this.sessions) {
+      if (managed.streamingText) {
+        this.persistSession(managed)
+      }
+    }
     await sessionPersistenceQueue.flushAll()
   }
 
@@ -1826,7 +1866,8 @@ export class SessionManager {
   private async loadMessagesFromDisk(managed: ManagedSession): Promise<void> {
     const storedSession = loadStoredSession(managed.workspace.rootPath, managed.id)
     if (storedSession) {
-      managed.messages = (storedSession.messages || []).map(storedToMessage)
+      const storedMessages = storedSession.messages || []
+      managed.messages = storedMessages.map(storedToMessage)
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
@@ -1838,6 +1879,8 @@ export class SessionManager {
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
+    } else {
+      sessionLog.warn(`loadMessagesFromDisk: storedSession is null for ${managed.id}`)
     }
     managed.messagesLoaded = true
   }
@@ -1913,6 +1956,8 @@ export class SessionManager {
       model: resolvedModel,
       llmConnection: resolvedConnection?.slug,
       hidden: options?.hidden,
+      name: (options as any)?.name,
+      labels: (options as any)?.labels,
     })
 
     const managed: ManagedSession = {
@@ -1940,6 +1985,8 @@ export class SessionManager {
       connectionLocked: false,
       systemPromptPreset: options?.systemPromptPreset,
       hidden: options?.hidden,
+      name: storedSession.name,
+      labels: storedSession.labels,
       thinkingLevel: defaultThinkingLevel,
       messageQueue: [],
       backgroundShellCommands: new Map(),

@@ -244,8 +244,9 @@ export class IMCoworkHandler extends EventEmitter {
     imStorage.createSessionMapping(conversationId, platform, sessionId, this.workspaceId);
     this.imSessionIds.add(sessionId);
 
-    // Subscribe to session events
-    this.subscribeToSession(sessionId);
+    // Note: Do NOT subscribe here — createAccumulatorPromise() handles subscription setup.
+    // Subscribing here would cause double event delivery (doubled response text) and leaked
+    // listeners because the accumulator doesn't exist yet to store unsubscribers.
 
     return sessionId;
   }

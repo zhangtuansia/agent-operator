@@ -73,9 +73,12 @@ class SessionPersistenceQueue {
       }
 
       // Create JSONL content: header + messages (one per line)
-      // Filter out intermediate messages - they're transient streaming status updates
+      // Keep all messages including intermediate ones - they provide context
+      // for interrupted sessions where the final response never arrived.
+      // groupMessagesByTurn promotes the last intermediate text to response
+      // when no non-intermediate response exists.
       const header = createSessionHeader(storageSession)
-      const persistableMessages = storageSession.messages.filter(m => !m.isIntermediate)
+      const persistableMessages = storageSession.messages
       // Use original absolute sessionDir (before toPortablePath) for path replacement
       const sessionDir = dirname(filePath)
       const lines = [
