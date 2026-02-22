@@ -93,8 +93,19 @@ export function matchSkillsToMessage(
 
     let score = 0;
     for (const trigger of triggers) {
-      // Case-insensitive substring match (works for both Chinese and English)
-      if (messageLower.includes(trigger.toLowerCase())) {
+      const triggerLower = trigger.toLowerCase();
+      // Use word boundary for ASCII triggers to avoid false positives
+      // (e.g., "cron" matching "acronym"). Chinese triggers use substring match
+      // since Chinese has no word boundaries.
+      const isAscii = /^[a-z0-9 ]+$/i.test(trigger);
+      let matched = false;
+      if (isAscii) {
+        const re = new RegExp(`\\b${triggerLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        matched = re.test(message);
+      } else {
+        matched = messageLower.includes(triggerLower);
+      }
+      if (matched) {
         // Longer triggers = higher confidence (phrase match > single word)
         score += trigger.length;
       }

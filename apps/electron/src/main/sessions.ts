@@ -36,9 +36,6 @@ import {
   saveSession as saveStoredSession,
   createSession as createStoredSession,
   deleteSession as deleteStoredSession,
-  flagSession as flagStoredSession,
-  unflagSession as unflagStoredSession,
-  setSessionTodoState as setStoredSessionTodoState,
   updateSessionMetadata,
   setPendingPlanExecution as setStoredPendingPlanExecution,
   markCompactionComplete as markStoredCompactionComplete,
@@ -1759,6 +1756,13 @@ export class SessionManager {
    * Used after importing sessions to refresh the in-memory session list.
    */
   reloadSessions(): void {
+    // Dispose agents for existing sessions to prevent orphaned child processes
+    for (const [, managed] of this.sessions) {
+      if (managed.agent) {
+        managed.agent.dispose()
+        managed.agent = null
+      }
+    }
     this.loadSessionsFromDisk()
   }
 
@@ -2526,8 +2530,8 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.isFlagged = true
-      const workspaceRootPath = managed.workspace.rootPath
-      flagStoredSession(workspaceRootPath, sessionId)
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_flagged', sessionId }, managed.workspace.id)
     }
@@ -2537,8 +2541,8 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.isFlagged = false
-      const workspaceRootPath = managed.workspace.rootPath
-      unflagStoredSession(workspaceRootPath, sessionId)
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_unflagged', sessionId }, managed.workspace.id)
     }
@@ -2548,8 +2552,8 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.todoState = todoState
-      const workspaceRootPath = managed.workspace.rootPath
-      setStoredSessionTodoState(workspaceRootPath, sessionId, todoState)
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'todo_state_changed', sessionId, todoState }, managed.workspace.id)
     }
@@ -3033,6 +3037,11 @@ export class SessionManager {
         )
       }
 
+      // Guard: session may have been deleted while awaiting title regeneration
+      if (!this.sessions.has(sessionId)) {
+        sessionLog.info(`Session ${sessionId} was deleted during title refresh, skipping persist`)
+        return { success: false, error: 'Session was deleted' }
+      }
       managed.name = title
       this.persistSession(managed)
       // title_generated will also clear isRegeneratingTitle via the event handler
@@ -3042,6 +3051,10 @@ export class SessionManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       sessionLog.error(`Failed to refresh title for session ${sessionId}:`, error)
+      // Guard: session may have been deleted
+      if (!this.sessions.has(sessionId)) {
+        return { success: false, error: 'Session was deleted' }
+      }
       const fallbackCandidates = userMessages.length > 0
         ? userMessages
         : assistantResponse
@@ -3138,10 +3151,7 @@ export class SessionManager {
       managed.agent = null
     }
 
-    await updateSessionMetadata(managed.workspace.rootPath, sessionId, {
-      llmConnection: connectionSlug,
-      ...(modelChanged ? { model: managed.model } : {}),
-    })
+    // Persist from in-memory state (no updateSessionMetadata — it reads stale disk)
     this.persistSession(managed)
     await sessionPersistenceQueue.flush(managed.id)
 
@@ -3284,6 +3294,7 @@ export class SessionManager {
     }
 
     this.sessions.delete(sessionId)
+    this.sessionEventListeners.delete(sessionId)
 
     // Delete from disk too
     deleteStoredSession(workspaceRootPath, sessionId)
@@ -4079,6 +4090,11 @@ To view this task's output:
       if (!generatedTitle?.trim()) {
         sessionLog.warn(`Title generation returned empty for session ${managed.id}; using fallback "${title}"`)
       }
+      // Guard: session may have been deleted while awaiting title generation
+      if (!this.sessions.has(managed.id)) {
+        sessionLog.info(`Session ${managed.id} was deleted during title generation, skipping persist`)
+        return
+      }
       managed.name = title
       this.persistSession(managed)
       // Flush immediately to ensure disk is up-to-date before notifying renderer.
@@ -4667,11 +4683,16 @@ To view this task's output:
         clearTimeout(timer)
         this.deltaFlushTimers.delete(sessionId)
       }
+      // Dispose agent to release child processes, MCP connections, file watchers
+      if (managed.agent) {
+        managed.agent.dispose()
+      }
       // Clean up session-scoped tool callbacks
       unregisterSessionScopedToolCallbacks(sessionId)
     }
 
     this.sessions.clear()
+    this.sessionEventListeners.clear()
     this.pendingDeltas.clear()
     sessionLog.info('All sessions cleared')
   }

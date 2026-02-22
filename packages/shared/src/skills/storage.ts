@@ -352,6 +352,11 @@ export async function importSkillFromUrl(
   customSlug?: string
 ): Promise<import('./types.ts').ImportSkillResult> {
   try {
+    // Basic SSRF protection: only allow http(s) URLs
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { success: false, error: `Unsupported protocol: ${parsed.protocol}` };
+    }
     const response = await fetch(url);
     if (!response.ok) {
       return { success: false, error: `Failed to fetch URL: ${response.status} ${response.statusText}` };
@@ -379,10 +384,15 @@ export async function importSkillFromContent(
     }
 
     // Generate slug from custom slug or skill name
-    const slug = customSlug || parsed.metadata.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    // Sanitize customSlug to prevent path traversal (e.g., "../../.ssh/keys")
+    const rawSlug = customSlug
+      ? customSlug.replace(/[^a-z0-9\-]/gi, '-').replace(/^-|-$/g, '').toLowerCase()
+      : parsed.metadata.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+    const slug = rawSlug;
 
     if (!slug) {
       return { success: false, error: 'Could not generate a valid slug from skill name' };
