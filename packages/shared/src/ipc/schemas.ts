@@ -71,12 +71,14 @@ export const SendMessageOptionsSchema = z.object({
   ultrathinkEnabled: z.boolean().optional(),
   skillSlugs: z.array(z.string()).optional(),
   badges: z.array(z.object({
-    type: z.enum(['source', 'skill', 'model']),
-    name: z.string(),
-    slug: z.string(),
-    iconUrl: z.string().optional(),
-    iconSvg: z.string().optional(),
-    color: z.string().optional(),
+    type: z.enum(['source', 'skill', 'context', 'command', 'file', 'folder']),
+    label: z.string(),
+    rawText: z.string(),
+    iconDataUrl: z.string().optional(),
+    start: z.number(),
+    end: z.number(),
+    collapsedLabel: z.string().optional(),
+    filePath: z.string().optional(),
   })).optional(),
 })
 

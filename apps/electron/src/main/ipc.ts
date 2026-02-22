@@ -619,6 +619,16 @@ export function registerIpcHandlers(
     return session
   })
 
+  // Create a sub-session under a parent session
+  ipcMain.handle(IPC_CHANNELS.CREATE_SUB_SESSION, async (_event, workspaceId: string, parentSessionId: string, options?: unknown) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { createSubSession } = await import('@agent-operator/shared/sessions')
+    const validatedOptions = options ? validateIpcArgs(CreateSessionOptionsSchema, options, 'CREATE_SUB_SESSION.options') : undefined
+    const session = await createSubSession(workspace.rootPath, parentSessionId, validatedOptions)
+    sessionManager.reloadSessions()
+    return session
+  })
+
   // Delete a session
   ipcMain.handle(IPC_CHANNELS.DELETE_SESSION, async (_event, sessionId: string) => {
     return sessionManager.deleteSession(sessionId)
@@ -3863,6 +3873,19 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, async (_event, enabled: boolean) => {
     const { setSpellCheck } = await import('@agent-operator/shared/config/storage')
     setSpellCheck(enabled)
+  })
+
+  // Power Management
+  ipcMain.handle(IPC_CHANNELS.POWER_GET_KEEP_AWAKE, async () => {
+    const { getKeepAwakeWhileRunning } = await import('@agent-operator/shared/config/storage')
+    return getKeepAwakeWhileRunning()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.POWER_SET_KEEP_AWAKE, async (_event, enabled: boolean) => {
+    const { setKeepAwakeWhileRunning } = await import('@agent-operator/shared/config/storage')
+    const { setKeepAwakeSetting } = await import('./power-manager')
+    setKeepAwakeWhileRunning(enabled)
+    setKeepAwakeSetting(enabled)
   })
 
   // Update app badge count

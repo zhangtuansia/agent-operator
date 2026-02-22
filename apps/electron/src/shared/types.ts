@@ -529,6 +529,25 @@ export interface ElectronAPI {
   openAccessibilitySettings(): Promise<void>
   getAllPermissions(): Promise<{ fullDiskAccess: boolean; accessibility: boolean }>
 
+  // Scheduled Tasks
+  listScheduledTasks(workspaceId: string): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask[]>
+  getScheduledTask(workspaceId: string, taskId: string): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask | null>
+  createScheduledTask(workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
+  updateScheduledTask(workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
+  deleteScheduledTask(workspaceId: string, taskId: string): Promise<void>
+  toggleScheduledTask(workspaceId: string, taskId: string, enabled: boolean): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
+  runScheduledTaskManually(workspaceId: string, taskId: string): Promise<void>
+  stopScheduledTask(workspaceId: string, taskId: string): Promise<void>
+  listScheduledTaskRuns(workspaceId: string, taskId: string, limit?: number, offset?: number): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRun[]>
+  listAllScheduledTaskRuns(workspaceId: string, limit?: number, offset?: number): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRun[]>
+  onScheduledTasksChanged(callback: (workspaceId?: string) => void): () => void
+  onScheduledTaskStatusUpdate(callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => void): () => void
+  onScheduledTaskRunUpdate(callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => void): () => void
+
+  // Power Management
+  getKeepAwakeWhileRunning(): Promise<boolean>
+  setKeepAwakeWhileRunning(enabled: boolean): Promise<void>
+
   // IM Integration (Feishu, Telegram)
   imGetConfig(): Promise<import('@agent-operator/shared/im').IMConfigMap>
   imSetConfig(config: import('@agent-operator/shared/im').IMConfigMap): Promise<void>

@@ -106,6 +106,8 @@ export interface StoredConfig {
   autoCapitalisation?: boolean;  // Auto-capitalize first letter when typing (default: true)
   sendMessageKey?: 'enter' | 'cmd-enter';  // Key to send messages (default: 'enter')
   spellCheck?: boolean;  // Enable spell check in input (default: false)
+  // Power settings
+  keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -1234,6 +1236,33 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+// ============================================
+// Power Settings
+// ============================================
+
+/**
+ * Get whether screen should stay awake while sessions are running.
+ * Defaults to false if not set.
+ */
+export function getKeepAwakeWhileRunning(): boolean {
+  const config = loadStoredConfig();
+  if (config?.keepAwakeWhileRunning !== undefined) {
+    return config.keepAwakeWhileRunning;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.keepAwakeWhileRunning;
+}
+
+/**
+ * Set whether screen should stay awake while sessions are running.
+ */
+export function setKeepAwakeWhileRunning(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.keepAwakeWhileRunning = enabled;
   saveConfig(config);
 }
 

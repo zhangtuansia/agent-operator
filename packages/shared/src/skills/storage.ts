@@ -61,6 +61,7 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         description: parsed.data.description as string,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
+        triggers: parsed.data.triggers as string[] | undefined,
         icon,
       },
       body: parsed.content,
@@ -335,6 +336,83 @@ export async function downloadSkillIcon(
  */
 export function skillNeedsIconDownload(skill: LoadedSkill): boolean {
   return needsIconDownload(skill.metadata.icon, skill.iconPath);
+}
+
+// ============================================================
+// Import Operations
+// ============================================================
+
+/**
+ * Import a skill from a URL (fetches SKILL.md content from the URL).
+ * Saves to workspace skills directory.
+ */
+export async function importSkillFromUrl(
+  workspaceRoot: string,
+  url: string,
+  customSlug?: string
+): Promise<import('./types.ts').ImportSkillResult> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return { success: false, error: `Failed to fetch URL: ${response.status} ${response.statusText}` };
+    }
+    const content = await response.text();
+    return importSkillFromContent(workspaceRoot, content, customSlug);
+  } catch (error) {
+    return { success: false, error: `Failed to fetch skill from URL: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+/**
+ * Import a skill from raw SKILL.md content.
+ * Parses the content, generates a slug, and saves to workspace skills directory.
+ */
+export async function importSkillFromContent(
+  workspaceRoot: string,
+  content: string,
+  customSlug?: string
+): Promise<import('./types.ts').ImportSkillResult> {
+  try {
+    const parsed = parseSkillFile(content);
+    if (!parsed) {
+      return { success: false, error: 'Invalid SKILL.md content: missing required name or description in frontmatter' };
+    }
+
+    // Generate slug from custom slug or skill name
+    const slug = customSlug || parsed.metadata.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (!slug) {
+      return { success: false, error: 'Could not generate a valid slug from skill name' };
+    }
+
+    const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+    const skillDir = join(skillsDir, slug);
+
+    // Create skill directory
+    const { mkdirSync, writeFileSync } = await import('fs');
+    mkdirSync(skillDir, { recursive: true });
+
+    // Write SKILL.md
+    writeFileSync(join(skillDir, 'SKILL.md'), content, 'utf-8');
+
+    // Download icon if it's a URL
+    if (parsed.metadata.icon && isIconUrl(parsed.metadata.icon)) {
+      await downloadSkillIcon(skillDir, parsed.metadata.icon);
+    }
+
+    // Load and return the saved skill
+    const skill = loadSkillFromDir(skillsDir, slug, 'workspace');
+    if (!skill) {
+      return { success: false, error: 'Skill was saved but failed to load back' };
+    }
+
+    return { success: true, skill };
+  } catch (error) {
+    return { success: false, error: `Failed to import skill: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 // Re-export icon utilities for convenience

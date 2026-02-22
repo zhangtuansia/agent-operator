@@ -236,6 +236,62 @@ export async function createSession(
 }
 
 /**
+ * Create a session from imported conversation data (OpenAI/Anthropic exports).
+ * Pre-populates messages and sets original timestamps.
+ */
+export async function createImportedSession(
+  workspaceRootPath: string,
+  options: {
+    name?: string;
+    labels?: string[];
+    createdAt?: number;
+    updatedAt?: number;
+    messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp?: number }>;
+  }
+): Promise<SessionConfig> {
+  ensureSessionsDir(workspaceRootPath);
+
+  const now = Date.now();
+  const sessionId = generateSessionId(workspaceRootPath);
+  ensureSessionDir(workspaceRootPath, sessionId);
+
+  const createdAt = options.createdAt ?? now;
+  const lastUsedAt = options.updatedAt ?? now;
+
+  const session: SessionConfig = {
+    id: sessionId,
+    workspaceRootPath,
+    name: options.name,
+    createdAt,
+    lastUsedAt,
+    labels: options.labels,
+  };
+
+  // Convert imported messages to StoredMessage format
+  const storedMessages: import('@agent-operator/core/types').StoredMessage[] = options.messages.map((msg, i) => ({
+    id: `imported-${sessionId}-${i}`,
+    type: msg.role as import('@agent-operator/core/types').MessageRole,
+    content: msg.content,
+    timestamp: msg.timestamp,
+  }));
+
+  const storedSession: StoredSession = {
+    ...session,
+    messages: storedMessages,
+    tokenUsage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      contextTokens: 0,
+      costUsd: 0,
+    },
+  };
+  await saveSession(storedSession);
+
+  return session;
+}
+
+/**
  * Get or create a session with a specific ID
  * Used for --session <id> flag to allow user-defined session IDs
  */

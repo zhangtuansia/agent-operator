@@ -17,6 +17,7 @@ export interface ConfigDefaults {
     autoCapitalisation: boolean;
     sendMessageKey: 'enter' | 'cmd-enter';
     spellCheck: boolean;
+    keepAwakeWhileRunning: boolean;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;
@@ -42,6 +43,7 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     autoCapitalisation: true,
     sendMessageKey: 'enter',
     spellCheck: false,
+    keepAwakeWhileRunning: false,
   },
   workspaceDefaults: {
     thinkingLevel: 'think',

@@ -211,9 +211,26 @@ export function getDateTimeContext(): string {
 }
 
 /**
+ * Skills that should always show full descriptions in the system prompt.
+ * These are high-frequency or hard-to-infer-from-name skills that the model
+ * needs to proactively route to without user @mention.
+ */
+const FEATURED_SKILL_SLUGS = new Set([
+  'web-search',      // Critical: replaces built-in WebSearch
+  'playwright',      // Browser automation — name alone isn't descriptive enough
+  'frontend-design', // Triggers on "build a page/component" which is common
+  'canvas-design',   // Triggers on "create a poster/design"
+  'scheduled-task',  // Triggers on "remind me" / "every day at..."
+  'local-tools',     // Calendar access — not obvious from name
+]);
+
+/**
  * Format available skills into a system prompt section.
- * Uses LobsterAI's auto-routing pattern: lists skills with locations,
- * instructs the AI to Read the SKILL.md and follow its instructions.
+ *
+ * To keep the system prompt compact (fewer tokens → faster TTFB):
+ * - Featured skills get full `<description>` so the model can auto-route.
+ * - Other skills are listed as name-only; the model reads their SKILL.md
+ *   on demand when the user @mentions them.
  *
  * @param skills - Array of skill metadata with paths
  */
@@ -222,29 +239,33 @@ export function formatAvailableSkillsPrompt(
 ): string {
   if (skills.length === 0) return '';
 
-  const skillEntries = skills
+  const featured = skills.filter((s) => FEATURED_SKILL_SLUGS.has(s.slug));
+  const others = skills.filter((s) => !FEATURED_SKILL_SLUGS.has(s.slug));
+
+  const featuredEntries = featured
     .map(
       (s) =>
-        `  <skill>
-    <id>${s.slug}</id>
+        `  <skill id="${s.slug}" location="${s.location}">
     <name>${s.name}</name>
     <description>${s.description}</description>
-    <location>${s.location}</location>
   </skill>`
     )
+    .join('\n');
+
+  const otherEntries = others
+    .map((s) => `  <skill id="${s.slug}" name="${s.name}" location="${s.location}" />`)
     .join('\n');
 
   return `
 
 ## Available Skills
 
-<available_skills>
-${skillEntries}
-</available_skills>
-
-**How to use skills:**
-When the user's request matches a skill's description, read its SKILL.md file (at the \`<location>\` path) using the Read tool. The SKILL.md contains detailed instructions, available scripts, and usage examples. Follow those instructions to complete the task.
-${skills.some((s) => s.slug === 'web-search') ? `\n**IMPORTANT — Web Search:**\nDo NOT use the built-in WebSearch tool. ALWAYS use the \`web-search\` skill instead — it launches a real browser and is more reliable. When you need to search the web, immediately read the web-search SKILL.md and follow its instructions.\n` : ''}
+<featured_skills>
+${featuredEntries}
+</featured_skills>
+${others.length > 0 ? `\n<other_skills>\n${otherEntries}\n</other_skills>\n` : ''}
+When the user's request matches a skill, read its SKILL.md (at \`location\`) and follow the instructions inside.
+${skills.some((s) => s.slug === 'web-search') ? `**IMPORTANT:** Do NOT use the built-in WebSearch tool. ALWAYS use the \`web-search\` skill instead.\n` : ''}
 `;
 }
 
@@ -591,21 +612,28 @@ For **hand-drawn style** diagrams, sketches, and freeform visuals, use Excalidra
 - **Mermaid**: Structured diagrams (flowcharts, sequences, ER diagrams) - auto-layout, text-based
 - **Excalidraw**: Freeform sketches, hand-drawn style, precise positioning, UI mockups, creative visuals
 
-**Quick example:**
+**CRITICAL Layout Rules (must follow to avoid overlapping/messy diagrams):**
+
+1. **Text inside containers** — use \`containerId\` to bind text to its parent shape. The text element's \`x\`/\`y\` MUST equal the container's \`x\`/\`y\`, and the container needs \`boundElements: [{"id":"text-id","type":"text"}]\`.
+2. **Size containers for text** — calculate width: \`max(charCount × fontSize × 0.55, 140)\`. Height: \`lineCount × fontSize × 1.5 + 20\`. Always pad generously.
+3. **Spacing** — minimum 60px gap between nodes. For mind maps, use 80-120px between levels.
+4. **Grid layout** — plan coordinates on a grid BEFORE writing JSON. E.g., center node at (400,300), children at radius 250+ around it.
+5. **Arrows** — set \`startBinding\`/\`endBinding\` with \`{elementId, focus:0, gap:8}\` to connect to shapes. Arrow \`x\`/\`y\` is the start point, \`points\` define the path as \`[[0,0],[dx,dy]]\`.
+
+**Labeled box pattern (ALWAYS use this for text in shapes):**
 \`\`\`excalidraw
 {
   "elements": [
-    {"type":"rectangle","x":100,"y":100,"width":120,"height":60,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","roundness":{"type":3}},
-    {"type":"text","x":115,"y":120,"text":"Hello!","fontSize":20,"fontFamily":1,"textAlign":"center"}
+    {"id":"box1","type":"rectangle","x":100,"y":100,"width":160,"height":50,"backgroundColor":"#a5d8ff","fillStyle":"solid","roundness":{"type":3},"boundElements":[{"id":"txt1","type":"text"}]},
+    {"id":"txt1","type":"text","x":100,"y":100,"width":160,"height":50,"text":"Node Label","fontSize":16,"fontFamily":1,"textAlign":"center","verticalAlign":"middle","containerId":"box1"},
+    {"id":"arrow1","type":"arrow","x":260,"y":125,"width":80,"height":0,"points":[[0,0],[80,0]],"startBinding":{"elementId":"box1","focus":0,"gap":8},"endBinding":{"elementId":"box2","focus":0,"gap":8}}
   ]
 }
 \`\`\`
 
-**Excalidraw Tips:**
-- Use \`backgroundColor\` with Excalidraw's palette colors for visual appeal: \`#a5d8ff\` (blue), \`#b2f2bb\` (green), \`#ffec99\` (yellow), \`#ffc9c9\` (red)
-- Set \`fillStyle\` to \`"solid"\`, \`"hachure"\`, or \`"cross-hatch"\` for different fill effects
-- Use \`roundness: {"type": 3}\` for rounded corners on rectangles
-- Keep drawings compact - the inline preview has a max height of 260px
+**Colors:** \`#a5d8ff\` (blue), \`#b2f2bb\` (green), \`#ffec99\` (yellow), \`#ffc9c9\` (red), \`#d0bfff\` (purple), \`#ffd8a8\` (orange), \`#e9ecef\` (gray)
+**Fill styles:** \`"solid"\`, \`"hachure"\`, \`"cross-hatch"\`
+**Tips:** Use \`roundness:{"type":3}\` for rounded corners. Keep the inline preview under 260px height — for larger diagrams, users can click to fullscreen.
 
 ## Scheduled Tasks
 

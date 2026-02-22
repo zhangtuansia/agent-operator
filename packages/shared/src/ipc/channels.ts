@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   CREATE_SESSION: 'sessions:create',
   DELETE_SESSION: 'sessions:delete',
   IMPORT_SESSIONS: 'sessions:import',
+  CREATE_SUB_SESSION: 'sessions:createSubSession',
   GET_SESSION_MESSAGES: 'sessions:getMessages',
   SEARCH_SESSION_CONTENT: 'sessions:searchContent',
   SEND_MESSAGE: 'sessions:sendMessage',
@@ -305,6 +306,10 @@ export const IPC_CHANNELS = {
   PERMISSIONS_CHECK_ACCESSIBILITY: 'permissions:checkAccessibility',
   PERMISSIONS_OPEN_ACCESSIBILITY_SETTINGS: 'permissions:openAccessibilitySettings',
   PERMISSIONS_GET_ALL: 'permissions:getAll',
+
+  // Power Management
+  POWER_GET_KEEP_AWAKE: 'power:getKeepAwake',
+  POWER_SET_KEEP_AWAKE: 'power:setKeepAwake',
 
   // Scheduled Tasks (workspace-scoped)
   SCHEDULED_TASKS_LIST: 'scheduledTasks:list',

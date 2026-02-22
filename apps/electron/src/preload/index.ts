@@ -479,6 +479,11 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.INPUT_GET_SPELL_CHECK) as Promise<boolean>,
   setSpellCheck: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, enabled),
+  // Power Management
+  getKeepAwakeWhileRunning: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.POWER_GET_KEEP_AWAKE) as Promise<boolean>,
+  setKeepAwakeWhileRunning: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.POWER_SET_KEEP_AWAKE, enabled),
   // Git Bash (Windows)
   checkGitBash: () =>
     ipcRenderer.invoke(IPC_CHANNELS.GITBASH_CHECK) as Promise<import('../shared/types').GitBashStatus>,

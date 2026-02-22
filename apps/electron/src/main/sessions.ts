@@ -2037,7 +2037,6 @@ export class SessionManager {
       if (managed.model && allowedModelIds.length > 0 && !allowedModelIds.includes(managed.model)) {
         const fallbackModel = resolvedConnection?.defaultModel ?? allowedModelIds[0]
         managed.model = fallbackModel
-        await updateSessionMetadata(managed.workspace.rootPath, managed.id, { model: fallbackModel })
         this.sendEvent(
           {
             type: 'session_model_changed',
@@ -2399,13 +2398,13 @@ export class SessionManager {
 
         // Tag the originating session with scheduled label so it appears in the filter
         try {
-          const { updateSessionMetadata } = await import('@agent-operator/shared/sessions')
           const existingLabels = managed.labels || []
           const newLabel = `scheduled:${task.id}`
           if (!existingLabels.includes(newLabel)) {
             const updatedLabels = [...existingLabels, newLabel]
-            updateSessionMetadata(managed.workspace.rootPath, sid, { labels: updatedLabels })
             managed.labels = updatedLabels
+            // Persist from in-memory state to avoid race condition with pending writes
+            this.persistSession(managed)
             // Notify renderer of label change
             this.sendEvent({ type: 'labels_changed', sessionId: sid, labels: updatedLabels }, managed.workspace.id)
           }
@@ -2651,11 +2650,8 @@ export class SessionManager {
       // Store shared info in session
       managed.sharedUrl = data.url
       managed.sharedId = data.id
-      const workspaceRootPath = managed.workspace.rootPath
-      updateSessionMetadata(workspaceRootPath, sessionId, {
-        sharedUrl: data.url,
-        sharedId: data.id,
-      })
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
 
       sessionLog.info(`Session ${sessionId} shared at ${data.url}`)
       // Notify all windows for this workspace
@@ -2751,11 +2747,8 @@ export class SessionManager {
       // Clear shared info
       delete managed.sharedUrl
       delete managed.sharedId
-      const workspaceRootPath = managed.workspace.rootPath
-      updateSessionMetadata(workspaceRootPath, sessionId, {
-        sharedUrl: undefined,
-        sharedId: undefined,
-      })
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
 
       sessionLog.info(`Session ${sessionId} share revoked`)
       // Notify all windows for this workspace
@@ -2897,7 +2890,8 @@ export class SessionManager {
     if (!managed) return
 
     managed.labels = labels
-    updateSessionMetadata(managed.workspace.rootPath, sessionId, { labels })
+    // Persist from in-memory state to avoid race condition with pending writes
+    this.persistSession(managed)
 
     this.sendEvent({
       type: 'labels_changed',
@@ -2947,9 +2941,10 @@ export class SessionManager {
       // Only update if actually changed (avoid unnecessary persistence)
       if (managed.lastReadMessageId !== lastFinalId) {
         managed.lastReadMessageId = lastFinalId
-        // Persist to disk
-        const workspaceRootPath = managed.workspace.rootPath
-        updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: lastFinalId })
+        // Persist from in-memory state to avoid race condition:
+        // updateSessionMetadata reads stale disk data and can overwrite
+        // pending in-memory changes (e.g., new messages not yet flushed)
+        this.persistSession(managed)
       }
     }
   }
@@ -2962,9 +2957,8 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.lastReadMessageId = undefined
-      // Persist to disk (undefined will clear the field)
-      const workspaceRootPath = managed.workspace.rootPath
-      updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: undefined })
+      // Persist from in-memory state to avoid race condition with pending writes
+      this.persistSession(managed)
     }
   }
 
@@ -3193,8 +3187,8 @@ export class SessionManager {
     const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
     managed.model = model ?? undefined
 
-    // Persist to disk
-    await updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
+    // Persist from in-memory state to avoid race condition with pending writes
+    this.persistSession(managed)
 
     // Update agent model if it already exists (takes effect on next query)
     if (managed.agent) {
@@ -3561,17 +3555,30 @@ export class SessionManager {
         sessionLog.info('Attachments:', attachments.length)
       }
 
-      // Inject skill content into message when skills are mentioned via @mentions
-      // This ensures Claude receives the skill instructions in context
+      // Inject skill content into message — from @mentions and/or auto-matching
       let finalMessage = message
-      if (options?.skillSlugs?.length) {
-        sessionLog.info(`Message contains ${options.skillSlugs.length} skill mention(s): ${options.skillSlugs.join(', ')}`)
+      const { loadSkill, loadAllSkills, matchSkillsToMessage } = await import('@agent-operator/shared/skills')
 
-        // Load skill content for each mentioned skill
-        const { loadSkill } = await import('@agent-operator/shared/skills')
+      // Collect explicit @mentioned slugs
+      const mentionedSlugs = options?.skillSlugs ?? []
+
+      // Auto-match skills from message content (keyword triggers)
+      const allSkills = loadAllSkills(workspaceRootPath)
+      const autoMatchedSlugs = matchSkillsToMessage(message, allSkills, mentionedSlugs)
+
+      // Merge: explicit @mentions first, then auto-matched (deduplicated)
+      const allSlugs = [...mentionedSlugs, ...autoMatchedSlugs]
+
+      if (allSlugs.length > 0) {
+        if (mentionedSlugs.length > 0) {
+          sessionLog.info(`Skill @mentions: ${mentionedSlugs.join(', ')}`)
+        }
+        if (autoMatchedSlugs.length > 0) {
+          sessionLog.info(`Skill auto-matched: ${autoMatchedSlugs.join(', ')}`)
+        }
+
         const skillContents: string[] = []
-
-        for (const slug of options.skillSlugs) {
+        for (const slug of allSlugs) {
           const skill = loadSkill(workspaceRootPath, slug)
           if (skill && skill.content) {
             skillContents.push(`<skill name="${skill.metadata.name}" slug="${slug}">
@@ -3583,7 +3590,6 @@ ${skill.content}
           }
         }
 
-        // Prepend skill context to the message
         if (skillContents.length > 0) {
           const skillContext = `<skill_context>
 The user has activated the following skill(s) for this message. Follow these instructions:
@@ -3774,8 +3780,9 @@ ${skillContents.join('\n\n')}
     // Emit complete since we're stopping and queue is cleared (include tokenUsage for real-time updates)
     this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
 
-    // Persist session
+    // Persist session immediately (flush bypasses debounce to prevent data loss)
     this.persistSession(managed)
+    sessionPersistenceQueue.flush(managed.id)
   }
 
   /**
@@ -3817,8 +3824,10 @@ ${skillContents.join('\n\n')}
       this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
     }
 
-    // 3. Always persist
+    // 3. Always persist immediately (flush bypasses debounce to prevent data loss
+    // if the app quits or dev server restarts within the debounce window)
     this.persistSession(managed)
+    sessionPersistenceQueue.flush(managed.id)
   }
 
   /**

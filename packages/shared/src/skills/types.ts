@@ -24,6 +24,13 @@ export interface SkillMetadata {
    * Note: Relative paths and inline SVG are NOT supported.
    */
   icon?: string;
+  /**
+   * Optional trigger keywords for auto-matching.
+   * When a user message contains any of these keywords (case-insensitive),
+   * the skill is automatically activated without needing @mention.
+   * Supports Chinese characters and English words/phrases.
+   */
+  triggers?: string[];
 }
 
 /** Source of a loaded skill */
@@ -45,4 +52,13 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+}
+
+/**
+ * Result of a skill import operation
+ */
+export interface ImportSkillResult {
+  success: boolean;
+  skill?: LoadedSkill;
+  error?: string;
 }

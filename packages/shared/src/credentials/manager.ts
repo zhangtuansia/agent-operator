@@ -417,6 +417,78 @@ export class CredentialManager {
     }
   }
 
+  /**
+   * Check the health of the credential store.
+   *
+   * Validates:
+   * 1. The credential file can be read and decrypted (if it exists)
+   * 2. The default LLM connection has valid credentials
+   *
+   * Use on app startup to detect issues before users hit cryptic errors.
+   */
+  async checkHealth(): Promise<import('./types.ts').CredentialHealthStatus> {
+    const issues: import('./types.ts').CredentialHealthIssue[] = [];
+
+    try {
+      await this.ensureInitialized();
+      // Try to list credentials — triggers decryption
+      await this.list({});
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const lowerMsg = errorMsg.toLowerCase();
+
+      if (lowerMsg.includes('decrypt') || lowerMsg.includes('cipher') || lowerMsg.includes('authentication tag')) {
+        issues.push({
+          type: 'decryption_failed',
+          message: 'Credentials from another machine detected. Please re-authenticate.',
+          error: errorMsg,
+        });
+      } else if (lowerMsg.includes('json') || lowerMsg.includes('parse') || lowerMsg.includes('unexpected')) {
+        issues.push({
+          type: 'file_corrupted',
+          message: 'Credential file is corrupted. Please re-authenticate.',
+          error: errorMsg,
+        });
+      } else {
+        issues.push({
+          type: 'file_corrupted',
+          message: 'Failed to read credentials. Please re-authenticate.',
+          error: errorMsg,
+        });
+      }
+
+      return { healthy: false, issues };
+    }
+
+    // Check if default connection has credentials
+    try {
+      const { getDefaultLlmConnection, getLlmConnection } = await import('../config/storage.ts');
+      const defaultSlug = getDefaultLlmConnection();
+
+      if (defaultSlug) {
+        const connection = getLlmConnection(defaultSlug);
+        if (connection && connection.authType !== 'none' && connection.authType !== 'environment') {
+          const hasCredentials = await this.hasLlmCredentials(
+            defaultSlug,
+            connection.authType,
+            connection.providerType
+          );
+          if (!hasCredentials) {
+            issues.push({
+              type: 'no_default_credentials',
+              message: `No credentials found for default connection "${connection.name}".`,
+            });
+          }
+        }
+      }
+    } catch {
+      // Config not yet initialized — skip this check
+      debug('[CredentialManager] Skipping default connection check - config not available');
+    }
+
+    return { healthy: issues.length === 0, issues };
+  }
+
   /** Check if a credential is expired (with 5-minute buffer) */
   isExpired(credential: StoredCredential): boolean {
     if (!credential.expiresAt) return false;
