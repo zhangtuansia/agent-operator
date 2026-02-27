@@ -79,6 +79,10 @@ function apiSetupMethodToConnectionSetup(
         slug: 'copilot',
         credential: options.credential,
       }
+    case 'bedrock':
+      return {
+        slug: 'bedrock',
+      }
     case 'deepseek_api_key':
       return {
         slug: 'deepseek-api',
@@ -249,8 +253,19 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     const isOpenAiFlow = state.apiSetupMethod === 'openai_api_key'
+    const isBedrockFlow = state.apiSetupMethod === 'bedrock'
 
     try {
+      if (isBedrockFlow) {
+        await handleSaveConfig(undefined)
+        setState(s => ({
+          ...s,
+          credentialStatus: 'success',
+          step: 'complete',
+        }))
+        return
+      }
+
       if (isOpenAiFlow && !data.apiKey.trim()) {
         setState(s => ({
           ...s,

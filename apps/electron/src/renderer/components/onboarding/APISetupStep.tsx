@@ -17,6 +17,7 @@ const SEGMENT_LABELS: Record<ProviderSegment, string> = {
 
 export type ApiSetupMethod =
   | 'anthropic_api_key'
+  | 'bedrock'
   | 'claude_oauth'
   | 'chatgpt_oauth'
   | 'openai_api_key'
@@ -94,6 +95,13 @@ const API_SETUP_OPTIONS: ApiSetupOption[] = [
     nameKey: 'onboarding.optAnthropicApiKey',
     descriptionKey: 'onboarding.optAnthropicApiKeyDesc',
     icon: <ProviderLogo provider="api_key" size={16} />,
+    segment: 'anthropic',
+  },
+  {
+    id: 'bedrock',
+    nameKey: 'onboarding.optBedrock',
+    descriptionKey: 'onboarding.optBedrockDesc',
+    icon: <ProviderLogo provider="anthropic" size={16} />,
     segment: 'anthropic',
   },
   {

@@ -43,6 +43,7 @@ export function CredentialsStep({
   const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'chatgpt_oauth'
   const isCopilotOAuth = apiSetupMethod === 'copilot_oauth'
+  const isBedrock = apiSetupMethod === 'bedrock'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
   const isOpenAiApiKey = apiSetupMethod === 'openai_api_key'
   const thirdPartyInfo = getThirdPartyProviderInfo(apiSetupMethod)
@@ -234,6 +235,43 @@ export function CredentialsStep({
           onSubmitAuthCode={onSubmitAuthCode}
           onCancelOAuth={onCancelOAuth}
         />
+      </StepFormLayout>
+    )
+  }
+
+  if (isBedrock) {
+    return (
+      <StepFormLayout
+        title={t('onboarding.connectBedrock')}
+        description={t('onboarding.connectBedrockDesc')}
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'}>{t('onboarding.back')}</BackButton>
+            <ContinueButton
+              onClick={() => onSubmit({ apiKey: '' })}
+              disabled={false}
+              loading={status === 'validating'}
+              loadingText={t('onboarding.settingUp')}
+            >
+              {t('onboarding.continue')}
+            </ContinueButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-foreground-2 p-4 text-sm text-muted-foreground">
+            <p>{t('onboarding.bedrockAuthHint')}</p>
+            <div className="mt-3 text-xs font-mono text-foreground/70 space-y-1">
+              <div>CLAUDE_CODE_USE_BEDROCK=1</div>
+              <div>AWS_REGION=us-west-2</div>
+            </div>
+          </div>
+          {status === 'error' && errorMessage && (
+            <div className="rounded-lg bg-destructive/10 text-destructive text-sm p-3">
+              {errorMessage}
+            </div>
+          )}
+        </div>
       </StepFormLayout>
     )
   }

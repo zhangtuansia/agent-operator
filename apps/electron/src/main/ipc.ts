@@ -201,6 +201,11 @@ const BUILT_IN_CONNECTION_TEMPLATES: Record<string, BuiltInConnectionTemplate> =
     providerType: 'anthropic',
     authType: 'oauth',
   },
+  'bedrock': {
+    name: 'AWS Bedrock',
+    providerType: 'bedrock',
+    authType: 'environment',
+  },
   'codex': {
     name: 'Codex (ChatGPT Plus)',
     providerType: 'openai',

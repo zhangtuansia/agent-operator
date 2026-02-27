@@ -68,6 +68,7 @@ export const onboardingComponents: ComponentEntry[] = [
             { label: 'None', value: '' },
             { label: 'Claude OAuth', value: 'claude_oauth' },
             { label: 'Anthropic API Key', value: 'anthropic_api_key' },
+            { label: 'AWS Bedrock', value: 'bedrock' },
             { label: 'ChatGPT OAuth', value: 'chatgpt_oauth' },
             { label: 'OpenAI API Key', value: 'openai_api_key' },
             { label: 'Copilot OAuth', value: 'copilot_oauth' },
