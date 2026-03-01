@@ -97,6 +97,10 @@ export const routes = {
     flagged: (sessionId?: string) =>
       sessionId ? `flagged/chat/${sessionId}` as const : 'flagged' as const,
 
+    /** Archived view (chats navigator, archived filter) */
+    archived: (sessionId?: string) =>
+      sessionId ? `archived/chat/${sessionId}` as const : 'archived' as const,
+
     /** Todo state filter view (chats navigator, state filter) */
     state: (stateId: string, sessionId?: string) =>
       sessionId
@@ -145,6 +149,12 @@ export const routes = {
       sessionId
         ? `scheduledTask/${taskId}/chat/${sessionId}` as const
         : `scheduledTask/${taskId}` as const,
+
+    /** Automations view (automations navigator) */
+    automations: (automationId?: string) =>
+      automationId
+        ? `automations/automation/${automationId}` as const
+        : 'automations' as const,
   },
 } as const
 

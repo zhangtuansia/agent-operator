@@ -4,7 +4,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getLastApiError } from '../network-interceptor.ts';
+import { getLastApiError } from '../network/interceptor.ts';
 import { getAnthropicApiKey, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
 
 export type DiagnosticCode =

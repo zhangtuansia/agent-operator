@@ -20,7 +20,6 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug, setBundledAssetsRoot } from '@agent-operator/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
-import { TaskScheduler } from './scheduler'
 import { getSkillServiceManager } from './skill-services'
 import { createIMServiceManager, getIMServiceManager } from './im-services'
 
@@ -50,7 +49,6 @@ const DEEPLINK_SCHEME =
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
-let taskScheduler: TaskScheduler | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -222,17 +220,6 @@ app.whenReady().then(async () => {
       mainLog.error('Session manager initialization failed (non-fatal):', error)
     }
 
-    // Initialize task scheduler
-    taskScheduler = new TaskScheduler({
-      sessionManager,
-      windowManager,
-      getWorkspaceRootPaths: () => {
-        const workspaces = getWorkspaces()
-        return workspaces.map((workspace) => workspace.rootPath)
-      },
-    })
-    taskScheduler.start()
-
     // Start skill services (web-search Bridge Server, etc.)
     const skillServices = getSkillServiceManager()
     skillServices.startAll().catch(error => {
@@ -244,20 +231,6 @@ app.whenReady().then(async () => {
     imServices.registerIpcHandlers()
     imServices.initialize().catch(error => {
       mainLog.error('Failed to initialize IM services:', error)
-    })
-
-    // Register scheduler IPC handlers (runManually/stop need the scheduler instance)
-    const { ipcMain } = await import('electron')
-    const { IPC_CHANNELS } = await import('../shared/types')
-
-    ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_RUN_MANUALLY, async (_event, workspaceId: string, taskId: string) => {
-      if (!taskScheduler) throw new Error('Scheduler not initialized')
-      await taskScheduler.runManually(workspaceId, taskId)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_STOP, async (_event, workspaceId: string, taskId: string) => {
-      if (!taskScheduler) throw new Error('Scheduler not initialized')
-      return taskScheduler.stopTask(workspaceId, taskId)
     })
 
     // Create initial windows (restores from saved state or opens first workspace)

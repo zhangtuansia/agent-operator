@@ -452,9 +452,6 @@ export class OperatorAgent {
   // 5. Agent resumes and processes the result
   public onAuthRequest: ((request: AuthRequest) => void) | null = null;
 
-  // Callback when a scheduled task is created via agent tool
-  public onScheduledTaskCreated: ((task: import('../scheduled-tasks/types.ts').ScheduledTask, sessionId: string) => void) | null = null;
-
   // Callback when a source config changes (hot-reload from file watcher)
   public onSourceChange: ((slug: string, source: LoadedSource | null) => void) | null = null;
 
@@ -514,10 +511,6 @@ export class OperatorAgent {
       onAuthRequest: (request) => {
         this.onDebug?.(`[OperatorAgent] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
         this.onAuthRequest?.(request);
-      },
-      onScheduledTaskCreated: (task, sid) => {
-        this.onDebug?.(`[OperatorAgent] onScheduledTaskCreated: ${task.name} (id: ${task.id}, session: ${sid})`);
-        this.onScheduledTaskCreated?.(task, sid);
       },
     });
 

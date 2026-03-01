@@ -21,34 +21,17 @@ interface AcceptPlanDropdownProps {
   onAcceptWithCompact: () => void
   /** Additional className for the trigger button */
   className?: string
-  /** Optional translations */
-  translations?: {
-    acceptPlan?: string
-    accept?: string
-    acceptDescription?: string
-    acceptCompact?: string
-    acceptCompactDescription?: string
-  }
 }
 
 export function AcceptPlanDropdown({
   onAccept,
   onAcceptWithCompact,
   className,
-  translations,
 }: AcceptPlanDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const t = {
-    acceptPlan: translations?.acceptPlan ?? 'Accept Plan',
-    accept: translations?.accept ?? 'Accept',
-    acceptDescription: translations?.acceptDescription ?? 'Execute the plan immediately',
-    acceptCompact: translations?.acceptCompact ?? 'Accept & Compact',
-    acceptCompactDescription:
-      translations?.acceptCompactDescription ?? 'Works best for complex, longer plans',
-  }
 
   // Calculate menu position relative to trigger
   // Prefers below the button, falls back to above if insufficient space
@@ -174,7 +157,7 @@ export function AcceptPlanDropdown({
           style={{ '--shadow-color': '34, 136, 82' } as React.CSSProperties}
         >
           <Check className="h-3.5 w-3.5" />
-          <span>{t.acceptPlan}</span>
+          <span>Accept Plan</span>
           <ChevronDown className={cn(
             "h-3 w-3 transition-transform duration-150",
             isOpen && "rotate-180"
@@ -203,9 +186,9 @@ export function AcceptPlanDropdown({
               "transition-colors"
             )}
           >
-            <span className="text-[13px] font-medium">{t.accept}</span>
+            <span className="text-[13px] font-medium">Accept</span>
             <span className="text-xs text-muted-foreground">
-              {t.acceptDescription}
+              Execute the plan immediately
             </span>
           </button>
 
@@ -219,9 +202,9 @@ export function AcceptPlanDropdown({
               "transition-colors"
             )}
           >
-            <span className="text-[13px] font-medium">{t.acceptCompact}</span>
+            <span className="text-[13px] font-medium">Accept & Compact</span>
             <span className="text-xs text-muted-foreground">
-              {t.acceptCompactDescription}
+              Works best for complex, longer plans
             </span>
           </button>
         </div>,

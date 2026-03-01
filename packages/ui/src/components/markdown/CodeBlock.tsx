@@ -1,8 +1,7 @@
 import * as React from 'react'
-import type { BundledLanguage } from 'shiki'
+import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '../../lib/utils'
 import { useShikiTheme } from '../../context/ShikiThemeContext'
-import { loadShiki, isBundledLanguage } from '../../lib/shiki-loader'
 
 export interface CodeBlockProps {
   code: string
@@ -49,6 +48,11 @@ const CACHE_MAX_SIZE = 200
 
 function getCacheKey(code: string, lang: string, theme: string): string {
   return `${theme}:${lang}:${code}`
+}
+
+function isValidLanguage(lang: string): lang is BundledLanguage {
+  const normalized = LANGUAGE_ALIASES[lang] || lang
+  return normalized in bundledLanguages
 }
 
 /**
@@ -99,11 +103,10 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
       }
 
       try {
-        const shiki = await loadShiki()
         // Use valid language or fallback to plaintext
-        const lang = isBundledLanguage(resolvedLang, shiki) ? (resolvedLang as BundledLanguage) : 'text'
+        const lang = isValidLanguage(resolvedLang) ? resolvedLang : 'text'
 
-        const html = await shiki.codeToHtml(code, {
+        const html = await codeToHtml(code, {
           lang,
           theme,
         })
@@ -217,12 +220,12 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
 
 /**
  * InlineCode - Styled inline code span
- * Features: subtle background (3%), subtle border (5%), 75% opacity text
+ * Features: subtle background (3%), no border, 75% opacity text
  */
 export function InlineCode({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <code className={cn(
-      'px-1.5 py-0.5 rounded bg-foreground/[0.03] border border-foreground/[0.05] font-mono text-sm text-foreground/75',
+      'pl-1 pr-1 py-0 rounded bg-foreground/[0.04] font-mono text-[13px]',
       className
     )}>
       {children}

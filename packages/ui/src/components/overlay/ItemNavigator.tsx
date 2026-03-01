@@ -3,6 +3,9 @@
  *
  * Renders left/right arrows with a clickable label between them.
  * Clicking the label opens a dropdown listing all items for direct selection.
+ * The active item shows a check icon.
+ *
+ * Uses StyledDropdown components for consistent popover styling (vibrancy, blur, sizing).
  */
 
 import { useCallback } from 'react'
@@ -23,6 +26,7 @@ export interface ItemNavigatorProps {
   items: NavigatorItem[]
   activeIndex: number
   onSelect: (index: number) => void
+  /** Size variant — 'sm' for inline blocks, 'md' for fullscreen overlays */
   size?: 'sm' | 'md'
 }
 
@@ -72,8 +76,13 @@ export function ItemNavigator({ items, activeIndex, onSelect, size = 'sm' }: Ite
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="center" className="max-h-64 overflow-y-auto" style={{ zIndex: 400 }}>
           {items.map((item, idx) => (
-            <StyledDropdownMenuItem key={idx} onSelect={() => onSelect(idx)}>
-              <span className="flex-1 truncate">{item.label || `Item ${idx + 1}`}</span>
+            <StyledDropdownMenuItem
+              key={idx}
+              onSelect={() => onSelect(idx)}
+            >
+              <span className="flex-1 truncate">
+                {item.label || `Item ${idx + 1}`}
+              </span>
               {idx === activeIndex && <Check className="w-3.5 h-3.5 text-accent" />}
             </StyledDropdownMenuItem>
           ))}

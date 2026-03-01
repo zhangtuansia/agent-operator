@@ -492,6 +492,10 @@ interface ManagedSession {
   pendingAuthRequest?: AuthRequest
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // Whether this session is archived
+  isArchived?: boolean
+  // Timestamp when session was archived
+  archivedAt?: number
   // Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic')
   labels?: string[]
 }
@@ -729,6 +733,10 @@ export class SessionManager {
         const skills = loadAllSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
+      onAutomationsConfigChange: (workspaceId: string) => {
+        sessionLog.info(`Automations config changed in ${workspaceId}`)
+        this.broadcastAutomationsChanged(workspaceId)
+      },
     }
 
     const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
@@ -789,6 +797,15 @@ export class SessionManager {
     if (!this.windowManager) return
     sessionLog.info('Broadcasting default permissions changed')
     this.windowManager.broadcastToAll(IPC_CHANNELS.DEFAULT_PERMISSIONS_CHANGED, null)
+  }
+
+  /**
+   * Broadcast automations config changed event to all windows
+   */
+  private broadcastAutomationsChanged(workspaceId: string): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting automations changed for ${workspaceId}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.AUTOMATIONS_CHANGED, workspaceId)
   }
 
   private async reconnectCodexIfPossible(managed: ManagedSession, context: string): Promise<void> {
@@ -1382,6 +1399,8 @@ export class SessionManager {
             llmConnection: normalizedConnection,
             connectionLocked: meta.connectionLocked,
             hidden: meta.hidden,
+            isArchived: meta.isArchived,
+            archivedAt: meta.archivedAt,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
@@ -1449,6 +1468,8 @@ export class SessionManager {
         llmConnection: managed.llmConnection,
         connectionLocked: managed.connectionLocked,
         hidden: managed.hidden,
+        isArchived: managed.isArchived,
+        archivedAt: managed.archivedAt,
         labels: managed.labels,
         thinkingLevel: managed.thinkingLevel,
         agentType: managed.agentType,
@@ -1789,6 +1810,8 @@ export class SessionManager {
         model: m.model,
         llmConnection: m.llmConnection,
         hidden: m.hidden,
+        isArchived: m.isArchived,
+        archivedAt: m.archivedAt,
         enabledSourceSlugs: m.enabledSourceSlugs,
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
@@ -1829,6 +1852,8 @@ export class SessionManager {
       model: m.model,
       llmConnection: m.llmConnection,
       hidden: m.hidden,
+      isArchived: m.isArchived,
+      archivedAt: m.archivedAt,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
       sharedUrl: m.sharedUrl,
@@ -2397,29 +2422,6 @@ export class SessionManager {
       }
 
       // Wire up onScheduledTaskCreated to tag session + broadcast changes
-      managed.agent.onScheduledTaskCreated = async (task, sid) => {
-        sessionLog.info(`Scheduled task created from session ${sid}: ${task.name} (${task.id})`)
-
-        // Tag the originating session with scheduled label so it appears in the filter
-        try {
-          const existingLabels = managed.labels || []
-          const newLabel = `scheduled:${task.id}`
-          if (!existingLabels.includes(newLabel)) {
-            const updatedLabels = [...existingLabels, newLabel]
-            managed.labels = updatedLabels
-            // Persist from in-memory state to avoid race condition with pending writes
-            this.persistSession(managed)
-            // Notify renderer of label change
-            this.sendEvent({ type: 'labels_changed', sessionId: sid, labels: updatedLabels }, managed.workspace.id)
-          }
-        } catch (err) {
-          sessionLog.info(`Failed to tag session with scheduled label:`, err)
-        }
-
-        // Broadcast to all windows so sidebar updates
-        this.windowManager?.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, managed.workspace.id)
-      }
-
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
         sessionLog.info(`Source activation request for session ${managed.id}:`, sourceSlug)
@@ -2545,6 +2547,26 @@ export class SessionManager {
       this.persistSession(managed)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_unflagged', sessionId }, managed.workspace.id)
+    }
+  }
+
+  async archiveSession(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.isArchived = true
+      managed.archivedAt = Date.now()
+      this.persistSession(managed)
+      this.sendEvent({ type: 'session_archived', sessionId }, managed.workspace.id)
+    }
+  }
+
+  async unarchiveSession(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.isArchived = false
+      managed.archivedAt = undefined
+      this.persistSession(managed)
+      this.sendEvent({ type: 'session_unarchived', sessionId }, managed.workspace.id)
     }
   }
 
@@ -4727,5 +4749,94 @@ To view this task's output:
     }
 
     sessionLog.info('Cleanup complete')
+  }
+
+  // ==========================================================================
+  // Automations
+  // ==========================================================================
+
+  /**
+   * Execute a prompt-type automation action.
+   * Creates a new session, resolves @mentions to source/skill slugs, and sends the prompt.
+   */
+  async executePromptAutomation(
+    workspaceId: string,
+    workspaceRootPath: string,
+    prompt: string,
+    labels?: string[],
+    permissionMode?: 'safe' | 'ask' | 'allow-all',
+    mentions?: string[],
+    llmConnection?: string,
+    model?: string,
+  ): Promise<{ sessionId: string }> {
+    // Warn if llmConnection was specified but doesn't resolve
+    if (llmConnection) {
+      const connection = resolveSessionConnection(llmConnection)
+      if (!connection) {
+        sessionLog.warn(`[Automations] llmConnection "${llmConnection}" not found, using default`)
+      }
+    }
+
+    // Resolve @mentions to source/skill slugs
+    const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
+
+    // Create a new session for this automation
+    const session = await this.createSession(workspaceId, {
+      name: `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`,
+      labels,
+      permissionMode: permissionMode || 'safe',
+      llmConnection,
+      model,
+    } as any)
+
+    // Pre-enable sources from @mentions
+    if (resolved?.sourceSlugs?.length) {
+      const managed = this.sessions.get(session.id)
+      if (managed) {
+        managed.enabledSourceSlugs = resolved.sourceSlugs
+      }
+    }
+
+    // Send the prompt with skill slugs from resolved mentions
+    await this.sendMessage(session.id, prompt, undefined, undefined, {
+      skillSlugs: resolved?.skillSlugs,
+    })
+
+    return { sessionId: session.id }
+  }
+
+  /**
+   * Resolve @mentions in automation prompts to source and skill slugs.
+   */
+  private resolveAutomationMentions(
+    workspaceRootPath: string,
+    mentions: string[],
+  ): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
+    const sources = loadWorkspaceSources(workspaceRootPath)
+    const sourceSlugs: string[] = []
+    const skillSlugs: string[] = []
+
+    // Dynamically load skills (they use a different import path)
+    let skills: Array<{ slug: string }> = []
+    try {
+      const skillsModule = require('@agent-operator/shared/skills')
+      skills = skillsModule.loadAllSkills(workspaceRootPath)
+    } catch {
+      sessionLog.warn('[Automations] Failed to load skills for mention resolution')
+    }
+
+    for (const mention of mentions) {
+      if (sources.some(s => s.config.slug === mention)) {
+        sourceSlugs.push(mention)
+      } else if (skills.some(s => s.slug === mention)) {
+        skillSlugs.push(mention)
+      } else {
+        sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
+      }
+    }
+
+    return (sourceSlugs.length > 0 || skillSlugs.length > 0)
+      ? { sourceSlugs, skillSlugs }
+      : undefined
   }
 }

@@ -11,6 +11,26 @@ import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent, TodoI
 // Re-export ActivityItem for consumers
 export type { ActivityItem }
 
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Strip error wrapper tags and prefixes from tool error messages.
+ * The Claude Agent SDK wraps errors in tags like <error><tool_use_error>...</tool_use_error></error>
+ * which aren't user-friendly. Additionally, errorResponse() and blockWithReason() prefix
+ * messages with "[ERROR] " so the Codex model can detect failures (the OpenAI API has no
+ * error signaling field). We strip that prefix here for clean UI display.
+ */
+function stripErrorTags(content: string | undefined): string | undefined {
+  if (!content) return content
+  return content
+    .replace(/<\/?error>/gi, '')
+    .replace(/<\/?tool_use_error>/gi, '')
+    .replace(/^\[ERROR]\s*/i, '')
+    .trim()
+}
+
 /** Convert StoredMessage to Message format for turn processing */
 export function storedToMessage(stored: StoredMessage): Message {
   return {
@@ -26,12 +46,14 @@ export function storedToMessage(stored: StoredMessage): Message {
     toolDuration: stored.toolDuration,
     toolIntent: stored.toolIntent,
     toolDisplayName: stored.toolDisplayName,
+    toolDisplayMeta: stored.toolDisplayMeta,  // Includes base64 icon for viewer
     parentToolUseId: stored.parentToolUseId,
     taskId: stored.taskId,
     shellId: stored.shellId,
     elapsedSeconds: stored.elapsedSeconds,
     isBackground: stored.isBackground,
     attachments: stored.attachments,
+    badges: stored.badges,
     isError: stored.isError,
     isIntermediate: stored.isIntermediate,
     turnId: stored.turnId,
@@ -212,6 +234,8 @@ export function shouldShowThinkingIndicator(phase: TurnPhase, isBuffering: boole
 
 /** Convert tool status from message to ActivityStatus */
 function getToolStatus(message: Message): ActivityStatus {
+  // response_too_large is success (data was saved, just too large for inline display)
+  if (message.errorCode === 'response_too_large') return 'completed'
   if (message.isError) return 'error'
   // Check explicit toolStatus first (set by tool_result handler)
   if (message.toolStatus === 'completed') return 'completed'
@@ -240,8 +264,9 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     content: message.toolResult || message.content,
     intent: message.toolIntent,
     displayName: message.toolDisplayName,  // LLM-generated human-friendly name
+    toolDisplayMeta: message.toolDisplayMeta,  // Embedded metadata with base64 icon for viewer
     timestamp: message.timestamp,
-    error: message.isError ? message.content : undefined,
+    error: message.isError ? stripErrorTags(message.toolResult || message.content) : undefined,
     // parentId: The toolUseId of the parent tool (e.g., Task subagent).
     // This is tracked by session manager's parentToolStack, NOT the SDK's
     // parent_tool_use_id which is for result-matching, not hierarchy.
@@ -391,8 +416,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
       // If no response but we have intermediate text, promote the last one to response
       // Don't do this for interrupted turns - respect user interruptions
+      // Don't do this for turns with plans - the plan is the final output
       // Only promote when turn is complete (processing indicator hidden)
-      if (!interrupted && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
+      const hasPlan = currentTurn.activities.some(a => a.type === 'plan')
+      if (!interrupted && !hasPlan && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
         // Find the last intermediate text activity (reverse to get most recent)
         const lastTextActivity = [...currentTurn.activities]
           .reverse()
@@ -499,7 +526,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       continue
     }
 
-    // Plan messages are treated as the response of the current turn (like assistant messages)
+    // Plan messages are added as activities to be time-sorted with tool calls
+    // This ensures SubmitPlan tool appears before the plan content chronologically
     if (message.role === 'plan') {
       if (!currentTurn) {
         // Edge case: plan without preceding activities
@@ -514,12 +542,15 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           timestamp: message.timestamp,
         }
       }
-      // Set plan as the response (like a final assistant message)
-      currentTurn.response = {
-        text: message.content,
-        isStreaming: false,
-        isPlan: true,
-      }
+      // Add plan as an activity so it gets time-sorted with other activities
+      currentTurn.activities.push({
+        id: message.id,
+        type: 'plan' as ActivityType,
+        status: 'completed',
+        content: message.content,
+        displayName: 'Plan',
+        timestamp: message.timestamp,
+      })
       currentTurn.isStreaming = false
       currentTurn.isComplete = true
       flushCurrentTurn()

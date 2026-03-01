@@ -1,7 +1,31 @@
 /**
- * MarkdownHtmlBlock - Renders ```html-preview blocks as sandboxed HTML previews.
+ * MarkdownHtmlBlock - Renders ```html-preview code blocks as sandboxed HTML previews.
  *
- * Supports single `src` or `items[]` payloads.
+ * Loads HTML from file(s) (via `src` or `items` field) and renders in a sandboxed iframe.
+ * Supports multiple items with a tab bar for switching between them.
+ *
+ * Expected JSON shapes:
+ * Single item:
+ * {
+ *   "src": "/absolute/path/to/file.html",
+ *   "title": "Optional title"
+ * }
+ *
+ * Multiple items:
+ * {
+ *   "title": "Email Thread",
+ *   "items": [
+ *     { "src": "/path/to/email1.html", "label": "Original" },
+ *     { "src": "/path/to/reply.html", "label": "Reply" }
+ *   ]
+ * }
+ *
+ * Flash prevention: All cached items are rendered as hidden iframes (display:none/block).
+ * Switching tabs toggles CSS visibility — no re-parse, no flash.
+ *
+ * Security: iframe uses `sandbox` attribute without `allow-scripts`,
+ * blocking all JavaScript execution. `allow-same-origin` is included
+ * so CSS and images resolve correctly.
  */
 
 import * as React from 'react'
@@ -11,6 +35,8 @@ import { CodeBlock } from './CodeBlock'
 import { HTMLPreviewOverlay } from '../overlay/HTMLPreviewOverlay'
 import { ItemNavigator } from '../overlay/ItemNavigator'
 import { usePlatform } from '../../context/PlatformContext'
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface PreviewItem {
   src: string
@@ -23,26 +49,31 @@ interface HtmlPreviewSpec {
   items?: PreviewItem[]
 }
 
+// ── Error boundary ───────────────────────────────────────────────────────────
+
 class HtmlBlockErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback: React.ReactNode },
   { hasError: boolean }
 > {
   state = { hasError: false }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
+  static getDerivedStateFromError() { return { hasError: true } }
   componentDidCatch(error: Error) {
     console.warn('[MarkdownHtmlBlock] Render failed, falling back to CodeBlock:', error)
   }
-
   render() {
     if (this.state.hasError) return this.props.fallback
     return this.props.children
   }
 }
 
+// ── HTML preprocessing ───────────────────────────────────────────────────────
+
+/**
+ * Inject `<base target="_top">` into HTML so link clicks navigate the top frame
+ * instead of the iframe. Combined with `allow-top-navigation-by-user-activation`
+ * in the sandbox, this lets Electron's `will-navigate` handler intercept the
+ * navigation and open the URL in the system browser.
+ */
 function injectBaseTarget(html: string): string {
   if (/<base\s/i.test(html)) return html
   if (/<head[^>]*>/i.test(html)) {
@@ -54,6 +85,8 @@ function injectBaseTarget(html: string): string {
   return `<head><base target="_top"></head>${html}`
 }
 
+// ── Main component ───────────────────────────────────────────────────────────
+
 export interface MarkdownHtmlBlockProps {
   code: string
   className?: string
@@ -62,6 +95,7 @@ export interface MarkdownHtmlBlockProps {
 export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   const { onReadFile } = usePlatform()
 
+  // Parse the JSON spec — supports single src or items array
   const spec = React.useMemo<HtmlPreviewSpec | null>(() => {
     try {
       const raw = JSON.parse(code)
@@ -77,6 +111,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
     }
   }, [code])
 
+  // Normalize to items array (backward compat)
   const items = React.useMemo<PreviewItem[]>(() => {
     if (!spec) return []
     if (spec.items && spec.items.length > 0) return spec.items
@@ -86,6 +121,8 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
 
   const [activeIndex, setActiveIndex] = React.useState(0)
   const [isFullscreen, setIsFullscreen] = React.useState(false)
+
+  // Content cache: src path → loaded HTML string
   const [contentCache, setContentCache] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -93,13 +130,13 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   const activeItem = items[activeIndex]
   const activeHtml = activeItem ? contentCache[activeItem.src] : undefined
 
+  // Load active item's content when it changes
   React.useEffect(() => {
     if (!activeItem?.src || !onReadFile) return
     if (contentCache[activeItem.src]) {
       setError(null)
       return
     }
-
     setLoading(true)
     setError(null)
     onReadFile(activeItem.src)
@@ -112,6 +149,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
       .finally(() => setLoading(false))
   }, [activeItem?.src, onReadFile, contentCache])
 
+  // Preprocess all cached HTML (inject base target for links)
   const processedCache = React.useMemo(() => {
     const result: Record<string, string> = {}
     for (const [src, html] of Object.entries(contentCache)) {
@@ -123,6 +161,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   const hasCachedContent = Object.keys(contentCache).length > 0
   const hasMultiple = items.length > 1
 
+  // Stable onLoadContent callback for the overlay
   const handleLoadContent = React.useCallback(async (src: string) => {
     if (contentCache[src]) return contentCache[src]
     if (!onReadFile) throw new Error('Cannot load content')
@@ -131,6 +170,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
     return content
   }, [contentCache, onReadFile])
 
+  // Invalid spec → fall back to code block
   if (!spec || items.length === 0) {
     return <CodeBlock code={code} language="json" mode="full" className={className} />
   }
@@ -140,6 +180,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
   return (
     <HtmlBlockErrorBoundary fallback={fallback}>
       <div className={cn('relative group rounded-[8px] overflow-hidden border bg-muted/10', className)}>
+        {/* Header */}
         <div className="px-3 py-2 bg-muted/50 border-b flex items-center gap-2">
           <Globe className="w-3.5 h-3.5 text-muted-foreground/50" />
           <span className="text-[12px] text-muted-foreground font-medium flex-1">
@@ -150,11 +191,11 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
             <button
               onClick={() => setIsFullscreen(true)}
               className={cn(
-                'p-1 rounded-[6px] transition-all select-none',
-                'bg-background shadow-minimal',
-                'text-muted-foreground/50 hover:text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100',
-                hasMultiple ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                "p-1 rounded-[6px] transition-all select-none",
+                "bg-background shadow-minimal",
+                "text-muted-foreground/50 hover:text-foreground",
+                "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100",
+                hasMultiple ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
               title="View Fullscreen"
             >
@@ -163,7 +204,9 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
           </div>
         </div>
 
+        {/* Content area: hidden iframes for cached items + loading/error for uncached active */}
         <div className="relative max-h-[400px] overflow-hidden">
+          {/* Render all cached items as hidden iframes — prevents flash on tab switch */}
           {items.map((item, i) => {
             const processed = processedCache[item.src]
             if (!processed) return null
@@ -182,14 +225,17 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
             )
           })}
 
+          {/* Loading state for uncached active item */}
           {!activeHtml && loading && (
             <div className="py-8 text-center text-muted-foreground text-[13px]">Loading...</div>
           )}
 
+          {/* Error state for uncached active item */}
           {!activeHtml && !loading && error && (
             <div className="py-6 text-center text-destructive/70 text-[13px]">{error}</div>
           )}
 
+          {/* Bottom fade gradient */}
           {hasCachedContent && (
             <div
               className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
@@ -201,6 +247,7 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
         </div>
       </div>
 
+      {/* Fullscreen overlay — passes items for multi-item navigation */}
       <HTMLPreviewOverlay
         isOpen={isFullscreen}
         onClose={() => setIsFullscreen(false)}
@@ -213,3 +260,4 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
     </HtmlBlockErrorBoundary>
   )
 }
+

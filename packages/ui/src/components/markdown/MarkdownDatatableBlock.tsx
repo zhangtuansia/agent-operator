@@ -319,7 +319,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
     setFileLoading(true)
     setFileError(null)
     onReadFile(spec.src)
-      .then((content: string) => {
+      .then((content) => {
         try {
           const raw = JSON.parse(content)
           // File can be full {title, columns, rows} or just a rows array
@@ -338,7 +338,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
           setFileError('Failed to parse data file as JSON')
         }
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         setFileError(err instanceof Error ? err.message : 'Failed to read data file')
       })
       .finally(() => setFileLoading(false))

@@ -11,6 +11,7 @@
 
 import type {
   NavigationState,
+  ChatsNavigationState,
   ChatFilter,
   SettingsSubpage,
   RightSidebarPanel,
@@ -33,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings' | 'automations'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -55,13 +56,14 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'imported', 'scheduled', 'scheduledTask', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'archived', 'state', 'label', 'imported', 'scheduled', 'scheduledTask', 'sources', 'skills', 'settings', 'automations'
 ]
 
 const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
   'app',
   'workspace',
   'api',
+  'appearance',
   'input',
   'labels',
   'permissions',
@@ -142,6 +144,23 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Automations navigator
+  if (first === 'automations') {
+    if (segments.length === 1) {
+      return { navigator: 'automations', details: null }
+    }
+
+    // automations/automation/{automationId}
+    if (segments[1] === 'automation' && segments[2]) {
+      return {
+        navigator: 'automations',
+        details: { type: 'automation', id: segments[2] },
+      }
+    }
+
+    return null
+  }
+
   // Chats navigator (allChats, flagged, state, scheduledTask)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
@@ -153,6 +172,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       break
     case 'flagged':
       chatFilter = { kind: 'flagged' }
+      detailsStartIndex = 1
+      break
+    case 'archived':
+      chatFilter = { kind: 'archived' }
       detailsStartIndex = 1
       break
     case 'state':
@@ -225,6 +248,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `skills/skill/${parsed.details.id}`
   }
 
+  if (parsed.navigator === 'automations') {
+    if (!parsed.details) return 'automations'
+    return `automations/automation/${parsed.details.id}`
+  }
+
   // Chats navigator
   let base: string
   const filter = parsed.chatFilter
@@ -236,6 +264,9 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       break
     case 'flagged':
       base = 'flagged'
+      break
+    case 'archived':
+      base = 'archived'
       break
     case 'state':
       base = `state/${filter.stateId}`
@@ -341,6 +372,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
+  }
+
+  // Automations
+  if (compound.navigator === 'automations') {
+    if (!compound.details) {
+      return { type: 'view', name: 'automations', params: {} }
+    }
+    return { type: 'view', name: 'automation-info', id: compound.details.id, params: {} }
   }
 
   // Chats
@@ -453,6 +492,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Automations
+  if (compound.navigator === 'automations') {
+    if (!compound.details) {
+      return { navigator: 'automations', details: null }
+    }
+    return {
+      navigator: 'automations',
+      details: { type: 'automation', automationId: compound.details.id },
+    }
+  }
+
   // Chats
   const filter = compound.chatFilter || { kind: 'allChats' as const }
   if (compound.details) {
@@ -552,6 +602,12 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         filter: { kind: 'flagged' },
         details: null,
       }
+    case 'archived':
+      return {
+        navigator: 'chats',
+        filter: { kind: 'archived' },
+        details: null,
+      }
     case 'state':
       if (parsed.id) {
         return {
@@ -597,15 +653,26 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
     return 'skills'
   }
 
-  // Chats
-  const filter = state.filter
-  let base: string
+  if (state.navigator === 'automations') {
+    if (state.details) {
+      return `automations/automation/${state.details.automationId}`
+    }
+    return 'automations'
+  }
+
+  // Chats (at this point we know navigator is 'chats')
+  const chatsState = state as ChatsNavigationState
+  const filter = chatsState.filter
+  let base: string = 'allChats'
   switch (filter.kind) {
     case 'allChats':
       base = 'allChats'
       break
     case 'flagged':
       base = 'flagged'
+      break
+    case 'archived':
+      base = 'archived'
       break
     case 'state':
       base = `state/${filter.stateId}`
@@ -624,8 +691,8 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       break
   }
 
-  if (state.details) {
-    return `${base}/chat/${state.details.sessionId}`
+  if (chatsState.details) {
+    return `${base}/chat/${chatsState.details.sessionId}`
   }
   return base
 }

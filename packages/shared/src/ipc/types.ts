@@ -91,6 +91,10 @@ export interface Session {
   }
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** Whether this session is archived */
+  isArchived?: boolean
+  /** Timestamp when session was archived */
+  archivedAt?: number
   /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
   labels?: string[]
 }
@@ -154,6 +158,8 @@ export type SessionEvent =
   // Session metadata events (for multi-window sync)
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
+  | { type: 'session_archived'; sessionId: string }
+  | { type: 'session_unarchived'; sessionId: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'connection_changed'; sessionId: string; connectionSlug: string }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
@@ -441,12 +447,14 @@ export type RightSidebarPanel =
  * - 'state': Sessions with specific status ID
  * - 'label': Sessions with specific label (includes descendants via tree hierarchy)
  * - 'imported': Imported sessions from external platforms
+ * - 'archived': Archived sessions
  * - 'scheduled': All sessions created by any scheduled task
  * - 'scheduledTask': Sessions created by a specific scheduled task
  */
 export type ChatFilter =
   | { kind: 'allChats' }
   | { kind: 'flagged' }
+  | { kind: 'archived' }
   | { kind: 'state'; stateId: string }
   | { kind: 'label'; labelId: string }
   | { kind: 'imported'; source: 'openai' | 'anthropic' }
@@ -456,7 +464,7 @@ export type ChatFilter =
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import' | 'im'
+export type SettingsSubpage = 'app' | 'workspace' | 'api' | 'appearance' | 'input' | 'labels' | 'permissions' | 'shortcuts' | 'preferences' | 'import' | 'im'
 
 /**
  * Chats navigation state - shows SessionList in navigator
@@ -504,6 +512,27 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Automation type filter for automations navigation
+ */
+export interface AutomationFilter {
+  kind: 'type'
+  automationType: 'scheduled' | 'event' | 'agentic'
+}
+
+/**
+ * Automations navigation state - shows AutomationsListPanel in navigator
+ */
+export interface AutomationsNavigationState {
+  navigator: 'automations'
+  /** Optional filter for automation type */
+  filter?: AutomationFilter
+  /** Selected automation details, or null for empty state */
+  details: { type: 'automation'; automationId: string } | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -516,6 +545,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | AutomationsNavigationState
 
 // =============================================================================
 // Tool Icons Types

@@ -58,6 +58,10 @@ export interface SessionMeta {
   labels?: string[]
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** Whether this session is archived */
+  isArchived?: boolean
+  /** Timestamp when session was archived */
+  archivedAt?: number
   /** Token usage for the session */
   tokenUsage?: {
     inputTokens?: number
@@ -104,6 +108,8 @@ export function extractSessionMeta(session: Session): SessionMeta {
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
     hidden: session.hidden,
+    isArchived: session.isArchived,
+    archivedAt: session.archivedAt,
     lastFinalMessageId,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,
@@ -634,6 +640,12 @@ export const backgroundTasksAtomFamily = atomFamily(
 // HMR: Force full page refresh when this file changes.
 // Jotai atoms are module-level objects - when HMR reloads this file, new atom
 // instances are created but the store still holds data in the old atoms.
+/**
+ * Window's current workspace ID — shared between Root (ThemeProvider) and App.
+ * Written by App on init & workspace switch, read by Root to pass to ThemeProvider.
+ */
+export const windowWorkspaceIdAtom = atom<string | null>(null)
+
 // This causes messages to disappear because components subscribe to new (empty)
 // atoms while data lives in old (orphaned) atoms. Full refresh avoids this.
 if (import.meta.hot) {

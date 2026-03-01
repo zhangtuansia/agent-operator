@@ -35,18 +35,29 @@ export {
   SystemMessage,
   FileTypeIcon,
   getFileTypeLabel,
+  // Inline execution for EditPopover
+  InlineExecution,
+  mapToolEventToActivity,
+  SIZE_CONFIG,
+  ActivityStatusIcon,
   type SessionViewerProps,
   type SessionViewerMode,
   type TurnCardProps,
   type TurnCardActionsMenuProps,
   type ResponseCardProps,
+  type TurnCardTranslations,
+  type ResponseCardTranslations,
   type UserMessageBubbleProps,
   type SystemMessageProps,
   type SystemMessageType,
   type FileTypeIconProps,
   type ActivityItem,
+  type ActivityStatus,
   type ResponseContent,
   type TodoItem,
+  type InlineExecutionProps,
+  type InlineExecutionStatus,
+  type InlineActivityItem,
 } from './components/chat'
 
 // Markdown
@@ -55,11 +66,11 @@ export {
   MemoizedMarkdown,
   CodeBlock,
   InlineCode,
+  CollapsibleMarkdownProvider,
+  useCollapsibleMarkdown,
   MarkdownDatatableBlock,
   MarkdownSpreadsheetBlock,
   MarkdownExcalidrawBlock,
-  CollapsibleMarkdownProvider,
-  useCollapsibleMarkdown,
   type MarkdownProps,
   type RenderMode,
   type MarkdownDatatableBlockProps,
@@ -103,8 +114,8 @@ export {
 export {
   ShikiCodeViewer,
   ShikiDiffViewer,
-  UnifiedDiffViewer,
   getDiffStats,
+  UnifiedDiffViewer,
   getUnifiedDiffStats,
   DiffViewerControls,
   DiffSplitIcon,
@@ -138,10 +149,15 @@ export {
 export {
   // Base overlay components
   FullscreenOverlayBase,
+  FullscreenOverlayBaseHeader,
   PreviewOverlay,
+  ContentFrame,
   CopyButton,
   type FullscreenOverlayBaseProps,
+  type FullscreenOverlayBaseHeaderProps,
+  type OverlayTypeBadge,
   type PreviewOverlayProps,
+  type ContentFrameProps,
   type BadgeVariant,
   type CopyButtonProps,
   // Specialized overlays
@@ -153,28 +169,35 @@ export {
   JSONPreviewOverlay,
   DataTableOverlay,
   DocumentFormattedMarkdownOverlay,
+  ImagePreviewOverlay,
+  PDFPreviewOverlay,
+  ExcalidrawPreviewOverlay,
   detectLanguage,
   detectLanguageFromPath,
   type CodePreviewOverlayProps,
   type DiffPreviewOverlayProps,
   type MultiDiffPreviewOverlayProps,
   type FileChange,
+  type DiffViewerSettings,
   type TerminalPreviewOverlayProps,
   type GenericOverlayProps,
   type JSONPreviewOverlayProps,
   type DataTableOverlayProps,
   type DocumentFormattedMarkdownOverlayProps,
+  type ImagePreviewOverlayProps,
+  type PDFPreviewOverlayProps,
+  type ExcalidrawPreviewOverlayProps,
 } from './components/overlay'
+
+// File classification (for link interceptor)
+export {
+  classifyFile,
+  type FilePreviewType,
+  type FileClassification,
+} from './lib/file-classification'
 
 // Utilities
 export { cn } from './lib/utils'
-
-// File classification
-export {
-  classifyFile,
-  type FileClassification,
-  type FilePreviewType,
-} from './lib/file-classification'
 
 // Layout constants and hooks
 export {

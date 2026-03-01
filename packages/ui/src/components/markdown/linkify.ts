@@ -1,4 +1,5 @@
 import LinkifyIt from 'linkify-it'
+import { FILE_EXTENSIONS_PATTERN } from '../../lib/file-classification'
 
 /**
  * Linkify - URL and file path detection for markdown preprocessing
@@ -11,8 +12,8 @@ import LinkifyIt from 'linkify-it'
 const linkify = new LinkifyIt()
 
 // File path regex - detects /path, ~/path, ./path with common extensions
-// Matches paths that start with /, ~/, or ./ followed by path chars and a file extension
-const FILE_PATH_REGEX = /(?:^|[\s([\{<])((\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|dockerfile|makefile|gitignore))(?=[\s)\]}\.,;:!?>]|$)/gi
+// Extensions derived from file-classification.ts to stay in sync with preview support
+const FILE_PATH_REGEX = new RegExp(`(?:^|[\\s([\\{<])((/|~/|./)[\\w\\-./@]+\\.(?:${FILE_EXTENSIONS_PATTERN}))(?=[\\s)\\]}\\.,:;!?>]|$)`, 'gi')
 
 interface DetectedLink {
   type: 'url' | 'email' | 'file'
@@ -63,31 +64,40 @@ function isInsideCode(pos: number, ranges: CodeRange[]): boolean {
   return ranges.some(r => pos >= r.start && pos < r.end)
 }
 
+/**
+ * Find all markdown link ranges in text: both [text](...) and [text][ref] patterns.
+ * Returns ranges covering the entire link syntax so any URL detected within
+ * these spans is skipped by preprocessLinks() — preventing nested/broken links.
+ */
 function findMarkdownLinkRanges(text: string): CodeRange[] {
   const ranges: CodeRange[] = []
 
-  // Match [text](url) style links.
+  // Match [text](url) — inline links
   const inlineLinkRegex = /\[(?:[^\[\]]|\\\[|\\\])*\]\([^)]*\)/g
   let match
   while ((match = inlineLinkRegex.exec(text)) !== null) {
     ranges.push({ start: match.index, end: match.index + match[0].length })
   }
 
-  // Match [text][ref] style links.
+  // Match [text][ref] — reference links
   const refLinkRegex = /\[(?:[^\[\]]|\\\[|\\\])*\]\[[^\]]*\]/g
   while ((match = refLinkRegex.exec(text)) !== null) {
-    const range = { start: match.index, end: match.index + match[0].length }
-    const alreadyCovered = ranges.some(existing => rangesOverlap(existing, range))
+    // Avoid duplicates with inline links that already matched
+    const r = { start: match.index, end: match.index + match[0].length }
+    const alreadyCovered = ranges.some(existing => rangesOverlap(existing, r))
     if (!alreadyCovered) {
-      ranges.push(range)
+      ranges.push(r)
     }
   }
 
   return ranges
 }
 
+/**
+ * Check if a position falls inside any markdown link range
+ */
 function isInsideMarkdownLink(pos: number, ranges: CodeRange[]): boolean {
-  return ranges.some(range => pos >= range.start && pos < range.end)
+  return ranges.some(r => pos >= r.start && pos < r.end)
 }
 
 /**
@@ -170,7 +180,7 @@ export function preprocessLinks(text: string): string {
     // Skip if inside code block
     if (isInsideCode(link.start, codeRanges)) continue
 
-    // Skip links that are already inside markdown link syntax.
+    // Skip if inside an existing markdown link (text or href portion)
     if (isInsideMarkdownLink(link.start, markdownLinkRanges)) continue
 
     // Add text before this link

@@ -65,6 +65,8 @@ const SESSION_EVENT_ALIAS: Record<SessionEvent['type'], string> = {
   user_message: 'message_user_event',
   session_flagged: 'session_flagged',
   session_unflagged: 'session_unflagged',
+  session_archived: 'session_archived',
+  session_unarchived: 'session_unarchived',
   session_model_changed: 'session_model_changed',
   connection_changed: 'connection_changed',
   todo_state_changed: 'session_todo_state_changed',

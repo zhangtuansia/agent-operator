@@ -17,6 +17,8 @@ import { Panel } from './Panel'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { useState, useEffect, useCallback } from 'react'
+import { useAtomValue } from 'jotai'
 import {
   useNavigation,
   useNavigationState,
@@ -24,13 +26,16 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isAutomationsNavigation,
 } from '@/contexts/NavigationContext'
 import { routes } from '@/lib/navigate'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { useLanguage } from '@/context/LanguageContext'
-import { ScheduledTasksView } from '@/components/scheduled-tasks/ScheduledTasksView'
+import { AutomationInfoPage } from '@/components/automations/AutomationInfoPage'
+import { automationsAtom } from '@/atoms/automations'
+import type { ExecutionEntry } from '@/components/automations/types'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -113,27 +118,35 @@ export function MainContentPanel({
     )
   }
 
+  // Automations navigator - show automation info or empty state
+  if (isAutomationsNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ErrorBoundary level="section" key={navState.details.automationId}>
+            <AutomationDetailView automationId={navState.details.automationId} />
+          </ErrorBoundary>
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t('emptyStates.selectAutomation') ?? 'Select an automation to view details'}</p>
+        </div>
+      </Panel>
+    )
+  }
+
   // Chats navigator - show chat or empty state
   if (isChatsNavigation(navState)) {
     if (!navState.details && (navState.filter.kind === 'scheduled' || navState.filter.kind === 'scheduledTask')) {
+      // Scheduled task management view removed — use Automations navigator instead
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <ScheduledTasksView
-            workspaceId={activeWorkspaceId}
-            filterKind={navState.filter.kind}
-            filterTaskId={navState.filter.kind === 'scheduledTask' ? navState.filter.taskId : null}
-            onViewSession={(sessionId, taskId) => {
-              if (taskId) {
-                navigate(routes.view.scheduledTask(taskId, sessionId))
-                return
-              }
-              if (navState.filter.kind === 'scheduledTask') {
-                navigate(routes.view.scheduledTask(navState.filter.taskId, sessionId))
-                return
-              }
-              navigate(routes.view.scheduled(sessionId))
-            }}
-          />
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+            {t('common.selectSession')}
+          </div>
         </Panel>
       )
     }
@@ -154,7 +167,9 @@ export function MainContentPanel({
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
               ? t('emptyStates.noFlaggedConversations')
-              : t('emptyStates.noConversationsYet')}
+              : navState.filter.kind === 'archived'
+                ? t('emptyStates.noArchivedConversations')
+                : t('emptyStates.noConversationsYet')}
           </p>
         </div>
       </Panel>
@@ -168,5 +183,109 @@ export function MainContentPanel({
         <p className="text-sm">{t('emptyStates.selectConversation')}</p>
       </div>
     </Panel>
+  )
+}
+
+// ============================================================================
+// AutomationDetailView — internal component for automation info page
+// ============================================================================
+
+function AutomationDetailView({ automationId }: { automationId: string }) {
+  const automations = useAtomValue(automationsAtom)
+  const { activeWorkspaceId } = useAppShellContext()
+  const [executions, setExecutions] = useState<ExecutionEntry[]>([])
+
+  const automation = automations.find(a => a.id === automationId)
+
+  // Load execution history
+  useEffect(() => {
+    if (!activeWorkspaceId || !automationId) return
+    window.electronAPI.getAutomationHistory(activeWorkspaceId, automationId, 20)
+      .then((entries: Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }>) => {
+        setExecutions(entries.map(e => ({
+          id: `${e.id}-${e.ts}`,
+          automationId: e.id,
+          event: automation?.event ?? 'LabelAdd',
+          status: e.ok ? 'success' as const : 'error' as const,
+          duration: 0,
+          timestamp: e.ts,
+          sessionId: e.sessionId,
+          actionSummary: e.prompt,
+          error: e.error,
+        })))
+      })
+      .catch(() => setExecutions([]))
+
+    // Subscribe to live updates
+    const cleanup = window.electronAPI.onAutomationsChanged(() => {
+      window.electronAPI.getAutomationHistory(activeWorkspaceId, automationId, 20)
+        .then((entries: Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }>) => {
+          setExecutions(entries.map(e => ({
+            id: `${e.id}-${e.ts}`,
+            automationId: e.id,
+            event: automation?.event ?? 'LabelAdd',
+            status: e.ok ? 'success' as const : 'error' as const,
+            duration: 0,
+            timestamp: e.ts,
+            sessionId: e.sessionId,
+            actionSummary: e.prompt,
+            error: e.error,
+          })))
+        })
+        .catch(() => {})
+    })
+    return () => { cleanup() }
+  }, [activeWorkspaceId, automationId, automation?.event])
+
+  const handleToggleEnabled = useCallback(() => {
+    if (!automation || !activeWorkspaceId) return
+    window.electronAPI.setAutomationEnabled(
+      activeWorkspaceId,
+      automation.event,
+      automation.matcherIndex,
+      !automation.enabled,
+    ).catch(() => {})
+  }, [automation, activeWorkspaceId])
+
+  const handleTest = useCallback(() => {
+    if (!automation || !activeWorkspaceId) return
+    window.electronAPI.testAutomation({
+      workspaceId: activeWorkspaceId,
+      automationId: automation.id,
+      actions: automation.actions,
+      permissionMode: automation.permissionMode,
+      labels: automation.labels,
+    }).catch(() => {})
+  }, [automation, activeWorkspaceId])
+
+  const handleDuplicate = useCallback(() => {
+    if (!automation || !activeWorkspaceId) return
+    window.electronAPI.duplicateAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
+      .catch(() => {})
+  }, [automation, activeWorkspaceId])
+
+  const handleDelete = useCallback(() => {
+    if (!automation || !activeWorkspaceId) return
+    window.electronAPI.deleteAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
+      .catch(() => {})
+  }, [automation, activeWorkspaceId])
+
+  if (!automation) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <p className="text-sm">Automation not found</p>
+      </div>
+    )
+  }
+
+  return (
+    <AutomationInfoPage
+      automation={automation}
+      executions={executions}
+      onToggleEnabled={handleToggleEnabled}
+      onTest={handleTest}
+      onDuplicate={handleDuplicate}
+      onDelete={handleDelete}
+    />
   )
 }

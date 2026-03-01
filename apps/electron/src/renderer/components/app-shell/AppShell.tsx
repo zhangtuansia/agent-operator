@@ -3,17 +3,22 @@ import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { useAtomValue } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
+  Archive,
+  Bot,
   CheckCircle2,
   Settings,
   ChevronRight,
   ChevronDown,
+  Globe,
   MoreHorizontal,
   RotateCw,
   Flag,
   ListFilter,
+  ListTodo,
   Check,
   Search,
   Plus,
+  Radio,
   Trash2,
   DatabaseZap,
   Zap,
@@ -24,7 +29,6 @@ import {
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
-// TodoStateIcons no longer used - icons come from dynamic todoStates
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -59,10 +63,10 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { LeftSidebar } from "./LeftSidebar"
-import { TaskList } from "@/components/scheduled-tasks/TaskList"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { useSession } from "@/hooks/useSession"
-import { useScheduledTasks } from "@/hooks/useScheduledTasks"
+import { useAutomations } from "@/hooks/useAutomations"
+import { AutomationsListPanel } from "@/components/automations/AutomationsListPanel"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
@@ -79,7 +83,8 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
+import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
+import { APP_EVENTS } from "@/components/automations/types"
 
 // Built-in status IDs that have translations
 const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
@@ -106,6 +111,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isAutomationsNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -274,7 +280,9 @@ function AppShellContent({
     onUnflagSession,
     onMarkSessionRead,
     onMarkSessionUnread,
-    onTodoStateChange,
+    onSessionStatusChange,
+    onArchiveSession,
+    onUnarchiveSession,
     onRenameSession,
     onOpenFile,
     onOpenSettings,
@@ -330,27 +338,25 @@ function AppShellContent({
   const activeChatSessionId = isChatsNavigation(navState) && navState.details
     ? navState.details.sessionId
     : null
-  const isScheduledManagementView = isChatsNavigation(navState)
-    && !navState.details
-    && !!chatFilter
-    && (chatFilter.kind === 'scheduled' || chatFilter.kind === 'scheduledTask')
   const showSessionListPanel = !isFocusedMode
 
   // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
   const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
 
-  // Scheduled task data (shared via Jotai atoms with ScheduledTasksView)
+  // Automations data
+  const activeWorkspaceForAutomations = workspaces.find(w => w.id === activeWorkspaceId)
   const {
-    tasks: scheduledTasks,
-    selectedTaskId: selectedScheduledTaskId,
-    isLoading: scheduledTasksLoading,
-    setSelectedTaskId: setSelectedScheduledTaskId,
-    setViewMode: setScheduledTaskViewMode,
-    toggleTask: toggleScheduledTask,
-    runManually: runScheduledTaskManually,
-    deleteTask: deleteScheduledTask,
-  } = useScheduledTasks(activeWorkspaceId)
-  const [scheduledDeleteTarget, setScheduledDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+    automations,
+    automationTestResults,
+    automationPendingDelete,
+    pendingDeleteAutomation,
+    setAutomationPendingDelete,
+    handleTestAutomation,
+    handleToggleAutomation,
+    handleDuplicateAutomation,
+    handleDeleteAutomation,
+    confirmDeleteAutomation,
+  } = useAutomations(activeWorkspaceId, activeWorkspaceForAutomations?.rootPath)
 
   // Handle right sidebar panel switch
   const handleSwitchPanel = useCallback((panel: RightSidebarPanel) => {
@@ -396,8 +402,8 @@ function AppShellContent({
   }, [])
 
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
-  const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {
-    const saved = storage.get<TodoStateId[]>(storage.KEYS.listFilter, [])
+  const [listFilter, setListFilter] = React.useState<Set<SessionStatusId>>(() => {
+    const saved = storage.get<SessionStatusId[]>(storage.KEYS.listFilter, [])
     return new Set(saved)
   })
   // Search state for session list
@@ -561,26 +567,23 @@ function AppShellContent({
   }, [])
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
-  const addScheduledTaskEditConfig = useTranslatedEditConfig(
-    'add-scheduled-task',
-    activeWorkspace?.rootPath || ''
-  )
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
   // Load labels from workspace config
   const { labels: labelConfigs } = useLabels(activeWorkspace?.id || null)
-  const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
+  const [todoStates, setTodoStates] = React.useState<SessionStatus[]>([])
 
-  // Convert StatusConfig to TodoState with resolved icons
+  // Convert StatusConfig to SessionStatus with resolved icons
   React.useEffect(() => {
     if (!activeWorkspace?.id || statusConfigs.length === 0) {
       setTodoStates([])
       return
     }
 
-    statusConfigsToTodoStates(statusConfigs, activeWorkspace.id).then(setTodoStates)
-  }, [statusConfigs, activeWorkspace?.id])
+    const isDark = resolvedMode === 'dark'
+    setTodoStates(statusConfigsToSessionStatuses(statusConfigs, activeWorkspace.id, isDark))
+  }, [statusConfigs, activeWorkspace?.id, resolvedMode])
 
   // Ensure session messages are loaded when selected
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
@@ -732,7 +735,30 @@ function AppShellContent({
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
   const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
-  const scheduledCount = scheduledTasks.length
+  const archivedCount = workspaceSessionMetas.filter(s => s.isArchived).length
+
+  // Count automations by type
+  const automationTypeCounts = useMemo(() => {
+    const counts = { scheduled: 0, event: 0, agentic: 0 }
+    for (const a of automations) {
+      if (a.event === 'SchedulerTick') counts.scheduled++
+      else if (APP_EVENTS.includes(a.event as any)) counts.event++
+      else counts.agentic++
+    }
+    return counts
+  }, [automations])
+
+  // Count sources by type
+  const sourceTypeCounts = useMemo(() => {
+    const counts = { api: 0, mcp: 0, local: 0 }
+    for (const s of sources) {
+      const sType = (s as any).config?.type ?? (s as any).type
+      if (sType === 'api') counts.api++
+      else if (sType === 'mcp') counts.mcp++
+      else if (sType === 'local') counts.local++
+    }
+    return counts
+  }, [sources])
 
   // Count sessions per label (includes descendants for hierarchical counting)
   const labelCounts = useMemo(() => {
@@ -743,7 +769,7 @@ function AppShellContent({
         targetIds.add(did)
       }
       counts[label.id] = workspaceSessionMetas.filter(s =>
-        s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
+        !s.isArchived && s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
       ).length
     }
     return counts
@@ -751,14 +777,15 @@ function AppShellContent({
 
   // Count sessions by individual todo state (dynamic based on todoStates)
   const todoStateCounts = useMemo(() => {
-    const counts: Record<TodoStateId, number> = {}
+    const counts: Record<SessionStatusId, number> = {}
     // Initialize counts for all dynamic statuses
     for (const state of todoStates) {
       counts[state.id] = 0
     }
-    // Count sessions
+    // Count sessions (exclude archived — archived sessions have their own view)
     for (const s of workspaceSessionMetas) {
-      const state = (s.todoState || 'todo') as TodoStateId
+      if (s.isArchived) continue
+      const state = (s.todoState || 'todo') as SessionStatusId
       // Increment count (initialize to 0 if status not in todoStates yet)
       counts[state] = (counts[state] || 0) + 1
     }
@@ -774,24 +801,31 @@ function AppShellContent({
 
     let result: SessionMeta[]
 
+    // Base pool: exclude archived sessions from all views except explicit archived view
+    const pool = workspaceSessionMetas.filter(s => !s.isArchived)
+
     switch (chatFilter.kind) {
       case 'allChats':
-        // "All Chats" - shows all sessions
-        result = workspaceSessionMetas
+        // "All Chats" - shows all non-archived sessions
+        result = pool
+        break
+      case 'archived':
+        // "Archived" - shows only archived sessions (use unfiltered list)
+        result = workspaceSessionMetas.filter(s => s.isArchived === true)
         break
       case 'flagged':
-        result = workspaceSessionMetas.filter(s => s.isFlagged)
+        result = pool.filter(s => s.isFlagged)
         break
       case 'state':
         // Filter by specific todo state
-        result = workspaceSessionMetas.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
+        result = pool.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
         break
       case 'label':
         // Filter by label (includes descendants for hierarchical filtering)
         if (chatFilter.labelId === '__all__') {
           // "Labels" header: show only sessions with user-visible labels.
           // Internal labels (scheduled:* / imported:*) should not appear in this view.
-          result = workspaceSessionMetas.filter(s =>
+          result = pool.filter(s =>
             s.labels?.some(entry => {
               const labelId = extractLabelId(entry)
               return !labelId.startsWith('scheduled:') && !labelId.startsWith('imported:')
@@ -803,34 +837,34 @@ function AppShellContent({
           for (const did of getDescendantIds(labelConfigs, chatFilter.labelId)) {
             targetIds.add(did)
           }
-          result = workspaceSessionMetas.filter(s =>
+          result = pool.filter(s =>
             s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
           )
         }
         break
       case 'imported':
         // Filter by import source
-        result = workspaceSessionMetas.filter(s => s.labels?.includes(`imported:${chatFilter.source}`))
+        result = pool.filter(s => s.labels?.includes(`imported:${chatFilter.source}`))
         break
       case 'scheduled':
         // Filter all sessions created by any scheduled task
-        result = workspaceSessionMetas.filter(s =>
+        result = pool.filter(s =>
           s.labels?.some(l => l.startsWith('scheduled:'))
         )
         break
       case 'scheduledTask':
         // Filter by specific scheduled task label
-        result = workspaceSessionMetas.filter(s =>
+        result = pool.filter(s =>
           s.labels?.includes(`scheduled:${chatFilter.taskId}`)
         )
         break
       default:
-        result = workspaceSessionMetas
+        result = pool
     }
 
     // Apply secondary filter by todo states if any are selected (only in allChats view)
     if (chatFilter.kind === 'allChats' && listFilter.size > 0) {
-      result = result.filter(s => listFilter.has((s.todoState || 'todo') as TodoStateId))
+      result = result.filter(s => listFilter.has((s.todoState || 'todo') as SessionStatusId))
     }
 
     return result
@@ -931,7 +965,7 @@ function AppShellContent({
     labels: labelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
-    todoStates,
+    sessionStatuses: todoStates,
     sessionListSearchQuery: searchActive ? searchQuery : undefined,
     isSearchModeActive: searchActive,
     onChatMatchInfoChange: handleChatMatchInfoChange,
@@ -976,22 +1010,13 @@ function AppShellContent({
     navigate(routes.view.scheduled())
   }, [navigate])
 
-  const handleDeleteScheduledTaskConfirm = useCallback(async () => {
-    if (!scheduledDeleteTarget) return
-    try {
-      const deletedTaskId = scheduledDeleteTarget.id
-      await deleteScheduledTask(deletedTaskId)
-      toast.success(t('scheduledTasks.taskDeleted'))
-      if (chatFilter?.kind === 'scheduledTask' && chatFilter.taskId === deletedTaskId && !activeChatSessionId) {
-        navigate(routes.view.scheduled())
-      }
-    } catch (error) {
-      console.error('[AppShell] Failed to delete scheduled task:', error)
-      toast.error(t('scheduledTasks.taskDeleteFailed'))
-    } finally {
-      setScheduledDeleteTarget(null)
-    }
-  }, [scheduledDeleteTarget, deleteScheduledTask, t, chatFilter, activeChatSessionId, navigate])
+  const handleAutomationsClick = useCallback(() => {
+    navigate(routes.view.automations())
+  }, [navigate])
+
+  const handleAutomationSelect = useCallback((automationId: string) => {
+    navigate(routes.view.automations(automationId))
+  }, [navigate])
 
   // Handlers for imported categories
   const handleOpenAIImportedClick = useCallback(() => {
@@ -1049,7 +1074,7 @@ function AppShellContent({
   }, [chatFilter, labelCounts, handleLabelClick, isExpanded, toggleExpanded, navigate, activeWorkspaceId])
 
   // Handler for individual todo state views
-  const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
+  const handleTodoStateClick = useCallback((stateId: SessionStatusId) => {
     navigate(routes.view.state(stateId))
   }, [navigate])
 
@@ -1148,34 +1173,34 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Nav items (All Chats, Flagged)
+    // Sessions section
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-
-    // 2. Status nav items (dynamic from todoStates)
+    // Status sub-items
     for (const state of todoStates) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
     }
-
-    // 2.5. Label nav items (dynamic from labelConfigs)
+    // Label sub-items
     for (const label of flattenLabels(labelConfigs)) {
       result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
     }
-
-    // 3. Sources nav item
+    // Sources section (with sub-items)
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-
-    // 2.6. Skills nav item
+    result.push({ id: 'nav:sources:api', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:sources:mcp', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:sources:local', type: 'nav', action: handleSourcesClick })
+    // Skills
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
-
-    // 2.65. Scheduled tasks nav item
-    result.push({ id: 'nav:scheduled', type: 'nav', action: handleScheduledClick })
-
-    // 2.7. Settings nav item
+    // Automations section (with sub-items)
+    result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:automations:scheduled', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:automations:event', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:automations:agentic', type: 'nav', action: handleAutomationsClick })
+    // Settings
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleScheduledClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1294,6 +1319,11 @@ function AppShellContent({
       return t('sidebar.skills')
     }
 
+    // Automations navigator
+    if (isAutomationsNavigation(navState)) {
+      return t('sidebar.automations')
+    }
+
     // Settings navigator
     if (isSettingsNavigation(navState)) return t('sidebar.settings')
 
@@ -1305,7 +1335,7 @@ function AppShellContent({
         return t('sessionList.flagged')
       case 'state':
         const state = todoStates.find(s => s.id === chatFilter.stateId)
-        return state?.label || t('sessionList.allChats')
+        return state ? getTranslatedStatusLabel(state.id, state.label, t) : t('sessionList.allChats')
       case 'label': {
         if (chatFilter.labelId === '__all__') {
           return t('sidebar.labels')
@@ -1316,9 +1346,9 @@ function AppShellContent({
       case 'imported':
         return chatFilter.source === 'openai' ? 'OpenAI' : 'Anthropic'
       case 'scheduled':
-        return t('sidebar.scheduledTasks')
+        return t('sidebar.automations')
       case 'scheduledTask':
-        return t('sidebar.scheduledTasks')
+        return t('sidebar.automations')
       default:
         return t('sessionList.allChats')
     }
@@ -1402,7 +1432,7 @@ function AppShellContent({
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Chat Button - Gmail-style, with context menu for "Open in New Window" */}
-                <div className="px-2 pt-1 pb-2">
+                <div className="px-2 pt-1 pb-2 shrink-0">
                   <ContextMenu modal={true}>
                     <ContextMenuTrigger asChild>
                       <Button
@@ -1423,96 +1453,63 @@ function AppShellContent({
                   </ContextMenu>
                 </div>
                 {/* Primary Nav: All Chats (with expandable submenu), Sources */}
+                {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
+                    // --- Sessions Section ---
                     {
                       id: "nav:allChats",
-                      title: t('sessionList.allChats'),
+                      title: t('sessionList.allSessions') ?? 'All Sessions',
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
                       onClick: handleAllChatsClick,
+                    },
+                    {
+                      id: "nav:flagged",
+                      title: t('sessionList.flagged'),
+                      label: String(flaggedCount),
+                      icon: <Flag className="h-3.5 w-3.5" />,
+                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                      onClick: handleFlaggedClick,
+                    },
+                    // Status: expandable section with dynamic status sub-items
+                    {
+                      id: "nav:states",
+                      title: t('sidebar.status') ?? 'Status',
+                      icon: CheckCircle2,
+                      variant: "ghost" as const,
+                      onClick: () => toggleExpanded('nav:states'),
                       expandable: true,
-                      expanded: isExpanded('nav:allChats'),
-                      onToggle: () => toggleExpanded('nav:allChats'),
-                      // Context menu: Configure Statuses
+                      expanded: isExpanded('nav:states'),
+                      onToggle: () => toggleExpanded('nav:states'),
                       contextMenu: {
-                        type: 'allChats',
+                        type: 'allChats' as const,
                         onConfigureStatuses: openConfigureStatuses,
                       },
-                      items: [
-                        // Dynamic status items from todoStates
-                        ...todoStates.map(state => ({
-                          id: `nav:state:${state.id}`,
-                          title: getTranslatedStatusLabel(state.id, state.label, t),
-                          label: String(todoStateCounts[state.id] || 0),
-                          icon: state.icon,
-                          iconColor: state.resolvedColor,
-                          iconColorable: state.iconColorable,
-                          variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                          onClick: () => handleTodoStateClick(state.id),
-                          // Context menu for each status: Configure Statuses
-                          contextMenu: {
-                            type: 'status' as const,
-                            statusId: state.id,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                          // Drag-and-drop: accept session drops to change status
-                          acceptsDrop: true,
-                          onSessionDrop: (sessionId: string) => onTodoStateChange(sessionId, state.id),
-                        })),
-                        // Separator before Flagged
-                        { id: "separator:before-flagged", type: "separator" },
-                        // Flagged at the bottom
-                        {
-                          id: "nav:flagged",
-                          title: t('sessionList.flagged'),
-                          label: String(flaggedCount),
-                          icon: <Flag className="h-3.5 w-3.5 fill-current" />,
-                          iconColor: "text-info",
-                          variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                          onClick: handleFlaggedClick,
-                          // Context menu for Flagged: Configure Statuses
-                          contextMenu: {
-                            type: 'flagged' as const,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                          // Drag-and-drop: accept session drops to flag
-                          acceptsDrop: true,
-                          onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
+                      items: todoStates.map(state => ({
+                        id: `nav:state:${state.id}`,
+                        title: getTranslatedStatusLabel(state.id, state.label, t),
+                        label: String(todoStateCounts[state.id] || 0),
+                        icon: state.icon,
+                        iconColor: state.resolvedColor,
+                        iconColorable: state.iconColorable,
+                        variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                        onClick: () => handleTodoStateClick(state.id),
+                        contextMenu: {
+                          type: 'status' as const,
+                          statusId: state.id,
+                          onConfigureStatuses: openConfigureStatuses,
                         },
-                        // Imported categories (only show if there are imported sessions)
-                        ...(openaiCount > 0 ? [{
-                          id: "nav:imported-openai",
-                          title: "OpenAI",
-                          label: String(openaiCount),
-                          icon: <FolderOpen className="h-3.5 w-3.5" />,
-                          variant: (chatFilter?.kind === 'imported' && chatFilter.source === 'openai' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleOpenAIImportedClick,
-                        }] : []),
-                        ...(anthropicCount > 0 ? [{
-                          id: "nav:imported-anthropic",
-                          title: "Anthropic",
-                          label: String(anthropicCount),
-                          icon: <FolderOpen className="h-3.5 w-3.5" />,
-                          variant: (chatFilter?.kind === 'imported' && chatFilter.source === 'anthropic' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleAnthropicImportedClick,
-                        }] : []),
-                      ],
+                        acceptsDrop: true,
+                        onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
+                      })),
                     },
-                    // Scheduled Tasks - top-level group (same level as Flagged)
-                    {
-                      id: "nav:scheduled",
-                      title: t('sidebar.scheduledTasks'),
-                      label: String(scheduledCount),
-                      icon: Clock,
-                      variant: (chatFilter?.kind === 'scheduled' ? "default" : "ghost") as "default" | "ghost",
-                      onClick: handleScheduledClick,
-                    },
-                    // Labels: top-level expandable section with hierarchical label tree
+                    // Labels: navigable header + hierarchical tree
                     ...(labelConfigs.length > 0 ? [{
                       id: "nav:labels",
                       title: t('sidebar.labels'),
@@ -1529,6 +1526,18 @@ function AppShellContent({
                         onAddLabel: () => navigate(routes.view.settings('labels')),
                       },
                     }] : []),
+                    // Archived
+                    {
+                      id: "nav:archived",
+                      title: t('sidebar.archived') ?? 'Archived',
+                      label: archivedCount > 0 ? String(archivedCount) : undefined,
+                      icon: Archive,
+                      variant: (chatFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
+                      onClick: () => navigate(routes.view.archived()),
+                    },
+                    // --- Separator ---
+                    { id: "separator:chats-sources", type: "separator" },
+                    // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
                       title: t('sidebar.sources'),
@@ -1537,11 +1546,39 @@ function AppShellContent({
                       variant: isSourcesNavigation(navState) ? "default" : "ghost",
                       onClick: handleSourcesClick,
                       dataTutorial: "sources-nav",
-                      // Context menu: Add Source
+                      expandable: true,
+                      expanded: isExpanded('nav:sources'),
+                      onToggle: () => toggleExpanded('nav:sources'),
                       contextMenu: {
                         type: 'sources',
                         onAddSource: openAddSource,
                       },
+                      items: [
+                        {
+                          id: "nav:sources:api",
+                          title: "APIs",
+                          label: String(sourceTypeCounts.api),
+                          icon: Globe,
+                          variant: "ghost" as const,
+                          onClick: handleSourcesClick,
+                        },
+                        {
+                          id: "nav:sources:mcp",
+                          title: "MCPs",
+                          label: String(sourceTypeCounts.mcp),
+                          icon: DatabaseZap,
+                          variant: "ghost" as const,
+                          onClick: handleSourcesClick,
+                        },
+                        {
+                          id: "nav:sources:local",
+                          title: t('sidebar.localFolders') ?? 'Local Folders',
+                          label: String(sourceTypeCounts.local),
+                          icon: FolderOpen,
+                          variant: "ghost" as const,
+                          onClick: handleSourcesClick,
+                        },
+                      ],
                     },
                     {
                       id: "nav:skills",
@@ -1550,25 +1587,63 @@ function AppShellContent({
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
                       onClick: handleSkillsClick,
-                      // Context menu: Add Skill
                       contextMenu: {
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
                     },
+                    {
+                      id: "nav:automations",
+                      title: t('sidebar.automations') ?? 'Automations',
+                      label: String(automations.length),
+                      icon: ListTodo,
+                      variant: isAutomationsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleAutomationsClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:automations'),
+                      onToggle: () => toggleExpanded('nav:automations'),
+                      items: [
+                        {
+                          id: "nav:automations:scheduled",
+                          title: t('sidebar.scheduled') ?? 'Scheduled',
+                          label: String(automationTypeCounts.scheduled),
+                          icon: Clock,
+                          variant: "ghost" as const,
+                          onClick: handleAutomationsClick,
+                        },
+                        {
+                          id: "nav:automations:event",
+                          title: t('sidebar.eventBased') ?? 'Event-based',
+                          label: String(automationTypeCounts.event),
+                          icon: Radio,
+                          variant: "ghost" as const,
+                          onClick: handleAutomationsClick,
+                        },
+                        {
+                          id: "nav:automations:agentic",
+                          title: t('sidebar.agentic') ?? 'Agentic',
+                          label: String(automationTypeCounts.agentic),
+                          icon: Bot,
+                          variant: "ghost" as const,
+                          onClick: handleAutomationsClick,
+                        },
+                      ],
+                    },
+                    // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
+                    // --- Settings ---
                     {
                       id: "nav:settings",
                       title: t('sidebar.settings'),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
-                      // No context menu for Settings
                     },
                   ]}
                 />
                 {/* Agent Tree: Hierarchical list of agents */}
                 {/* Agents section removed */}
+                </div>
               </div>
 
               {/* Sidebar Bottom Section: WorkspaceSwitcher */}
@@ -1629,17 +1704,7 @@ function AppShellContent({
               compensateForStoplight={!isSidebarVisible}
               actions={
                 <>
-                  {isScheduledManagementView && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t('scheduledTasks.newTask')}
-                        />
-                      }
-                      {...addScheduledTaskEditConfig}
-                    />
-                  )}
+                  {/* Scheduled task management removed — use Automations instead */}
                   {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
                   {chatFilter?.kind === 'allChats' && (
                     <DropdownMenu>
@@ -1706,7 +1771,7 @@ function AppShellContent({
                     </DropdownMenu>
                   )}
                   {/* More menu with Search for non-allChats views (only for chats mode) */}
-                  {isChatsNavigation(navState) && chatFilter?.kind !== 'allChats' && !isScheduledManagementView && (
+                  {isChatsNavigation(navState) && chatFilter?.kind !== 'allChats' && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <HeaderIconButton icon={<MoreHorizontal className="h-4 w-4" />} />
@@ -1770,6 +1835,21 @@ function AppShellContent({
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details ? navState.details.skillSlug : null}
               />
             )}
+            {isAutomationsNavigation(navState) && (
+              /* Automations List */
+              <ErrorBoundary level="section">
+                <AutomationsListPanel
+                  automations={automations}
+                  selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
+                  workspaceRootPath={activeWorkspaceForAutomations?.rootPath}
+                  onAutomationClick={handleAutomationSelect}
+                  onToggleAutomation={handleToggleAutomation}
+                  onTestAutomation={handleTestAutomation}
+                  onDuplicateAutomation={handleDuplicateAutomation}
+                  onDeleteAutomation={handleDeleteAutomation}
+                />
+              </ErrorBoundary>
+            )}
             {isSettingsNavigation(navState) && (
               /* Settings Navigator */
               <SettingsNavigator
@@ -1777,50 +1857,7 @@ function AppShellContent({
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
               />
             )}
-            {isChatsNavigation(navState) && isScheduledManagementView && (
-              /* Scheduled Task List (middle column) */
-              <ErrorBoundary level="section">
-                <TaskList
-                  tasks={scheduledTasks}
-                  selectedTaskId={
-                    selectedScheduledTaskId
-                    ?? (chatFilter?.kind === 'scheduledTask' ? chatFilter.taskId : null)
-                  }
-                  isLoading={scheduledTasksLoading}
-                  onSelectTask={(taskId) => {
-                    setSelectedScheduledTaskId(taskId)
-                    setScheduledTaskViewMode('detail')
-                    navigate(routes.view.scheduledTask(taskId))
-                  }}
-                  onToggleTask={async (taskId, enabled) => {
-                    const { warning } = await toggleScheduledTask(taskId, enabled)
-                    if (warning) {
-                      toast.warning(warning)
-                    }
-                  }}
-                  onRunManually={async (taskId) => {
-                    try {
-                      await runScheduledTaskManually(taskId)
-                      toast.success(t('scheduledTasks.taskStarted'))
-                    } catch (error) {
-                      console.error('[AppShell] Failed to run scheduled task:', error)
-                      toast.error(t('scheduledTasks.taskRunFailed'))
-                    }
-                  }}
-                  onDelete={(taskId) => {
-                    const task = scheduledTasks.find((item) => item.id === taskId)
-                    if (!task) return
-                    setScheduledDeleteTarget({ id: taskId, name: task.name })
-                  }}
-                  onEdit={(taskId) => {
-                    setSelectedScheduledTaskId(taskId)
-                    setScheduledTaskViewMode('edit')
-                    navigate(routes.view.scheduledTask(taskId))
-                  }}
-                />
-              </ErrorBoundary>
-            )}
-            {isChatsNavigation(navState) && !isScheduledManagementView && (
+            {isChatsNavigation(navState) && (
               /* Sessions List */
               <>
                 {/* SessionList: Scrollable list of session cards */}
@@ -1833,7 +1870,9 @@ function AppShellContent({
                   onFlag={onFlagSession}
                   onUnflag={onUnflagSession}
                   onMarkUnread={onMarkSessionUnread}
-                  onTodoStateChange={onTodoStateChange}
+                  onSessionStatusChange={onSessionStatusChange}
+                  onArchive={onArchiveSession}
+                  onUnarchive={onUnarchiveSession}
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
                   onSessionSelect={(selectedMeta) => {
@@ -1860,7 +1899,7 @@ function AppShellContent({
                     }
                   }}
                   onNavigateToView={(view) => {
-                    if (view === 'allChats') {
+                    if (view === 'allSessions') {
                       navigate(routes.view.allChats())
                     } else if (view === 'flagged') {
                       navigate(routes.view.flagged())
@@ -1874,7 +1913,8 @@ function AppShellContent({
                     setSearchActive(false)
                     setSearchQuery('')
                   }}
-                  todoStates={todoStates}
+                  sessionStatuses={todoStates}
+                  workspaceId={activeWorkspaceId || undefined}
                   labels={labelConfigs}
                   onLabelsChange={handleSessionLabelsChange}
                 />
@@ -2013,35 +2053,6 @@ function AppShellContent({
           )}
         </div>
       </div>
-
-      <Dialog open={!!scheduledDeleteTarget} onOpenChange={(open) => !open && setScheduledDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('scheduledTasks.deleteConfirm')}</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            {scheduledDeleteTarget
-              ? t('scheduledTasks.deleteConfirmMessage').replace('{name}', scheduledDeleteTarget.name)
-              : ''}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setScheduledDeleteTarget(null)}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void handleDeleteScheduledTaskConfirm()}
-            >
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ============================================================================
        * CONTEXT MENU TRIGGERED EDIT POPOVERS

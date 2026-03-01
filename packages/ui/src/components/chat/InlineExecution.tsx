@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { CheckCircle2, XCircle, X } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { cn } from '@agent-operator/ui'
 import { ActivityStatusIcon, SIZE_CONFIG, type ActivityItem, type ActivityStatus } from './TurnCard'
 import { LoadingIndicator } from '../ui/LoadingIndicator'
 import { Markdown } from '../markdown'

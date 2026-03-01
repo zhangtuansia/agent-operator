@@ -7,11 +7,22 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, Globe, Copy, RefreshCw, Link2Off } from 'lucide-react'
+import { toast } from 'sonner'
 import { ChatDisplay } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
+import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import { RenameDialog } from '@/components/ui/rename-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+} from '@/components/ui/styled-dropdown'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
@@ -53,7 +64,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     labels,
     onSessionLabelsChange,
     enabledModes,
-    todoStates,
+    sessionStatuses,
     sessionListSearchQuery,
     isSearchModeActive,
     onChatMatchInfoChange,
@@ -61,7 +72,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onRenameSession,
     onFlagSession,
     onUnflagSession,
-    onTodoStateChange,
+    onArchiveSession,
+    onUnarchiveSession,
+    onSessionStatusChange,
     onDeleteSession,
     rightSidebarButton,
   } = useAppShellContext()
@@ -269,11 +282,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Priority: name > first user message > preview > "New chat"
   const displayTitle = session ? getSessionTitle(session) : (sessionMeta ? getSessionTitle(sessionMeta) : t('chat.title'))
   const isFlagged = session?.isFlagged || sessionMeta?.isFlagged || false
-  const currentTodoState = session?.todoState || sessionMeta?.todoState || 'todo'
-  const hasMessages = !!(session?.messages?.length || sessionMeta?.lastFinalMessageId)
-  const hasUnreadMessages = sessionMeta
-    ? !!(sessionMeta.lastFinalMessageId && sessionMeta.lastFinalMessageId !== sessionMeta.lastReadMessageId)
-    : false
   // Use isAsyncOperationOngoing for shimmer effect (sharing, updating share, revoking, title regeneration)
   const isAsyncOperationOngoing = session?.isAsyncOperationOngoing || sessionMeta?.isAsyncOperationOngoing || false
 
@@ -307,8 +315,16 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [sessionId, onMarkSessionUnread])
 
   const handleTodoStateChange = React.useCallback((state: string) => {
-    onTodoStateChange(sessionId, state)
-  }, [sessionId, onTodoStateChange])
+    onSessionStatusChange(sessionId, state)
+  }, [sessionId, onSessionStatusChange])
+
+  const handleArchive = React.useCallback(() => {
+    onArchiveSession(sessionId)
+  }, [sessionId, onArchiveSession])
+
+  const handleUnarchive = React.useCallback(() => {
+    onUnarchiveSession(sessionId)
+  }, [sessionId, onUnarchiveSession])
 
   const handleLabelsChange = React.useCallback((newLabels: string[]) => {
     onSessionLabelsChange?.(sessionId, newLabels)
@@ -317,6 +333,51 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleDelete = React.useCallback(async () => {
     await onDeleteSession(sessionId)
   }, [sessionId, onDeleteSession])
+
+  // Share handlers
+  const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
+
+  const handleShare = React.useCallback(async () => {
+    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'shareToViewer' }) as { success: boolean; url?: string; error?: string } | undefined
+    if (result?.success && result.url) {
+      await navigator.clipboard.writeText(result.url)
+      toast.success(t('contextMenu.linkCopied'), {
+        description: result.url,
+        action: { label: t('contextMenu.openInBrowser'), onClick: () => window.electronAPI.openUrl(result.url!) },
+      })
+    } else {
+      toast.error(t('contextMenu.failedToShare'), { description: result?.error })
+    }
+  }, [sessionId, t])
+
+  const handleCopyLink = React.useCallback(async () => {
+    if (sharedUrl) {
+      await navigator.clipboard.writeText(sharedUrl)
+      toast.success(t('contextMenu.linkCopied'))
+    }
+  }, [sharedUrl, t])
+
+  const handleOpenInBrowser = React.useCallback(() => {
+    if (sharedUrl) window.electronAPI.openUrl(sharedUrl)
+  }, [sharedUrl])
+
+  const handleUpdateShare = React.useCallback(async () => {
+    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'updateShare' }) as { success: boolean; error?: string } | undefined
+    if (result?.success) {
+      toast.success(t('contextMenu.shareUpdated'))
+    } else {
+      toast.error(t('contextMenu.failedToUpdateShare'), { description: result?.error })
+    }
+  }, [sessionId, t])
+
+  const handleRevokeShare = React.useCallback(async () => {
+    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'revokeShare' }) as { success: boolean; error?: string } | undefined
+    if (result?.success) {
+      toast.success(t('contextMenu.sharingStopped'))
+    } else {
+      toast.error(t('contextMenu.failedToStopSharing'), { description: result?.error })
+    }
+  }, [sessionId, t])
 
   const handleOpenInNewWindow = React.useCallback(async () => {
     const route = routes.view.allChats(sessionId)
@@ -329,42 +390,111 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId])
 
+  // Build a SessionMeta item for the menu (prefer atom metadata, fallback to session)
+  const menuItem = React.useMemo(() => {
+    if (sessionMeta) return sessionMeta
+    if (!session) return null
+    return {
+      id: session.id,
+      workspaceId: session.workspaceId,
+      name: session.name,
+      isFlagged: session.isFlagged,
+      todoState: session.todoState,
+      labels: session.labels,
+      sharedUrl: (session as Record<string, unknown>).sharedUrl as string | undefined,
+      isArchived: (session as Record<string, unknown>).isArchived as boolean | undefined,
+      lastFinalMessageId: (session as Record<string, unknown>).lastFinalMessageId as string | undefined,
+    } satisfies Partial<import('@/atoms/sessions').SessionMeta> as import('@/atoms/sessions').SessionMeta
+  }, [sessionMeta, session])
+
+  // Share button for header
+  const shareButton = React.useMemo(() => {
+    // Upload icon (outline) for unshared state
+    const uploadIcon = (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+    )
+    // Download icon (filled) for shared state
+    const downloadIcon = (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" strokeWidth="0">
+        <path d="M12 2a1 1 0 0 1 1 1v10.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-5 5a1 1 0 0 1-1.414 0l-5-5a1 1 0 0 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1zM5 19a2 2 0 0 0-2 2v0a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v0a2 2 0 0 0-2-2H5z" />
+      </svg>
+    )
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <HeaderIconButton
+            icon={sharedUrl ? downloadIcon : uploadIcon}
+            className={sharedUrl ? 'text-accent' : 'text-foreground'}
+            tooltip={sharedUrl ? t('contextMenu.shared') : t('contextMenu.share')}
+          />
+        </DropdownMenuTrigger>
+        <StyledDropdownMenuContent align="end" sideOffset={8}>
+          {sharedUrl ? (
+            <>
+              <StyledDropdownMenuItem onClick={handleOpenInBrowser}>
+                <Globe className="h-3.5 w-3.5" />
+                <span className="flex-1">{t('contextMenu.openInBrowser')}</span>
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={handleCopyLink}>
+                <Copy className="h-3.5 w-3.5" />
+                <span className="flex-1">{t('contextMenu.copyLink')}</span>
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={handleUpdateShare}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span className="flex-1">{t('contextMenu.updateShare')}</span>
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem onClick={handleRevokeShare} variant="destructive">
+                <Link2Off className="h-3.5 w-3.5" />
+                <span className="flex-1">{t('contextMenu.stopSharing')}</span>
+              </StyledDropdownMenuItem>
+            </>
+          ) : (
+            <StyledDropdownMenuItem onClick={handleShare}>
+              {uploadIcon}
+              <span className="flex-1">{t('contextMenu.share')}</span>
+            </StyledDropdownMenuItem>
+          )}
+        </StyledDropdownMenuContent>
+      </DropdownMenu>
+    )
+  }, [sharedUrl, t, handleShare, handleOpenInBrowser, handleCopyLink, handleUpdateShare, handleRevokeShare])
+
   // Build title menu content for chat sessions using shared SessionMenu
-  const titleMenu = React.useMemo(() => (
-    <SessionMenu
-      sessionId={sessionId}
-      sessionName={displayTitle}
-      isFlagged={isFlagged}
-      hasMessages={hasMessages}
-      hasUnreadMessages={hasUnreadMessages}
-      currentTodoState={currentTodoState}
-      todoStates={todoStates ?? []}
-      sessionLabels={session?.labels ?? sessionMeta?.labels ?? []}
-      labels={labels}
-      onLabelsChange={handleLabelsChange}
-      onRename={handleRename}
-      onFlag={handleFlag}
-      onUnflag={handleUnflag}
-      onMarkUnread={handleMarkUnread}
-      onTodoStateChange={handleTodoStateChange}
-      onOpenInNewWindow={handleOpenInNewWindow}
-      onDelete={handleDelete}
-    />
-  ), [
-    sessionId,
-    displayTitle,
-    isFlagged,
-    hasMessages,
-    hasUnreadMessages,
-    currentTodoState,
-    todoStates,
-    session?.labels,
-    sessionMeta?.labels,
+  const titleMenu = React.useMemo(() => {
+    if (!menuItem) return undefined
+    return (
+      <SessionMenu
+        item={menuItem}
+        sessionStatuses={sessionStatuses ?? []}
+        labels={labels}
+        onLabelsChange={handleLabelsChange}
+        onRename={handleRename}
+        onFlag={handleFlag}
+        onUnflag={handleUnflag}
+        onArchive={handleArchive}
+        onUnarchive={handleUnarchive}
+        onMarkUnread={handleMarkUnread}
+        onSessionStatusChange={handleTodoStateChange}
+        onOpenInNewWindow={handleOpenInNewWindow}
+        onDelete={handleDelete}
+      />
+    )
+  }, [
+    menuItem,
+    sessionStatuses,
     labels,
     handleLabelsChange,
     handleRename,
     handleFlag,
     handleUnflag,
+    handleArchive,
+    handleUnarchive,
     handleMarkUnread,
     handleTodoStateChange,
     handleOpenInNewWindow,
@@ -393,7 +523,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 session={skeletonSession}
@@ -420,6 +550,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 skills={skills}
                 labels={labels}
                 onLabelsChange={handleLabelsChange}
+                sessionStatuses={sessionStatuses}
+                onSessionStatusChange={handleTodoStateChange}
                 workspaceId={activeWorkspaceId || undefined}
                 onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
                 workingDirectory={sessionMeta.workingDirectory}
@@ -460,7 +592,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             session={session}
@@ -491,6 +623,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             skills={skills}
             labels={labels}
             onLabelsChange={handleLabelsChange}
+            sessionStatuses={sessionStatuses}
+            onSessionStatusChange={handleTodoStateChange}
             workspaceId={activeWorkspaceId || undefined}
             onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
             workingDirectory={workingDirectory}

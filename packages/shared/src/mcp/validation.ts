@@ -12,7 +12,7 @@ import { OperatorMcpClient } from './client.js';
 import { debug } from '../utils/debug.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
 import { parseError, type AgentError } from '../agent/errors.ts';
-import { getLastApiError } from '../network-interceptor.ts';
+import { getLastApiError } from '../network/interceptor.ts';
 
 export interface InvalidProperty {
   toolName: string;

@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
+  PenLine,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -29,6 +30,7 @@ import {
   MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
   GenericOverlay,
+  DocumentFormattedMarkdownOverlay,
   JSONPreviewOverlay,
   type ActivityItem,
   type OverlayData,
@@ -46,10 +48,10 @@ import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@agent-operator/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
-import { LabelBadgeRow } from "@/components/ui/label-badge-row"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
+import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { ProcessingIndicator, ScrollOnMount } from "./ProcessingIndicator"
 
@@ -70,6 +72,14 @@ interface MarkdownOverlayState {
   type: 'markdown'
   content: string
   title: string
+  filePath?: string
+}
+
+/** Check if a file path is a plan file (for plan variant in DocumentFormattedMarkdownOverlay) */
+function isPlanFilePath(filePath: string | undefined): boolean {
+  if (!filePath) return false
+  return (filePath.includes('/plans/') || filePath.startsWith('plans/')) &&
+         filePath.endsWith('.md')
 }
 
 /** Union of all overlay states, or null for no overlay */
@@ -131,6 +141,11 @@ interface ChatDisplayProps {
   labels?: LabelConfig[]
   /** Callback when labels change */
   onLabelsChange?: (labels: string[]) => void
+  // State/status selection (for ActiveOptionBadges)
+  /** Available workflow states */
+  sessionStatuses?: import('@/config/session-status-config').SessionStatus[]
+  /** Callback when session state changes */
+  onSessionStatusChange?: (stateId: string) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   // Working directory (per session)
@@ -208,6 +223,9 @@ export function ChatDisplay({
   // Labels (for #labels and badge row)
   labels = [],
   onLabelsChange,
+  // States (for badge)
+  sessionStatuses,
+  onSessionStatusChange,
   workspaceId,
   // Working directory
   workingDirectory,
@@ -279,6 +297,17 @@ export function ChatDisplay({
   const { tasks: backgroundTasks, killTask } = useBackgroundTasks({
     sessionId: session?.id ?? ''
   })
+
+  // TurnCard expansion state — persisted to localStorage across session switches
+  const {
+    expandedTurns,
+    toggleTurn,
+    expandedActivityGroups,
+    setExpandedActivityGroups,
+  } = useTurnCardExpansion(session?.id)
+
+  // Track which label should auto-open its value popover after being added via # menu.
+  const [autoOpenLabelId, setAutoOpenLabelId] = useState<string | null>(null)
 
   // ============================================================================
   // Search Highlighting (from session list search)
@@ -1017,6 +1046,10 @@ export function ChatDisplay({
                           onOpenFile={onOpenFile}
                           onOpenUrl={onOpenUrl}
                           isLastResponse={isLastResponse}
+                          isExpanded={expandedTurns.has(turn.turnId)}
+                          onExpandedChange={(expanded) => toggleTurn(turn.turnId, expanded)}
+                          expandedActivityGroups={expandedActivityGroups}
+                          onExpandedActivityGroupsChange={setExpandedActivityGroups}
                           translations={{
                             copy: t('turnCard.copy'),
                             copied: t('turnCard.copied'),
@@ -1188,14 +1221,18 @@ export function ChatDisplay({
                 sessionId={session.id}
                 onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
                 onInsertMessage={onInputChange}
-              />
-            )}
-            {!compactMode && session.labels && session.labels.some(l => !l.startsWith('scheduled:') && !l.startsWith('imported:')) && (
-              <LabelBadgeRow
                 sessionLabels={session.labels}
                 labels={labels}
                 onLabelsChange={onLabelsChange}
-                className="px-0 pt-0 pb-2"
+                onRemoveLabel={(labelId) => {
+                  const newLabels = (session.labels || []).filter(id => id !== labelId)
+                  onLabelsChange?.(newLabels)
+                }}
+                autoOpenLabelId={autoOpenLabelId}
+                onAutoOpenConsumed={() => setAutoOpenLabelId(null)}
+                sessionStatuses={sessionStatuses}
+                currentSessionStatus={session.todoState || 'todo'}
+                onSessionStatusChange={onSessionStatusChange}
               />
             )}
             <InputContainer
@@ -1343,18 +1380,29 @@ export function ChatDisplay({
 
       {/* Markdown preview overlay (pop-out, turn details, generic activities) */}
       {overlayState?.type === 'markdown' && (
-        <GenericOverlay
+        <DocumentFormattedMarkdownOverlay
           isOpen={true}
           onClose={handleCloseOverlay}
           content={overlayState.content}
-          title={overlayState.title}
-          translations={{
-            preview: t('overlay.preview'),
-            original: t('overlay.original'),
-            modified: t('overlay.modified'),
-            toolFailed: t('overlay.toolFailed'),
-          }}
-          headerTranslations={overlayHeaderTranslations}
+          variant={isPlanFilePath(overlayState.filePath) ? 'plan' : 'response'}
+          filePath={overlayState.filePath}
+          onOpenUrl={onOpenUrl}
+          onOpenFile={onOpenFile}
+        />
+      )}
+
+      {/* Document overlay (Write tool → .md/.txt files) — rendered markdown with tool badge */}
+      {overlayData?.type === 'document' && (
+        <DocumentFormattedMarkdownOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          content={overlayData.content}
+          filePath={overlayData.filePath}
+          typeBadge={{ icon: PenLine, label: overlayData.toolName, variant: 'write' as const }}
+          onOpenUrl={onOpenUrl}
+          onOpenFile={onOpenFile}
+          error={overlayData.error}
+          variant={isPlanFilePath(overlayData.filePath) ? 'plan' : 'response'}
         />
       )}
 

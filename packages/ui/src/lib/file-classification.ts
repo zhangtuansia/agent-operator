@@ -35,13 +35,14 @@ const CODE_EXTENSIONS = new Set([
   'py', 'rb', 'rs', 'go', 'java', 'kt', 'swift',
   'c', 'cpp', 'h', 'hpp', 'cs',
   'css', 'scss', 'less',
-  'html', 'xml', 'svg',  // SVG is also code-viewable, but image takes priority
+  'html', 'htm', 'xml', 'svg',  // SVG is also code-viewable, but image takes priority
   'yaml', 'yml', 'toml',
   'sh', 'bash', 'zsh', 'fish',
   'sql', 'graphql',
   'dockerfile',
   'makefile',
   'r', 'lua', 'perl', 'php',
+  'vue', 'svelte', 'astro', 'prisma',
 ])
 
 /** Markdown files — rendered with the Markdown component */
@@ -93,3 +94,17 @@ export function classifyFile(filePath: string): FileClassification {
 
   return { type: null, canPreview: false }
 }
+
+/**
+ * Regex alternation of all known file extensions (e.g. "ts|tsx|js|...").
+ * Derived from the classification sets above so link detection stays in sync
+ * with preview support automatically.
+ */
+export const FILE_EXTENSIONS_PATTERN = [
+  ...IMAGE_EXTENSIONS,
+  ...CODE_EXTENSIONS,
+  ...MARKDOWN_EXTENSIONS,
+  ...JSON_EXTENSIONS,
+  ...TEXT_EXTENSIONS,
+  ...PDF_EXTENSIONS,
+].join('|')

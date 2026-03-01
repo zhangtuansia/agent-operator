@@ -34,11 +34,7 @@ import { useEffect, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { usePlatform } from '../../context/PlatformContext'
 import { cn } from '../../lib/utils'
-import {
-  FullscreenOverlayBaseHeader,
-  type FullscreenOverlayBaseHeaderTranslations,
-  type OverlayTypeBadge,
-} from './FullscreenOverlayBaseHeader'
+import { FullscreenOverlayBaseHeader, type OverlayTypeBadge } from './FullscreenOverlayBaseHeader'
 import { OverlayErrorBanner, type OverlayErrorBannerProps } from './OverlayErrorBanner'
 
 // Z-index for fullscreen overlays - must be above app chrome (z-overlay: 300)
@@ -71,7 +67,7 @@ export interface FullscreenOverlayBaseProps {
 
   /** Type badge — tool/format indicator (e.g. "Read", "Image", "Bash") */
   typeBadge?: OverlayTypeBadge
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title — displayed as a badge when no filePath */
   title?: string
@@ -83,8 +79,6 @@ export interface FullscreenOverlayBaseProps {
   headerActions?: ReactNode
   /** When provided, renders a built-in copy button in the header right actions area */
   copyContent?: string
-  /** Optional localized strings for header/menu UI */
-  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 
   /** Optional error banner — rendered between header and children */
   error?: OverlayErrorBannerProps
@@ -103,7 +97,6 @@ export function FullscreenOverlayBase({
   subtitle,
   headerActions,
   copyContent,
-  headerTranslations,
   error,
 }: FullscreenOverlayBaseProps) {
   const { onSetTrafficLightsVisible } = usePlatform()
@@ -178,7 +171,6 @@ export function FullscreenOverlayBase({
                 subtitle={subtitle}
                 headerActions={headerActions}
                 copyContent={copyContent}
-                translations={headerTranslations}
               />
             </div>
           )}

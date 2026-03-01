@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { StatusConfig } from '@agent-operator/shared/statuses'
-import { clearIconCache } from '@/config/todo-states'
+import { clearIconCache } from '@/config/session-status-config'
 
 export interface UseStatusesResult {
   statuses: StatusConfig[]

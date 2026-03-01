@@ -1,8 +1,13 @@
 /**
- * HTMLPreviewOverlay - Fullscreen overlay for rendered HTML content.
+ * HTMLPreviewOverlay - Fullscreen overlay for viewing rendered HTML content.
  *
+ * Uses PreviewOverlay as the base for consistent modal/fullscreen behavior.
  * Renders HTML in a sandboxed iframe (no script execution).
- * Supports single content or multiple items with navigation.
+ * Links open in the system browser via Electron's will-navigate handler.
+ *
+ * Supports multiple items with arrow navigation in the header.
+ * The iframe auto-sizes to its content height by reading contentDocument.scrollHeight
+ * on load (possible because allow-same-origin is set).
  */
 
 import * as React from 'react'
@@ -11,6 +16,10 @@ import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
 import { ItemNavigator } from './ItemNavigator'
 
+/**
+ * Inject `<base target="_top">` so link clicks navigate the top frame,
+ * which Electron's will-navigate handler intercepts → system browser.
+ */
 function injectBaseTarget(html: string): string {
   if (/<base\s/i.test(html)) return html
   if (/<head[^>]*>/i.test(html)) {
@@ -28,14 +37,23 @@ interface PreviewItem {
 }
 
 export interface HTMLPreviewOverlayProps {
+  /** Whether the overlay is visible */
   isOpen: boolean
+  /** Callback when the overlay should close */
   onClose: () => void
+  /** Single HTML content (backward compat for link interceptor usage) */
   html?: string
+  /** Multiple items for tabbed navigation */
   items?: PreviewItem[]
+  /** Pre-loaded content cache (src → html string) */
   contentCache?: Record<string, string>
+  /** Callback to load content for uncached items */
   onLoadContent?: (src: string) => Promise<string>
+  /** Initial active item index (defaults to 0) */
   initialIndex?: number
+  /** Optional title for the overlay header */
   title?: string
+  /** Theme mode for dark/light styling */
   theme?: 'light' | 'dark'
 }
 
@@ -50,6 +68,7 @@ export function HTMLPreviewOverlay({
   title,
   theme,
 }: HTMLPreviewOverlayProps) {
+  // Normalize: single html prop → single item, or use items array
   const resolvedItems = React.useMemo<PreviewItem[]>(() => {
     if (items && items.length > 0) return items
     if (html) return [{ src: '__single__' }]
@@ -59,10 +78,13 @@ export function HTMLPreviewOverlay({
   const [activeIdx, setActiveIdx] = React.useState(initialIndex)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const [contentSize, setContentSize] = React.useState<{ width: number; height: number } | null>(null)
+
+  // Internal content cache (merges external + locally loaded)
   const [internalCache, setInternalCache] = React.useState<Record<string, string>>({})
   const [loadingItem, setLoadingItem] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
+  // Merge caches — external takes precedence, plus single html prop
   const mergedCache = React.useMemo(() => {
     const merged: Record<string, string> = { ...internalCache }
     if (externalCache) Object.assign(merged, externalCache)
@@ -73,6 +95,7 @@ export function HTMLPreviewOverlay({
   const activeItem = resolvedItems[activeIdx]
   const activeContent = activeItem ? mergedCache[activeItem.src] : undefined
 
+  // Reset index when overlay opens
   React.useEffect(() => {
     if (isOpen) {
       setActiveIdx(initialIndex)
@@ -80,11 +103,13 @@ export function HTMLPreviewOverlay({
     }
   }, [isOpen, initialIndex])
 
+  // Reset size when active item changes
   React.useEffect(() => {
     setContentSize(null)
     setLoadError(null)
   }, [activeIdx])
 
+  // Load content for active item if not cached
   React.useEffect(() => {
     if (!isOpen || !activeItem?.src) return
     if (mergedCache[activeItem.src]) return
@@ -102,11 +127,13 @@ export function HTMLPreviewOverlay({
       .finally(() => setLoadingItem(false))
   }, [isOpen, activeItem?.src, mergedCache, onLoadContent])
 
+  // Preprocess active HTML
   const processedHtml = React.useMemo(
     () => activeContent ? injectBaseTarget(activeContent) : null,
     [activeContent]
   )
 
+  // Read iframe content dimensions after it loads
   const handleLoad = React.useCallback(() => {
     const iframe = iframeRef.current
     if (!iframe) return
@@ -122,17 +149,21 @@ export function HTMLPreviewOverlay({
       const height = doc.body.scrollHeight
       setContentSize({ width: naturalWidth, height })
     } catch {
-      // ignore cross-origin measurement failures
+      // Cross-origin access denied
     }
   }, [])
 
-  const iframeHeight = contentSize ? `${contentSize.height}px` : 'calc(100vh - 200px)'
+  const iframeHeight = contentSize
+    ? `${contentSize.height}px`
+    : 'calc(100vh - 200px)'
+
   const measured = contentSize !== null
 
+  // Header actions: item navigation + copy button
   const headerActions = (
     <div className="flex items-center gap-2">
       <ItemNavigator items={resolvedItems} activeIndex={activeIdx} onSelect={setActiveIdx} size="md" />
-      <CopyButton content={activeContent || ''} title="Copy HTML" className="bg-background shadow-minimal" />
+      <CopyButton content={activeContent || ''} label="Copy HTML" className="bg-background shadow-minimal" />
     </div>
   )
 

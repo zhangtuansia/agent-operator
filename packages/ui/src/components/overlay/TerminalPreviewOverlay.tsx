@@ -7,8 +7,8 @@
 import * as React from 'react'
 import { Terminal, Search, FolderSearch } from 'lucide-react'
 import { PreviewOverlay, type BadgeVariant } from './PreviewOverlay'
+import { ContentFrame } from './ContentFrame'
 import { TerminalOutput, type ToolType } from '../terminal/TerminalOutput'
-import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface TerminalPreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -27,17 +27,10 @@ export interface TerminalPreviewOverlayProps {
   description?: string
   /** Theme mode */
   theme?: 'light' | 'dark'
-  /** Optional localized strings for terminal content */
-  translations?: {
-    command?: string
-    output?: string
-    copyCommand?: string
-    copyOutput?: string
-    copied?: string
-    noOutput?: string
-  }
-  /** Optional localized strings for overlay header/menu */
-  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
+  /** Error message if the command failed to execute */
+  error?: string
+  /** Render inline without dialog (for playground) */
+  embedded?: boolean
 }
 
 function getToolConfig(toolType: ToolType): {
@@ -64,8 +57,8 @@ export function TerminalPreviewOverlay({
   toolType = 'bash',
   description,
   theme = 'light',
-  translations,
-  headerTranslations,
+  error,
+  embedded,
 }: TerminalPreviewOverlayProps) {
   const config = getToolConfig(toolType)
 
@@ -80,17 +73,22 @@ export function TerminalPreviewOverlay({
         variant: config.variant,
       }}
       title={description || ''}
-      headerTranslations={headerTranslations}
+      error={error ? { label: 'Command Failed', message: error } : undefined}
+      embedded={embedded}
+      className="bg-foreground-3"
     >
-      <TerminalOutput
-        command={command}
-        output={output}
-        exitCode={exitCode}
-        toolType={toolType}
-        description={description}
-        theme={theme}
-        translations={translations}
-      />
+      <ContentFrame title="Terminal">
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <TerminalOutput
+            command={command}
+            output={output}
+            exitCode={exitCode}
+            toolType={toolType}
+            description={description}
+            theme={theme}
+          />
+        </div>
+      </ContentFrame>
     </PreviewOverlay>
   )
 }

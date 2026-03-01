@@ -1,12 +1,11 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
-import { readFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
+import { readFile, appendFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { SessionManager } from './sessions'
-import type { TaskScheduler } from './scheduler'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
@@ -477,7 +476,6 @@ function withRateLimit<T extends unknown[], R>(
 export function registerIpcHandlers(
   sessionManager: SessionManager,
   windowManager: WindowManager,
-  getTaskScheduler?: () => TaskScheduler | null,
 ): void {
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
@@ -793,6 +791,10 @@ export function registerIpcHandlers(
         return sessionManager.flagSession(validatedSessionId)
       case 'unflag':
         return sessionManager.unflagSession(validatedSessionId)
+      case 'archive':
+        return sessionManager.archiveSession(validatedSessionId)
+      case 'unarchive':
+        return sessionManager.unarchiveSession(validatedSessionId)
       case 'rename':
         return sessionManager.renameSession(validatedSessionId, validatedCommand.name)
       case 'setTodoState':
@@ -3731,11 +3733,30 @@ export function registerIpcHandlers(
   })
 
   // Workspace-level theme overrides
+  ipcMain.handle(IPC_CHANNELS.THEME_GET_WORKSPACE_COLOR_THEME, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return null
+    const { getWorkspaceColorTheme } = await import('@agent-operator/shared/workspaces/storage')
+    return getWorkspaceColorTheme(workspace.rootPath) ?? null
+  })
+
   ipcMain.handle(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME, async (_event, workspaceId: string, themeId: string | null) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return
     const { setWorkspaceColorTheme } = await import('@agent-operator/shared/workspaces/storage')
     setWorkspaceColorTheme(workspace.rootPath, themeId ?? undefined)
+  })
+
+  // Broadcast workspace theme change to all other windows
+  ipcMain.handle(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, (event, workspaceId: string, themeId: string | null) => {
+    for (const managed of windowManager.getAllWindows()) {
+      if (!managed.window.isDestroyed() &&
+          !managed.window.webContents.isDestroyed() &&
+          managed.window.webContents.mainFrame &&
+          managed.window.webContents !== event.sender) {
+        managed.window.webContents.send(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, { workspaceId, themeId })
+      }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES, async () => {
@@ -3961,91 +3982,181 @@ export function registerIpcHandlers(
   })
 
   // ============================================================
-  // Scheduled Tasks (Workspace-scoped)
+  // Automations
   // ============================================================
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST, async (_event, workspaceId: string) => {
+  // History file name -- matches AUTOMATIONS_HISTORY_FILE from @agent-operator/shared/automations/constants
+  const HISTORY_FILE = 'automations-history.jsonl'
+  interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }
+
+  // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
+  const configMutexes = new Map<string, Promise<void>>()
+  function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
+    const prev = configMutexes.get(workspaceRoot) ?? Promise.resolve()
+    const next = prev.then(fn, fn)
+    configMutexes.set(workspaceRoot, next.then(() => {}, () => {}))
+    return next
+  }
+
+  // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
+  interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+  async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listTasks } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    return listTasks(workspace.rootPath)
-  })
+    await withConfigMutex(workspace.rootPath, async () => {
+      const { resolveAutomationsConfigPath, generateShortId } = await import('@agent-operator/shared/automations/resolve-config-path')
+      const configPath = resolveAutomationsConfigPath(workspace.rootPath)
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_GET, async (_event, workspaceId: string, taskId: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
+      const raw = await readFile(configPath, 'utf-8')
+      const config = JSON.parse(raw)
+
+      const eventMap = config.automations ?? {}
+      const matchers = eventMap[eventName]
+      if (!Array.isArray(matchers) || matcherIndex < 0 || matcherIndex >= matchers.length) {
+        throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
+      }
+
+      mutate(matchers, matcherIndex, config, generateShortId)
+
+      // Backfill missing IDs on all matchers before writing
+      for (const eventMatchers of Object.values(eventMap)) {
+        if (!Array.isArray(eventMatchers)) continue
+        for (const m of eventMatchers as Record<string, unknown>[]) {
+          if (!m.id) m.id = generateShortId()
+        }
+      }
+
+      await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    })
+  }
+
+  // Test automation (manual trigger from UI)
+  ipcMain.handle(IPC_CHANNELS.TEST_AUTOMATION, async (_event, payload: import('../shared/types').TestAutomationPayload) => {
+    const workspace = getWorkspaceByNameOrId(payload.workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { getTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    return getTask(workspace.rootPath, taskId)
-  })
+    const results: import('../shared/types').TestAutomationActionResult[] = []
+    const { parsePromptReferences } = await import('@agent-operator/shared/automations')
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_CREATE, async (_event, workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error('Workspace not found')
+    for (const action of payload.actions) {
+      const start = Date.now()
+      const references = parsePromptReferences(action.prompt)
 
-    const { createTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    const task = createTask(workspace.rootPath, input)
-    getTaskScheduler?.()?.reschedule()
-    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
-    return task
-  })
+      try {
+        // Use executePromptAutomation for @mention resolution and model/connection support
+        const { sessionId } = await sessionManager.executePromptAutomation(
+          payload.workspaceId,
+          workspace.rootPath,
+          action.prompt,
+          payload.labels,
+          payload.permissionMode,
+          references.mentions,
+          action.llmConnection,
+          action.model,
+        )
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_UPDATE, async (_event, workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error('Workspace not found')
+        results.push({
+          type: 'prompt',
+          success: true,
+          sessionId,
+          duration: Date.now() - start,
+        })
 
-    const { updateTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    const task = updateTask(workspace.rootPath, taskId, input)
-    getTaskScheduler?.()?.reschedule()
-    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
-    return task
-  })
+        // Write history entry for test runs
+        if (payload.automationId) {
+          const entry = { id: payload.automationId, ts: Date.now(), ok: true, sessionId, prompt: action.prompt.slice(0, 200) }
+          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => ipcLog.warn('[Automations] Failed to write history:', e))
+        }
+      } catch (err: unknown) {
+        results.push({
+          type: 'prompt',
+          success: false,
+          stderr: (err as Error).message,
+          duration: Date.now() - start,
+        })
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_DELETE, async (_event, workspaceId: string, taskId: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error('Workspace not found')
-
-    const scheduler = getTaskScheduler?.()
-    if (scheduler) {
-      await scheduler.stopTask(workspaceId, taskId)
+        if (payload.automationId) {
+          const entry = { id: payload.automationId, ts: Date.now(), ok: false, error: ((err as Error).message ?? '').slice(0, 200), prompt: action.prompt.slice(0, 200) }
+          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => ipcLog.warn('[Automations] Failed to write history:', e))
+        }
+      }
     }
 
-    const { deleteTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    const result = deleteTask(workspace.rootPath, taskId)
-    getTaskScheduler?.()?.reschedule()
-    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
-    return result
+    return { actions: results } satisfies import('../shared/types').TestAutomationResult
   })
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_TOGGLE, async (_event, workspaceId: string, taskId: string, enabled: boolean) => {
+  // Toggle automation enabled/disabled
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, async (_event, workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+      if (enabled) {
+        delete matchers[idx].enabled
+      } else {
+        matchers[idx].enabled = false
+      }
+    })
+  })
+
+  // Duplicate automation
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
+      const clone = JSON.parse(JSON.stringify(matchers[idx]))
+      clone.id = genId()
+      clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
+      matchers.splice(idx + 1, 0, clone)
+    })
+  })
+
+  // Delete automation
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_DELETE, async (_event, workspaceId: string, eventName: string, matcherIndex: number) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
+      matchers.splice(idx, 1)
+      if (matchers.length === 0) {
+        const eventMap = config.automations
+        if (eventMap) delete eventMap[eventName]
+      }
+    })
+  })
+
+  // Get automation execution history
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, async (_event, workspaceId: string, automationId: string, limit = 20) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { toggleTask } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    const result = toggleTask(workspace.rootPath, taskId, enabled)
-    getTaskScheduler?.()?.reschedule()
-    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, workspaceId)
-    return result
+    const historyPath = join(workspace.rootPath, HISTORY_FILE)
+    try {
+      const content = await readFile(historyPath, 'utf-8')
+      const lines = content.trim().split('\n').filter(Boolean)
+
+      return lines
+        .map(line => { try { return JSON.parse(line) } catch { return null } })
+        .filter((e): e is HistoryEntry => e?.id === automationId)
+        .slice(-limit)
+        .reverse()
+    } catch {
+      return []
+    }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST_RUNS, async (_event, workspaceId: string, taskId: string, limit?: number, offset?: number) => {
+  // Get last execution timestamp for all automations
+  ipcMain.handle(IPC_CHANNELS.AUTOMATIONS_GET_LAST_EXECUTED, async (_event, workspaceId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listRuns } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    return listRuns(workspace.rootPath, taskId, limit, offset)
+    const historyPath = join(workspace.rootPath, HISTORY_FILE)
+    try {
+      const content = await readFile(historyPath, 'utf-8')
+      const result: Record<string, number> = {}
+      for (const line of content.trim().split('\n')) {
+        try {
+          const entry = JSON.parse(line)
+          if (entry.id && entry.ts) result[entry.id] = entry.ts
+        } catch { /* skip malformed lines */ }
+      }
+      return result
+    } catch {
+      return {}
+    }
   })
-
-  ipcMain.handle(IPC_CHANNELS.SCHEDULED_TASKS_LIST_ALL_RUNS, async (_event, workspaceId: string, limit?: number, offset?: number) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error('Workspace not found')
-
-    const { listAllRuns } = await import('@agent-operator/shared/scheduled-tasks/crud')
-    return listAllRuns(workspace.rootPath, limit, offset)
-  })
-
-  // Run manually and Stop are handled by the scheduler instance.
-  // They are registered in index.ts after scheduler initialization.
 
 }

@@ -3,7 +3,7 @@
  *
  * Loads an image via data URL (from READ_FILE_DATA_URL IPC) and displays it
  * with fit-to-container sizing. File path badge provides "Open" and
- * "Reveal in Finder" via PlatformContext (dual-trigger menu).
+ * "Reveal in {file manager}" via PlatformContext (dual-trigger menu).
  */
 
 import * as React from 'react'
@@ -11,7 +11,6 @@ import { useState, useEffect } from 'react'
 import { Image } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { CopyButton } from './CopyButton'
-import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface ImagePreviewOverlayProps {
   isOpen: boolean
@@ -21,15 +20,6 @@ export interface ImagePreviewOverlayProps {
   /** Async loader that returns a data URL (data:{mime};base64,...) */
   loadDataUrl: (path: string) => Promise<string>
   theme?: 'light' | 'dark'
-  /** Optional localized strings */
-  translations?: {
-    copyPath?: string
-    loadFailed?: string
-    loading?: string
-    imagePreviewAlt?: string
-  }
-  /** Optional localized strings for overlay header/menu */
-  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 }
 
 export function ImagePreviewOverlay({
@@ -38,15 +28,7 @@ export function ImagePreviewOverlay({
   filePath,
   loadDataUrl,
   theme = 'light',
-  translations,
-  headerTranslations,
 }: ImagePreviewOverlayProps) {
-  const t = {
-    copyPath: translations?.copyPath ?? 'Copy path',
-    loadFailed: translations?.loadFailed ?? 'Load Failed',
-    loading: translations?.loading ?? 'Loading image...',
-    imagePreviewAlt: translations?.imagePreviewAlt ?? 'Image preview',
-  }
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -69,17 +51,17 @@ export function ImagePreviewOverlay({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : t.loadFailed)
+          setError(err instanceof Error ? err.message : 'Failed to load image')
           setIsLoading(false)
         }
       })
 
     return () => { cancelled = true }
-  }, [isOpen, filePath, loadDataUrl, t.loadFailed])
+  }, [isOpen, filePath, loadDataUrl])
 
   // Copy path button as header action
   const headerActions = (
-    <CopyButton content={filePath} title={t.copyPath} />
+    <CopyButton content={filePath} title="Copy path" />
   )
 
   return (
@@ -93,18 +75,17 @@ export function ImagePreviewOverlay({
         variant: 'purple',
       }}
       filePath={filePath}
-      error={error ? { label: t.loadFailed, message: error } : undefined}
+      error={error ? { label: 'Load Failed', message: error } : undefined}
       headerActions={headerActions}
-      headerTranslations={headerTranslations}
     >
       <div className="min-h-full flex items-center justify-center p-4">
         {isLoading && (
-          <div className="text-muted-foreground text-sm">{t.loading}</div>
+          <div className="text-muted-foreground text-sm">Loading image...</div>
         )}
         {dataUrl && (
           <img
             src={dataUrl}
-            alt={filePath.split('/').pop() ?? t.imagePreviewAlt}
+            alt={filePath.split('/').pop() ?? 'Image preview'}
             className="max-w-full max-h-full object-contain rounded-sm"
             draggable={false}
           />

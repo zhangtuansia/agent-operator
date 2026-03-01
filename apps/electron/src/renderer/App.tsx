@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
-import { useSetAtom, useStore, useAtomValue } from 'jotai'
+import { useSetAtom, useStore, useAtomValue, useAtom } from 'jotai'
 import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge, LlmConnectionWithStatus } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -34,12 +34,14 @@ import {
   removeSessionAtom,
   updateSessionAtom,
   sessionMetaMapAtom,
+  windowWorkspaceIdAtom,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
 import { toast } from 'sonner'
 import { ShikiThemeProvider, PlatformProvider } from '@agent-operator/ui'
+import { ActionRegistryProvider } from '@/actions'
 import { useSessionDrafts } from '@/hooks/useSessionDrafts'
 import { useSessionEvents } from '@/hooks/useSessionEvents'
 import { useMenuEvents } from '@/hooks/useMenuEvents'
@@ -88,8 +90,8 @@ export default function App() {
   }, [updateSessionDirect])
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  // Window's workspace ID - fixed for this window (multi-window architecture)
-  const [windowWorkspaceId, setWindowWorkspaceId] = useState<string | null>(null)
+  // Window's workspace ID — shared atom so Root/ThemeProvider stays in sync on switch
+  const [windowWorkspaceId, setWindowWorkspaceId] = useAtom(windowWorkspaceIdAtom)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
   const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
   const [workspaceDefaultLlmConnection, setWorkspaceDefaultLlmConnection] = useState<string | undefined>()
@@ -428,6 +430,16 @@ export default function App() {
   const handleTodoStateChange = useCallback((sessionId: string, state: TodoState) => {
     updateSessionById(sessionId, { todoState: state })
     window.electronAPI.sessionCommand(sessionId, { type: 'setTodoState', state })
+  }, [updateSessionById])
+
+  const handleArchiveSession = useCallback((sessionId: string) => {
+    updateSessionById(sessionId, { isArchived: true, archivedAt: Date.now() })
+    window.electronAPI.sessionCommand(sessionId, { type: 'archive' })
+  }, [updateSessionById])
+
+  const handleUnarchiveSession = useCallback((sessionId: string) => {
+    updateSessionById(sessionId, { isArchived: false, archivedAt: undefined })
+    window.electronAPI.sessionCommand(sessionId, { type: 'unarchive' })
   }, [updateSessionById])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
@@ -907,7 +919,9 @@ export default function App() {
     onUnflagSession: handleUnflagSession,
     onMarkSessionRead: handleMarkSessionRead,
     onMarkSessionUnread: handleMarkSessionUnread,
-    onTodoStateChange: handleTodoStateChange,
+    onSessionStatusChange: handleTodoStateChange,
+    onArchiveSession: handleArchiveSession,
+    onUnarchiveSession: handleUnarchiveSession,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission: handleRespondToPermission,
     onRespondToCredential: handleRespondToCredential,
@@ -951,6 +965,8 @@ export default function App() {
     handleMarkSessionRead,
     handleMarkSessionUnread,
     handleTodoStateChange,
+    handleArchiveSession,
+    handleUnarchiveSession,
     handleDeleteSession,
     handleRespondToPermission,
     handleRespondToCredential,
@@ -1062,6 +1078,7 @@ export default function App() {
     <LanguageProvider initialLanguage={initialLanguage}>
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
+      <ActionRegistryProvider>
       <FocusProvider>
         <ModalProvider>
         <TooltipProvider>
@@ -1102,6 +1119,7 @@ export default function App() {
         </TooltipProvider>
         </ModalProvider>
       </FocusProvider>
+      </ActionRegistryProvider>
     </ShikiThemeProvider>
     </PlatformProvider>
     </LanguageProvider>

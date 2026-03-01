@@ -2,15 +2,14 @@
  * CodePreviewOverlay - Overlay for code file preview (Read/Write tools)
  *
  * Uses PreviewOverlay for presentation and ShikiCodeViewer for syntax highlighting.
+ * File path badge provides "Open" / "Reveal in {file manager}" via PlatformContext.
  */
 
 import * as React from 'react'
 import { BookOpen, PenLine } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
+import { ContentFrame } from './ContentFrame'
 import { ShikiCodeViewer } from '../code-viewer/ShikiCodeViewer'
-import { MarkdownExcalidrawBlock } from '../markdown/MarkdownExcalidrawBlock'
-import { truncateFilePath } from '../code-viewer/language-map'
-import type { FullscreenOverlayBaseHeaderTranslations } from './FullscreenOverlayBaseHeader'
 
 export interface CodePreviewOverlayProps {
   /** Whether the overlay is visible */
@@ -35,14 +34,10 @@ export interface CodePreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Error message if tool failed */
   error?: string
-  /** Callback to open file in external editor */
-  onOpenFile?: (filePath: string) => void
-  /** Optional localized strings for overlay header/menu */
-  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
-}
-
-function isExcalidrawPath(filePath: string): boolean {
-  return /\.excalidraw(?:\.json)?$/i.test(filePath)
+  /** Render inline without dialog (for playground) */
+  embedded?: boolean
+  /** Original shell command (for Codex reads) - shown above code */
+  command?: string
 }
 
 export function CodePreviewOverlay({
@@ -57,12 +52,9 @@ export function CodePreviewOverlay({
   numLines,
   theme = 'light',
   error,
-  onOpenFile,
-  headerTranslations,
+  embedded,
+  command,
 }: CodePreviewOverlayProps) {
-  const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
-  const isExcalidraw = isExcalidrawPath(filePath)
-
   // Build subtitle with line info
   const subtitle =
     startLine !== undefined && totalLines !== undefined && numLines !== undefined
@@ -79,18 +71,29 @@ export function CodePreviewOverlay({
         label: mode === 'write' ? 'Write' : 'Read',
         variant: mode === 'write' ? 'amber' : 'blue',
       }}
-      title={truncateFilePath(filePath)}
-      onTitleClick={onOpenFile ? () => onOpenFile(filePath) : undefined}
+      filePath={filePath}
       subtitle={subtitle}
       error={error ? { label: mode === 'write' ? 'Write Failed' : 'Read Failed', message: error } : undefined}
-      headerTranslations={headerTranslations}
+      embedded={embedded}
+      className="bg-foreground-3"
     >
-      <div className="h-full" style={{ backgroundColor }}>
-        {isExcalidraw ? (
-          <div className="h-full overflow-auto p-4">
-            <MarkdownExcalidrawBlock code={content} className="my-0" showExpandButton={false} />
+      {/* Show command if present (Codex reads via shell commands) */}
+      {command && (
+        <div className="px-6 mb-4">
+          <div className="w-full max-w-[850px] mx-auto">
+            <div className="bg-background shadow-minimal rounded-[8px] px-4 py-3 font-mono">
+              <div className="text-xs font-semibold text-muted-foreground/70 mb-1">Command</div>
+              <div className="text-sm text-foreground overflow-x-auto">
+                <span className="text-muted-foreground select-none">$ </span>
+                <span>{command}</span>
+              </div>
+            </div>
           </div>
-        ) : (
+        </div>
+      )}
+
+      <ContentFrame title="Code" fitContent minWidth={850}>
+        <div>
           <ShikiCodeViewer
             code={content}
             filePath={filePath}
@@ -98,8 +101,8 @@ export function CodePreviewOverlay({
             startLine={startLine}
             theme={theme}
           />
-        )}
-      </div>
+        </div>
+      </ContentFrame>
     </PreviewOverlay>
   )
 }

@@ -257,8 +257,10 @@ export const IPC_CHANNELS = {
   THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
   THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
   // Workspace-level theme overrides
+  THEME_GET_WORKSPACE_COLOR_THEME: 'theme:getWorkspaceColorTheme',
   THEME_SET_WORKSPACE_COLOR_THEME: 'theme:setWorkspaceColorTheme',
   THEME_GET_ALL_WORKSPACE_THEMES: 'theme:getAllWorkspaceThemes',
+  THEME_WORKSPACE_CHANGED: 'theme:workspaceChanged',
 
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
@@ -311,20 +313,19 @@ export const IPC_CHANNELS = {
   POWER_GET_KEEP_AWAKE: 'power:getKeepAwake',
   POWER_SET_KEEP_AWAKE: 'power:setKeepAwake',
 
-  // Scheduled Tasks (workspace-scoped)
-  SCHEDULED_TASKS_LIST: 'scheduledTasks:list',
-  SCHEDULED_TASKS_GET: 'scheduledTasks:get',
-  SCHEDULED_TASKS_CREATE: 'scheduledTasks:create',
-  SCHEDULED_TASKS_UPDATE: 'scheduledTasks:update',
-  SCHEDULED_TASKS_DELETE: 'scheduledTasks:delete',
-  SCHEDULED_TASKS_TOGGLE: 'scheduledTasks:toggle',
-  SCHEDULED_TASKS_RUN_MANUALLY: 'scheduledTasks:runManually',
-  SCHEDULED_TASKS_STOP: 'scheduledTasks:stop',
-  SCHEDULED_TASKS_LIST_RUNS: 'scheduledTasks:listRuns',
-  SCHEDULED_TASKS_LIST_ALL_RUNS: 'scheduledTasks:listAllRuns',
-  SCHEDULED_TASKS_STATUS_UPDATE: 'scheduledTasks:statusUpdate',  // Broadcast: task state changed
-  SCHEDULED_TASKS_RUN_UPDATE: 'scheduledTasks:runUpdate',        // Broadcast: run record updated
-  SCHEDULED_TASKS_CHANGED: 'scheduledTasks:changed',              // Broadcast: task list changed
+  // Filesystem search (for @ mention file selection)
+  FS_SEARCH: 'fs:search',
+  // Debug logging from renderer → main log file
+  DEBUG_LOG: 'debug:log',
+
+  // Automations (manual trigger + state management)
+  TEST_AUTOMATION: 'automations:test',
+  AUTOMATIONS_SET_ENABLED: 'automations:setEnabled',
+  AUTOMATIONS_DUPLICATE: 'automations:duplicate',
+  AUTOMATIONS_DELETE: 'automations:delete',
+  AUTOMATIONS_GET_HISTORY: 'automations:getHistory',
+  AUTOMATIONS_GET_LAST_EXECUTED: 'automations:getLastExecuted',
+  AUTOMATIONS_CHANGED: 'automations:changed',  // Broadcast event
 
   // IM Integration (Feishu, Telegram)
   IM_GET_CONFIG: 'im:config:get',

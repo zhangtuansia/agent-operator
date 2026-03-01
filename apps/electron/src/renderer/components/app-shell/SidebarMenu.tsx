@@ -21,14 +21,11 @@ import {
   Settings2,
   Plus,
   Trash2,
-  Play,
-  Pencil,
-  Power,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useLanguage } from '@/context/LanguageContext'
 
-export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'newChat' | 'scheduledTasks' | 'scheduledTask'
+export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'newChat'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -49,23 +46,8 @@ export interface SidebarMenuProps {
   onAddLabel?: (parentId?: string) => void
   /** Handler for "Delete Label" action - deletes the label identified by labelId */
   onDeleteLabel?: (labelId: string) => void
-  // Scheduled task actions
-  /** Task ID for scheduled task items */
-  taskId?: string
-  /** Whether the task is enabled */
-  taskEnabled?: boolean
-  /** Whether the task is currently running */
-  taskRunning?: boolean
-  /** Handler for "New Task" */
-  onNewTask?: () => void
-  /** Handler for "Edit Task" */
-  onEditTask?: (taskId: string) => void
-  /** Handler for "Run Now" */
-  onRunTask?: (taskId: string) => void
-  /** Handler for "Enable/Disable" */
-  onToggleTask?: (taskId: string, enabled: boolean) => void
-  /** Handler for "Delete Task" */
-  onDeleteTask?: (taskId: string) => void
+  /** Handler for "Add Automation" action - for automations type */
+  onAddAutomation?: () => void
 }
 
 /**
@@ -82,14 +64,7 @@ export function SidebarMenu({
   onConfigureLabels,
   onAddLabel,
   onDeleteLabel,
-  taskId,
-  taskEnabled,
-  taskRunning,
-  onNewTask,
-  onEditTask,
-  onRunTask,
-  onToggleTask,
-  onDeleteTask,
+  onAddAutomation,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -166,58 +141,13 @@ export function SidebarMenu({
     )
   }
 
-  // Scheduled Tasks group header: New Task
-  if (type === 'scheduledTasks') {
+  // Automations: show "Add Automation"
+  if (type === 'automations' && onAddAutomation) {
     return (
-      <>
-        {onNewTask && (
-          <MenuItem onClick={onNewTask}>
-            <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">{t('scheduledTasks.newTask')}</span>
-          </MenuItem>
-        )}
-      </>
-    )
-  }
-
-  // Individual Scheduled Task: Run, Edit, Enable/Disable, Delete
-  if (type === 'scheduledTask' && taskId) {
-    return (
-      <>
-        {onNewTask && (
-          <MenuItem onClick={onNewTask}>
-            <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">{t('scheduledTasks.newTask')}</span>
-          </MenuItem>
-        )}
-        {onRunTask && (
-          <MenuItem onClick={() => onRunTask(taskId)} disabled={taskRunning}>
-            <Play className="h-3.5 w-3.5" />
-            <span className="flex-1">{t('scheduledTasks.run')}</span>
-          </MenuItem>
-        )}
-        {onEditTask && (
-          <MenuItem onClick={() => onEditTask(taskId)}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span className="flex-1">{t('scheduledTasks.edit')}</span>
-          </MenuItem>
-        )}
-        {onToggleTask && (
-          <MenuItem onClick={() => onToggleTask(taskId, !taskEnabled)}>
-            <Power className="h-3.5 w-3.5" />
-            <span className="flex-1">{taskEnabled ? t('common.disable') : t('common.enable')}</span>
-          </MenuItem>
-        )}
-        {onDeleteTask && (
-          <>
-            <Separator />
-            <MenuItem onClick={() => onDeleteTask(taskId)}>
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('scheduledTasks.delete')}</span>
-            </MenuItem>
-          </>
-        )}
-      </>
+      <MenuItem onClick={onAddAutomation}>
+        <Plus className="h-3.5 w-3.5" />
+        <span className="flex-1">{t('automations.addAutomation')}</span>
+      </MenuItem>
     )
   }
 

@@ -31,15 +31,6 @@ export interface TerminalOutputProps {
   theme?: 'light' | 'dark'
   /** Additional class names */
   className?: string
-  /** Optional localized strings */
-  translations?: {
-    command?: string
-    output?: string
-    copyCommand?: string
-    copyOutput?: string
-    copied?: string
-    noOutput?: string
-  }
 }
 
 /**
@@ -53,22 +44,12 @@ export function TerminalOutput({
   description,
   theme = 'light',
   className,
-  translations,
 }: TerminalOutputProps) {
-  const t = {
-    command: translations?.command ?? 'Command',
-    output: translations?.output ?? 'Output',
-    copyCommand: translations?.copyCommand ?? 'Copy command',
-    copyOutput: translations?.copyOutput ?? 'Copy output',
-    copied: translations?.copied ?? 'Copied!',
-    noOutput: translations?.noOutput ?? '(no output)',
-  }
   const [copied, setCopied] = useState<'command' | 'output' | null>(null)
 
   const isDark = theme === 'dark'
 
-  // Theme-aware colors
-  const bgColor = isDark ? '#1e1e1e' : '#ffffff'
+  // Theme-aware colors for inner elements (outer bg inherits from overlay's bg-background)
   const textColor = isDark ? '#e4e4e4' : '#1a1a1a'
   const mutedColor = isDark ? '#888888' : '#666666'
   const matchColor = '#22c55e' // Green for grep matches
@@ -107,15 +88,15 @@ export function TerminalOutput({
 
   return (
     <div
-      className={cn('h-full w-full overflow-auto p-4 font-mono text-sm', className)}
-      style={{ fontFamily: '"JetBrains Mono", monospace', backgroundColor: bgColor, color: textColor }}
+      className={cn('h-full w-full overflow-auto px-5 py-4 font-mono text-sm', className)}
+      style={{ fontFamily: '"JetBrains Mono", monospace' }}
     >
       {/* Command section */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs" style={{ color: mutedColor }}>
             <Terminal className="w-3 h-3" />
-            <span>{t.command}</span>
+            <span>Command</span>
           </div>
           <button
             onClick={() => copyToClipboard(command, 'command')}
@@ -123,7 +104,7 @@ export function TerminalOutput({
               'p-1 rounded transition-colors',
               isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'
             )}
-            title={copied === 'command' ? t.copied : t.copyCommand}
+            title={copied === 'command' ? 'Copied!' : 'Copy command'}
           >
             {copied === 'command' ? (
               <Check className="h-3.5 w-3.5 text-green-500" />
@@ -132,11 +113,8 @@ export function TerminalOutput({
             )}
           </button>
         </div>
-        <div
-          className="p-3 rounded-lg overflow-x-auto"
-          style={{ backgroundColor: codeBg }}
-        >
-          <code style={{ color: cmdColor }}>{command}</code>
+        <div className="overflow-x-auto">
+          <code className="text-foreground">{command}</code>
         </div>
       </div>
 
@@ -145,7 +123,7 @@ export function TerminalOutput({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs" style={{ color: mutedColor }}>
             <Terminal className="w-3 h-3" />
-            <span>{t.output}</span>
+            <span>Output</span>
             {exitCode !== undefined && (
               <span
                 className="px-1.5 py-0.5 rounded text-[10px]"
@@ -164,7 +142,7 @@ export function TerminalOutput({
               'p-1 rounded transition-colors',
               isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'
             )}
-            title={copied === 'output' ? t.copied : t.copyOutput}
+            title={copied === 'output' ? 'Copied!' : 'Copy output'}
           >
             {copied === 'output' ? (
               <Check className="h-3.5 w-3.5 text-green-500" />
@@ -174,12 +152,8 @@ export function TerminalOutput({
           </button>
         </div>
         <pre
-          className="p-3 rounded-lg overflow-auto"
-          style={{
-            backgroundColor: outputBg,
-            color: textColor,
-            maxHeight: 'calc(100vh - 200px)',
-          }}
+          className="overflow-auto"
+          style={{ color: textColor }}
         >
           {/* Grep output with line number highlighting */}
           {isGrepOutput && grepLines.length > 0 ? (
@@ -237,7 +211,7 @@ export function TerminalOutput({
               ))}
             </div>
           ) : (
-            <span style={{ color: mutedColor }}>{t.noOutput}</span>
+            <span style={{ color: mutedColor }}>(no output)</span>
           )}
         </pre>
       </div>

@@ -54,7 +54,7 @@ export function DataTableOverlay({
       subtitle={subtitle}
       headerActions={headerActions}
     >
-      {/* Table content - scrolling is handled by the parent overlay's scroll container */}
+      {/* Table content — scrolling is handled by the parent overlay's scroll container */}
       <div>
         {children}
       </div>

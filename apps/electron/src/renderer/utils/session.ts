@@ -1,5 +1,7 @@
+import * as React from "react"
 import type { Session } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
+import type { SessionStatusId } from "../config/session-status-config"
 
 /** Common session fields used by getSessionTitle */
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
@@ -50,6 +52,64 @@ export function getSessionTitle(session: SessionLike | SessionMeta, fallback: st
   }
 
   return fallback
+}
+
+// ---------------------------------------------------------------------------
+// SessionMeta helpers (lightweight, no full Session needed)
+// ---------------------------------------------------------------------------
+
+export function getSessionStatus(session: SessionMeta): SessionStatusId {
+  return (session.todoState as SessionStatusId) || 'todo'
+}
+
+export function hasUnreadMeta(session: SessionMeta): boolean {
+  return session.hasUnread === true
+}
+
+export function hasMessagesMeta(session: SessionMeta): boolean {
+  return session.lastFinalMessageId !== undefined
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+
+/** Short relative time locale for date-fns formatDistanceToNowStrict.
+ *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y" */
+export const shortTimeLocale = {
+  formatDistance: (token: string, count: number) => {
+    const units: Record<string, string> = {
+      xSeconds: `${count}s`,
+      xMinutes: `${count}m`,
+      xHours: `${count}h`,
+      xDays: `${count}d`,
+      xWeeks: `${count}w`,
+      xMonths: `${count}mo`,
+      xYears: `${count}y`,
+    }
+    return units[token] ?? `${count}`
+  },
+}
+
+/** Highlight matching text in a string with yellow background spans. */
+export function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text
+
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const index = lowerText.indexOf(lowerQuery)
+
+  if (index === -1) return text
+
+  const before = text.slice(0, index)
+  const match = text.slice(index, index + query.length)
+  const after = text.slice(index + query.length)
+
+  return React.createElement(React.Fragment, null,
+    before,
+    React.createElement('span', { className: 'bg-yellow-300/30 rounded-[2px]' }, match),
+    highlightMatch(after, query),
+  )
 }
 
 /**

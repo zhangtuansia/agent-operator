@@ -219,6 +219,7 @@ export const SETTINGS_ICONS: Partial<Record<SettingsSubpage, React.ComponentType
   app: AppSettingsIcon,
   workspace: WorkspaceIcon,
   api: ApiIcon,
+  appearance: AppearanceIcon,
   input: InputIcon,
   labels: LabelsIcon,
   permissions: PermissionsIcon,

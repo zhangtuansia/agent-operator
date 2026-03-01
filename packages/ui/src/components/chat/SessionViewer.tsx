@@ -44,12 +44,14 @@ export interface SessionViewerProps {
   header?: ReactNode
   /** Custom footer content (input area for interactive mode) */
   footer?: ReactNode
+  /** Optional session folder path for stripping from file paths in tool display */
+  sessionFolderPath?: string
 }
 
 /**
- * OperatorAgentLogo - The Cowork "C" logo for branding
+ * CraftAgentLogo - The Cowork "C" logo for branding
  */
-function OperatorAgentLogo({ className }: { className?: string }) {
+function CraftAgentLogo({ className }: { className?: string }) {
   return (
     <svg
       className={className}
@@ -80,6 +82,7 @@ export function SessionViewer({
   defaultExpanded = false,
   header,
   footer,
+  sessionFolderPath,
 }: SessionViewerProps) {
   // Convert StoredMessage[] to Message[] and group into turns
   const turns = useMemo(
@@ -158,6 +161,7 @@ export function SessionViewer({
                     <UserMessageBubble
                       content={turn.message.content}
                       attachments={turn.message.attachments}
+                      badges={turn.message.badges}
                       onUrlClick={platformActions.onOpenUrl}
                       onFileClick={platformActions.onOpenFile}
                     />
@@ -205,6 +209,7 @@ export function SessionViewer({
                       ? () => platformActions.onOpenMultiFileDiff!(session.id, turn.turnId)
                       : undefined
                     }
+                    sessionFolderPath={sessionFolderPath}
                   />
                 )
               }
@@ -214,7 +219,7 @@ export function SessionViewer({
 
             {/* Bottom branding */}
             <div className={CHAT_CLASSES.brandingContainer}>
-              <OperatorAgentLogo className="w-8 h-8 text-[#9570BE]/40" />
+              <CraftAgentLogo className="w-8 h-8 text-[#9570BE]/40" />
             </div>
             </div>
           </div>

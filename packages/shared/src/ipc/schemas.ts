@@ -97,6 +97,8 @@ export const SendMessageArgsSchema = z.object({
 export const SessionCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('flag') }),
   z.object({ type: z.literal('unflag') }),
+  z.object({ type: z.literal('archive') }),
+  z.object({ type: z.literal('unarchive') }),
   z.object({ type: z.literal('rename'), name: z.string().min(1).max(500) }),
   z.object({ type: z.literal('setTodoState'), state: z.string().min(1).max(50) }),
   z.object({ type: z.literal('markRead') }),

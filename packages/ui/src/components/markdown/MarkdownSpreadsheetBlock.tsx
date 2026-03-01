@@ -142,7 +142,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
     setFileLoading(true)
     setFileError(null)
     onReadFile(spec.src)
-      .then((content: string) => {
+      .then((content) => {
         try {
           const raw = JSON.parse(content)
           if (Array.isArray(raw)) {
@@ -161,7 +161,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
           setFileError('Failed to parse data file as JSON')
         }
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         setFileError(err instanceof Error ? err.message : 'Failed to read data file')
       })
       .finally(() => setFileLoading(false))

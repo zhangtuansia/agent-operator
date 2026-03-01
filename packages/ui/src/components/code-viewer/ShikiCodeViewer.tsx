@@ -10,10 +10,9 @@
 
 import * as React from 'react'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import type { BundledLanguage } from 'shiki'
+import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '../../lib/utils'
 import { LANGUAGE_MAP } from './language-map'
-import { loadShiki, isBundledLanguage } from '../../lib/shiki-loader'
 
 export interface ShikiCodeViewerProps {
   /** The code content to display */
@@ -47,6 +46,11 @@ const LANGUAGE_ALIASES: Record<string, BundledLanguage> = {
   'kt': 'kotlin',
   'objective-c': 'objc',
   'objc': 'objc',
+}
+
+function isValidLanguage(lang: string): lang is BundledLanguage {
+  const normalized = LANGUAGE_ALIASES[lang] || lang
+  return normalized in bundledLanguages
 }
 
 function getLanguageFromPath(filePath: string, explicit?: string): string {
@@ -89,11 +93,10 @@ export function ShikiCodeViewer({
     async function highlight() {
       // Use provided shikiTheme or fall back to github theme based on mode
       const resolvedShikiTheme = shikiTheme || (theme === 'dark' ? 'github-dark' : 'github-light')
-      const shiki = await loadShiki()
-      const lang = isBundledLanguage(resolvedLang, shiki) ? (resolvedLang as BundledLanguage) : 'text'
+      const lang = isValidLanguage(resolvedLang) ? resolvedLang : 'text'
 
       try {
-        const html = await shiki.codeToHtml(code, {
+        const html = await codeToHtml(code, {
           lang,
           theme: resolvedShikiTheme,
         })
@@ -129,8 +132,8 @@ export function ShikiCodeViewer({
     }
   }, [code, resolvedLang, theme, shikiTheme, onReady])
 
-  // Theme-aware colors
-  const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
+  // Use CSS variables so custom themes are respected
+  const backgroundColor = 'var(--background)'
   const lineNumberColor = theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
   const borderColor = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 

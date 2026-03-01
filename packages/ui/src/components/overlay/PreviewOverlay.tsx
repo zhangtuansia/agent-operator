@@ -20,10 +20,7 @@ import * as ReactDOM from 'react-dom'
 import { type LucideIcon } from 'lucide-react'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
 import { FullscreenOverlayBase } from './FullscreenOverlayBase'
-import {
-  FullscreenOverlayBaseHeader,
-  type FullscreenOverlayBaseHeaderTranslations,
-} from './FullscreenOverlayBaseHeader'
+import { FullscreenOverlayBaseHeader } from './FullscreenOverlayBaseHeader'
 import { OverlayErrorBanner } from './OverlayErrorBanner'
 import type { PreviewBadgeVariant } from '../ui/PreviewHeader'
 
@@ -48,7 +45,7 @@ export interface PreviewOverlayProps {
     variant: BadgeVariant
   }
 
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title — displayed as badge. Fallback when no file path. */
   title?: string
@@ -65,8 +62,6 @@ export interface PreviewOverlayProps {
 
   /** Actions to show in header right side */
   headerActions?: ReactNode
-  /** Optional localized strings for header/menu UI */
-  headerTranslations?: FullscreenOverlayBaseHeaderTranslations
 
   /** Main content */
   children: ReactNode
@@ -76,6 +71,9 @@ export interface PreviewOverlayProps {
 
   /** Custom class names for the overlay container (e.g., to override bg-background) */
   className?: string
+
+  /** Translations for header UI strings */
+  headerTranslations?: import('./FullscreenOverlayBaseHeader').FullscreenOverlayBaseHeaderTranslations
 }
 
 export function PreviewOverlay({
@@ -89,7 +87,6 @@ export function PreviewOverlay({
   subtitle,
   error,
   headerActions,
-  headerTranslations,
   children,
   embedded = false,
   className,
@@ -125,7 +122,6 @@ export function PreviewOverlay({
       onTitleClick={onTitleClick}
       subtitle={subtitle}
       headerActions={headerActions}
-      translations={headerTranslations}
     />
   )
 
@@ -184,7 +180,6 @@ export function PreviewOverlay({
         onTitleClick={onTitleClick}
         subtitle={subtitle}
         headerActions={headerActions}
-        headerTranslations={headerTranslations}
         error={error}
       >
         {children}

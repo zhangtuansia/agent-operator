@@ -45,6 +45,14 @@ export type { AuthState, SetupNeeds, AuthType, AgentType };
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@agent-operator/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
+/**
+ * Source type filter for sources navigation (e.g., show only APIs, MCPs, or Local sources)
+ */
+export interface SourceFilter {
+  kind: 'type'
+  sourceType: 'api' | 'mcp' | 'local'
+}
+
 // Import LLM connection types
 import type { LlmConnection, LlmConnectionWithStatus } from '@agent-operator/shared/config/llm-connections';
 export type { LlmConnection, LlmConnectionWithStatus };
@@ -52,6 +60,9 @@ export type { LlmConnection, LlmConnectionWithStatus };
 // Import skill types
 import type { LoadedSkill, SkillMetadata } from '@agent-operator/shared/skills/types';
 export type { LoadedSkill, SkillMetadata };
+
+// Import session types from shared (for SessionFamily - different from core SessionMetadata)
+import type { SessionMetadata as SharedSessionMetadata } from '@agent-operator/shared/sessions/types';
 
 // Import credential health types
 import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@agent-operator/shared/credentials/types';
@@ -106,6 +117,8 @@ export type {
   SourcesNavigationState,
   SettingsNavigationState,
   SkillsNavigationState,
+  AutomationFilter,
+  AutomationsNavigationState,
   NavigationState,
 } from '@agent-operator/shared/ipc/types';
 
@@ -177,6 +190,49 @@ export interface LlmConnectionSetup {
   models?: string[] | null
 }
 
+/**
+ * File search result for @ mention file selection.
+ * Returned by FS_SEARCH IPC handler when user types @filename in input.
+ */
+export interface FileSearchResult {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  relativePath: string  // Path relative to search base
+}
+
+/**
+ * Session family information (parent + siblings)
+ * Uses SharedSessionMetadata from @agent-operator/shared (not core SessionMetadata)
+ */
+export interface SessionFamily {
+  parent: SharedSessionMetadata
+  siblings: SharedSessionMetadata[]
+  self: SharedSessionMetadata
+}
+
+// Automation testing types (manual trigger from UI)
+export interface TestAutomationPayload {
+  workspaceId: string
+  /** Matcher ID for writing history entries */
+  automationId?: string
+  actions: Array<{ type: 'prompt'; prompt: string; llmConnection?: string; model?: string }>
+  permissionMode?: 'safe' | 'ask' | 'allow-all'
+  labels?: string[]
+}
+
+export interface TestAutomationActionResult {
+  type: 'prompt'
+  success: boolean
+  stderr?: string
+  sessionId?: string
+  duration: number
+}
+
+export interface TestAutomationResult {
+  actions: TestAutomationActionResult[]
+}
+
 // Import types needed for ElectronAPI
 import type { Message } from '@agent-operator/core/types';
 import type {
@@ -212,6 +268,7 @@ export interface ElectronAPI {
   getSessionMessages(sessionId: string): Promise<Session | null>
   searchSessionContent(query: string): Promise<SessionSearchResult[]>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
+  createSubSession(workspaceId: string, parentSessionId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   importSessions(workspaceId: string, source: 'openai' | 'anthropic', filePath: string): Promise<{ imported: number; failed: number; errors: string[] }>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: CoreStoredAttachment[], options?: SendMessageOptions): Promise<void>
@@ -222,7 +279,7 @@ export interface ElectronAPI {
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
   // Consolidated session command handler
-  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult>
+  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | SessionFamily | { count: number }>
 
   // Pending plan execution (for reload recovery)
   getPendingPlanExecution(sessionId: string): Promise<{ planPath: string; awaitingCompaction: boolean } | null>
@@ -467,8 +524,11 @@ export interface ElectronAPI {
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
   // Per-workspace color theme overrides
+  getWorkspaceColorTheme(workspaceId: string): Promise<string | null>
   setWorkspaceColorTheme(workspaceId: string, themeId: string | null): Promise<void>
   getAllWorkspaceThemes(): Promise<Record<string, string | undefined>>
+  broadcastWorkspaceThemeChange(workspaceId: string, themeId: string | null): Promise<void>
+  onWorkspaceThemeChange(callback: (data: { workspaceId: string; themeId: string | null }) => void): () => void
   // Tool icon mappings (CLI command → icon)
   getToolIconMappings(): Promise<ToolIconMapping[]>
   // Appearance settings
@@ -529,20 +589,21 @@ export interface ElectronAPI {
   openAccessibilitySettings(): Promise<void>
   getAllPermissions(): Promise<{ fullDiskAccess: boolean; accessibility: boolean }>
 
-  // Scheduled Tasks
-  listScheduledTasks(workspaceId: string): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask[]>
-  getScheduledTask(workspaceId: string, taskId: string): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask | null>
-  createScheduledTask(workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
-  updateScheduledTask(workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
-  deleteScheduledTask(workspaceId: string, taskId: string): Promise<void>
-  toggleScheduledTask(workspaceId: string, taskId: string, enabled: boolean): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTask>
-  runScheduledTaskManually(workspaceId: string, taskId: string): Promise<void>
-  stopScheduledTask(workspaceId: string, taskId: string): Promise<void>
-  listScheduledTaskRuns(workspaceId: string, taskId: string, limit?: number, offset?: number): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRun[]>
-  listAllScheduledTaskRuns(workspaceId: string, limit?: number, offset?: number): Promise<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRun[]>
-  onScheduledTasksChanged(callback: (workspaceId?: string) => void): () => void
-  onScheduledTaskStatusUpdate(callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => void): () => void
-  onScheduledTaskRunUpdate(callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => void): () => void
+  // Automation testing (manual trigger)
+  testAutomation(payload: TestAutomationPayload): Promise<TestAutomationResult>
+
+  // Automation state management
+  setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
+  duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
+  deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
+  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }>>
+  getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
+
+  // Automations change listener (live updates when automations.json changes on disk)
+  onAutomationsChanged(callback: (workspaceId: string) => void): () => void
+
+  // Filesystem search (for @ mention file selection)
+  searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>
 
   // Power Management
   getKeepAwakeWhileRunning(): Promise<boolean>
@@ -572,6 +633,7 @@ import type {
   SourcesNavigationState,
   SettingsNavigationState,
   SkillsNavigationState,
+  AutomationsNavigationState,
   ChatFilter,
   SettingsSubpage,
 } from '@agent-operator/shared/ipc/types'
@@ -605,6 +667,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is automations navigation
+ */
+export const isAutomationsNavigation = (
+  state: NavigationState
+): state is AutomationsNavigationState => state.navigator === 'automations'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -628,6 +697,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'automations') {
+    if (state.details?.type === 'automation') {
+      return `automations/automation/${state.details.automationId}`
+    }
+    return 'automations'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -669,6 +744,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle automations
+  if (key === 'automations') return { navigator: 'automations', details: null }
+  if (key.startsWith('automations/automation/')) {
+    const automationId = key.slice(22)
+    if (automationId) {
+      return { navigator: 'automations', details: { type: 'automation', automationId } }
+    }
+    return { navigator: 'automations', details: null }
   }
 
   // Handle settings

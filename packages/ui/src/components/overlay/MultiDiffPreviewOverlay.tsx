@@ -36,6 +36,11 @@ export interface FileChange {
   error?: string
 }
 
+export interface DiffViewerSettings {
+  diffStyle: 'unified' | 'split'
+  disableBackground: boolean
+}
+
 export interface MultiDiffPreviewOverlayProps {
   /** Whether the overlay is visible */
   isOpen: boolean

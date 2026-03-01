@@ -144,7 +144,7 @@ export function parseGlobResult(
 }
 
 /**
- * Parse WebSearch result content into formatted markdown.
+ * Parse WebSearch tool result to format embedded JSON links properly.
  * Converts raw JSON arrays in "Links: [...]" to formatted markdown lists.
  * Handles multiple Links sections in a single result.
  */
@@ -182,6 +182,8 @@ export interface CodeOverlayData {
   totalLines?: number
   numLines?: number
   error?: string
+  /** Original shell command (for Codex reads) - displayed in overlay */
+  command?: string
 }
 
 export interface DiffOverlayData {
@@ -199,12 +201,14 @@ export interface TerminalOverlayData {
   exitCode?: number
   toolType: ToolType
   description: string
+  error?: string
 }
 
 export interface GenericOverlayData {
   type: 'generic'
   content: string
   title: string
+  error?: string
 }
 
 export interface JSONOverlayData {
@@ -257,10 +261,12 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       totalLines: parsed.totalLines,
       numLines: parsed.numLines,
       error: activity.error,
+      // Pass through command if present (Codex reads via shell commands)
+      command: input?._command as string | undefined,
     }
   }
 
-  // Write tool → Document overlay for .md/.txt, Code overlay otherwise
+  // Write tool → Document overlay for .md/.txt (rendered markdown), Code overlay for everything else
   if (toolName === 'write') {
     const content = (input?.content as string) || rawContent
     const ext = filePath.split('.').pop()?.toLowerCase()
@@ -282,16 +288,8 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     }
   }
 
-  // Edit tool → Diff overlay
-  if (toolName === 'edit' || toolName === 'multiedit') {
-    return {
-      type: 'diff',
-      filePath,
-      original: (input?.old_string as string) || '',
-      modified: (input?.new_string as string) || '',
-      error: activity.error,
-    }
-  }
+  // Edit/Write tools are handled directly by the click handler (multi-diff overlay)
+  // so they fall through to the generic handler if they reach here
 
   // Bash tool → Terminal overlay
   if (toolName === 'bash') {
@@ -303,6 +301,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       exitCode: parsed.exitCode,
       description: (input?.description as string) || activity.displayName || '',
       toolType: 'bash',
+      error: activity.error,
     }
   }
 
@@ -318,6 +317,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       output: parsed.output,
       description: parsed.description,
       toolType: 'grep',
+      error: activity.error,
     }
   }
 
@@ -332,6 +332,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       output: parsed.output,
       description: parsed.description,
       toolType: 'glob',
+      error: activity.error,
     }
   }
 
@@ -343,6 +344,54 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       filePath: 'Web Search Results',
       content: formattedContent,
       toolName: 'WebSearch',
+      error: activity.error,
+    }
+  }
+
+  // LLM Query tool (call_llm) → Document overlay with input prompt + output response
+  if (toolName === 'mcp__session__call_llm') {
+    const prompt = (input?.prompt as string) || ''
+    const model = input?.model as string | undefined
+    const systemPrompt = input?.systemPrompt as string | undefined
+    const attachments = input?.attachments as unknown[] | undefined
+    const outputFormat = input?.outputFormat as string | undefined
+    const outputSchema = input?.outputSchema as Record<string, unknown> | undefined
+
+    const sections: string[] = []
+
+    // Input section
+    sections.push('## Prompt')
+
+    // Metadata (only show when present)
+    const meta: string[] = []
+    if (model) meta.push(`**Model:** ${model}`)
+    if (systemPrompt) meta.push(`**System Prompt:** ${systemPrompt}`)
+    if (outputFormat) meta.push(`**Output Format:** ${outputFormat}`)
+    if (outputSchema) meta.push(`**Output Schema:**\n\`\`\`json\n${JSON.stringify(outputSchema, null, 2)}\n\`\`\``)
+    if (attachments && attachments.length > 0) {
+      const paths = attachments
+        .map(a => typeof a === 'string' ? a : (a as { path: string }).path)
+        .filter(Boolean)
+      if (paths.length > 0) meta.push(`**Attachments:** ${paths.join(', ')}`)
+    }
+    if (meta.length > 0) {
+      sections.push(meta.join('\n\n'))
+    }
+
+    sections.push(prompt)
+
+    // Output section
+    if (rawContent) {
+      sections.push('---')
+      sections.push('## Response')
+      sections.push(rawContent)
+    }
+
+    return {
+      type: 'document',
+      content: sections.join('\n\n'),
+      filePath: 'LLM Query',
+      toolName: 'call_llm',
       error: activity.error,
     }
   }
@@ -371,5 +420,6 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     type: 'generic',
     content: rawContent || (input ? JSON.stringify(input, null, 2) : ''),
     title: activity.displayName || activity.toolName || 'Activity',
+    error: activity.error,
   }
 }

@@ -4,7 +4,6 @@ import { Brain, Check } from 'lucide-react'
 import { Icon_Folder } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@agent-operator/shared/agent/modes'
-import { useLanguage } from '@/context/LanguageContext'
 
 // ============================================================================
 // Types
@@ -79,53 +78,8 @@ function PermissionModeIcon({ mode, className }: PermissionModeIconProps) {
 // Icon size constant
 const MENU_ICON_SIZE = 'h-3.5 w-3.5'
 
-/**
- * Hook to get translated slash commands
- * Uses i18n for labels and descriptions
- */
-export function useTranslatedSlashCommands() {
-  const { t } = useLanguage()
-
-  return React.useMemo(() => {
-    // Map mode ID to i18n keys
-    const modeLabels: Record<PermissionMode, { label: string; desc: string }> = {
-      'safe': { label: t('workspaceSettings.modeExplore'), desc: t('workspaceSettings.modeExploreDescription') },
-      'ask': { label: t('workspaceSettings.modeAsk'), desc: t('workspaceSettings.modeAskDescription') },
-      'allow-all': { label: t('workspaceSettings.modeAuto'), desc: t('workspaceSettings.modeAutoDescription') },
-    }
-
-    const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
-      const labels = modeLabels[mode]
-      return {
-        id: mode as SlashCommandId,
-        label: labels.label,
-        description: labels.desc,
-        icon: <PermissionModeIcon mode={mode} className={MENU_ICON_SIZE} />,
-      }
-    })
-
-    const ultrathinkCommand: SlashCommand = {
-      id: 'ultrathink',
-      label: t('thinkingLevels.high'),
-      description: t('thinkingLevels.highDescription'),
-      icon: <Brain className={MENU_ICON_SIZE} />,
-    }
-
-    return {
-      permissionModeCommands,
-      ultrathinkCommand,
-      allCommands: [...permissionModeCommands, ultrathinkCommand],
-      commandGroups: [
-        { id: 'modes', commands: permissionModeCommands },
-        { id: 'features', commands: [ultrathinkCommand] },
-      ] as CommandGroup[],
-    }
-  }, [t])
-}
-
-// Legacy exports for backwards compatibility (static English versions)
-// Prefer useTranslatedSlashCommands() for i18n support
-const staticPermissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
+// Generate permission mode commands from centralized config
+const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
   const config = PERMISSION_MODE_CONFIG[mode]
   return {
     id: mode as SlashCommandId,
@@ -135,7 +89,7 @@ const staticPermissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(m
   }
 })
 
-const staticUltrathinkCommand: SlashCommand = {
+const ultrathinkCommand: SlashCommand = {
   id: 'ultrathink',
   label: 'Ultrathink',
   description: 'Extended reasoning for complex problems',
@@ -143,13 +97,13 @@ const staticUltrathinkCommand: SlashCommand = {
 }
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
-  ...staticPermissionModeCommands,
-  staticUltrathinkCommand,
+  ...permissionModeCommands,
+  ultrathinkCommand,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
-  { id: 'modes', commands: staticPermissionModeCommands },
-  { id: 'features', commands: [staticUltrathinkCommand] },
+  { id: 'modes', commands: permissionModeCommands },
+  { id: 'features', commands: [ultrathinkCommand] },
 ]
 
 // ============================================================================
@@ -160,7 +114,7 @@ const MENU_CONTAINER_STYLE = 'min-w-[200px] overflow-hidden rounded-[8px] bg-bac
 const MENU_LIST_STYLE = 'max-h-[260px] overflow-y-auto py-1'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
-const MENU_SECTION_HEADER = 'px-3 py-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider'
+const MENU_SECTION_HEADER = 'px-3 py-1.5 mb-0.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5'
 
 // ============================================================================
 // Shared: Filter utilities
@@ -522,12 +476,13 @@ export function InlineSlashCommand({
               }
             })}
 
-            {/* Separator between sections (not after last) */}
-            {sectionIndex < filteredSections.length - 1 && (
-              <div className="h-px bg-border/50 my-1 mx-2" />
-            )}
           </React.Fragment>
         ))}
+      </div>
+      {/* Always-visible footer hint for @ mentions */}
+      <div className="h-px bg-border/50 mx-2" />
+      <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
+        Use @ for skills and files
       </div>
     </div>
   )
@@ -570,12 +525,6 @@ export interface UseInlineSlashCommandOptions {
   activeCommands?: SlashCommandId[]
   recentFolders?: string[]
   homeDir?: string
-  /** Section labels for i18n */
-  sectionLabels?: {
-    modes: string
-    features: string
-    recentFolders: string
-  }
 }
 
 export interface UseInlineSlashCommandReturn {
@@ -597,7 +546,6 @@ export function useInlineSlashCommand({
   activeCommands = [],
   recentFolders = [],
   homeDir,
-  sectionLabels,
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
@@ -606,9 +554,6 @@ export function useInlineSlashCommand({
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
 
-  // Get translated commands
-  const { permissionModeCommands, ultrathinkCommand } = useTranslatedSlashCommands()
-
   // Build sections from commands and folders
   const sections = React.useMemo((): SlashSection[] => {
     const result: SlashSection[] = []
@@ -616,14 +561,14 @@ export function useInlineSlashCommand({
     // Modes section
     result.push({
       id: 'modes',
-      label: sectionLabels?.modes || 'Modes',
+      label: 'Modes',
       items: permissionModeCommands,
     })
 
     // Features section
     result.push({
       id: 'features',
-      label: sectionLabels?.features || 'Features',
+      label: 'Features',
       items: [ultrathinkCommand],
     })
 
@@ -638,7 +583,7 @@ export function useInlineSlashCommand({
 
       result.push({
         id: 'folders',
-        label: sectionLabels?.recentFolders || 'Recent Folders',
+        label: 'Recent Working Directories',
         items: sortedFolders.map(path => ({
           id: path,
           type: 'folder' as const,
@@ -650,7 +595,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir, sectionLabels, permissionModeCommands, ultrathinkCommand])
+  }, [recentFolders, homeDir])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
@@ -663,9 +608,23 @@ export function useInlineSlashCommand({
     const hasItems = sections.some(s => s.items.length > 0)
 
     if (slashMatch && hasItems) {
+      const filterText = slashMatch[1] || ''
+      // Check if there are any filtered results before opening menu
+      // This ensures Enter key works normally when no matches exist
+      const filteredSections = filterSections(sections, filterText)
+      const hasFilteredItems = filteredSections.some(s => s.items.length > 0)
+
+      if (!hasFilteredItems) {
+        // No results after filtering - close menu to allow normal Enter handling
+        setIsOpen(false)
+        setFilter('')
+        setSlashStart(-1)
+        return
+      }
+
       const matchStart = textBeforeCursor.lastIndexOf('/')
       setSlashStart(matchStart)
-      setFilter(slashMatch[1] || '')
+      setFilter(filterText)
 
       if (inputRef.current) {
         // Try to get actual caret position from the input element

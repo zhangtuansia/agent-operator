@@ -57,6 +57,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
@@ -70,7 +71,9 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, ChatFilter }
-export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation }
+/** @deprecated Use ChatFilter — aliased for OSS component compatibility */
+export type SessionFilter = ChatFilter
+export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -91,6 +94,8 @@ interface NavigationContextValue {
   updateRightSidebar: (panel: RightSidebarPanel | undefined) => void
   /** Toggle right sidebar (with optional panel) */
   toggleRightSidebar: (panel?: RightSidebarPanel) => void
+  /** Navigate to a session, preserving the current filter type */
+  navigateToSession: (sessionId: string) => void
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null)
@@ -344,7 +349,7 @@ export function NavigationProvider({
     (newState: NavigationState): NavigationState => {
       // For chats: auto-select first session if no details provided
       if (isChatsNavigation(newState) && !newState.details) {
-        // Scheduled task management routes should open the task panel first.
+        // Automation-scheduled session routes don't auto-select a session.
         if (newState.filter.kind === 'scheduled' || newState.filter.kind === 'scheduledTask') {
           setSession({ selected: null })
           setNavigationState(newState)
@@ -683,6 +688,32 @@ export function NavigationProvider({
     })
   }, [])
 
+  // Navigate to a session while preserving the current filter type
+  const navigateToSession = useCallback((sessionId: string) => {
+    if (!isChatsNavigation(navigationState)) {
+      navigate(routes.view.allChats(sessionId))
+      return
+    }
+
+    const filter = navigationState.filter
+    switch (filter.kind) {
+      case 'allChats':
+        navigate(routes.view.allChats(sessionId))
+        break
+      case 'flagged':
+        navigate(routes.view.flagged(sessionId))
+        break
+      case 'state':
+        navigate(routes.view.state(filter.stateId, sessionId))
+        break
+      case 'label':
+        navigate(routes.view.label(filter.labelId, sessionId))
+        break
+      default:
+        navigate(routes.view.allChats(sessionId))
+    }
+  }, [navigationState, navigate])
+
   return (
     <NavigationContext.Provider
       value={{
@@ -695,6 +726,7 @@ export function NavigationProvider({
         goForward,
         updateRightSidebar,
         toggleRightSidebar,
+        navigateToSession,
       }}
     >
       {children}

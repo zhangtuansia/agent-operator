@@ -510,11 +510,16 @@ Read relevant context files using the Read tool - they contain architecture info
 | Sources | \`${DOC_REFS.sources}\` | BEFORE creating/modifying sources |
 | Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying ${PERMISSION_MODE_CONFIG['safe'].displayName} mode rules |
 | Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
+| Automations | \`${DOC_REFS.hooks}\` | BEFORE creating/modifying automations |
 | Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
 | Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses or workflow states |
 | Labels | \`${DOC_REFS.labels}\` | BEFORE creating/modifying labels |
 | Tool Icons | \`${DOC_REFS.toolIcons}\` | BEFORE modifying tool icon mappings |
 | Mermaid | \`${DOC_REFS.mermaid}\` | When creating diagrams |
+| Data Tables | \`${DOC_REFS.dataTables}\` | When working with datasets of 20+ rows |
+| HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
+| PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
+| LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Cowork has specific patterns that differ from standard approaches.
 
@@ -635,23 +640,19 @@ For **hand-drawn style** diagrams, sketches, and freeform visuals, use Excalidra
 **Fill styles:** \`"solid"\`, \`"hachure"\`, \`"cross-hatch"\`
 **Tips:** Use \`roundness:{"type":3}\` for rounded corners. Keep the inline preview under 260px height — for larger diagrams, users can click to fullscreen.
 
-## Scheduled Tasks
+## Automations
 
-Users can ask you to set up recurring or one-time scheduled tasks through natural conversation. Use the \`create_scheduled_task\` tool when the user requests something like:
-- "Every morning at 8am, send me a news briefing"
-- "Check my PRs every 2 hours"
-- "Remind me tomorrow at 3pm to submit the report"
+Users can ask you to set up automations — event-driven or scheduled actions that run automatically. Automations are configured in \`automations.json\` at the workspace root.
 
-**How it works:**
-1. You create the task with \`create_scheduled_task\` (name, prompt, schedule)
-2. The system runs the task automatically on schedule in a **new, separate session**
-3. Each run creates a new chat session tagged under "Scheduled Tasks" in the sidebar
+**IMPORTANT:** Read \`${DOC_REFS.hooks}\` BEFORE creating or modifying automations. It contains the full schema, supported events, and examples.
 
-**Key points:**
-- The \`prompt\` must be **self-contained** — the new session has no memory of this conversation
-- For cron schedules, use 5-field format: \`minute hour day month weekday\` (e.g., \`0 8 * * *\` = daily at 8:00 AM)
-- Tasks are enabled by default and start running immediately
-- Users can manage tasks (enable/disable/delete) from the sidebar
+**Quick summary:**
+- **Scheduled tasks**: Use \`SchedulerTick\` event with a \`cron\` expression (5-field: \`minute hour day month weekday\`)
+- **Event-driven**: Use events like \`LabelAdd\`, \`SessionStatusChange\`, \`FlagChange\`, etc. with a \`matcher\` regex
+- **Actions**: \`{ "type": "prompt", "prompt": "..." }\` — creates a new session with the prompt
+- Each run creates a **new, separate session** — prompts must be **self-contained**
+- Optional: \`permissionMode\`, \`labels\`, \`llmConnection\`, \`model\` per automation
+- Users can manage automations from the sidebar (enable/disable/delete/test)
 
 ## Tool Metadata
 

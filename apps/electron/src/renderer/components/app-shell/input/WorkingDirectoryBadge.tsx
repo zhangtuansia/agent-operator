@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Check } from 'lucide-react'
-import { Icon_Folder } from '@agent-operator/ui'
+import { Icon_Home, Icon_Folder } from '@agent-operator/ui'
 
 import * as storage from '@/lib/local-storage'
 import { cn } from '@/lib/utils'
@@ -20,16 +20,6 @@ function addRecentDir(path: string): void {
   const recent = getRecentDirs().filter(p => p !== path)
   const updated = [path, ...recent].slice(0, 25)
   storage.set(storage.KEYS.recentWorkingDirs, updated)
-}
-
-const FOLDER_LABEL_MAX_CHARS = 5
-
-function truncateFolderLabel(name: string): string {
-  const chars = Array.from(name.trim())
-  if (chars.length <= FOLDER_LABEL_MAX_CHARS) {
-    return name
-  }
-  return `${chars.slice(0, FOLDER_LABEL_MAX_CHARS).join('')}...`
 }
 
 /**
@@ -65,6 +55,7 @@ export function WorkingDirectoryBadge({
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
+  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -75,6 +66,17 @@ export function WorkingDirectoryBadge({
       if (dir) setHomeDir(dir)
     })
   }, [])
+
+  // Fetch git branch when working directory changes
+  React.useEffect(() => {
+    if (workingDirectory) {
+      window.electronAPI?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
+        setGitBranch(branch)
+      })
+    } else {
+      setGitBranch(null)
+    }
+  }, [workingDirectory])
 
   // Reset filter and focus input when popover opens
   React.useEffect(() => {
@@ -127,7 +129,7 @@ export function WorkingDirectoryBadge({
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
   const folderName = hasFolder
-    ? truncateFolderLabel(workingDirectory.split('/').pop() || 'Folder')
+    ? (workingDirectory.split('/').pop() || 'Folder')
     : t('input.workInFolder')
 
   // Show reset option when a folder is selected and it differs from session folder
@@ -141,9 +143,9 @@ export function WorkingDirectoryBadge({
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
-        <span>
+        <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
-            icon={<Icon_Folder className="h-4 w-4" strokeWidth={1.75} />}
+            icon={<Icon_Home className="h-4 w-4" />}
             label={folderName}
             isExpanded={isEmptySession}
             hasSelection={hasFolder}
@@ -154,6 +156,7 @@ export function WorkingDirectoryBadge({
                 <span className="flex flex-col gap-0.5">
                   <span className="font-medium">{t('input.workInFolder')}</span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
                 </span>
               ) : t('input.chooseWorkingDir')
             }

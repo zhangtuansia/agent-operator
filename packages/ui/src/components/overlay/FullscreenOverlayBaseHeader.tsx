@@ -3,18 +3,23 @@
  *
  * Builds a badge row from structured props (typeBadge, filePath, title, subtitle).
  * The file path badge has a dual-trigger menu:
- * - Left-click → Radix DropdownMenu with "Open" / "Reveal in Finder"
+ * - Left-click → Radix DropdownMenu with "Open" / "Reveal in {file manager}"
  * - Right-click → Radix ContextMenu with the same items
  *
  * Both menus share one internal items array, just wrapped differently.
- * onOpenFile and onRevealInFinder come from PlatformContext — no per-overlay callbacks.
+ * onOpenFileExternal and onRevealInFinder come from PlatformContext — no per-overlay callbacks.
  */
 
 import { useState, useCallback, type ReactNode } from 'react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Check, Copy, ExternalLink, FolderOpen, type LucideIcon } from 'lucide-react'
 import { PreviewHeader, PreviewHeaderBadge, type PreviewBadgeVariant } from '../ui/PreviewHeader'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from '../ui/StyledDropdown'
 import { usePlatform } from '../../context/PlatformContext'
 import { cn } from '../../lib/utils'
 
@@ -25,12 +30,21 @@ export interface OverlayTypeBadge {
   variant?: PreviewBadgeVariant
 }
 
+/** Translations for FullscreenOverlayBaseHeader UI strings */
+export interface FullscreenOverlayBaseHeaderTranslations {
+  close?: string
+  open?: string
+  revealInFinder?: string
+  copied?: string
+  copyToClipboard?: string
+}
+
 export interface FullscreenOverlayBaseHeaderProps {
   /** Close handler — shows X button in header */
   onClose: () => void
   /** Type badge — tool/format indicator */
   typeBadge?: OverlayTypeBadge
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title — displayed as a badge. Fallback when no file path. */
   title?: string
@@ -42,16 +56,8 @@ export interface FullscreenOverlayBaseHeaderProps {
   headerActions?: ReactNode
   /** When provided, renders a built-in copy button (matching close button style) */
   copyContent?: string
-  /** Optional localized strings for header/menu UI */
+  /** Translations for UI strings (optional, defaults to English) */
   translations?: FullscreenOverlayBaseHeaderTranslations
-}
-
-export interface FullscreenOverlayBaseHeaderTranslations {
-  open?: string
-  revealInFinder?: string
-  copyAll?: string
-  copied?: string
-  closeTitle?: string
 }
 
 /**
@@ -70,21 +76,20 @@ function displayPath(filePath: string): string {
 }
 
 // ============================================================================
-// Shared menu item styling — used by both DropdownMenu and ContextMenu
+// Shared context menu styling — matches StyledDropdown's popover-styled look
 // ============================================================================
 
-/** Common styles for menu content containers */
-const menuContentClasses = cn(
-  'z-[400] min-w-[160px] overflow-hidden rounded-lg p-1',
-  'bg-background shadow-lg border border-foreground/5',
+const contextMenuContentClasses = cn(
+  'popover-styled z-dropdown min-w-40 overflow-hidden p-1',
+  'w-fit font-sans whitespace-nowrap text-xs flex flex-col gap-0.5',
   'animate-in fade-in-0 zoom-in-95'
 )
 
-/** Common styles for menu items */
-const menuItemClasses = cn(
-  'flex items-center gap-2 px-3 py-1.5 text-[13px] font-sans rounded-md cursor-pointer outline-none',
-  'text-foreground/80 hover:bg-foreground/5 focus:bg-foreground/5',
-  'transition-colors'
+const contextMenuItemClasses = cn(
+  'relative flex cursor-default items-center gap-2 px-2 py-1.5 text-sm outline-hidden select-none',
+  '[&_svg]:pointer-events-none [&_svg]:shrink-0',
+  'pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]',
+  '[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0'
 )
 
 // ============================================================================
@@ -93,7 +98,6 @@ const menuItemClasses = cn(
 
 interface FilePathBadgeProps {
   filePath: string
-  translations: Required<FullscreenOverlayBaseHeaderTranslations>
 }
 
 /**
@@ -101,52 +105,54 @@ interface FilePathBadgeProps {
  *
  * Implementation: Wraps a Radix DropdownMenu (left-click trigger) inside a
  * Radix ContextMenu (right-click trigger). Both render the same menu items.
- * Uses onOpenFile + onRevealInFinder from PlatformContext.
+ * Uses onOpenFileExternal (not onOpenFile) from PlatformContext — when already
+ * viewing a file in an overlay, "Open" should launch the system editor directly,
+ * not re-trigger the in-app preview interceptor.
  */
-function FilePathBadge({ filePath, translations }: FilePathBadgeProps) {
-  const { onOpenFile, onRevealInFinder } = usePlatform()
+function FilePathBadge({ filePath }: FilePathBadgeProps) {
+  const { onOpenFileExternal, onRevealInFinder, fileManagerName } = usePlatform()
+  const revealLabel = `Reveal in ${fileManagerName || 'Finder'}`
 
   const handleOpen = useCallback(() => {
-    onOpenFile?.(filePath)
-  }, [onOpenFile, filePath])
+    onOpenFileExternal?.(filePath)
+  }, [onOpenFileExternal, filePath])
 
   const handleReveal = useCallback(() => {
     onRevealInFinder?.(filePath)
   }, [onRevealInFinder, filePath])
 
   // Shared menu items — same content rendered by both dropdown and context menu
-  const hasMenuItems = !!onOpenFile || !!onRevealInFinder
+  const hasMenuItems = !!onOpenFileExternal || !!onRevealInFinder
 
-  // Menu items rendered inside both DropdownMenu.Content and ContextMenu.Content
   const dropdownItems = (
     <>
-      {onOpenFile && (
-        <DropdownMenu.Item className={menuItemClasses} onSelect={handleOpen}>
-          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-          {translations.open}
-        </DropdownMenu.Item>
+      {onOpenFileExternal && (
+        <StyledDropdownMenuItem onSelect={handleOpen}>
+          <ExternalLink />
+          Open
+        </StyledDropdownMenuItem>
       )}
       {onRevealInFinder && (
-        <DropdownMenu.Item className={menuItemClasses} onSelect={handleReveal}>
-          <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-          {translations.revealInFinder}
-        </DropdownMenu.Item>
+        <StyledDropdownMenuItem onSelect={handleReveal}>
+          <FolderOpen />
+          {revealLabel}
+        </StyledDropdownMenuItem>
       )}
     </>
   )
 
   const contextItems = (
     <>
-      {onOpenFile && (
-        <ContextMenu.Item className={menuItemClasses} onSelect={handleOpen}>
-          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-          {translations.open}
+      {onOpenFileExternal && (
+        <ContextMenu.Item className={contextMenuItemClasses} onSelect={handleOpen}>
+          <ExternalLink />
+          Open
         </ContextMenu.Item>
       )}
       {onRevealInFinder && (
-        <ContextMenu.Item className={menuItemClasses} onSelect={handleReveal}>
-          <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-          {translations.revealInFinder}
+        <ContextMenu.Item className={contextMenuItemClasses} onSelect={handleReveal}>
+          <FolderOpen />
+          {revealLabel}
         </ContextMenu.Item>
       )}
     </>
@@ -163,8 +169,8 @@ function FilePathBadge({ filePath, translations }: FilePathBadgeProps) {
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             {/* Badge that responds to left-click (dropdown) and right-click (context menu) */}
             <button
               className={cn(
@@ -177,16 +183,14 @@ function FilePathBadge({ filePath, translations }: FilePathBadgeProps) {
             >
               <span className="truncate group-hover:underline">{display}</span>
             </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className={menuContentClasses} sideOffset={6} align="center">
-              {dropdownItems}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent sideOffset={6} align="center" style={{ zIndex: 400 }}>
+            {dropdownItems}
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className={menuContentClasses}>
+        <ContextMenu.Content className={contextMenuContentClasses}>
           {contextItems}
         </ContextMenu.Content>
       </ContextMenu.Portal>
@@ -207,15 +211,7 @@ export function FullscreenOverlayBaseHeader({
   subtitle,
   headerActions,
   copyContent,
-  translations,
 }: FullscreenOverlayBaseHeaderProps) {
-  const t: Required<FullscreenOverlayBaseHeaderTranslations> = {
-    open: translations?.open ?? 'Open',
-    revealInFinder: translations?.revealInFinder ?? 'Reveal in Finder',
-    copyAll: translations?.copyAll ?? 'Copy all',
-    copied: translations?.copied ?? 'Copied!',
-    closeTitle: translations?.closeTitle ?? 'Close (Esc)',
-  }
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -240,7 +236,7 @@ export function FullscreenOverlayBaseHeader({
             'opacity-70 hover:opacity-100 transition-opacity',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
           )}
-          title={copied ? t.copied : t.copyAll}
+          title={copied ? 'Copied!' : 'Copy all'}
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
@@ -250,7 +246,7 @@ export function FullscreenOverlayBaseHeader({
   )
 
   return (
-    <PreviewHeader onClose={onClose} height={48} rightActions={rightActions} closeTitle={t.closeTitle}>
+    <PreviewHeader onClose={onClose} height={48} rightActions={rightActions}>
       {typeBadge && (
         <PreviewHeaderBadge
           icon={typeBadge.icon}
@@ -259,7 +255,7 @@ export function FullscreenOverlayBaseHeader({
         />
       )}
       {filePath ? (
-        <FilePathBadge filePath={filePath} translations={t} />
+        <FilePathBadge filePath={filePath} />
       ) : title ? (
         <PreviewHeaderBadge label={title} onClick={onTitleClick} shrinkable />
       ) : null}

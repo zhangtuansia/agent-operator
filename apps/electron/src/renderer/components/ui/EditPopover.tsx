@@ -73,13 +73,14 @@ export type EditContextKey =
   | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
   | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
-  | 'add-scheduled-task'
+  | 'add-automation'
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
   | 'add-label'
   | 'edit-views'
   | 'edit-tool-icons'
+  | 'automation-config'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -343,22 +344,21 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     overridePlaceholder: 'What should I learn to do?',
   }),
 
-  'add-scheduled-task': (location) => ({
+  'add-automation': (location) => ({
     context: {
-      label: 'Add Scheduled Task',
-      filePath: `${location}/scheduled-tasks/config.json`,
+      label: 'Add Automation',
+      filePath: `${location}/automations.json`,
       context:
-        'The user wants to create a scheduled task via conversation. ' +
-        'Use the create_scheduled_task tool to create it. Do not edit files manually for this workflow. ' +
-        'Ask brief clarifying questions only when required fields are missing (task intent, schedule, timing). ' +
-        'When schedule.type is "at", use local wall-clock ISO datetime format (YYYY-MM-DDTHH:mm:ss) without trailing Z. ' +
-        'Write the task prompt as a complete standalone instruction because runs execute in a separate session with no context from this chat. ' +
-        'After successful creation, summarize the created task name and schedule clearly.',
+        'The user wants to create an automation. ' +
+        'Read ~/.cowork/docs/automations.md FIRST for the full schema and examples. ' +
+        'Automations are defined in automations.json at the workspace root. ' +
+        'Ask brief clarifying questions only when required fields are missing (trigger event, schedule/matcher, prompt). ' +
+        'For scheduled automations, use SchedulerTick event with 5-field cron expressions (minute hour day month weekday). ' +
+        'Write the prompt as a complete standalone instruction because runs execute in a separate session with no context from this chat. ' +
+        'After editing, call config_validate with target "automations" to verify the changes.',
     },
     example: 'Create a daily 9:00 AM technology news briefing',
-    overridePlaceholder: 'What task should I schedule?',
-    systemPromptPreset: 'mini',
-    inlineExecution: true,
+    overridePlaceholder: 'What automation should I create?',
   }),
 
   // Status configuration context
@@ -478,6 +478,27 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     systemPromptPreset: 'mini',
     inlineExecution: true,
   }),
+
+  'automation-config': (location) => ({
+    context: {
+      label: 'Automation Configuration',
+      filePath: `${location}/automations.json`,
+      context:
+        'The user wants to add or edit an automation in automations.json. ' +
+        'Automations are event-driven rules that execute prompt actions. ' +
+        'The file has { automations: { EventName: [{ id, name, matcher, cron, timezone, permissionMode, labels, enabled, actions }] } }. ' +
+        'Events include: SchedulerTick (cron-based), LabelAdd, LabelRemove, FlagChange, SessionStatusChange (app events), ' +
+        'and PreToolUse, PostToolUse, SessionStart, SessionEnd, etc. (agent events). ' +
+        'Actions are currently prompt-only: { type: "prompt", prompt: "..." }. ' +
+        'For SchedulerTick, use a "cron" field (5-field cron) instead of "matcher". ' +
+        'Use @mentions in prompts to reference sources/skills (e.g., @my-source). ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a daily 9 AM automation to summarize yesterday\'s activity',
+    overridePlaceholder: 'What automation would you like to create?',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
+  }),
 }
 
 /**
@@ -516,13 +537,14 @@ const EDIT_CONFIG_TRANSLATIONS: Record<EditContextKey, { labelKey: string; examp
   'add-source-mcp': { labelKey: 'editPopover.addMcp', exampleKey: 'editPopover.exampleAddMcp', placeholderKey: 'editPopover.placeholderAddMcp' },
   'add-source-local': { labelKey: 'editPopover.addLocalFolder', exampleKey: 'editPopover.exampleAddLocal', placeholderKey: 'editPopover.placeholderAddLocal' },
   'add-skill': { labelKey: 'editPopover.addSkill', exampleKey: 'editPopover.exampleAddSkill', placeholderKey: 'editPopover.placeholderAddSkill' },
-  'add-scheduled-task': { labelKey: 'editPopover.addScheduledTask', exampleKey: 'editPopover.exampleAddScheduledTask', placeholderKey: 'editPopover.placeholderAddScheduledTask' },
+  'add-automation': { labelKey: 'editPopover.addAutomation', exampleKey: 'editPopover.exampleAddAutomation', placeholderKey: 'editPopover.placeholderAddAutomation' },
   'edit-statuses': { labelKey: 'editPopover.statusConfiguration', exampleKey: 'editPopover.exampleStatus' },
   'edit-labels': { labelKey: 'editPopover.labelConfiguration', exampleKey: 'editPopover.exampleLabel' },
   'edit-auto-rules': { labelKey: 'editPopover.autoApplyRules', exampleKey: 'editPopover.exampleAutoRule' },
   'add-label': { labelKey: 'editPopover.addLabel', exampleKey: 'editPopover.exampleAddLabel', placeholderKey: 'editPopover.placeholderAddLabel' },
   'edit-views': { labelKey: 'editPopover.viewsConfiguration', exampleKey: 'editPopover.exampleViews' },
   'edit-tool-icons': { labelKey: 'editPopover.toolIcons', exampleKey: 'editPopover.exampleToolIcon' },
+  'automation-config': { labelKey: 'editPopover.automationConfig', exampleKey: 'editPopover.exampleAutomation', placeholderKey: 'editPopover.placeholderAutomation' },
 }
 
 /**

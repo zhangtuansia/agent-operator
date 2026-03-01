@@ -37,6 +37,13 @@ export interface SkillMetadata {
 export type SkillSource = 'global' | 'workspace' | 'project';
 
 /**
+ * Canonical plugin name for skills.
+ * Both workspace and global skills share the same namespace under
+ * `.agents`, so skills from either tier resolve to `.agents:skillSlug`.
+ */
+export const AGENTS_PLUGIN_NAME = '.agents';
+
+/**
  * A loaded skill with parsed content
  */
 export interface LoadedSkill {

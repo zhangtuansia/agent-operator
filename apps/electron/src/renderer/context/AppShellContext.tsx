@@ -10,6 +10,7 @@ import * as React from 'react'
 import { createContext, useContext, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
 import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
+import type { ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import type {
   Session,
   Workspace,
@@ -24,7 +25,7 @@ import type {
   NewChatActionParams,
   LlmConnectionWithStatus,
 } from '../../shared/types'
-import type { TodoState as TodoStateConfig } from '@/config/todo-states'
+import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
@@ -36,12 +37,15 @@ export interface AppShellContextType {
   // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
   activeWorkspaceId: string | null
-  /** All LLM connections with runtime auth status */
+  /** Workspace slug for SDK skill qualification (derived from workspace path) */
+  activeWorkspaceSlug: string | null
+  /** All LLM connections with authentication status */
   llmConnections: LlmConnectionWithStatus[]
-  /** Workspace-level default LLM connection slug */
+  /** Default LLM connection slug for the current workspace */
   workspaceDefaultLlmConnection?: string
-  /** Refresh LLM connections and workspace default */
+  /** Refresh LLM connections from config */
   refreshLlmConnections: () => Promise<void>
+  /** Current model identifier (agent-operator specific) */
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
   pendingCredentials: Map<string, CredentialRequest[]>
@@ -57,14 +61,8 @@ export interface AppShellContextType {
   onSessionLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
-  /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
-  todoStates?: TodoStateConfig[]
-  /** Active session-list search query (when search mode is open) */
-  sessionListSearchQuery?: string
-  /** Whether session-list search mode is active */
-  isSearchModeActive?: boolean
-  /** Callback with chat-match info for search result syncing */
-  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+  /** Dynamic session statuses from workspace config (provided by AppShell, defaults to empty) */
+  sessionStatuses?: SessionStatusConfig[]
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
@@ -72,13 +70,17 @@ export interface AppShellContextType {
 
   // Session callbacks
   onCreateSession: (workspaceId: string, options?: import('../../shared/types').CreateSessionOptions) => Promise<Session>
-  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], badges?: import('@agent-operator/core').ContentBadge[]) => void
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void
   onUnflagSession: (sessionId: string) => void
+  onArchiveSession: (sessionId: string) => void
+  onUnarchiveSession: (sessionId: string) => void
   onMarkSessionRead: (sessionId: string) => void
   onMarkSessionUnread: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoState) => void
+  /** Track which session user is viewing (for unread state machine) */
+  onSetActiveViewingSession: (sessionId: string) => void
+  onSessionStatusChange: (sessionId: string, state: TodoState) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 
   // Permission handling
@@ -100,14 +102,14 @@ export interface AppShellContextType {
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
 
-  // Model
+  // Model (agent-operator specific)
   onModelChange: (model: string, connection?: string) => void
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
   onRefreshWorkspaces?: () => void
 
-  // Sessions
+  // Sessions (agent-operator specific)
   refreshSessions?: () => Promise<void>
 
   // App actions
@@ -133,6 +135,32 @@ export interface AppShellContextType {
 
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
+
+  // Session list search state (for ChatDisplay highlighting)
+  /** Current search query from session list - used to highlight matches in ChatDisplay */
+  sessionListSearchQuery?: string
+  /** Whether search mode is active (prevents focus stealing to chat input even with empty query) */
+  isSearchModeActive?: boolean
+  /** Callback to update session list search query */
+  setSessionListSearchQuery?: (query: string) => void
+  /** Ref to ChatDisplay for navigation between matches */
+  chatDisplayRef?: React.RefObject<ChatDisplayHandle>
+  /** Callback when ChatDisplay match info changes (for immediate UI updates) */
+  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+
+  // Automation management
+  /** Test an automation by ID -- executes its actions and returns results */
+  onTestAutomation?: (automationId: string) => void
+  /** Toggle an automation's enabled state by ID */
+  onToggleAutomation?: (automationId: string) => void
+  /** Duplicate an automation by ID -- clones config with " Copy" suffix */
+  onDuplicateAutomation?: (automationId: string) => void
+  /** Delete an automation by ID -- removes from automations config */
+  onDeleteAutomation?: (automationId: string) => void
+  /** Map of automationId -> last test result */
+  automationTestResults?: Record<string, import('../components/automations/types').TestResult>
+  /** Fetch execution history for an automation by ID */
+  getAutomationHistory?: (automationId: string) => Promise<import('../components/automations/types').ExecutionEntry[]>
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)
@@ -147,7 +175,7 @@ export function AppShellProvider({
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>
 }
 
-/** Returns context or null if not wrapped (for optional playground use) */
+/** Returns context or null if outside provider (safe for optional consumers like playground) */
 export function useOptionalAppShellContext(): AppShellContextType | null {
   return useContext(AppShellContext)
 }

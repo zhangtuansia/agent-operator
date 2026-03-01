@@ -9,58 +9,50 @@
  * primitives, allowing the same component to work in both scenarios.
  *
  * Provides consistent session actions:
+ * - Share / Shared submenu
  * - Status submenu
+ * - Labels submenu
  * - Flag/Unflag
+ * - Archive/Unarchive
  * - Mark as Unread
  * - Rename
  * - Open in New Window
- * - View in Finder
+ * - Show in file manager
  * - Delete
  */
 
 import * as React from 'react'
 import {
+  Archive,
+  ArchiveRestore,
   Trash2,
   Pencil,
   Flag,
   FlagOff,
   MailOpen,
   FolderOpen,
+  Copy,
   AppWindow,
   RefreshCw,
   Tag,
-  Copy,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn, isHexColor } from '@/lib/utils'
 import { useMenuComponents } from '@/components/ui/menu-context'
-import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
-import type { TodoState } from '@/config/todo-states'
-import { useLanguage } from '@/context/LanguageContext'
+import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
+import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import { extractLabelId } from '@agent-operator/shared/labels'
-import { LabelMenuItems } from './SessionMenuParts'
-
-// Built-in status IDs that have translations
-const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
+import { getFileManagerName } from '@/lib/platform'
+import type { SessionMeta } from '@/atoms/sessions'
+import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface SessionMenuProps {
-  /** Session ID */
-  sessionId: string
-  /** Session name for rename dialog */
-  sessionName: string
-  /** Whether session is flagged */
-  isFlagged: boolean
-  /** Whether session has messages */
-  hasMessages: boolean
-  /** Whether session has unread messages */
-  hasUnreadMessages: boolean
-  /** Current todo state */
-  currentTodoState: TodoStateId
-  /** Available todo states */
-  todoStates: TodoState[]
-  /** Current labels applied to this session (e.g. ["bug", "priority::3"]) */
-  sessionLabels?: string[]
+  /** Session data — display state is derived from this */
+  item: SessionMeta
+  /** Available session statuses */
+  sessionStatuses: SessionStatus[]
   /** All available label configs (tree structure) for the labels submenu */
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
@@ -69,8 +61,10 @@ export interface SessionMenuProps {
   onRename: () => void
   onFlag: () => void
   onUnflag: () => void
+  onArchive: () => void
+  onUnarchive: () => void
   onMarkUnread: () => void
-  onTodoStateChange: (state: TodoStateId) => void
+  onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
   onDelete: () => void
 }
@@ -80,25 +74,30 @@ export interface SessionMenuProps {
  * This is the content only, not wrapped in a DropdownMenu
  */
 export function SessionMenu({
-  sessionId,
-  sessionName,
-  isFlagged,
-  hasMessages,
-  hasUnreadMessages,
-  currentTodoState,
-  todoStates,
-  sessionLabels = [],
+  item,
+  sessionStatuses,
   labels = [],
   onLabelsChange,
   onRename,
   onFlag,
   onUnflag,
+  onArchive,
+  onUnarchive,
   onMarkUnread,
-  onTodoStateChange,
+  onSessionStatusChange,
   onOpenInNewWindow,
   onDelete,
 }: SessionMenuProps) {
   const { t } = useLanguage()
+
+  // Derive display state from item
+  const sessionId = item.id
+  const isFlagged = item.isFlagged ?? false
+  const isArchived = item.isArchived ?? false
+  const currentSessionStatus = getSessionStatus(item)
+  const sessionLabels = item.labels ?? []
+  const _hasMessages = hasMessagesMeta(item)
+  const _hasUnread = hasUnreadMeta(item)
 
   const handleShowInFinder = () => {
     window.electronAPI.sessionCommand(sessionId, { type: 'showInFinder' })
@@ -121,7 +120,7 @@ export function SessionMenu({
     }
   }
 
-  // Set of currently applied label IDs (extracted from entries like "priority::3" -> "priority")
+  // Set of currently applied label IDs (extracted from entries like "priority::3" → "priority")
   const appliedLabelIds = React.useMemo(
     () => new Set(sessionLabels.map(extractLabelId)),
     [sessionLabels]
@@ -132,9 +131,11 @@ export function SessionMenu({
     if (!onLabelsChange) return
     const isApplied = appliedLabelIds.has(labelId)
     if (isApplied) {
+      // Remove all entries matching this label ID (handles valued labels too)
       const updated = sessionLabels.filter(entry => extractLabelId(entry) !== labelId)
       onLabelsChange(updated)
     } else {
+      // Add as a boolean label (just the ID, no value)
       onLabelsChange([...sessionLabels, labelId])
     }
   }, [sessionLabels, appliedLabelIds, onLabelsChange])
@@ -144,73 +145,30 @@ export function SessionMenu({
 
   return (
     <>
-      {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
+      {/* Status submenu */}
       <Sub>
-        <SubTrigger>
-          <span
-            className={cn(
-              'shrink-0 flex items-center justify-center -mt-px h-3.5 w-3.5',
-              '[&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full',
-              !isHexColor(getStateColor(currentTodoState, todoStates)) &&
-                (getStateColor(currentTodoState, todoStates) || 'text-muted-foreground')
-            )}
-            style={
-              isHexColor(getStateColor(currentTodoState, todoStates))
-                ? { color: getStateColor(currentTodoState, todoStates) }
-                : undefined
-            }
-          >
-            {getStateIcon(currentTodoState, todoStates)}
+        <SubTrigger className="pr-2">
+          <span style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}>
+            {(() => {
+              const icon = getStateIcon(currentSessionStatus, sessionStatuses)
+              return React.isValidElement(icon)
+                ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
+                : icon
+            })()}
           </span>
           <span className="flex-1">{t('sessionMenu.status')}</span>
         </SubTrigger>
         <SubContent>
-          {todoStates.map((state) => {
-            // Only apply color if icon is colorable (uses currentColor)
-            const applyColor = state.iconColorable
-            return (
-              <MenuItem
-                key={state.id}
-                onClick={() => onTodoStateChange(state.id)}
-                className={currentTodoState === state.id ? 'bg-foreground/5' : ''}
-              >
-                <span
-                  className={cn(
-                    'shrink-0 flex items-center justify-center -mt-px h-3.5 w-3.5',
-                    '[&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full',
-                  )}
-                  style={applyColor && state.resolvedColor ? { color: state.resolvedColor } : undefined}
-                >
-                  {state.icon}
-                </span>
-                <span className="flex-1">
-                  {(BUILT_IN_STATUS_IDS as readonly string[]).includes(state.id)
-                    ? t(`statusLabels.${state.id}`)
-                    : state.label}
-                </span>
-              </MenuItem>
-            )
-          })}
-
-          {/* Separator before Flag/Unflag */}
-          <Separator />
-
-          {/* Flag/Unflag at the bottom of status menu */}
-          {!isFlagged ? (
-            <MenuItem onClick={onFlag}>
-              <Flag className="h-3.5 w-3.5 text-info" />
-              <span className="flex-1">{t('sessionMenu.flag')}</span>
-            </MenuItem>
-          ) : (
-            <MenuItem onClick={onUnflag}>
-              <FlagOff className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('sessionMenu.unflag')}</span>
-            </MenuItem>
-          )}
+          <StatusMenuItems
+            sessionStatuses={sessionStatuses}
+            activeStateId={currentSessionStatus}
+            onSelect={onSessionStatusChange}
+            menu={{ MenuItem }}
+          />
         </SubContent>
       </Sub>
 
-      {/* Labels submenu */}
+      {/* Labels submenu - hierarchical label tree with nested sub-menus and toggle checkmarks */}
       {labels.length > 0 && (
         <Sub>
           <SubTrigger className="pr-2">
@@ -233,8 +191,34 @@ export function SessionMenu({
         </Sub>
       )}
 
+      {/* Flag/Unflag */}
+      {!isFlagged ? (
+        <MenuItem onClick={onFlag}>
+          <Flag className="h-3.5 w-3.5 text-info" />
+          <span className="flex-1">{t('sessionMenu.flag')}</span>
+        </MenuItem>
+      ) : (
+        <MenuItem onClick={onUnflag}>
+          <FlagOff className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('sessionMenu.unflag')}</span>
+        </MenuItem>
+      )}
+
+      {/* Archive/Unarchive */}
+      {!isArchived ? (
+        <MenuItem onClick={onArchive}>
+          <Archive className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('sessionMenu.archive') || 'Archive'}</span>
+        </MenuItem>
+      ) : (
+        <MenuItem onClick={onUnarchive}>
+          <ArchiveRestore className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('sessionMenu.unarchive') || 'Unarchive'}</span>
+        </MenuItem>
+      )}
+
       {/* Mark as Unread - only show if session has been read */}
-      {!hasUnreadMessages && hasMessages && (
+      {!_hasUnread && _hasMessages && (
         <MenuItem onClick={onMarkUnread}>
           <MailOpen className="h-3.5 w-3.5" />
           <span className="flex-1">{t('sessionMenu.markAsUnread')}</span>
@@ -263,10 +247,10 @@ export function SessionMenu({
         <span className="flex-1">{t('sessionMenu.openInNewWindow')}</span>
       </MenuItem>
 
-      {/* View in Finder */}
+      {/* Show in file manager */}
       <MenuItem onClick={handleShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">{t('sessionMenu.viewInFinder')}</span>
+        <span className="flex-1">{t('sessionMenu.viewInFinder') || `Show in ${getFileManagerName()}`}</span>
       </MenuItem>
 
       {/* Copy Path */}

@@ -41,10 +41,8 @@ const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 400]
 function parseSvgDimensions(svgString: string): { width: number; height: number } | null {
   const widthMatch = svgString.match(/width="(\d+(?:\.\d+)?)"/)
   const heightMatch = svgString.match(/height="(\d+(?:\.\d+)?)"/)
-  const width = widthMatch?.[1]
-  const height = heightMatch?.[1]
-  if (!width || !height) return null
-  return { width: parseFloat(width), height: parseFloat(height) }
+  if (!widthMatch?.[1] || !heightMatch?.[1]) return null
+  return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) }
 }
 
 // ── Inline zoom dropdown ─────────────────────────────────────────────────

@@ -4,26 +4,21 @@
  * Global app-level settings that apply across all workspaces.
  *
  * Settings:
- * - Appearance (Theme, Font)
  * - Language
  * - Notifications
+ * - System Permissions (macOS)
  * - About
  */
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import type { ColumnDef } from '@tanstack/react-table'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
-import { useTheme } from '@/context/ThemeContext'
 import { routes } from '@/lib/navigate'
-import { Monitor, Sun, Moon } from 'lucide-react'
 import { Spinner } from '@agent-operator/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { ToolIconMapping } from '@agent-operator/shared/ipc'
 
 import {
   SettingsSection,
@@ -31,17 +26,11 @@ import {
   SettingsRow,
   SettingsToggle,
   SettingsSegmentedControl,
-  SettingsMenuSelect,
   SystemPermissionsSection,
 } from '@/components/settings'
-import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
-import { Info_Badge } from '@/components/info/Info_Badge'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
-import { useAppShellContext } from '@/context/AppShellContext'
 import { useLanguage } from '@/context/LanguageContext'
 import { LANGUAGES, type Language } from '@/i18n'
-import type { PresetTheme } from '@config/theme'
-import { FONTS, getFontLabel, SYSTEM_FONT } from '@/config/fonts'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -49,75 +38,11 @@ export const meta: DetailsPageMeta = {
 }
 
 // ============================================
-// Tool Icons Table
-// ============================================
-
-/**
- * Column definitions for the tool icon mappings table.
- * Shows a preview icon, tool name, and the CLI commands that trigger it.
- */
-const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
-  {
-    accessorKey: 'iconDataUrl',
-    header: () => <span className="p-1.5 pl-2.5">Icon</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <img
-          src={row.original.iconDataUrl}
-          alt={row.original.displayName}
-          className="w-5 h-5 object-contain"
-        />
-      </div>
-    ),
-    size: 60,
-    enableSorting: false,
-  },
-  {
-    accessorKey: 'displayName',
-    header: ({ column }) => <SortableHeader column={column} title="Tool" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 font-medium">
-        {row.original.displayName}
-      </div>
-    ),
-    size: 150,
-  },
-  {
-    accessorKey: 'commands',
-    header: () => <span className="p-1.5 pl-2.5">Commands</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 flex flex-wrap gap-1">
-        {row.original.commands.map(cmd => (
-          <Info_Badge key={cmd} color="muted" className="font-mono">
-            {cmd}
-          </Info_Badge>
-        ))}
-      </div>
-    ),
-    meta: { fillWidth: true },
-    enableSorting: false,
-  },
-]
-
-// ============================================
 // Main Component
 // ============================================
 
 export default function AppSettingsPage() {
-  const { mode, setMode, colorTheme, setColorTheme, setPreviewColorTheme, font, setFont } = useTheme()
   const { language, setLanguage, t } = useLanguage()
-
-  // Get workspace ID from context for loading preset themes
-  const { activeWorkspaceId } = useAppShellContext()
-
-  // Preset themes state
-  const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
-
-  // Tool icon mappings loaded from main process
-  const [toolIcons, setToolIcons] = useState<ToolIconMapping[]>([])
-
-  // Resolved path to tool-icons.json (needed for EditPopover and "Edit File" action)
-  const [toolIconsJsonPath, setToolIconsJsonPath] = useState<string | null>(null)
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -149,43 +74,6 @@ export default function AppSettingsPage() {
     loadSettings()
   }, [])
 
-  // Load preset themes when workspace changes (themes are workspace-scoped)
-  // Load preset themes (app-level, no workspace dependency)
-  useEffect(() => {
-    const loadThemes = async () => {
-      if (!window.electronAPI) {
-        setPresetThemes([])
-        return
-      }
-      try {
-        const themes = await window.electronAPI.loadPresetThemes()
-        setPresetThemes(themes)
-      } catch (error) {
-        console.error('Failed to load preset themes:', error)
-        setPresetThemes([])
-      }
-    }
-    loadThemes()
-  }, [])
-
-  // Load tool icon mappings and resolve the config file path on mount
-  useEffect(() => {
-    const load = async () => {
-      if (!window.electronAPI) return
-      try {
-        const [mappings, homeDir] = await Promise.all([
-          window.electronAPI.getToolIconMappings(),
-          window.electronAPI.getHomeDir(),
-        ])
-        setToolIcons(mappings)
-        setToolIconsJsonPath(`${homeDir}/.cowork/tool-icons/tool-icons.json`)
-      } catch (error) {
-        console.error('Failed to load tool icon mappings:', error)
-      }
-    }
-    load()
-  }, [])
-
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)
     await window.electronAPI.setNotificationsEnabled(enabled)
@@ -198,51 +86,6 @@ export default function AppSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
-            {/* Appearance */}
-            <SettingsSection title={t('appSettings.appearance')}>
-              <SettingsCard>
-                <SettingsRow label={t('appSettings.mode')}>
-                  <SettingsSegmentedControl
-                    value={mode}
-                    onValueChange={setMode}
-                    options={[
-                      { value: 'system', label: t('appSettings.modeSystem'), icon: <Monitor className="w-4 h-4" /> },
-                      { value: 'light', label: t('appSettings.modeLight'), icon: <Sun className="w-4 h-4" /> },
-                      { value: 'dark', label: t('appSettings.modeDark'), icon: <Moon className="w-4 h-4" /> },
-                    ]}
-                  />
-                </SettingsRow>
-                <SettingsRow label={t('appSettings.colorTheme')}>
-                  <SettingsMenuSelect
-                    value={colorTheme}
-                    onValueChange={setColorTheme}
-                    options={[
-                      { value: 'default', label: t('appSettings.colorThemeDefault') },
-                      ...presetThemes
-                        .filter(theme => theme.id !== 'default')
-                        .map(theme => ({
-                          value: theme.id,
-                          label: theme.theme.name || theme.id,
-                        })),
-                    ]}
-                  />
-                </SettingsRow>
-                <SettingsRow label={t('appSettings.font')}>
-                  <SettingsMenuSelect
-                    value={font}
-                    onValueChange={setFont}
-                    options={[
-                      { value: SYSTEM_FONT.id, label: t('appSettings.modeSystem') },
-                      ...FONTS.map(f => ({
-                        value: f.id,
-                        label: getFontLabel(f),
-                      })),
-                    ]}
-                  />
-                </SettingsRow>
-              </SettingsCard>
-            </SettingsSection>
-
             {/* Language */}
             <SettingsSection title={t('appSettings.language')} description={t('appSettings.languageDescription')}>
               <SettingsCard>
@@ -267,34 +110,6 @@ export default function AppSettingsPage() {
                   description={t('appSettings.desktopNotificationsDesc')}
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
-                />
-              </SettingsCard>
-            </SettingsSection>
-
-            {/* Tool Icons — shows the command → icon mapping used in turn cards */}
-            <SettingsSection
-              title={t('appSettings.toolIcons')}
-              description={t('appSettings.toolIconsDescription')}
-              action={
-                toolIconsJsonPath ? (
-                  <EditPopover
-                    trigger={<EditButton />}
-                    {...getEditConfig('edit-tool-icons', toolIconsJsonPath)}
-                    secondaryAction={{
-                      label: t('appSettings.editFile'),
-                      filePath: toolIconsJsonPath,
-                    }}
-                  />
-                ) : undefined
-              }
-            >
-              <SettingsCard>
-                <Info_DataTable
-                  columns={toolIconColumns}
-                  data={toolIcons}
-                  searchable={{ placeholder: t('appSettings.searchTools') }}
-                  maxHeight={480}
-                  emptyContent={t('appSettings.noToolIconMappings')}
                 />
               </SettingsCard>
             </SettingsSection>

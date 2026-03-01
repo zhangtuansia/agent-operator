@@ -39,3 +39,10 @@ export const PATH_SEP = isWindows ? '\\' : '/'
 export function getPathBasename(path: string): string {
   return path.split(PATH_SEP).pop() || ''
 }
+
+/** Returns the OS-specific file manager name (Finder, Explorer, Files) */
+export function getFileManagerName(): string {
+  if (isMac) return 'Finder'
+  if (isWindows) return 'Explorer'
+  return 'Files'
+}

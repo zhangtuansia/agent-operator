@@ -74,9 +74,9 @@
     "./tools": "./src/tools/index.ts",
     "./statuses": "./src/statuses/index.ts",
     "./skills": "./src/skills/index.ts",
+    "./skills/types": "./src/skills/types.ts",
     "./scheduled-tasks": "./src/scheduled-tasks/index.ts",
-    "./scheduled-tasks/storage": "./src/scheduled-tasks/storage.ts",
-    "./scheduled-tasks/crud": "./src/scheduled-tasks/crud.ts",
+    "./automations": "./src/automations/index.ts",
     "./im": "./src/im/index.ts"
   },
   "dependencies": {

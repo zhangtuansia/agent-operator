@@ -32,6 +32,7 @@ import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
 import { Info_Badge } from '@/components/info/Info_Badge'
 import type { PresetTheme } from '@config/theme'
+import { FONTS, getFontLabel, SYSTEM_FONT } from '@/config/fonts'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -94,8 +95,8 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
 // ============================================
 
 export default function AppearanceSettingsPage() {
-  const { mode, setMode, colorTheme, setColorTheme, font, setFont } = useTheme()
-  const { workspaces } = useAppShellContext()
+  const { mode, setMode, colorTheme, setColorTheme, font, setFont, setWorkspaceColorTheme } = useTheme()
+  const { workspaces, activeWorkspaceId } = useAppShellContext()
   const { t } = useLanguage()
 
   // Fetch workspace icons as data URLs (file:// URLs don't work in renderer)
@@ -189,16 +190,22 @@ export default function AppearanceSettingsPage() {
       // 'default' means inherit from app default (null in storage)
       const themeId = value === 'default' ? null : value
 
-      // Persist workspace-specific override
-      await window.electronAPI?.setWorkspaceColorTheme?.(workspaceId, themeId)
-
       // Update local state for UI
       setWorkspaceThemes(prev => ({
         ...prev,
         [workspaceId]: themeId ?? undefined
       }))
+
+      // If changing the active workspace, apply live via ThemeContext
+      // (which also persists and broadcasts to other windows)
+      if (workspaceId === activeWorkspaceId) {
+        setWorkspaceColorTheme(themeId)
+      } else {
+        // For non-active workspaces, just persist via IPC
+        await window.electronAPI?.setWorkspaceColorTheme?.(workspaceId, themeId)
+      }
     },
-    []
+    [activeWorkspaceId, setWorkspaceColorTheme]
   )
 
   // Theme options for dropdowns
@@ -252,12 +259,15 @@ export default function AppearanceSettingsPage() {
                     />
                   </SettingsRow>
                   <SettingsRow label={t('appSettings.font')}>
-                    <SettingsSegmentedControl
+                    <SettingsMenuSelect
                       value={font}
                       onValueChange={setFont}
                       options={[
-                        { value: 'inter', label: 'Inter' },
-                        { value: 'system', label: 'System' },
+                        { value: SYSTEM_FONT.id, label: t('appSettings.modeSystem') },
+                        ...FONTS.map(f => ({
+                          value: f.id,
+                          label: getFontLabel(f),
+                        })),
                       ]}
                     />
                   </SettingsRow>

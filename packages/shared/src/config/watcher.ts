@@ -119,6 +119,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json or views.json changes */
   onLabelsChange?: (workspaceId: string) => void;
 
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -418,6 +422,12 @@ export class ConfigWatcher {
     // Views changes: views.json (top-level file)
     if (relativePath === 'views.json') {
       this.debounce('views-config', () => this.handleLabelsChange());
+      return;
+    }
+
+    // Automations config: automations.json (top-level file)
+    if (relativePath === 'automations.json') {
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
       return;
     }
   }
@@ -827,6 +837,15 @@ export class ConfigWatcher {
   private handleLabelsChange(): void {
     debug('[ConfigWatcher] Labels/Views config changed:', this.workspaceId);
     this.callbacks.onLabelsChange?.(this.workspaceId);
+  }
+
+  /**
+   * Handle automations.json change.
+   * Notifies UI to reload automation configuration.
+   */
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

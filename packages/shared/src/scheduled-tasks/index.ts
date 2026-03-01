@@ -1,13 +1,8 @@
 /**
- * Scheduled Tasks Module
+ * Scheduler Service
  *
- * Workspace-scoped scheduled task management.
- * Tasks run agent sessions on a schedule (one-time, interval, or cron).
- *
- * This barrel is browser-safe for types only.
- * For filesystem operations, import from '@agent-operator/shared/scheduled-tasks/storage'
- * or '@agent-operator/shared/scheduled-tasks/crud'.
+ * Emits SchedulerTick events every minute, aligned to minute boundaries.
+ * Used by the automations system for cron-based automation matching.
  */
 
-// Types
-export * from './types.ts';
+export { SchedulerService, type SchedulerTickPayload } from './scheduler-service.ts';

@@ -406,10 +406,23 @@ const api: ElectronAPI = {
   loadPresetTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_LOAD_PRESET, themeId),
   getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
+  getWorkspaceColorTheme: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_WORKSPACE_COLOR_THEME, workspaceId) as Promise<string | null>,
   setWorkspaceColorTheme: (workspaceId: string, themeId: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME, workspaceId, themeId),
   getAllWorkspaceThemes: () =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES),
+  broadcastWorkspaceThemeChange: (workspaceId: string, themeId: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, workspaceId, themeId),
+  onWorkspaceThemeChange: (callback: (data: { workspaceId: string; themeId: string | null }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; themeId: string | null }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, handler)
+    }
+  },
 
   // Fonts (local font files path)
   // In development: relative to app root
@@ -542,56 +555,6 @@ const api: ElectronAPI = {
   getAllPermissions: () =>
     ipcRenderer.invoke(IPC_CHANNELS.PERMISSIONS_GET_ALL) as Promise<{ fullDiskAccess: boolean; accessibility: boolean }>,
 
-  // Scheduled Tasks
-  listScheduledTasks: (workspaceId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST, workspaceId),
-  getScheduledTask: (workspaceId: string, taskId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_GET, workspaceId, taskId),
-  createScheduledTask: (workspaceId: string, input: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_CREATE, workspaceId, input),
-  updateScheduledTask: (workspaceId: string, taskId: string, input: Partial<import('@agent-operator/shared/scheduled-tasks').ScheduledTaskInput>) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_UPDATE, workspaceId, taskId, input),
-  deleteScheduledTask: (workspaceId: string, taskId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_DELETE, workspaceId, taskId),
-  toggleScheduledTask: (workspaceId: string, taskId: string, enabled: boolean) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_TOGGLE, workspaceId, taskId, enabled),
-  runScheduledTaskManually: (workspaceId: string, taskId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_RUN_MANUALLY, workspaceId, taskId),
-  stopScheduledTask: (workspaceId: string, taskId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_STOP, workspaceId, taskId),
-  listScheduledTaskRuns: (workspaceId: string, taskId: string, limit?: number, offset?: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST_RUNS, workspaceId, taskId, limit, offset),
-  listAllScheduledTaskRuns: (workspaceId: string, limit?: number, offset?: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULED_TASKS_LIST_ALL_RUNS, workspaceId, limit, offset),
-
-  onScheduledTaskStatusUpdate: (callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskStatusEvent) => {
-      callback(data)
-    }
-    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_STATUS_UPDATE, handler)
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_STATUS_UPDATE, handler)
-    }
-  },
-  onScheduledTaskRunUpdate: (callback: (event: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: import('@agent-operator/shared/scheduled-tasks').ScheduledTaskRunEvent) => {
-      callback(data)
-    }
-    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_RUN_UPDATE, handler)
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_RUN_UPDATE, handler)
-    }
-  },
-  onScheduledTasksChanged: (callback: (workspaceId?: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, workspaceId?: string) => {
-      callback(workspaceId)
-    }
-    ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, handler)
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULED_TASKS_CHANGED, handler)
-    }
-  },
-
   // IM Integration (Feishu, Telegram)
   imGetConfig: () =>
     ipcRenderer.invoke(IPC_CHANNELS.IM_GET_CONFIG),
@@ -622,6 +585,27 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.IM_GET_SESSION_MAPPINGS, platform),
   imDeleteSessionMapping: (conversationId: string, platform: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.IM_DELETE_SESSION_MAPPING, conversationId, platform),
+
+  // Automations
+  testAutomation: (payload: { workspaceId: string; automationId: string; actions: unknown[]; permissionMode?: string; labels?: string[] }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEST_AUTOMATION, payload),
+  setAutomationEnabled: (workspaceId: string, event: string, matcherIndex: number, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_SET_ENABLED, workspaceId, event, matcherIndex, enabled),
+  duplicateAutomation: (workspaceId: string, event: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DUPLICATE, workspaceId, event, matcherIndex),
+  deleteAutomation: (workspaceId: string, event: string, matcherIndex: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_DELETE, workspaceId, event, matcherIndex),
+  getAutomationHistory: (workspaceId: string, automationId: string, limit?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY, workspaceId, automationId, limit),
+  getAutomationLastExecuted: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTOMATIONS_GET_LAST_EXECUTED, workspaceId),
+  onAutomationsChanged: (callback: () => void) => {
+    const handler = () => { callback() }
+    ipcRenderer.on(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.AUTOMATIONS_CHANGED, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

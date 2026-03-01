@@ -60,6 +60,7 @@ import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@agent-operator/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useTranslation } from '@/i18n'
 
 /**
@@ -781,12 +782,27 @@ export function FreeFormInput({
     onLabelAdd?.(labelId)
   }, [onLabelAdd])
 
+  // Add-label EditPopover state
+  const [addLabelPopoverOpen, setAddLabelPopoverOpen] = React.useState(false)
+  const [addLabelPrefill, setAddLabelPrefill] = React.useState('')
+
+  const addLabelEditConfig = React.useMemo(() => {
+    if (!workingDirectory) return null
+    return getEditConfig('add-label', workingDirectory)
+  }, [workingDirectory])
+
+  const handleAddLabel = React.useCallback((prefill: string) => {
+    setAddLabelPrefill(prefill)
+    setAddLabelPopoverOpen(true)
+  }, [])
+
   // Inline label hook (for #labels)
   const inlineLabel = useInlineLabelMenu({
     inputRef: richInputRef,
     labels,
     sessionLabels,
     onSelect: handleLabelSelect,
+    onAddLabel: handleAddLabel,
   })
 
   // NOTE: Mentions are now rendered inline in RichTextInput, no separate badge row needed
@@ -1225,6 +1241,28 @@ export function FreeFormInput({
           position={inlineLabel.position}
         />
 
+        {/* Add Label EditPopover (triggered from inline # menu "Add New Label") */}
+        {addLabelEditConfig && (
+          <EditPopover
+            trigger={<span className="absolute top-0 left-0 w-0 h-0 overflow-hidden" />}
+            open={addLabelPopoverOpen}
+            onOpenChange={setAddLabelPopoverOpen}
+            context={addLabelEditConfig.context}
+            example={addLabelEditConfig.example}
+            overridePlaceholder={addLabelEditConfig.overridePlaceholder}
+            defaultValue={addLabelPrefill}
+            model={addLabelEditConfig.model}
+            systemPromptPreset={addLabelEditConfig.systemPromptPreset}
+            inlineExecution={addLabelEditConfig.inlineExecution}
+            secondaryAction={workingDirectory ? {
+              label: t('editPopover.editFile'),
+              filePath: `${workingDirectory}/labels/config.json`,
+            } : undefined}
+            side="top"
+            align="start"
+          />
+        )}
+
         {/* Attachment Preview */}
         <AttachmentPreview
           attachments={attachments}
@@ -1267,13 +1305,12 @@ export function FreeFormInput({
           <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
 
           <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
-          {/* Context Badges - hidden in compact mode */}
+          {/* Left side: Context badges - hidden in compact mode */}
           {!compactMode && (
-            <>
+            <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
               {/* 1. Attach Files Badge */}
               <FreeFormInputContextBadge
                 icon={<Paperclip className="h-4 w-4" />}
-                // Show count ("1 file" / "X files") instead of filename for cleaner UI
                 label={attachments.length > 0
                   ? attachments.length === 1
                     ? t('input.oneFile')
@@ -1288,7 +1325,7 @@ export function FreeFormInput({
                 disabled={disabled}
               />
 
-              {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
+              {/* 2. Source Selector Badge */}
               {onSourcesChange && (
                 <SourceSelectorBadge
                   sources={sources}
@@ -1311,13 +1348,16 @@ export function FreeFormInput({
                   isEmptySession={isEmptySession}
                 />
               )}
-            </>
+            </div>
           )}
 
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* 5. Model Selector - Radix DropdownMenu for automatic positioning and submenu support */}
+          {/* Right side: Model + Send - no shrink */}
+          <div className="flex items-center shrink-0">
+
+          {/* 5. Model Selector */}
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1586,6 +1626,8 @@ export function FreeFormInput({
               <ArrowUp className="h-4 w-4" />
             </Button>
           )}
+
+          </div>{/* end right side */}
           </div>
         </div>
       </div>

@@ -4,7 +4,7 @@
  * in both the callback server and the playground preview.
  */
 
-import { COWORK_LOGO_HTML } from '../branding.ts';
+import { COWORK_LOGO_HTML } from '../config/branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 

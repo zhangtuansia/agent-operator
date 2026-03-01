@@ -24,10 +24,11 @@ export interface PlatformActions {
   onOpenFile?: (path: string) => void
 
   /**
-   * Reveal file in system file manager (Finder/Explorer)
-   * Optional because web viewer may not support this action.
+   * Open a file directly in the system editor, bypassing the link interceptor.
+   * Used by overlay header badges — when already viewing a file, "Open" should
+   * launch an external editor, not re-trigger the in-app preview.
    */
-  onRevealInFinder?: (path: string) => void
+  onOpenFileExternal?: (path: string) => void
 
   /**
    * Open a URL in the default browser (Electron: shell.openExternal)
@@ -77,15 +78,28 @@ export interface PlatformActions {
 
   /**
    * Read a file's contents as UTF-8 string (Electron: fs.readFile via IPC)
-   * Used by datatable/spreadsheet markdown blocks with `src` references.
+   * Used by datatable/spreadsheet blocks to load data from `src` field
    */
   onReadFile?: (path: string) => Promise<string>
 
   /**
-   * Read a file's binary contents as Uint8Array.
-   * Used by PDF preview blocks and PDF overlays.
+   * Read a file as binary Uint8Array (Electron: fs.readFile via IPC)
+   * Used by PDF preview blocks that need raw binary data
    */
   onReadFileBinary?: (path: string) => Promise<Uint8Array>
+
+  /**
+   * Reveal a file in the system file manager (Electron: shell.showItemInFolder)
+   * Web: Not available (menu items hidden when undefined)
+   */
+  onRevealInFinder?: (path: string) => void
+
+  /**
+   * Platform-specific file manager name for display labels.
+   * macOS → "Finder", Windows → "Explorer", Linux → "File Manager"
+   * Defaults to "Finder" if not provided.
+   */
+  fileManagerName?: string
 
   /**
    * Show/hide macOS traffic light buttons (close/minimize/maximize).

@@ -24,7 +24,7 @@ import { AGENT_EVENTS, type HooksConfig, type HookEvent, type HookMatcher, type 
 import { validateHooksConfig } from './validation.ts';
 import { buildEnvFromSdkInput } from './sdk-bridge.ts';
 import { executeCommand } from './command-executor.ts';
-import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
+import { SchedulerService, type SchedulerTickPayload } from '../scheduled-tasks/scheduler-service.ts';
 
 const log = createLogger('hook-system');
 

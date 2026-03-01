@@ -13,6 +13,7 @@
 
 import * as React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { ChevronRightIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 // Re-export raw primitives that need no styling
@@ -80,7 +81,7 @@ export const StyledDropdownMenuItem = React.forwardRef<
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       // styled additions
       'pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]',
-      '[&_svg]:size-auto [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0',
+      '[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0',
       variant === 'destructive' && 'text-destructive focus:text-destructive hover:text-destructive [&_svg]:!text-destructive',
       className,
     )}
@@ -92,8 +93,7 @@ StyledDropdownMenuItem.displayName = 'StyledDropdownMenuItem'
 // ── Separator ────────────────────────────────────────────────────────────────
 
 export const StyledDropdownMenuSeparator: React.ForwardRefExoticComponent<
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator> &
-  React.RefAttributes<React.ComponentRef<typeof DropdownMenuPrimitive.Separator>>
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator> & React.RefAttributes<React.ComponentRef<typeof DropdownMenuPrimitive.Separator>>
 > = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
@@ -109,23 +109,25 @@ StyledDropdownMenuSeparator.displayName = 'StyledDropdownMenuSeparator'
 // ── Sub-menu trigger ─────────────────────────────────────────────────────────
 
 export const StyledDropdownMenuSubTrigger: React.ForwardRefExoticComponent<
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> &
-  React.RefAttributes<React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>>
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & React.RefAttributes<React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>>
 > = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
       'relative flex cursor-default items-center gap-2 px-2 py-1.5 text-sm outline-hidden select-none',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0',
       'pr-1.5 rounded-[4px] hover:bg-foreground/10 focus:bg-foreground/10 data-[state=open]:bg-foreground/10',
-      '[&_svg]:size-auto [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0',
+      '[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0',
       className,
     )}
     {...props}
-  />
+  >
+    {children}
+    <ChevronRightIcon className="ml-auto size-4" />
+  </DropdownMenuPrimitive.SubTrigger>
 ))
 StyledDropdownMenuSubTrigger.displayName = 'StyledDropdownMenuSubTrigger'
 

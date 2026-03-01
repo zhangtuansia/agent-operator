@@ -1,7 +1,4 @@
 /**
- * System Permissions Module
- *
- * Utilities for checking and managing macOS system permissions.
+ * @deprecated Moved to config/permissions-types.ts — this re-export shim maintains backward compatibility.
  */
-
-export * from './types.ts';
+export * from '../config/permissions-types.ts';
