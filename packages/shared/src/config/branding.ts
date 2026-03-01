@@ -15,7 +15,7 @@ export const COWORK_LOGO = [
 export const COWORK_LOGO_HTML = COWORK_LOGO.map((line) => line.trimEnd()).join('\n');
 
 /** Session viewer base URL */
-export const VIEWER_URL = '';
+export const VIEWER_URL = 'https://share.aicowork.chat';
 
 // Legacy exports for backward compatibility
 export const OPERATOR_LOGO = COWORK_LOGO;

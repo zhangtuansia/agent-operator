@@ -1,0 +1,14 @@
+# Cloudflare Pages project for session sharing viewer
+# Deploys static viewer SPA + API functions (backed by R2)
+# Custom domain: share.aicowork.chat
+
+name = "cowork-viewer"
+compatibility_date = "2024-12-01"
+
+# Static assets from viewer build output
+pages_build_output_dir = "./apps/viewer/dist"
+
+# R2 bucket for storing shared session JSON files
+[[r2_buckets]]
+binding = "SESSIONS"
+bucket_name = "cowork"

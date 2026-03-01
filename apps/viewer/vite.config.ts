@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
-const VIEWER_API_PROXY_TARGET = process.env.VITE_VIEWER_API_PROXY_TARGET || 'https://www.aicowork.chat'
+const VIEWER_API_PROXY_TARGET = process.env.VITE_VIEWER_API_PROXY_TARGET || 'https://share.aicowork.chat'
 
 // https://vitejs.dev/config/
 export default defineConfig({
