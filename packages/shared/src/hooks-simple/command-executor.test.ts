@@ -9,12 +9,33 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   isCommandAllowed,
   executeCommand,
-  resolvePermissionsConfig,
 } from './command-executor.ts';
+import type { MergedPermissionsConfig } from '../agent/permissions-config.ts';
 
-// Helper to get a resolved permissions config for /tmp workspace
-function getTestConfig() {
-  return resolvePermissionsConfig({ workspaceRootPath: '/tmp' });
+// Build a self-contained test config with basic allowed patterns.
+// This avoids depending on ~/.cowork/permissions/default.json which
+// doesn't exist on CI runners.
+function getTestConfig(): MergedPermissionsConfig {
+  return {
+    blockedTools: new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']),
+    readOnlyBashPatterns: [
+      { regex: /^ls\b/, comment: 'List directory contents', source: 'test' },
+      { regex: /^git\b/, comment: 'Git commands', source: 'test' },
+      { regex: /^echo\b/, comment: 'Echo', source: 'test' },
+      { regex: /^cat\b/, comment: 'Cat', source: 'test' },
+      { regex: /^pwd\b/, comment: 'Print working directory', source: 'test' },
+    ],
+    readOnlyMcpPatterns: [],
+    allowedApiEndpoints: [],
+    allowedWritePaths: [],
+    displayName: 'Test Config',
+    shortcutHint: 'SHIFT+TAB',
+    permissionPaths: {
+      workspacePath: '/tmp/permissions.json',
+      appDefaultPath: '/tmp/default.json',
+      docsPath: '/tmp/docs/permissions.md',
+    },
+  };
 }
 
 describe('command-executor', () => {
@@ -68,21 +89,16 @@ describe('command-executor', () => {
     });
   });
 
-  describe('resolvePermissionsConfig', () => {
-    it('should return a config when given a valid context', () => {
-      const config = resolvePermissionsConfig({ workspaceRootPath: '/tmp' });
-      expect(config).not.toBeNull();
-    });
-  });
-
   describe('executeCommand', () => {
     it('should execute a simple allowed command', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = await executeCommand('ls /tmp', {
         env: { ...process.env as Record<string, string> },
-        permissionsContext: { workspaceRootPath: '/tmp' },
+        permissionMode: 'allow-all',
       });
       expect(result.success).toBe(true);
       expect(result.blocked).toBeUndefined();
+      warnSpy.mockRestore();
     });
 
     it('should block commands when no permissions context provided', async () => {
