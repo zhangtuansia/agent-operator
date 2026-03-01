@@ -6,7 +6,7 @@ name = "cowork-viewer"
 compatibility_date = "2024-12-01"
 
 # Static assets from viewer build output
-pages_build_output_dir = "./apps/viewer/dist"
+pages_build_output_dir = "./dist"
 
 # R2 bucket for storing shared session JSON files
 [[r2_buckets]]
