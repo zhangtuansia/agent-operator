@@ -163,6 +163,7 @@ export type SessionEvent =
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'connection_changed'; sessionId: string; connectionSlug: string }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
+  | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
   | { type: 'session_unshared'; sessionId: string }
@@ -483,6 +484,8 @@ export interface ChatsNavigationState {
  */
 export interface SourcesNavigationState {
   navigator: 'sources'
+  /** Optional filter for source type */
+  filter?: SourceFilter
   /** Selected source details, or null for empty state */
   details: { type: 'source'; sourceSlug: string } | null
   /** Optional right sidebar panel state */

@@ -140,6 +140,10 @@ export const CreateSessionOptionsSchema = z.object({
     z.string(),
   ]).optional(),
   hidden: z.boolean().optional(),
+  name: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+  todoState: z.string().optional(),
+  isFlagged: z.boolean().optional(),
 })
 
 // =============================================================================

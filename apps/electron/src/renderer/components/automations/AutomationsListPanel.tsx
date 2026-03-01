@@ -22,6 +22,7 @@ import { AutomationMenu } from './AutomationMenu'
 import { BatchAutomationMenu } from './BatchAutomationMenu'
 import { AutomationAvatar } from './AutomationAvatar'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 import { automationSelection } from '@/hooks/useEntitySelection'
 import { APP_EVENTS, AGENT_EVENTS, getEventDisplayName, type AutomationListItem, type AutomationListFilter } from './types'
 import { formatShortRelativeTime } from './utils'
@@ -171,6 +172,7 @@ export function AutomationsListPanel({
   workspaceRootPath,
   className,
 }: AutomationsListPanelProps) {
+  const { t } = useLanguage()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchActive, setSearchActive] = useState(false)
 
@@ -235,8 +237,8 @@ export function AutomationsListPanel({
       <div className={cn('flex flex-col flex-1 min-h-0', className)}>
         <EntityListEmptyScreen
           icon={<Webhook />}
-          title="No automations configured"
-          description="Automations run actions when events occur — execute commands on schedules, react to label changes, or trigger prompts automatically."
+          title={t('automations.noAutomations')}
+          description={t('automations.emptyDescription')}
           docKey="automations"
         >
           {workspaceRootPath && (
@@ -244,7 +246,7 @@ export function AutomationsListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Automation
+                  {t('automations.addAutomation')}
                 </button>
               }
               {...getEditConfig('automation-config', workspaceRootPath)}
@@ -266,7 +268,7 @@ export function AutomationsListPanel({
             setSearchActive(false)
             setSearchQuery('')
           }}
-          placeholder="Search automations..."
+          placeholder={t('automations.searchPlaceholder')}
           resultCount={isSearchMode ? filteredAutomations.length : undefined}
         />
       )}
@@ -275,7 +277,7 @@ export function AutomationsListPanel({
       {filteredAutomations.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-1">
           <p className="text-sm text-muted-foreground">
-            {isSearchMode ? 'No automations found' : 'No automations configured.'}
+            {isSearchMode ? t('automations.noAutomationsFound') : t('automations.noAutomations')}
           </p>
           {isSearchMode && (
             <button

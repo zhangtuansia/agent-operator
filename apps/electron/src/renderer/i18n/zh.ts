@@ -648,6 +648,16 @@ export const zh: TranslationKeys = {
     deleteSource: '删除数据源',
     authenticateToViewData: '请先验证此数据源以查看可用数据',
     authenticateToViewTools: '请先验证此数据源以查看可用工具',
+    // Empty state (filtered)
+    noApiSources: '未配置 API 数据源。',
+    noMcpSources: '未配置 MCP 数据源。',
+    noLocalSources: '未配置本地文件夹数据源。',
+    emptyDescription: '数据源将您的智能体连接到外部数据 — MCP 服务器、REST API 和本地文件夹。',
+    // Learn More links
+    learnMoreSources: '了解更多关于数据源',
+    learnMoreApis: '了解更多关于 API',
+    learnMoreMcp: '了解更多关于 MCP',
+    learnMoreLocal: '了解更多关于本地文件夹',
   },
 
   // Skills
@@ -1837,6 +1847,10 @@ export const zh: TranslationKeys = {
   // 自动化
   automations: {
     addAutomation: '添加自动化',
+    noAutomations: '未配置自动化任务',
+    emptyDescription: '自动化在事件发生时执行操作 — 定时执行命令、响应标签变更、或自动触发提示词。',
+    noAutomationsFound: '未找到自动化任务',
+    searchPlaceholder: '搜索自动化...',
   },
 
 } as const;

@@ -21,9 +21,11 @@ import {
   Settings2,
   Plus,
   Trash2,
+  ExternalLink,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useLanguage } from '@/context/LanguageContext'
+import { getDocUrl, type DocKey } from '@agent-operator/shared/docs/doc-links'
 
 export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'newChat'
 
@@ -48,6 +50,8 @@ export interface SidebarMenuProps {
   onDeleteLabel?: (labelId: string) => void
   /** Handler for "Add Automation" action - for automations type */
   onAddAutomation?: () => void
+  /** Source type filter - enables type-aware "Learn More" links */
+  sourceType?: 'api' | 'mcp' | 'local'
 }
 
 /**
@@ -65,6 +69,7 @@ export function SidebarMenu({
   onAddLabel,
   onDeleteLabel,
   onAddAutomation,
+  sourceType,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -90,13 +95,31 @@ export function SidebarMenu({
     )
   }
 
-  // Sources: show "Add Source"
-  if (type === 'sources' && onAddSource) {
+  // Sources: show "Add Source" + "Learn More"
+  if (type === 'sources') {
+    const docKey = (sourceType ? `sources-${sourceType}` : 'sources') as DocKey
+    const learnMoreLabel = sourceType === 'api'
+      ? t('sources.learnMoreApis')
+      : sourceType === 'mcp'
+        ? t('sources.learnMoreMcp')
+        : sourceType === 'local'
+          ? t('sources.learnMoreLocal')
+          : t('sources.learnMoreSources')
+
     return (
-      <MenuItem onClick={onAddSource}>
-        <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">{t('sources.addSource')}</span>
-      </MenuItem>
+      <>
+        {onAddSource && (
+          <MenuItem onClick={onAddSource}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('sources.addSource')}</span>
+          </MenuItem>
+        )}
+        <Separator />
+        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl(docKey))}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span className="flex-1">{learnMoreLabel}</span>
+        </MenuItem>
+      </>
     )
   }
 

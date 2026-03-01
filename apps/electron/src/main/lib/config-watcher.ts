@@ -12,6 +12,7 @@
  * - ~/.cowork/workspaces/{slug}/ - Workspace directory (recursive)
  *   - sources/{slug}/config.json, guide.md, permissions.json
  *   - skills/{slug}/SKILL.md, icon.*
+ *   - sessions/{id}/session.jsonl (header metadata only)
  *   - permissions.json
  */
 
@@ -36,6 +37,9 @@ import {
 } from '@agent-operator/shared/sources';
 import { permissionsConfigCache, getAppPermissionsDir } from '@agent-operator/shared/agent';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@agent-operator/shared/workspaces';
+import { AUTOMATIONS_CONFIG_FILE } from '@agent-operator/shared/automations';
+import { readSessionHeader } from '@agent-operator/shared/sessions';
+import type { SessionHeader } from '@agent-operator/shared/sessions';
 import type { LoadedSkill } from '@agent-operator/shared/skills';
 import { loadSkill, loadAllSkills, skillNeedsIconDownload, downloadSkillIcon } from '@agent-operator/shared/skills';
 import {
@@ -117,6 +121,14 @@ export interface ConfigWatcherCallbacks {
   // Labels & Views callbacks
   /** Called when labels config.json or views.json changes */
   onLabelsChange?: (workspaceId: string) => void;
+
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
+
+  // Session callbacks
+  /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
+  onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -343,6 +355,13 @@ export class ConfigWatcher {
       return;
     }
 
+    // Workspace-level automations config file
+    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+      debug('[ConfigWatcher] automations config change detected:', relativePath);
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
+      return;
+    }
+
     // Sources changes: sources/{slug}/...
     if (parts[0] === 'sources' && parts.length >= 2) {
       const slug = parts[1]!;  // Safe: checked parts.length >= 2
@@ -382,6 +401,20 @@ export class ConfigWatcher {
       } else if (file && /^icon\.(svg|png|jpg|jpeg)$/i.test(file)) {
         // Icon file changes also trigger a skill change (to update iconPath)
         this.debounce(`skill-icon:${slug}`, () => this.handleSkillChange(slug));
+      }
+      return;
+    }
+
+    // Session metadata changes: sessions/{id}/session.jsonl
+    // Detects external modifications (other instances, scripts, manual edits).
+    // Only reads line 1 (header) — lightweight even during active streaming.
+    if (parts[0] === 'sessions' && parts.length >= 3) {
+      const sessionId = parts[1]!;
+      const file = parts[2];
+
+      // Only watch actual session files, ignore .tmp (atomic write intermediates)
+      if (file === 'session.jsonl') {
+        this.debounce(`session-meta:${sessionId}`, () => this.handleSessionMetadataChange(sessionId));
       }
       return;
     }
@@ -846,6 +879,41 @@ export class ConfigWatcher {
   private handleLabelsChange(): void {
     debug('[ConfigWatcher] Labels/Views config changed:', this.workspaceId);
     this.callbacks.onLabelsChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Automations Handlers
+  // ============================================================
+
+  /**
+   * Handle automations.json change.
+   * Notifies sessions to reload automation configuration.
+   */
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Session Metadata Handlers
+  // ============================================================
+
+  /**
+   * Handle session.jsonl change — reads only line 1 (header) and emits if valid.
+   * This enables detection of external metadata changes (labels, name, flags)
+   * made by other instances, scripts, or manual edits.
+   */
+  private handleSessionMetadataChange(sessionId: string): void {
+    const sessionFile = join(this.workspaceDir, 'sessions', sessionId, 'session.jsonl');
+
+    if (!existsSync(sessionFile)) {
+      return;
+    }
+
+    const header = readSessionHeader(sessionFile);
+    if (header) {
+      this.callbacks.onSessionMetadataChange?.(sessionId, header);
+    }
   }
 
   // ============================================================

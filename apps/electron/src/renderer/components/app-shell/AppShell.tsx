@@ -27,6 +27,7 @@ import {
   WifiOff,
   FolderOpen,
 } from "lucide-react"
+import { McpIcon } from "../icons/McpIcon"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -84,7 +85,7 @@ import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
-import { APP_EVENTS } from "@/components/automations/types"
+import { APP_EVENTS, AUTOMATION_TYPE_TO_FILTER_KIND } from "@/components/automations/types"
 
 // Built-in status IDs that have translations
 const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
@@ -128,7 +129,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
-import { EditPopover, getEditConfig, useTranslatedEditConfig } from "@/components/ui/EditPopover"
+import { EditPopover, getEditConfig, useTranslatedEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -1014,9 +1015,23 @@ function AppShellContent({
     navigate(routes.view.automations())
   }, [navigate])
 
-  const handleAutomationSelect = useCallback((automationId: string) => {
-    navigate(routes.view.automations(automationId))
+  const handleAutomationsScheduledClick = useCallback(() => {
+    navigate(routes.view.automationsScheduled())
   }, [navigate])
+
+  const handleAutomationsEventClick = useCallback(() => {
+    navigate(routes.view.automationsEvent())
+  }, [navigate])
+
+  const handleAutomationsAgenticClick = useCallback(() => {
+    navigate(routes.view.automationsAgentic())
+  }, [navigate])
+
+  const handleAutomationSelect = useCallback((automationId: string) => {
+    // Preserve current automation filter when selecting an automation
+    const type = isAutomationsNavigation(navState) ? navState.filter?.automationType : undefined
+    navigate(routes.view.automations({ automationId, type }))
+  }, [navState, navigate])
 
   // Handlers for imported categories
   const handleOpenAIImportedClick = useCallback(() => {
@@ -1083,6 +1098,19 @@ function AppShellContent({
     navigate(routes.view.sources())
   }, [navigate])
 
+  // Handlers for source type filter views (subcategories in Sources dropdown)
+  const handleSourcesApiClick = useCallback(() => {
+    navigate(routes.view.sourcesApi())
+  }, [navigate])
+
+  const handleSourcesMcpClick = useCallback(() => {
+    navigate(routes.view.sourcesMcp())
+  }, [navigate])
+
+  const handleSourcesLocalClick = useCallback(() => {
+    navigate(routes.view.sourcesLocal())
+  }, [navigate])
+
   // Handler for skills view
   const handleSkillsClick = useCallback(() => {
     navigate(routes.view.skills())
@@ -1099,7 +1127,7 @@ function AppShellContent({
   // State to control which EditPopover is open (triggered from context menus).
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-skill' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'automation-config' | null>(null)
 
   // Handler for "Configure Statuses" context menu action
   // Opens the EditPopover for status configuration
@@ -1111,14 +1139,22 @@ function AppShellContent({
 
   // Handler for "Add Source" context menu action
   // Opens the EditPopover for adding a new source
-  const openAddSource = useCallback(() => {
-    setTimeout(() => setEditPopoverOpen('add-source'), 50)
+  // Optional sourceType param allows filter-aware context
+  const openAddSource = useCallback((sourceType?: 'api' | 'mcp' | 'local') => {
+    const key = sourceType ? `add-source-${sourceType}` as const : 'add-source' as const
+    setTimeout(() => setEditPopoverOpen(key), 50)
   }, [])
 
   // Handler for "Add Skill" context menu action
   // Opens the EditPopover for adding a new skill
   const openAddSkill = useCallback(() => {
     setTimeout(() => setEditPopoverOpen('add-skill'), 50)
+  }, [])
+
+  // Handler for "Add Automation" context menu action
+  // Opens the EditPopover for adding/configuring an automation
+  const openAddAutomation = useCallback(() => {
+    setTimeout(() => setEditPopoverOpen('automation-config'), 50)
   }, [])
 
   // Create a new chat and select it
@@ -1186,21 +1222,21 @@ function AppShellContent({
     }
     // Sources section (with sub-items)
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:sources:api', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:sources:mcp', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:sources:local', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:sources:api', type: 'nav', action: handleSourcesApiClick })
+    result.push({ id: 'nav:sources:mcp', type: 'nav', action: handleSourcesMcpClick })
+    result.push({ id: 'nav:sources:local', type: 'nav', action: handleSourcesLocalClick })
     // Skills
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     // Automations section (with sub-items)
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:automations:scheduled', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:automations:event', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:automations:agentic', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:automations:scheduled', type: 'nav', action: handleAutomationsScheduledClick })
+    result.push({ id: 'nav:automations:event', type: 'nav', action: handleAutomationsEventClick })
+    result.push({ id: 'nav:automations:agentic', type: 'nav', action: handleAutomationsAgenticClick })
     // Settings
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1306,6 +1342,12 @@ function AppShellContent({
       })
     }
   }, [sidebarFocused, focusedSidebarItemId, unifiedSidebarItems])
+
+  // Derive source filter from navigation state (for type-specific highlighting)
+  const sourceFilter = isSourcesNavigation(navState) ? navState.filter ?? null : null
+
+  // Derive automation filter from navigation state (for type-specific highlighting)
+  const automationFilter = isAutomationsNavigation(navState) ? navState.filter ?? null : null
 
   // Get title based on navigation state
   const listTitle = React.useMemo(() => {
@@ -1543,7 +1585,7 @@ function AppShellContent({
                       title: t('sidebar.sources'),
                       label: String(sources.length),
                       icon: DatabaseZap,
-                      variant: isSourcesNavigation(navState) ? "default" : "ghost",
+                      variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
                       onClick: handleSourcesClick,
                       dataTutorial: "sources-nav",
                       expandable: true,
@@ -1551,7 +1593,7 @@ function AppShellContent({
                       onToggle: () => toggleExpanded('nav:sources'),
                       contextMenu: {
                         type: 'sources',
-                        onAddSource: openAddSource,
+                        onAddSource: () => openAddSource(),
                       },
                       items: [
                         {
@@ -1559,24 +1601,39 @@ function AppShellContent({
                           title: "APIs",
                           label: String(sourceTypeCounts.api),
                           icon: Globe,
-                          variant: "ghost" as const,
-                          onClick: handleSourcesClick,
+                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" as const : "ghost" as const,
+                          onClick: handleSourcesApiClick,
+                          contextMenu: {
+                            type: 'sources' as const,
+                            onAddSource: () => openAddSource('api'),
+                            sourceType: 'api' as const,
+                          },
                         },
                         {
                           id: "nav:sources:mcp",
                           title: "MCPs",
                           label: String(sourceTypeCounts.mcp),
-                          icon: DatabaseZap,
-                          variant: "ghost" as const,
-                          onClick: handleSourcesClick,
+                          icon: <McpIcon className="h-3.5 w-3.5" />,
+                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" as const : "ghost" as const,
+                          onClick: handleSourcesMcpClick,
+                          contextMenu: {
+                            type: 'sources' as const,
+                            onAddSource: () => openAddSource('mcp'),
+                            sourceType: 'mcp' as const,
+                          },
                         },
                         {
                           id: "nav:sources:local",
                           title: t('sidebar.localFolders') ?? 'Local Folders',
                           label: String(sourceTypeCounts.local),
                           icon: FolderOpen,
-                          variant: "ghost" as const,
-                          onClick: handleSourcesClick,
+                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" as const : "ghost" as const,
+                          onClick: handleSourcesLocalClick,
+                          contextMenu: {
+                            type: 'sources' as const,
+                            onAddSource: () => openAddSource('local'),
+                            sourceType: 'local' as const,
+                          },
                         },
                       ],
                     },
@@ -1597,35 +1654,42 @@ function AppShellContent({
                       title: t('sidebar.automations') ?? 'Automations',
                       label: String(automations.length),
                       icon: ListTodo,
-                      variant: isAutomationsNavigation(navState) ? "default" : "ghost",
+                      variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
                       onClick: handleAutomationsClick,
                       expandable: true,
                       expanded: isExpanded('nav:automations'),
                       onToggle: () => toggleExpanded('nav:automations'),
+                      contextMenu: {
+                        type: 'automations' as const,
+                        onAddAutomation: openAddAutomation,
+                      },
                       items: [
                         {
                           id: "nav:automations:scheduled",
                           title: t('sidebar.scheduled') ?? 'Scheduled',
                           label: String(automationTypeCounts.scheduled),
                           icon: Clock,
-                          variant: "ghost" as const,
-                          onClick: handleAutomationsClick,
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" as const : "ghost" as const,
+                          onClick: handleAutomationsScheduledClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                         {
                           id: "nav:automations:event",
                           title: t('sidebar.eventBased') ?? 'Event-based',
                           label: String(automationTypeCounts.event),
                           icon: Radio,
-                          variant: "ghost" as const,
-                          onClick: handleAutomationsClick,
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" as const : "ghost" as const,
+                          onClick: handleAutomationsEventClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                         {
                           id: "nav:automations:agentic",
                           title: t('sidebar.agentic') ?? 'Agentic',
                           label: String(automationTypeCounts.agentic),
                           icon: Bot,
-                          variant: "ghost" as const,
-                          onClick: handleAutomationsClick,
+                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" as const : "ghost" as const,
+                          onClick: handleAutomationsAgenticClick,
+                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
                       ],
                     },
@@ -1823,6 +1887,7 @@ function AppShellContent({
                 onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
+                sourceFilter={sourceFilter}
               />
             )}
             {isSkillsNavigation(navState) && activeWorkspaceId && (
@@ -1836,10 +1901,11 @@ function AppShellContent({
               />
             )}
             {isAutomationsNavigation(navState) && (
-              /* Automations List */
+              /* Automations List - filtered by type if automationFilter is active */
               <ErrorBoundary level="section">
                 <AutomationsListPanel
                   automations={automations}
+                  automationFilter={automationFilter ? { kind: AUTOMATION_TYPE_TO_FILTER_KIND[automationFilter.automationType] ?? 'all' } : undefined}
                   selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
                   workspaceRootPath={activeWorkspaceForAutomations?.rootPath}
                   onAutomationClick={handleAutomationSelect}
@@ -2080,10 +2146,10 @@ function AppShellContent({
             align="start"
             {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
           />
-          {/* Add Source EditPopover */}
+          {/* Add Source EditPopover (handles add-source, add-source-api, add-source-mcp, add-source-local) */}
           <EditPopover
-            open={editPopoverOpen === 'add-source'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-source' : null)}
+            open={editPopoverOpen?.startsWith('add-source') ?? false}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? (editPopoverOpen ?? 'add-source') : null)}
             modal={true}
             trigger={
               <div
@@ -2094,7 +2160,7 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
-            {...getEditConfig('add-source', activeWorkspace.rootPath)}
+            {...getEditConfig((editPopoverOpen?.startsWith('add-source') ? editPopoverOpen : 'add-source') as EditContextKey, activeWorkspace.rootPath)}
             example={t('editPopover.connectExample')}
             overridePlaceholder={t('editPopover.connectPlaceholder')}
           />
@@ -2115,6 +2181,22 @@ function AppShellContent({
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
             example={t('editPopover.skillExample')}
             overridePlaceholder={t('editPopover.skillPlaceholder')}
+          />
+          {/* Automation Config EditPopover */}
+          <EditPopover
+            open={editPopoverOpen === 'automation-config'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'automation-config' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed top-[120px] w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20 }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('automation-config', activeWorkspace.rootPath)}
           />
         </>
       )}

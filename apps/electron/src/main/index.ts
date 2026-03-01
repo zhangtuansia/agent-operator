@@ -22,6 +22,7 @@ import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBa
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { getSkillServiceManager } from './skill-services'
 import { createIMServiceManager, getIMServiceManager } from './im-services'
+import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -206,6 +207,22 @@ app.whenReady().then(async () => {
     // Initialize notification service
     initNotificationService(windowManager)
 
+    // Initialize model refresh service (before IPC handlers so it's available)
+    const modelRefreshService = initModelRefreshService(async (slug: string) => {
+      const { getCredentialManager } = await import('@agent-operator/shared/credentials')
+      const manager = getCredentialManager()
+      const [apiKey, oauth] = await Promise.all([
+        manager.getLlmApiKey(slug).catch(() => null),
+        manager.getLlmOAuth(slug).catch(() => null),
+      ])
+      return {
+        apiKey: apiKey ?? undefined,
+        oauthAccessToken: oauth?.accessToken,
+        oauthRefreshToken: oauth?.refreshToken,
+        oauthIdToken: oauth?.idToken,
+      }
+    })
+
     // Register IPC handlers BEFORE session initialization to ensure they are
     // always available to the renderer even if initialization fails.
     // This prevents "No handler registered" errors during onboarding on fresh installs.
@@ -219,6 +236,9 @@ app.whenReady().then(async () => {
     } catch (error) {
       mainLog.error('Session manager initialization failed (non-fatal):', error)
     }
+
+    // Start model refresh service (non-blocking background fetch for all connections)
+    modelRefreshService.startAll()
 
     // Start skill services (web-search Bridge Server, etc.)
     const skillServices = getSkillServiceManager()
@@ -313,6 +333,13 @@ app.on('before-quit', async (event) => {
       lastFocusedWorkspaceId,
     })
     mainLog.info('Saved window state:', windows.length, 'windows')
+  }
+
+  // Stop model refresh timers
+  try {
+    getModelRefreshService().stopAll()
+  } catch {
+    // Service may not have been initialized if startup failed early
   }
 
   // Stop skill services (web-search Bridge Server, etc.)

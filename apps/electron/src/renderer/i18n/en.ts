@@ -646,6 +646,16 @@ export const en = {
     deleteSource: 'Delete Source',
     authenticateToViewData: 'Authenticate with this source to view available data',
     authenticateToViewTools: 'Authenticate with this source to view available tools',
+    // Empty state (filtered)
+    noApiSources: 'No API sources configured.',
+    noMcpSources: 'No MCP sources configured.',
+    noLocalSources: 'No local folder sources configured.',
+    emptyDescription: 'Sources connect your agent to external data — MCP servers, REST APIs, and local folders.',
+    // Learn More links
+    learnMoreSources: 'Learn More about Sources',
+    learnMoreApis: 'Learn More about APIs',
+    learnMoreMcp: 'Learn More about MCP',
+    learnMoreLocal: 'Learn More about Local Folders',
   },
 
   // Skills
@@ -1835,6 +1845,10 @@ export const en = {
   // Automations
   automations: {
     addAutomation: 'Add Automation',
+    noAutomations: 'No automations configured',
+    emptyDescription: 'Automations run actions when events occur — execute commands on schedules, react to label changes, or trigger prompts automatically.',
+    noAutomationsFound: 'No automations found',
+    searchPlaceholder: 'Search automations...',
   },
 
 } as const;

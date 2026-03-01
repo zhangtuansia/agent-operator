@@ -150,6 +150,43 @@ export function useSessionEvents({
         }))
       }
 
+      // Handle metadata-only events directly without going through the event processor.
+      // These are sent by ConfigWatcher's onSessionMetadataChange when external edits
+      // (other instances, scripts) modify session.jsonl headers. They just update fields
+      // and refresh the metadata map — no need for the full processor pipeline.
+      if (event.type === 'todo_state_changed' || event.type === 'name_changed' ||
+          event.type === 'session_flagged' || event.type === 'session_unflagged') {
+        const currentSession = store.get(sessionAtomFamily(sessionId))
+        if (!currentSession) return
+
+        let updated: Session
+        switch (event.type) {
+          case 'todo_state_changed':
+            if (currentSession.todoState === (event as { todoState?: string }).todoState) return
+            updated = { ...currentSession, todoState: (event as { todoState?: string }).todoState }
+            break
+          case 'name_changed':
+            if (currentSession.name === (event as { name?: string }).name) return
+            updated = { ...currentSession, name: (event as { name?: string }).name }
+            break
+          case 'session_flagged':
+            if (currentSession.isFlagged === true) return
+            updated = { ...currentSession, isFlagged: true }
+            break
+          case 'session_unflagged':
+            if (currentSession.isFlagged === false || currentSession.isFlagged === undefined) return
+            updated = { ...currentSession, isFlagged: false }
+            break
+        }
+
+        updateSessionDirect(sessionId, () => updated)
+        const metaMap = store.get(sessionMetaMapAtom)
+        const newMetaMap = new Map(metaMap)
+        newMetaMap.set(sessionId, extractSessionMeta(updated))
+        store.set(sessionMetaMapAtom, newMetaMap)
+        return
+      }
+
       // Check if session is currently streaming (atom is source of truth)
       const atomSession = store.get(sessionAtomFamily(sessionId))
       const isStreaming = atomSession?.isProcessing === true

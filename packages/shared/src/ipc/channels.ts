@@ -151,6 +151,7 @@ export const IPC_CHANNELS = {
   LLM_CONNECTION_TEST: 'LLM_Connection:test',
   LLM_CONNECTION_SET_DEFAULT: 'LLM_Connection:setDefault',
   LLM_CONNECTION_SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
+  LLM_CONNECTION_REFRESH_MODELS: 'LLM_Connection:refreshModels',
 
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',

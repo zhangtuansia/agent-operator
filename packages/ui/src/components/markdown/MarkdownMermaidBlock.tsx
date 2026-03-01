@@ -78,29 +78,46 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
   const [isFullscreen, setIsFullscreen] = React.useState(false)
   const { scrollRef, maskImage } = useScrollFade(FADE_SIZE)
 
-  // Calculate scaled dimensions for wide diagrams.
-  // If the natural height at container width would be below MIN_READABLE_HEIGHT,
-  // scale up to reach that height — but never exceed 100% (natural size).
-  // This prevents small diagrams from being over-zoomed and pixelated.
-  const getScaledDimensions = React.useCallback(() => {
-    if (!svg) return null
+  // Track container width as stable state to prevent resize oscillation.
+  // Only ResizeObserver updates this — never read clientWidth during render.
+  const [containerWidth, setContainerWidth] = React.useState(0)
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    // Initial measurement
+    setContainerWidth(el.clientWidth)
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) {
+        const newWidth = Math.round(entry.contentRect.width)
+        setContainerWidth(prev => prev === newWidth ? prev : newWidth)
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
-    const dims = parseSvgDimensions(svg)
-    if (!dims) return null
+  // Parse SVG dimensions once per SVG change
+  const svgDims = React.useMemo(() => svg ? parseSvgDimensions(svg) : null, [svg])
 
-    const containerWidth = scrollRef.current?.clientWidth ?? 600
+  // Calculate scaled dimensions as a stable memo — only recalculates when
+  // containerWidth or SVG dimensions actually change, preventing render loops.
+  const scaledDims = React.useMemo(() => {
+    if (!svgDims || containerWidth <= 0) return null
+
+    const { width: svgW, height: svgH } = svgDims
 
     // Calculate what height we'd get if we fit to container width
-    const fitToContainerScale = containerWidth / dims.width
-    const projectedHeight = dims.height * fitToContainerScale
+    const fitToContainerScale = containerWidth / svgW
+    const projectedHeight = svgH * fitToContainerScale
 
     // If diagram height is fine at natural size, check if width overflows
     if (projectedHeight >= MIN_READABLE_HEIGHT) {
-      const overflow = dims.width - containerWidth
+      const overflow = svgW - containerWidth
 
       // Small overflow: scale to fit rather than scroll
       if (overflow > 0 && overflow < SMALL_OVERFLOW_THRESHOLD) {
-        const scaledHeight = dims.height * fitToContainerScale
+        const scaledHeight = svgH * fitToContainerScale
         return { scale: fitToContainerScale, width: containerWidth, height: scaledHeight, needsScroll: false }
       }
 
@@ -108,26 +125,26 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
       const needsScroll = overflow > 0
       return {
         scale: 1,
-        width: needsScroll ? dims.width : undefined,
-        height: needsScroll ? dims.height : undefined,
+        width: needsScroll ? svgW : undefined,
+        height: needsScroll ? svgH : undefined,
         needsScroll,
       }
     }
 
     // Diagram would be too small at container width.
     // Scale up to reach MIN_READABLE_HEIGHT, but cap at 100% (natural size).
-    const desiredScale = MIN_READABLE_HEIGHT / dims.height
+    const desiredScale = MIN_READABLE_HEIGHT / svgH
     const scale = Math.min(desiredScale, 1.0)
 
-    const scaledWidth = dims.width * scale
-    const scaledHeight = dims.height * scale
+    const scaledWidth = svgW * scale
+    const scaledHeight = svgH * scale
 
     // Enable scroll if scaled content is wider than container (beyond threshold)
     const scaledOverflow = scaledWidth - containerWidth
     if (scaledOverflow > 0 && scaledOverflow < SMALL_OVERFLOW_THRESHOLD) {
       // Small overflow: scale to fit container
-      const fitScale = containerWidth / dims.width
-      const fitHeight = dims.height * fitScale
+      const fitScale = containerWidth / svgW
+      const fitHeight = svgH * fitScale
       return { scale: fitScale, width: containerWidth, height: fitHeight, needsScroll: false }
     }
 
@@ -137,7 +154,7 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
       height: scaledHeight,
       needsScroll: scaledOverflow > 0,
     }
-  }, [svg])
+  }, [svgDims, containerWidth])
 
   // On error, fall back to a plain code block showing the mermaid source
   if (error) {
@@ -148,8 +165,6 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
   if (!svg) {
     return <CodeBlock code={code} language="mermaid" mode="full" className={className} />
   }
-
-  const scaledDims = getScaledDimensions()
 
   // Scaling mode: when dimensions are provided OR scale !== 1
   // This is separate from needsScroll — we may scale to fit without scrolling

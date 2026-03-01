@@ -1,12 +1,13 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { rm, readFile, mkdir, writeFile, rename, open } from 'fs/promises'
+import { rm, readFile, mkdir, writeFile, rename, open, appendFile } from 'fs/promises'
 import { OperatorAgent, CodexAgent, CopilotAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
+import { InitGate } from './lib/init-gate'
 import {
   loadStoredConfig,
   getWorkspaces,
@@ -81,6 +82,7 @@ import {
   type CredentialCacheEntry,
 } from '@agent-operator/shared/codex'
 import type { SdkMcpServerConfig } from '@agent-operator/shared/agent/backend'
+import { AutomationSystem, AUTOMATIONS_HISTORY_FILE } from '@agent-operator/shared/automations'
 
 /**
  * Feature flags for agent behavior
@@ -642,6 +644,10 @@ export class SessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
+  // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
+  private automationSystems: Map<string, AutomationSystem> = new Map()
+  /** Coordinates startup initialization — IPC handlers can await init completion. */
+  private initGate = new InitGate()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
@@ -653,6 +659,12 @@ export class SessionManager {
   // Keyed by sessionId → Set of callbacks
   private sessionEventListeners: Map<string, Set<(event: SessionEvent) => void>> = new Map()
 
+  /** Wait until initialize() has completed (sessions loaded from disk).
+   *  Resolves immediately if already initialized. */
+  waitForInit(): Promise<void> {
+    return this.initGate.wait()
+  }
+
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
   }
@@ -663,7 +675,7 @@ export class SessionManager {
    * Public so ipc.ts can call it when sources are first requested
    * Supports multiple workspaces simultaneously
    */
-  setupConfigWatcher(workspaceRootPath: string): void {
+  setupConfigWatcher(workspaceRootPath: string, workspaceId?: string): void {
     // Check if already watching this workspace
     if (this.configWatchers.has(workspaceRootPath)) {
       return // Already watching this workspace
@@ -713,6 +725,13 @@ export class SessionManager {
       onLabelsChange: (workspaceId: string) => {
         sessionLog.info(`Labels/Views config changed in ${workspaceId}`)
         this.broadcastLabelsChanged(workspaceId)
+        // Emit LabelConfigChange event via AutomationSystem
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          automationSystem.emitLabelConfigChange().catch((error) => {
+            sessionLog.error(`[Automations] Failed to emit LabelConfigChange:`, error)
+          })
+        }
       },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)
@@ -733,8 +752,82 @@ export class SessionManager {
         const skills = loadAllSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
+      // Session metadata changes (external edits to session.jsonl headers).
+      // Detects label/flag/name/sessionStatus changes made by other instances or scripts.
+      // Compares with in-memory state and only emits events for actual differences.
+      onSessionMetadataChange: (sessionId, header) => {
+        const managed = this.sessions.get(sessionId)
+        if (!managed) return
+
+        // Skip if session is currently processing — in-memory state is authoritative during streaming
+        if (managed.isProcessing) return
+
+        let changed = false
+
+        // Labels
+        const oldLabels = JSON.stringify(managed.labels ?? [])
+        const newLabels = JSON.stringify(header.labels ?? [])
+        if (oldLabels !== newLabels) {
+          managed.labels = header.labels
+          this.sendEvent({ type: 'labels_changed', sessionId, labels: header.labels ?? [] }, managed.workspace.id)
+          changed = true
+        }
+
+        // Flagged
+        if ((managed.isFlagged ?? false) !== (header.isFlagged ?? false)) {
+          managed.isFlagged = header.isFlagged ?? false
+          this.sendEvent(
+            { type: header.isFlagged ? 'session_flagged' : 'session_unflagged', sessionId },
+            managed.workspace.id
+          )
+          changed = true
+        }
+
+        // Session status (stored as todoState in SessionHeader)
+        if (managed.todoState !== header.todoState) {
+          managed.todoState = header.todoState
+          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState ?? '' }, managed.workspace.id)
+          changed = true
+        }
+
+        // Name
+        if (managed.name !== header.name) {
+          managed.name = header.name
+          this.sendEvent({ type: 'name_changed', sessionId, name: header.name }, managed.workspace.id)
+          changed = true
+        }
+
+        if (changed) {
+          sessionLog.info(`External metadata change detected for session ${sessionId}`)
+        }
+
+        // Update session metadata via AutomationSystem (handles diffing and event emission internally)
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          automationSystem.updateSessionMetadata(sessionId, {
+            permissionMode: header.permissionMode,
+            labels: header.labels,
+            isFlagged: header.isFlagged,
+            sessionStatus: header.todoState,
+            sessionName: header.name,
+          }).catch((error) => {
+            sessionLog.error(`[Automations] Failed to update session metadata:`, error)
+          })
+        }
+      },
       onAutomationsConfigChange: (workspaceId: string) => {
         sessionLog.info(`Automations config changed in ${workspaceId}`)
+        // Reload automations config via AutomationSystem
+        const automationSystem = this.automationSystems.get(workspaceRootPath)
+        if (automationSystem) {
+          const result = automationSystem.reloadConfig()
+          if (result.errors.length === 0) {
+            sessionLog.info(`Reloaded ${result.automationCount} automations for workspace ${workspaceId}`)
+          } else {
+            sessionLog.error(`Failed to reload automations for workspace ${workspaceId}:`, result.errors)
+          }
+        }
+        // Notify renderer to re-read automations.json
         this.broadcastAutomationsChanged(workspaceId)
       },
     }
@@ -742,6 +835,64 @@ export class SessionManager {
     const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
     watcher.start()
     this.configWatchers.set(workspaceRootPath, watcher)
+
+    // Initialize AutomationSystem for this workspace (includes scheduler, handlers, and event logging)
+    if (!this.automationSystems.has(workspaceRootPath)) {
+      const resolvedWorkspaceId = workspaceId || workspaceRootPath.split(/[/\\]/).pop() || workspaceRootPath
+      const automationSystem = new AutomationSystem({
+        workspaceRootPath,
+        workspaceId: resolvedWorkspaceId,
+        enableScheduler: true,
+        onPromptsReady: async (prompts) => {
+          // Execute prompt automations by creating new sessions
+          const settled = await Promise.allSettled(
+            prompts.map((pending) =>
+              this.executePromptAutomation(
+                derivedWorkspaceId,
+                workspaceRootPath,
+                pending.prompt,
+                pending.labels,
+                pending.permissionMode,
+                pending.mentions,
+                pending.llmConnection,
+                pending.model,
+              )
+            )
+          )
+
+          // Write enriched history entries (with session IDs and prompt summaries)
+          const historyPath = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE)
+          for (const [idx, result] of settled.entries()) {
+            const pending = prompts[idx]
+            if (!pending.matcherId) continue
+
+            const entry = {
+              id: pending.matcherId,
+              ts: Date.now(),
+              ok: result.status === 'fulfilled',
+              sessionId: result.status === 'fulfilled' ? result.value.sessionId : undefined,
+              prompt: pending.prompt.slice(0, 200),
+              error: result.status === 'rejected' ? String(result.reason).slice(0, 200) : undefined,
+            }
+
+            appendFile(historyPath, JSON.stringify(entry) + '\n', 'utf-8').catch(e =>
+              sessionLog.warn('[Automations] Failed to write history:', e)
+            )
+
+            if (result.status === 'rejected') {
+              sessionLog.error(`[Automations] Failed to execute prompt action ${idx + 1}:`, result.reason)
+            } else {
+              sessionLog.info(`[Automations] Created session ${result.value.sessionId} from prompt action`)
+            }
+          }
+        },
+        onError: (event, error) => {
+          sessionLog.error(`Automation failed for ${event}:`, error.message)
+        },
+      })
+      this.automationSystems.set(workspaceRootPath, automationSystem)
+      sessionLog.info(`Initialized AutomationSystem for workspace ${resolvedWorkspaceId}`)
+    }
   }
 
   /**
@@ -1321,7 +1472,15 @@ export class SessionManager {
     await this.reinitializeAuth()
 
     // Load existing sessions from disk
-    this.loadSessionsFromDisk()
+    try {
+      this.loadSessionsFromDisk()
+
+      // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
+      this.initGate.markReady()
+    } catch (error) {
+      this.initGate.markFailed(error)
+      throw error
+    }
   }
 
   // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
@@ -1414,6 +1573,19 @@ export class SessionManager {
           }
 
           this.sessions.set(meta.id, managed)
+
+          // Seed AutomationSystem with initial metadata so event diffs work
+          const automationSystem = this.automationSystems.get(workspaceRootPath)
+          if (automationSystem) {
+            automationSystem.setInitialSessionMetadata(meta.id, {
+              permissionMode: meta.permissionMode,
+              labels: meta.labels,
+              isFlagged: meta.isFlagged,
+              sessionStatus: meta.todoState,
+              sessionName: managed.name,
+            })
+          }
+
           totalSessions++
         }
       }
@@ -1985,8 +2157,10 @@ export class SessionManager {
       model: resolvedModel,
       llmConnection: resolvedConnection?.slug,
       hidden: options?.hidden,
-      name: (options as any)?.name,
-      labels: (options as any)?.labels,
+      name: options?.name,
+      labels: options?.labels,
+      todoState: options?.todoState,
+      isFlagged: options?.isFlagged,
     })
 
     const managed: ManagedSession = {
@@ -2004,8 +2178,9 @@ export class SessionManager {
       parentToolStack: [],
       toolToParentMap: new Map(),
       pendingTextParent: undefined,
-      isFlagged: false,
+      isFlagged: storedSession.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
+      todoState: storedSession.todoState,
       workingDirectory: resolvedWorkingDir,
       pendingCodexReconnect: false,
       sdkCwd: storedSession.sdkCwd,
@@ -2024,6 +2199,18 @@ export class SessionManager {
 
     this.sessions.set(storedSession.id, managed)
 
+    // Seed AutomationSystem with initial metadata for new session
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      automationSystem.setInitialSessionMetadata(storedSession.id, {
+        permissionMode: storedSession.permissionMode,
+        labels: storedSession.labels,
+        isFlagged: storedSession.isFlagged,
+        sessionStatus: storedSession.todoState,
+        sessionName: managed.name,
+      })
+    }
+
     return {
       id: storedSession.id,
       workspaceId: workspace.id,
@@ -2032,9 +2219,10 @@ export class SessionManager {
       lastMessageAt: managed.lastMessageAt,
       messages: [],
       isProcessing: false,
-      isFlagged: false,
+      isFlagged: storedSession.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
-      todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
+      todoState: storedSession.todoState,
+      labels: storedSession.labels,
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
       llmConnection: managed.llmConnection,
@@ -2534,6 +2722,7 @@ export class SessionManager {
       managed.isFlagged = true
       // Persist from in-memory state to avoid race condition with pending writes
       this.persistSession(managed)
+      await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_flagged', sessionId }, managed.workspace.id)
     }
@@ -2545,6 +2734,7 @@ export class SessionManager {
       managed.isFlagged = false
       // Persist from in-memory state to avoid race condition with pending writes
       this.persistSession(managed)
+      await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_unflagged', sessionId }, managed.workspace.id)
     }
@@ -2576,6 +2766,7 @@ export class SessionManager {
       managed.todoState = todoState
       // Persist from in-memory state to avoid race condition with pending writes
       this.persistSession(managed)
+      await this.flushSession(managed.id)
       // Notify all windows for this workspace
       this.sendEvent({ type: 'todo_state_changed', sessionId, todoState }, managed.workspace.id)
     }
@@ -3317,6 +3508,12 @@ export class SessionManager {
 
     this.sessions.delete(sessionId)
     this.sessionEventListeners.delete(sessionId)
+
+    // Clean up AutomationSystem metadata for this session
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      automationSystem.removeSessionMetadata(sessionId)
+    }
 
     // Delete from disk too
     deleteStoredSession(workspaceRootPath, sessionId)
@@ -4733,6 +4930,17 @@ To view this task's output:
     }
     this.configWatchers.clear()
 
+    // Dispose all AutomationSystem instances (stop schedulers, event buses)
+    for (const [path, system] of this.automationSystems) {
+      try {
+        system.dispose()
+        sessionLog.info(`Disposed automation system for ${path}`)
+      } catch (e) {
+        sessionLog.error(`Failed to dispose automation system for ${path}:`, e)
+      }
+    }
+    this.automationSystems.clear()
+
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {
       clearTimeout(timer)
@@ -4787,7 +4995,7 @@ To view this task's output:
       permissionMode: permissionMode || 'safe',
       llmConnection,
       model,
-    } as any)
+    })
 
     // Pre-enable sources from @mentions
     if (resolved?.sourceSlugs?.length) {

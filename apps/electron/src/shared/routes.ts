@@ -120,13 +120,26 @@ export const routes = {
         : `imported/${source}` as const,
 
     /** Sources view (sources navigator) */
-    sources: (params?: { sourceSlug?: string }) => {
-      const { sourceSlug } = params ?? {}
+    sources: (params?: { sourceSlug?: string; type?: 'api' | 'mcp' | 'local' }) => {
+      const { sourceSlug, type } = params ?? {}
+      const base = type ? `sources/${type}` : 'sources'
       if (sourceSlug) {
-        return `sources/source/${sourceSlug}` as const
+        return `${base}/source/${sourceSlug}` as const
       }
-      return 'sources' as const
+      return base as 'sources' | `sources/${'api' | 'mcp' | 'local'}`
     },
+
+    /** API sources view */
+    sourcesApi: (sourceSlug?: string) =>
+      sourceSlug ? `sources/api/source/${sourceSlug}` as const : 'sources/api' as const,
+
+    /** MCP sources view */
+    sourcesMcp: (sourceSlug?: string) =>
+      sourceSlug ? `sources/mcp/source/${sourceSlug}` as const : 'sources/mcp' as const,
+
+    /** Local folder sources view */
+    sourcesLocal: (sourceSlug?: string) =>
+      sourceSlug ? `sources/local/source/${sourceSlug}` as const : 'sources/local' as const,
 
     /** Skills view (skills navigator) */
     skills: (skillSlug?: string) =>
@@ -150,11 +163,29 @@ export const routes = {
         ? `scheduledTask/${taskId}/chat/${sessionId}` as const
         : `scheduledTask/${taskId}` as const,
 
-    /** Automations view (automations navigator) */
-    automations: (automationId?: string) =>
-      automationId
-        ? `automations/automation/${automationId}` as const
-        : 'automations' as const,
+    /** Automations view (automations navigator) - supports type filtering */
+    automations: (params?: string | { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
+      // Support both legacy (automationId string) and new (params object) signatures
+      if (typeof params === 'string') {
+        return `automations/automation/${params}` as const
+      }
+      const { automationId, type } = params ?? {}
+      const base = type ? `automations/${type}` : 'automations'
+      if (automationId) return `${base}/automation/${automationId}` as const
+      return base as 'automations' | `automations/${'scheduled' | 'event' | 'agentic'}`
+    },
+
+    /** Scheduled automations view (automations navigator, scheduled filter) */
+    automationsScheduled: (automationId?: string) =>
+      automationId ? `automations/scheduled/automation/${automationId}` as const : 'automations/scheduled' as const,
+
+    /** Event-based automations view (automations navigator, event filter) */
+    automationsEvent: (automationId?: string) =>
+      automationId ? `automations/event/automation/${automationId}` as const : 'automations/event' as const,
+
+    /** Agentic automations view (automations navigator, agentic filter) */
+    automationsAgentic: (automationId?: string) =>
+      automationId ? `automations/agentic/automation/${automationId}` as const : 'automations/agentic' as const,
   },
 } as const
 

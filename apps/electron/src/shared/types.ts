@@ -406,6 +406,7 @@ export interface ElectronAPI {
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
+  refreshLlmConnectionModels(slug: string): Promise<void>
 
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>

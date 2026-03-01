@@ -35,6 +35,8 @@ export interface SidebarContextMenuConfig {
   onDeleteLabel?: (labelId: string) => void
   /** Handler for "Add Automation" action - for automations type */
   onAddAutomation?: () => void
+  /** Source type filter - enables type-aware context menus */
+  sourceType?: 'api' | 'mcp' | 'local'
 }
 
 export interface LinkItem {
@@ -384,6 +386,7 @@ function SidebarDropItem({
             onAddLabel={link.contextMenu.onAddLabel}
             onDeleteLabel={link.contextMenu.onDeleteLabel}
             onAddAutomation={link.contextMenu.onAddAutomation}
+            sourceType={link.contextMenu.sourceType}
           />
         </ContextMenuProvider>
       </StyledContextMenuContent>

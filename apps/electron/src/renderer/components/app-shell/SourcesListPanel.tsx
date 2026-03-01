@@ -8,6 +8,7 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { sourceSelection } from '@/hooks/useEntitySelection'
 import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { useLanguage } from '@/context/LanguageContext'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
 const SOURCE_TYPE_CONFIG: Record<string, { label: string; colorClass: string }> = {
@@ -51,6 +52,8 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { t } = useLanguage()
+
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) return sources
     return sources.filter(s => s.config.type === sourceFilter.sourceType)
@@ -58,10 +61,13 @@ export function SourcesListPanel({
 
   const emptyMessage = React.useMemo(() => {
     if (sourceFilter?.kind === 'type') {
-      return `No ${SOURCE_TYPE_FILTER_LABELS[sourceFilter.sourceType] ?? sourceFilter.sourceType} sources configured.`
+      const key = sourceFilter.sourceType === 'api' ? 'sources.noApiSources'
+        : sourceFilter.sourceType === 'mcp' ? 'sources.noMcpSources'
+        : 'sources.noLocalSources'
+      return t(key as any)
     }
-    return 'No sources configured.'
-  }, [sourceFilter])
+    return t('sources.noSourcesConfigured')
+  }, [sourceFilter, t])
 
   return (
     <EntityPanel<LoadedSource>
@@ -75,7 +81,7 @@ export function SourcesListPanel({
         <EntityListEmptyScreen
           icon={<DatabaseZap />}
           title={emptyMessage}
-          description="Sources connect your agent to external data — MCP servers, REST APIs, and local folders."
+          description={t('sources.emptyDescription')}
           docKey="sources"
         >
           {workspaceRootPath && (
@@ -83,7 +89,7 @@ export function SourcesListPanel({
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Source
+                  {t('sources.addSource')}
                 </button>
               }
               {...getEditConfig(

@@ -42,8 +42,6 @@ import {
   isOpenAIProvider,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
-  getDefaultModelsForSlug,
-  getDefaultModelForSlug,
   type Workspace,
   type AgentType,
   type LlmConnection,
@@ -76,6 +74,8 @@ import {
   AuthTypeSchema,
 } from '@agent-operator/shared/ipc/schemas'
 import { validateIpcArgs, IpcValidationError } from './ipc-validator'
+import { createBuiltInConnection } from './connection-setup-logic'
+import { getModelRefreshService } from './model-fetchers'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -109,173 +109,6 @@ function getWorkspaceOrThrow(workspaceId: string): Workspace {
     throw new Error(`Workspace not found: ${workspaceId}`)
   }
   return workspace
-}
-
-/**
- * Fetch available models from Copilot SDK and persist them on the connection.
- * Copilot models are dynamic and should not rely on hardcoded defaults.
- */
-async function fetchAndStoreCopilotModels(slug: string, accessToken: string): Promise<void> {
-  const { CopilotClient } = await import('@github/copilot-sdk')
-
-  const copilotRelativePath = join('node_modules', '@github', 'copilot', 'index.js')
-  const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
-  let copilotCliPath = join(basePath, copilotRelativePath)
-  if (!existsSync(copilotCliPath)) {
-    const monorepoRoot = join(basePath, '..', '..')
-    copilotCliPath = join(monorepoRoot, copilotRelativePath)
-  }
-
-  const previousToken = process.env.COPILOT_GITHUB_TOKEN
-  process.env.COPILOT_GITHUB_TOKEN = accessToken
-
-  const client = new CopilotClient({
-    useStdio: true,
-    autoStart: true,
-    logLevel: 'error',
-    ...(existsSync(copilotCliPath) ? { cliPath: copilotCliPath } : {}),
-  })
-
-  let models: Array<{ id: string; name: string; supportedReasoningEfforts?: string[] }>
-  try {
-    await client.start()
-    models = await client.listModels()
-  } finally {
-    try {
-      await client.stop()
-    } catch {
-      // noop
-    }
-    if (previousToken !== undefined) {
-      process.env.COPILOT_GITHUB_TOKEN = previousToken
-    } else {
-      delete process.env.COPILOT_GITHUB_TOKEN
-    }
-  }
-
-  if (!models || models.length === 0) {
-    throw new Error('No models returned from Copilot API')
-  }
-
-  const modelDefs = models.map((m) => ({
-    id: m.id,
-    name: m.name,
-    shortName: m.name,
-    description: '',
-    provider: 'copilot' as const,
-    contextWindow: 200_000,
-    supportsThinking: !!(m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0),
-  }))
-
-  const current = getLlmConnection(slug)
-  const currentDefault = current?.defaultModel
-  const defaultStillValid = currentDefault && modelDefs.some((m) => m.id === currentDefault)
-
-  updateLlmConnection(slug, {
-    models: modelDefs,
-    defaultModel: defaultStillValid ? currentDefault : modelDefs[0].id,
-  })
-}
-
-/**
- * Built-in connection templates for first-time setup flows.
- * Each entry maps a slug to its provider configuration.
- * Functions receive `hasCustomEndpoint` to vary behavior.
- */
-interface BuiltInConnectionTemplate {
-  name: string | ((h: boolean) => string)
-  providerType: LlmConnection['providerType'] | ((h: boolean) => LlmConnection['providerType'])
-  authType: LlmConnection['authType'] | ((h: boolean) => LlmConnection['authType'])
-  baseUrl?: string
-}
-
-const BUILT_IN_CONNECTION_TEMPLATES: Record<string, BuiltInConnectionTemplate> = {
-  'anthropic-api': {
-    name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic API',
-    providerType: (h) => h ? 'anthropic_compat' : 'anthropic',
-    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
-  },
-  'claude-max': {
-    name: 'Claude Max',
-    providerType: 'anthropic',
-    authType: 'oauth',
-  },
-  'bedrock': {
-    name: 'AWS Bedrock',
-    providerType: 'bedrock',
-    authType: 'environment',
-  },
-  'codex': {
-    name: 'Codex (ChatGPT Plus)',
-    providerType: 'openai',
-    authType: 'oauth',
-  },
-  'codex-api': {
-    name: (h) => h ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
-    providerType: (h) => h ? 'openai_compat' : 'openai',
-    authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
-  },
-  'copilot': {
-    name: 'GitHub Copilot',
-    providerType: 'copilot',
-    authType: 'oauth',
-  },
-  'deepseek-api': {
-    name: 'DeepSeek',
-    providerType: 'anthropic_compat',
-    authType: 'api_key_with_endpoint',
-    baseUrl: 'https://api.deepseek.com/anthropic',
-  },
-  'glm-api': {
-    name: '智谱 GLM',
-    providerType: 'anthropic_compat',
-    authType: 'api_key_with_endpoint',
-    baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-  },
-  'minimax-api': {
-    name: 'MiniMax',
-    providerType: 'anthropic_compat',
-    authType: 'api_key_with_endpoint',
-    baseUrl: 'https://api.minimaxi.com/anthropic',
-  },
-  'doubao-api': {
-    name: '豆包 Doubao',
-    providerType: 'anthropic_compat',
-    authType: 'api_key_with_endpoint',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
-  },
-  'kimi-api': {
-    name: 'Kimi',
-    providerType: 'anthropic_compat',
-    authType: 'api_key_with_endpoint',
-    baseUrl: 'https://api.moonshot.ai/anthropic/',
-  },
-}
-
-function createBuiltInConnection(slug: string, baseUrl?: string | null): LlmConnection | null {
-  const template = BUILT_IN_CONNECTION_TEMPLATES[slug]
-  if (!template) return null
-
-  const now = Date.now()
-  const hasCustomEndpoint = typeof baseUrl === 'string' && baseUrl.trim().length > 0
-
-  const providerType = typeof template.providerType === 'function'
-    ? template.providerType(hasCustomEndpoint) : template.providerType
-  const authType = typeof template.authType === 'function'
-    ? template.authType(hasCustomEndpoint) : template.authType
-  const name = typeof template.name === 'function'
-    ? template.name(hasCustomEndpoint) : template.name
-
-  // Slug-level models (third-party), fallback to providerType-level
-  const slugModels = getDefaultModelsForSlug(slug)
-  const models = slugModels.length > 0 ? slugModels : getDefaultModelsForConnection(providerType)
-  const defaultModel = getDefaultModelForSlug(slug) ?? getDefaultModelForConnection(providerType)
-
-  const effectiveBaseUrl = hasCustomEndpoint
-    ? baseUrl!.trim()
-    : template.baseUrl ?? undefined
-
-  return { slug, name, providerType, authType, baseUrl: effectiveBaseUrl, models, defaultModel, createdAt: now }
 }
 
 /**
@@ -537,7 +370,7 @@ export function registerIpcHandlers(
     if (workspaceId) {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (workspace) {
-        sessionManager.setupConfigWatcher(workspace.rootPath)
+        sessionManager.setupConfigWatcher(workspace.rootPath, workspace.id)
       }
     }
     return workspaceId
@@ -605,7 +438,7 @@ export function registerIpcHandlers(
     // Set up ConfigWatcher for the new workspace
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (workspace) {
-      sessionManager.setupConfigWatcher(workspace.rootPath)
+      sessionManager.setupConfigWatcher(workspace.rootPath, workspace.id)
     }
     end()
   })
@@ -879,7 +712,12 @@ export function registerIpcHandlers(
       return content
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      ipcLog.error('readFile error:', message)
+      // ENOENT is expected for optional config files (automations.json, etc.) — don't log at error level
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        ipcLog.warn('readFile: file not found:', path)
+      } else {
+        ipcLog.error('readFile error:', message)
+      }
       throw new Error(`Failed to read file: ${message}`)
     }
   })
@@ -1721,8 +1559,10 @@ export function registerIpcHandlers(
         accessToken: tokens.accessToken,
       })
 
-      // Refresh dynamic Copilot model list after OAuth success.
-      await fetchAndStoreCopilotModels(connectionSlug, tokens.accessToken)
+      // Refresh dynamic model list after OAuth success (non-blocking).
+      getModelRefreshService().refreshNow(connectionSlug).catch(err => {
+        ipcLog.warn(`Model refresh after OAuth failed for ${connectionSlug}:`, err)
+      })
 
       return { success: true }
     } catch (error) {
@@ -1906,12 +1746,10 @@ export function registerIpcHandlers(
       // Always set the configured connection as default — the user explicitly chose it.
       setDefaultLlmConnection(setup.slug)
 
-      if (isCopilotProvider(pendingConnection.providerType)) {
-        const oauth = await manager.getLlmOAuth(setup.slug)
-        if (oauth?.accessToken) {
-          await fetchAndStoreCopilotModels(setup.slug, oauth.accessToken)
-        }
-      }
+      // Refresh models from provider (non-blocking)
+      getModelRefreshService().refreshNow(setup.slug).catch(err => {
+        ipcLog.warn(`Model refresh after setup failed for ${setup.slug}:`, err)
+      })
 
       await sessionManager.reinitializeAuth(getDefaultLlmConnection() || setup.slug)
       return { success: true }
@@ -2408,6 +2246,8 @@ export function registerIpcHandlers(
         return { success: false, error: 'Failed to delete connection' }
       }
 
+      getModelRefreshService().stopConnection(slug)
+
       const credentialManager = getCredentialManager()
       await credentialManager.deleteLlmCredentials(slug)
       ipcLog.info(`LLM connection deleted: ${slug}`)
@@ -2459,7 +2299,7 @@ export function registerIpcHandlers(
         }
 
         try {
-          await fetchAndStoreCopilotModels(slug, oauth.accessToken)
+          await getModelRefreshService().refreshNow(slug)
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Unknown error'
           ipcLog.error(`Copilot model fetch failed during validation: ${msg}`)
@@ -2629,6 +2469,12 @@ export function registerIpcHandlers(
 
       // Bedrock/Vertex (and future providers): credential-level validation only for now.
       touchLlmConnection(slug)
+
+      // Refresh models from provider after successful test (non-blocking)
+      getModelRefreshService().refreshNow(slug).catch(err => {
+        ipcLog.warn(`Model refresh after test failed for ${slug}:`, err)
+      })
+
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2698,6 +2544,11 @@ export function registerIpcHandlers(
       ipcLog.error('Failed to set workspace default LLM connection:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
+  })
+
+  // Refresh models from provider API (user-triggered or after auth)
+  ipcMain.handle(IPC_CHANNELS.LLM_CONNECTION_REFRESH_MODELS, async (_event, slug: string): Promise<void> => {
+    await getModelRefreshService().refreshNow(slug)
   })
 
   // ============================================================
@@ -3062,7 +2913,7 @@ export function registerIpcHandlers(
       return []
     }
     // Set up ConfigWatcher for this workspace to broadcast live updates
-    sessionManager.setupConfigWatcher(workspace.rootPath)
+    sessionManager.setupConfigWatcher(workspace.rootPath, workspace.id)
     return loadWorkspaceSources(workspace.rootPath)
   })
 

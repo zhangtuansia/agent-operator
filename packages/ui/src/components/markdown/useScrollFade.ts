@@ -18,8 +18,16 @@ export function useScrollFade(fadeSize = DEFAULT_FADE_SIZE) {
 
     const update = () => {
       const { scrollLeft, scrollWidth, clientWidth } = el
-      setCanScrollLeft(scrollLeft > 1)
-      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1)
+      // Use functional updates to avoid setting state when value hasn't changed,
+      // preventing unnecessary re-renders and resize oscillation loops.
+      setCanScrollLeft(prev => {
+        const next = scrollLeft > 1
+        return prev === next ? prev : next
+      })
+      setCanScrollRight(prev => {
+        const next = scrollLeft + clientWidth < scrollWidth - 1
+        return prev === next ? prev : next
+      })
     }
 
     update()

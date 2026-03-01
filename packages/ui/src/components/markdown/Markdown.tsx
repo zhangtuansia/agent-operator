@@ -552,6 +552,15 @@ function createComponents(
     del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
     // Handle unknown <markdown> tags that may come through rehype-raw
     markdown: ({ children }) => <>{children}</>,
+    // Suppress internal XML tags from edit_request blocks and other system instructions.
+    // These are injected by the app (e.g., EditPopover automation config flow) and should
+    // not render as DOM elements. rehype-raw passes them through, causing React warnings.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    edit_request: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    file: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    context: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   }
 }
 
