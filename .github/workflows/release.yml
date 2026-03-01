@@ -1,0 +1,374 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.9). Leave empty to use package.json version.'
+        required: false
+
+# Only allow one release at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.3.5"
+  BUN_DOWNLOAD_VERSION: "bun-v1.3.5"
+  ELECTRON_BUILDER_PUBLISH: "always"
+
+jobs:
+  # ─── macOS ARM64 ──────────────────────────────────────────────────────────────
+  build-mac-arm64:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download Bun runtime (darwin-aarch64)
+        run: |
+          mkdir -p apps/electron/vendor/bun
+          curl -fSL "https://github.com/oven-sh/bun/releases/download/${{ env.BUN_DOWNLOAD_VERSION }}/bun-darwin-aarch64.zip" -o /tmp/bun.zip
+          unzip -q -o /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-darwin-aarch64/bun apps/electron/vendor/bun/bun
+          chmod +x apps/electron/vendor/bun/bun
+
+      - name: Copy SDK and interceptor
+        run: |
+          # Copy SDK
+          mkdir -p apps/electron/node_modules/@anthropic-ai
+          cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
+
+          # Copy interceptor files
+          mkdir -p apps/electron/packages/shared/src/config
+          cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
+
+      - name: Build Electron app
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          MICROSOFT_OAUTH_CLIENT_SECRET: ${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}
+        run: bun run electron:build
+
+      - name: Package (electron-builder)
+        run: |
+          cd apps/electron
+          npx electron-builder --mac --arm64 --publish always
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-mac-arm64
+          path: |
+            apps/electron/release/Cowork-arm64.dmg
+            apps/electron/release/Cowork-arm64.zip
+            apps/electron/release/latest-mac.yml
+          retention-days: 5
+
+  # ─── macOS x64 ────────────────────────────────────────────────────────────────
+  build-mac-x64:
+    runs-on: macos-13
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download Bun runtime (darwin-x64)
+        run: |
+          mkdir -p apps/electron/vendor/bun
+          curl -fSL "https://github.com/oven-sh/bun/releases/download/${{ env.BUN_DOWNLOAD_VERSION }}/bun-darwin-x64.zip" -o /tmp/bun.zip
+          unzip -q -o /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-darwin-x64/bun apps/electron/vendor/bun/bun
+          chmod +x apps/electron/vendor/bun/bun
+
+      - name: Copy SDK and interceptor
+        run: |
+          mkdir -p apps/electron/node_modules/@anthropic-ai
+          cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
+
+          mkdir -p apps/electron/packages/shared/src/config
+          cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
+
+      - name: Build Electron app
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          MICROSOFT_OAUTH_CLIENT_SECRET: ${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}
+        run: bun run electron:build
+
+      - name: Package (electron-builder)
+        run: |
+          cd apps/electron
+          npx electron-builder --mac --x64 --publish always
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-mac-x64
+          path: |
+            apps/electron/release/Cowork-x64.dmg
+            apps/electron/release/Cowork-x64.zip
+            apps/electron/release/latest-mac.yml
+          retention-days: 5
+
+  # ─── Windows x64 ──────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download Bun runtime (windows-x64)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path apps/electron/vendor/bun
+          Invoke-WebRequest -Uri "https://github.com/oven-sh/bun/releases/download/${{ env.BUN_DOWNLOAD_VERSION }}/bun-windows-x64-baseline.zip" -OutFile "$env:TEMP\bun.zip"
+          Expand-Archive -Path "$env:TEMP\bun.zip" -DestinationPath "$env:TEMP\bun-extract" -Force
+          Copy-Item "$env:TEMP\bun-extract\bun-windows-x64-baseline\bun.exe" -Destination "apps/electron/vendor/bun/bun.exe"
+
+      - name: Copy SDK and interceptor
+        shell: pwsh
+        run: |
+          # Copy SDK
+          New-Item -ItemType Directory -Force -Path apps/electron/node_modules/@anthropic-ai
+          Copy-Item -Recurse -Force node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
+
+          # Copy interceptor files
+          New-Item -ItemType Directory -Force -Path apps/electron/packages/shared/src/config
+          Copy-Item packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
+          Copy-Item packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
+          Copy-Item packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          Copy-Item packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
+
+      - name: Build Electron app
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          MICROSOFT_OAUTH_CLIENT_SECRET: ${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}
+        run: bun run electron:build
+
+      - name: Package (electron-builder)
+        run: |
+          cd apps/electron
+          npx electron-builder --win --x64 --publish always
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows
+          path: |
+            apps/electron/release/Cowork-x64.exe
+            apps/electron/release/latest.yml
+          retention-days: 5
+
+  # ─── Linux x64 ────────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download Bun runtime (linux-x64)
+        run: |
+          mkdir -p apps/electron/vendor/bun
+          curl -fSL "https://github.com/oven-sh/bun/releases/download/${{ env.BUN_DOWNLOAD_VERSION }}/bun-linux-x64.zip" -o /tmp/bun.zip
+          unzip -q -o /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-linux-x64/bun apps/electron/vendor/bun/bun
+          chmod +x apps/electron/vendor/bun/bun
+
+      - name: Copy SDK and interceptor
+        run: |
+          mkdir -p apps/electron/node_modules/@anthropic-ai
+          cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
+
+          mkdir -p apps/electron/packages/shared/src/config
+          cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
+
+      - name: Build Electron app
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          MICROSOFT_OAUTH_CLIENT_SECRET: ${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}
+        run: bun run electron:build
+
+      - name: Package (electron-builder)
+        run: |
+          cd apps/electron
+          npx electron-builder --linux --x64 --publish always
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux
+          path: |
+            apps/electron/release/Cowork-x86_64.AppImage
+            apps/electron/release/latest-linux.yml
+          retention-days: 5
+
+  # ─── Create GitHub Release ────────────────────────────────────────────────────
+  release:
+    needs: [build-mac-arm64, build-mac-x64, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(jq -r .version apps/electron/package.json)
+            echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge macOS YAML manifests
+        run: |
+          # arm64 yml
+          ARM64_YML="artifacts/build-mac-arm64/apps/electron/release/latest-mac.yml"
+          # x64 yml
+          X64_YML="artifacts/build-mac-x64/apps/electron/release/latest-mac.yml"
+
+          if [ -f "$ARM64_YML" ] && [ -f "$X64_YML" ]; then
+            echo "Merging macOS YAML manifests (arm64 + x64)..."
+
+            # Extract files sections from both and merge
+            node -e "
+            const fs = require('fs');
+            const arm64 = fs.readFileSync('$ARM64_YML', 'utf8');
+            const x64 = fs.readFileSync('$X64_YML', 'utf8');
+
+            function parseFiles(yml) {
+              const files = [];
+              let inFiles = false;
+              let current = null;
+              for (const line of yml.split('\n')) {
+                if (line.startsWith('files:')) { inFiles = true; continue; }
+                if (inFiles && line.startsWith('  - ')) {
+                  if (current) files.push(current);
+                  current = {};
+                }
+                if (inFiles && current) {
+                  const m = line.match(/^\s+-?\s*(\w+):\s*(.+)/);
+                  if (m) current[m[1]] = m[2];
+                }
+                if (inFiles && !line.startsWith('  ') && !line.startsWith('files:') && line.trim()) {
+                  inFiles = false;
+                }
+              }
+              if (current) files.push(current);
+              return files;
+            }
+
+            const arm64Files = parseFiles(arm64);
+            const x64Files = parseFiles(x64);
+            const allFiles = [...arm64Files, ...x64Files];
+
+            let merged = x64.replace(/files:[\s\S]*?(?=\npath:)/,
+              'files:\n' + allFiles.map(f =>
+                '  - url: ' + f.url + '\n    sha512: ' + f.sha512 + '\n    size: ' + f.size +
+                (f.blockMapSize ? '\n    blockMapSize: ' + f.blockMapSize : '')
+              ).join('\n') + '\n');
+
+            fs.writeFileSync('latest-mac.yml', merged);
+            console.log('Merged ' + allFiles.length + ' file entries');
+            "
+          elif [ -f "$ARM64_YML" ]; then
+            cp "$ARM64_YML" latest-mac.yml
+          elif [ -f "$X64_YML" ]; then
+            cp "$X64_YML" latest-mac.yml
+          fi
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+
+          # macOS
+          cp artifacts/build-mac-arm64/apps/electron/release/Cowork-arm64.dmg release-files/ 2>/dev/null || true
+          cp artifacts/build-mac-arm64/apps/electron/release/Cowork-arm64.zip release-files/ 2>/dev/null || true
+          cp artifacts/build-mac-x64/apps/electron/release/Cowork-x64.dmg release-files/ 2>/dev/null || true
+          cp artifacts/build-mac-x64/apps/electron/release/Cowork-x64.zip release-files/ 2>/dev/null || true
+
+          # Windows
+          cp artifacts/build-windows/apps/electron/release/Cowork-x64.exe release-files/ 2>/dev/null || true
+
+          # Linux
+          cp artifacts/build-linux/apps/electron/release/Cowork-x86_64.AppImage release-files/ 2>/dev/null || true
+
+          # YAML manifests
+          cp latest-mac.yml release-files/ 2>/dev/null || true
+          cp artifacts/build-windows/apps/electron/release/latest.yml release-files/ 2>/dev/null || true
+          cp artifacts/build-linux/apps/electron/release/latest-linux.yml release-files/ 2>/dev/null || true
+
+          echo "Release files:"
+          ls -lh release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Cowork ${{ steps.version.outputs.tag }}
+          draft: true
+          generate_release_notes: true
+          files: release-files/*
