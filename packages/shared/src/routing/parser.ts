@@ -124,7 +124,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
     // Check for type filter: sources/api, sources/mcp, sources/local
     const validSourceTypes = ['api', 'mcp', 'local']
-    if (validSourceTypes.includes(segments[1])) {
+    if (segments[1] && validSourceTypes.includes(segments[1])) {
       const sourceType = segments[1] as 'api' | 'mcp' | 'local'
       const sourceFilter: SourceFilter = { kind: 'type', sourceType }
 
@@ -177,7 +177,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
     // Check for type filter: automations/scheduled, automations/event, automations/agentic
     const validAutomationTypes = ['scheduled', 'event', 'agentic']
-    if (validAutomationTypes.includes(segments[1])) {
+    if (segments[1] && validAutomationTypes.includes(segments[1])) {
       const automationType = segments[1] as 'scheduled' | 'event' | 'agentic'
       const automationFilter: AutomationFilter = { kind: 'type', automationType }
 

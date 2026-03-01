@@ -219,8 +219,10 @@ function createComponents(
   hideFirstMermaidExpand: boolean = true,
   firstExcalidrawCodeRef?: React.RefObject<string | null>,
   hideFirstExcalidrawExpand: boolean = true
-): Components & { markdown?: React.FC<{ children?: React.ReactNode }> } {
-  const baseComponents: Components & { markdown?: React.FC<{ children?: React.ReactNode }> } = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Components & Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const baseComponents: Components & Record<string, any> = {
     // Section wrapper for collapsible headings
     div: ({ node, children, ...props }) => {
       const sectionId = (props as Record<string, unknown>)['data-section-id'] as string | undefined
@@ -551,7 +553,7 @@ function createComponents(
     em: ({ children }) => <em className="italic">{children}</em>,
     del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
     // Handle unknown <markdown> tags that may come through rehype-raw
-    markdown: ({ children }) => <>{children}</>,
+    markdown: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     // Suppress internal XML tags from edit_request blocks and other system instructions.
     // These are injected by the app (e.g., EditPopover automation config flow) and should
     // not render as DOM elements. rehype-raw passes them through, causing React warnings.

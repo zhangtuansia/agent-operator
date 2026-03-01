@@ -480,6 +480,14 @@ export interface ChatsNavigationState {
 }
 
 /**
+ * Source type filter for sources navigation
+ */
+export interface SourceFilter {
+  kind: 'type'
+  sourceType: 'api' | 'mcp' | 'local'
+}
+
+/**
  * Sources navigation state - shows SourcesListPanel in navigator
  */
 export interface SourcesNavigationState {
