@@ -26,6 +26,23 @@ export type PermissionMode = 'safe' | 'ask' | 'allow-all';
  */
 export const PERMISSION_MODE_ORDER: PermissionMode[] = ['safe', 'ask', 'allow-all'];
 
+/**
+ * Normalize a permission mode string to a valid PermissionMode.
+ * Handles common aliases and display names (e.g., 'auto' → 'allow-all', 'explore' → 'safe').
+ * Returns undefined for unrecognized values.
+ */
+export function normalizePermissionMode(value: string | undefined): PermissionMode | undefined {
+  if (!value) return undefined;
+  const lower = value.toLowerCase().trim();
+  // Direct match
+  if (lower === 'safe' || lower === 'ask' || lower === 'allow-all') return lower;
+  // Display name / alias mapping
+  if (lower === 'auto' || lower === 'allowall' || lower === 'allow_all') return 'allow-all';
+  if (lower === 'explore' || lower === 'read-only' || lower === 'readonly') return 'safe';
+  if (lower === 'ask to edit' || lower === 'ask-to-edit') return 'ask';
+  return undefined;
+}
+
 // ============================================================
 // Permissions Config Types (Browser-safe Zod schemas)
 // ============================================================

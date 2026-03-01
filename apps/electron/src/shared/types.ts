@@ -339,7 +339,22 @@ export interface ElectronAPI {
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
   onMenuOpenSettings(callback: () => void): () => void
+  onMenuOpenSettingsSubpage(callback: (subpage: string) => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
+
+  // Menu role actions
+  menuUndo(): Promise<void>
+  menuRedo(): Promise<void>
+  menuCut(): Promise<void>
+  menuCopy(): Promise<void>
+  menuPaste(): Promise<void>
+  menuSelectAll(): Promise<void>
+  menuZoomIn(): Promise<void>
+  menuZoomOut(): Promise<void>
+  menuZoomReset(): Promise<void>
+  menuMinimize(): Promise<void>
+  menuMaximize(): Promise<void>
+  newWindow(): Promise<void>
 
   // Deep link navigation listener (for external agentoperator:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void

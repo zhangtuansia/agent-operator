@@ -1877,7 +1877,8 @@ export function formatSessionState(
   const mode = getPermissionMode(sessionId);
 
   // Use the display name (lowercased) so the agent sees "explore" instead of internal key "safe"
-  const modeName = PERMISSION_MODE_CONFIG[mode].displayName.toLowerCase();
+  const modeConfig = PERMISSION_MODE_CONFIG[mode];
+  const modeName = modeConfig ? modeConfig.displayName.toLowerCase() : mode;
   let result = `<session_state>\nsessionId: ${sessionId}\npermissionMode: ${modeName}`;
 
   // Always include plans folder path so agent knows where plans are stored

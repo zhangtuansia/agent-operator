@@ -1233,17 +1233,65 @@ export function registerIpcHandlers(
     }
   })
 
+  // Menu role actions (renderer → main)
+  // Edit operations use webContents methods for proper Electron integration
+  ipcMain.handle(IPC_CHANNELS.MENU_UNDO, (event) => { event.sender.undo() })
+  ipcMain.handle(IPC_CHANNELS.MENU_REDO, (event) => { event.sender.redo() })
+  ipcMain.handle(IPC_CHANNELS.MENU_CUT, (event) => { event.sender.cut() })
+  ipcMain.handle(IPC_CHANNELS.MENU_COPY, (event) => { event.sender.copy() })
+  ipcMain.handle(IPC_CHANNELS.MENU_PASTE, (event) => { event.sender.paste() })
+  ipcMain.handle(IPC_CHANNELS.MENU_SELECT_ALL, (event) => { event.sender.selectAll() })
+
+  // Zoom operations
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_IN, (event) => {
+    const level = event.sender.getZoomLevel()
+    event.sender.setZoomLevel(level + 0.5)
+  })
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_OUT, (event) => {
+    const level = event.sender.getZoomLevel()
+    event.sender.setZoomLevel(level - 0.5)
+  })
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_RESET, (event) => {
+    event.sender.setZoomLevel(0)
+  })
+
+  // Window operations
+  ipcMain.handle(IPC_CHANNELS.MENU_MINIMIZE, () => {
+    const win = BrowserWindow.getFocusedWindow()
+    win?.minimize()
+  })
+  ipcMain.handle(IPC_CHANNELS.MENU_MAXIMIZE, () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win?.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win?.maximize()
+    }
+  })
+
+  // New window
+  ipcMain.handle(IPC_CHANNELS.MENU_NEW_WINDOW_ACTION, () => {
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused) {
+      const workspaceId = windowManager.getWorkspaceForWindow(focused.webContents.id)
+      if (workspaceId) {
+        windowManager.createWindow({ workspaceId })
+      }
+    }
+  })
+
   // Show logout confirmation dialog
   ipcMain.handle(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION, async () => {
     const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const isZh = (loadStoredConfig()?.uiLanguage || app.getLocale() || '').startsWith('zh')
     const result = await dialog.showMessageBox(window, {
       type: 'warning',
-      buttons: ['Cancel', 'Log Out'],
+      buttons: [isZh ? '取消' : 'Cancel', isZh ? '退出登录' : 'Log Out'],
       defaultId: 0,
       cancelId: 0,
-      title: 'Log Out',
-      message: 'Are you sure you want to log out?',
-      detail: 'All conversations will be deleted. This action cannot be undone.',
+      title: isZh ? '退出登录' : 'Log Out',
+      message: isZh ? '确定要退出登录吗？' : 'Are you sure you want to log out?',
+      detail: isZh ? '所有对话将被删除，此操作无法撤消。' : 'All conversations will be deleted. This action cannot be undone.',
     } as Electron.MessageBoxOptions)
     // result.response is the index of the clicked button
     // 0 = Cancel, 1 = Log Out
@@ -1253,14 +1301,15 @@ export function registerIpcHandlers(
   // Show delete session confirmation dialog
   ipcMain.handle(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, async (_event, name: string) => {
     const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const isZh = (loadStoredConfig()?.uiLanguage || app.getLocale() || '').startsWith('zh')
     const result = await dialog.showMessageBox(window, {
       type: 'warning',
-      buttons: ['Cancel', 'Delete'],
+      buttons: [isZh ? '取消' : 'Cancel', isZh ? '删除' : 'Delete'],
       defaultId: 0,
       cancelId: 0,
-      title: 'Delete Conversation',
-      message: `Are you sure you want to delete: "${name}"?`,
-      detail: 'This action cannot be undone.',
+      title: isZh ? '删除对话' : 'Delete Conversation',
+      message: isZh ? `确定要删除「${name}」吗？` : `Are you sure you want to delete: "${name}"?`,
+      detail: isZh ? '此操作无法撤消。' : 'This action cannot be undone.',
     } as Electron.MessageBoxOptions)
     // result.response is the index of the clicked button
     // 0 = Cancel, 1 = Delete

@@ -67,7 +67,7 @@ export function SessionBadges({ item }: SessionBadgesProps) {
           <ConnectionIcon connection={connectionDetails} size={14} showTooltip />
         </EntityListBadge>
       )}
-      {permissionMode && (
+      {permissionMode && PERMISSION_MODE_CONFIG[permissionMode] && (
         <EntityListBadge colorClass={cn(
           permissionMode === 'safe' && "bg-foreground/5 text-foreground/60",
           permissionMode === 'ask' && "bg-info/10 text-info",

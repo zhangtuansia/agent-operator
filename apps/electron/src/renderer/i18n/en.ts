@@ -724,6 +724,7 @@ export const en = {
   // App Menu
   appMenu: {
     newChat: 'New Chat',
+    newWindow: 'New Window',
     settings: 'Settings...',
     keyboardShortcuts: 'Keyboard Shortcuts',
     storedUserPreferences: 'Stored User Preferences',
@@ -732,6 +733,25 @@ export const en = {
     goForward: 'Go forward',
     hideSidebar: 'Hide sidebar',
     showSidebar: 'Show sidebar',
+    // Submenu labels
+    edit: 'Edit',
+    view: 'View',
+    window: 'Window',
+    help: 'Help',
+    // Edit submenu
+    undo: 'Undo',
+    redo: 'Redo',
+    cut: 'Cut',
+    copy: 'Copy',
+    paste: 'Paste',
+    selectAll: 'Select All',
+    // View submenu
+    zoomIn: 'Zoom In',
+    zoomOut: 'Zoom Out',
+    resetZoom: 'Reset Zoom',
+    // Window submenu
+    minimize: 'Minimize',
+    maximize: 'Maximize',
   },
 
   // Onboarding

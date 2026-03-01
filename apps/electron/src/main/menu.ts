@@ -1,6 +1,6 @@
 import { Menu, app, shell, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
-import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
+import { EDIT_MENU, VIEW_MENU, WINDOW_MENU, SETTINGS_ITEMS } from '../shared/menu-schema'
 import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
 import { mainLog } from './logger'
@@ -189,6 +189,23 @@ export async function rebuildMenu(): Promise<void> {
       ]
     },
 
+    // Settings menu
+    {
+      label: 'Settings',
+      submenu: [
+        {
+          label: 'Settings...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
+        },
+        { type: 'separator' as const },
+        ...SETTINGS_ITEMS.map(item => ({
+          label: item.label,
+          click: () => sendToRendererWithArgs(IPC_CHANNELS.MENU_OPEN_SETTINGS_SUBPAGE, item.id),
+        })),
+      ]
+    },
+
     // Debug menu (development or developer mode)
     ...(isDeveloperMode() ? [{
       label: 'Debug',
@@ -257,6 +274,16 @@ function sendToRenderer(channel: string): void {
   const win = BrowserWindow.getFocusedWindow()
   if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
     win.webContents.send(channel)
+  }
+}
+
+/**
+ * Sends an IPC message with arguments to the focused renderer window.
+ */
+function sendToRendererWithArgs(channel: string, ...args: unknown[]): void {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.send(channel, ...args)
   }
 }
 

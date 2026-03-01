@@ -726,6 +726,7 @@ export const zh: TranslationKeys = {
   // App Menu
   appMenu: {
     newChat: '新建聊天',
+    newWindow: '新窗口',
     settings: '设置...',
     keyboardShortcuts: '键盘快捷键',
     storedUserPreferences: '已存储的用户偏好',
@@ -734,6 +735,25 @@ export const zh: TranslationKeys = {
     goForward: '前进',
     hideSidebar: '隐藏侧边栏',
     showSidebar: '显示侧边栏',
+    // Submenu labels
+    edit: '编辑',
+    view: '视图',
+    window: '窗口',
+    help: '帮助',
+    // Edit submenu
+    undo: '撤销',
+    redo: '重做',
+    cut: '剪切',
+    copy: '复制',
+    paste: '粘贴',
+    selectAll: '全选',
+    // View submenu
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    resetZoom: '重置缩放',
+    // Window submenu
+    minimize: '最小化',
+    maximize: '最大化',
   },
 
   // Onboarding

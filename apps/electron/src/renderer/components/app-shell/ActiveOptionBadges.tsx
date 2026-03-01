@@ -22,7 +22,7 @@ import { useLanguage } from '@/context/LanguageContext'
 // ============================================================================
 
 function PermissionModeIcon({ mode, className }: { mode: PermissionMode; className?: string }) {
-  const config = PERMISSION_MODE_CONFIG[mode]
+  const config = PERMISSION_MODE_CONFIG[mode] ?? PERMISSION_MODE_CONFIG['ask']
   return (
     <svg
       viewBox="0 0 24 24"
@@ -484,7 +484,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
       shadowVar: 'var(--accent-rgb)',
     },
   }
-  const currentStyle = modeStyles[optimisticMode]
+  const currentStyle = modeStyles[optimisticMode] ?? modeStyles['ask']
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

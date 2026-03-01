@@ -7,6 +7,7 @@
 
 import { useEffect } from 'react'
 import { navigate, routes } from '../lib/navigate'
+import type { SettingsSubpage } from '../../shared/settings-registry'
 
 export interface UseMenuEventsOptions {
   /** Callback to trigger new chat creation */
@@ -29,12 +30,16 @@ export function useMenuEvents({
     const unsubSettings = window.electronAPI.onMenuOpenSettings(() => {
       onOpenSettings()
     })
+    const unsubSettingsSubpage = window.electronAPI.onMenuOpenSettingsSubpage((subpage: string) => {
+      navigate(routes.view.settings(subpage as SettingsSubpage))
+    })
     const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
       navigate(routes.view.settings('shortcuts'))
     })
     return () => {
       unsubNewChat()
       unsubSettings()
+      unsubSettingsSubpage()
       unsubShortcuts()
     }
   }, [onNewChat, onOpenSettings])

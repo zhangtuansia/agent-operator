@@ -22,6 +22,12 @@ import { useScrollFade } from './useScrollFade'
 // minimum rendered height (MIN_READABLE_HEIGHT). If the natural scale would
 // produce a height below this threshold, we scale up and allow horizontal
 // scroll. A CSS mask gradient fades the edges to indicate scrollable content.
+//
+// Scaling approach: We modify the SVG element's width/height attributes
+// directly (ensuring viewBox is set for proper internal scaling) instead of
+// using CSS `transform: scale()`. CSS transforms don't change layout
+// dimensions, which causes scrollWidth to reflect the unscaled SVG width
+// and triggers oscillation loops with scroll-fade detection.
 // ============================================================================
 
 // Minimum rendered height for diagrams. Wide horizontal diagrams are scaled
@@ -42,6 +48,34 @@ function parseSvgDimensions(svgString: string): { width: number; height: number 
   return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) }
 }
 
+/**
+ * Modify the SVG string's root element to have scaled width/height attributes
+ * and ensure a viewBox exists so the SVG scales its internal content properly.
+ * This approach changes *layout* dimensions (unlike CSS transform: scale()),
+ * so scrollWidth correctly reflects the visible size.
+ */
+function scaleSvgString(
+  svgString: string,
+  naturalWidth: number,
+  naturalHeight: number,
+  newWidth: number,
+  newHeight: number,
+): string {
+  let result = svgString
+
+  // Ensure viewBox exists — if not, add one based on natural dimensions.
+  // viewBox tells the SVG how to map its internal coordinate system.
+  if (!/viewBox\s*=/.test(result)) {
+    result = result.replace(/^<svg/, `<svg viewBox="0 0 ${naturalWidth} ${naturalHeight}"`)
+  }
+
+  // Replace width and height attributes with scaled values
+  result = result.replace(/width="[\d.]+"/, `width="${newWidth}"`)
+  result = result.replace(/height="[\d.]+"/, `height="${newHeight}"`)
+
+  return result
+}
+
 export interface MarkdownMermaidBlockProps {
   code: string
   className?: string
@@ -51,7 +85,11 @@ export interface MarkdownMermaidBlockProps {
   showExpandButton?: boolean
 }
 
-export function MarkdownMermaidBlock({ code, className, showExpandButton = true }: MarkdownMermaidBlockProps) {
+export const MarkdownMermaidBlock = React.memo(function MarkdownMermaidBlock({
+  code,
+  className,
+  showExpandButton = true,
+}: MarkdownMermaidBlockProps) {
   // Render synchronously — no flash between CodeBlock and SVG.
   // Colors are CSS variable references so the SVG inherits from the app's theme
   // via CSS cascade. Theme switches apply automatically without re-rendering.
@@ -78,13 +116,13 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
   const [isFullscreen, setIsFullscreen] = React.useState(false)
   const { scrollRef, maskImage } = useScrollFade(FADE_SIZE)
 
-  // Track container width as stable state to prevent resize oscillation.
-  // Only ResizeObserver updates this — never read clientWidth during render.
+  // Track container width via a separate wrapper ref to avoid having two
+  // ResizeObservers on the same element (scrollRef already has one from useScrollFade).
+  const wrapperRef = React.useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = React.useState(0)
   React.useEffect(() => {
-    const el = scrollRef.current
+    const el = wrapperRef.current
     if (!el) return
-    // Initial measurement
     setContainerWidth(el.clientWidth)
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0]
@@ -156,6 +194,18 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
     }
   }, [svgDims, containerWidth])
 
+  // Produce the final SVG string with scaled dimensions baked in.
+  // By modifying width/height attributes (instead of CSS transform), the layout
+  // dimensions match the visual dimensions, eliminating scroll oscillation.
+  const finalSvg = React.useMemo(() => {
+    if (!svg || !svgDims || !scaledDims) return svg
+    if (scaledDims.scale === 1 && !scaledDims.width) return svg
+
+    const targetW = scaledDims.width ?? svgDims.width
+    const targetH = scaledDims.height ?? svgDims.height
+    return scaleSvgString(svg, svgDims.width, svgDims.height, targetW, targetH)
+  }, [svg, svgDims, scaledDims])
+
   // On error, fall back to a plain code block showing the mermaid source
   if (error) {
     return <CodeBlock code={code} language="mermaid" mode="full" className={className} />
@@ -166,14 +216,11 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
     return <CodeBlock code={code} language="mermaid" mode="full" className={className} />
   }
 
-  // Scaling mode: when dimensions are provided OR scale !== 1
-  // This is separate from needsScroll — we may scale to fit without scrolling
-  const needsScaling = scaledDims && (scaledDims.width != null || scaledDims.scale !== 1)
-
   return (
     <>
-      {/* Wrapper with group class so the expand button shows on hover */}
-      <div className={cn('relative group', className)}>
+      {/* Wrapper with group class so the expand button shows on hover.
+          Also observed by containerWidth ResizeObserver (separate from scrollRef). */}
+      <div ref={wrapperRef} className={cn('relative group', className)}>
         {/* Expand button — matches code block expand button style (TurnCard pattern).
             Hidden when showExpandButton is false (first block in message, where
             TurnCard's own fullscreen button occupies the same top-right position). */}
@@ -204,26 +251,16 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
             WebkitMaskImage: maskImage,
           }}
         >
-          {/* Size wrapper — uses explicit dimensions when scaling or scrolling.
-              Block display for scaled/scrolling content, flex center for natural fit. */}
+          {/* SVG container — dimensions are baked into the SVG attributes,
+              so layout size matches visual size (no CSS transform needed). */}
           <div
+            dangerouslySetInnerHTML={{ __html: finalSvg || svg }}
             style={{
-              width: needsScaling && scaledDims?.width ? `${scaledDims.width}px` : undefined,
-              height: needsScaling && scaledDims?.height ? `${scaledDims.height}px` : undefined,
-              display: needsScaling ? 'block' : 'flex',
-              justifyContent: needsScaling ? undefined : 'center',
+              display: scaledDims?.width ? 'block' : 'flex',
+              justifyContent: scaledDims?.width ? undefined : 'center',
+              overflow: 'hidden',
             }}
-          >
-            {/* SVG container — CSS transform scales the SVG visually.
-                transform-origin: top left ensures scaling expands down and right. */}
-            <div
-              dangerouslySetInnerHTML={{ __html: svg }}
-              style={{
-                transformOrigin: 'top left',
-                transform: scaledDims && scaledDims.scale !== 1 ? `scale(${scaledDims.scale})` : undefined,
-              }}
-            />
-          </div>
+          />
         </div>
       </div>
 
@@ -236,4 +273,4 @@ export function MarkdownMermaidBlock({ code, className, showExpandButton = true 
       />
     </>
   )
-}
+})

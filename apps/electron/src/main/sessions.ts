@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { rm, readFile, mkdir, writeFile, rename, open, appendFile } from 'fs/promises'
 import { OperatorAgent, CodexAgent, CopilotAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
@@ -2116,9 +2117,10 @@ export class SessionManager {
     const wsConfig = loadWorkspaceConfig(workspaceRootPath)
     const globalDefaults = loadConfigDefaults()
 
-    // Read permission mode from workspace config, fallback to global defaults
+    // Read permission mode from workspace config, fallback to global defaults.
+    // Normalize values to handle display names (e.g., 'auto' → 'allow-all').
     const defaultPermissionMode = options?.permissionMode
-      ?? wsConfig?.defaults?.permissionMode
+      ?? normalizePermissionMode(wsConfig?.defaults?.permissionMode as string)
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined

@@ -284,6 +284,20 @@ export function ChatDisplay({
     copied: t('actions.copied'),
     noOutput: t('terminalOutput.noOutput'),
   }), [t])
+  const turnCardTranslations = useMemo(() => ({
+    copy: t('turnCard.copy'),
+    copied: t('turnCard.copied'),
+    viewAsMarkdown: t('turnCard.viewAsMarkdown'),
+    typeFeedbackOr: t('turnCard.typeFeedbackOr'),
+    plan: t('turnCard.plan'),
+    viewFullscreen: t('turnCard.viewFullscreen'),
+    closeTitle: `${t('common.close')} (Esc)`,
+    acceptPlan: t('turnCard.acceptPlan'),
+    accept: t('turnCard.accept'),
+    acceptDescription: t('turnCard.acceptDescription'),
+    acceptCompact: t('turnCard.acceptCompact'),
+    acceptCompactDescription: t('turnCard.acceptCompactDescription'),
+  }), [t])
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -1050,20 +1064,7 @@ export function ChatDisplay({
                           onExpandedChange={(expanded) => toggleTurn(turn.turnId, expanded)}
                           expandedActivityGroups={expandedActivityGroups}
                           onExpandedActivityGroupsChange={setExpandedActivityGroups}
-                          translations={{
-                            copy: t('turnCard.copy'),
-                            copied: t('turnCard.copied'),
-                            viewAsMarkdown: t('turnCard.viewAsMarkdown'),
-                            typeFeedbackOr: t('turnCard.typeFeedbackOr'),
-                            plan: t('turnCard.plan'),
-                            viewFullscreen: t('turnCard.viewFullscreen'),
-                            closeTitle: `${t('common.close')} (Esc)`,
-                            acceptPlan: t('turnCard.acceptPlan'),
-                            accept: t('turnCard.accept'),
-                            acceptDescription: t('turnCard.acceptDescription'),
-                            acceptCompact: t('turnCard.acceptCompact'),
-                            acceptCompactDescription: t('turnCard.acceptCompactDescription'),
-                          }}
+                          translations={turnCardTranslations}
                           onAcceptPlan={() => {
                             window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
                               detail: { text: 'Plan approved, please execute.', sessionId: session?.id }

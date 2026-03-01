@@ -124,11 +124,30 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.MENU_OPEN_SETTINGS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_SETTINGS, handler)
   },
+  onMenuOpenSettingsSubpage: (callback: (subpage: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, subpage: string) => callback(subpage)
+    ipcRenderer.on(IPC_CHANNELS.MENU_OPEN_SETTINGS_SUBPAGE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_SETTINGS_SUBPAGE, handler)
+  },
   onMenuKeyboardShortcuts: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS, handler)
   },
+
+  // Menu role actions (renderer → main)
+  menuUndo: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_UNDO),
+  menuRedo: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_REDO),
+  menuCut: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_CUT),
+  menuCopy: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_COPY),
+  menuPaste: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_PASTE),
+  menuSelectAll: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_SELECT_ALL),
+  menuZoomIn: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_ZOOM_IN),
+  menuZoomOut: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_ZOOM_OUT),
+  menuZoomReset: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_ZOOM_RESET),
+  menuMinimize: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_MINIMIZE),
+  menuMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_MAXIMIZE),
+  newWindow: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_NEW_WINDOW_ACTION),
 
   // Deep link navigation listener (for external agentoperator:// URLs)
   onDeepLinkNavigate: (callback: (nav: import('../shared/types').DeepLinkNavigation) => void) => {

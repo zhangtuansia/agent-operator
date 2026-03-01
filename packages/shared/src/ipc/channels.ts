@@ -95,7 +95,22 @@ export const IPC_CHANNELS = {
   MENU_NEW_CHAT: 'menu:newChat',
   MENU_NEW_WINDOW: 'menu:newWindow',
   MENU_OPEN_SETTINGS: 'menu:openSettings',
+  MENU_OPEN_SETTINGS_SUBPAGE: 'menu:openSettingsSubpage',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
+
+  // Menu role actions (renderer → main)
+  MENU_UNDO: 'menu:undo',
+  MENU_REDO: 'menu:redo',
+  MENU_CUT: 'menu:cut',
+  MENU_COPY: 'menu:copy',
+  MENU_PASTE: 'menu:paste',
+  MENU_SELECT_ALL: 'menu:selectAll',
+  MENU_ZOOM_IN: 'menu:zoomIn',
+  MENU_ZOOM_OUT: 'menu:zoomOut',
+  MENU_ZOOM_RESET: 'menu:zoomReset',
+  MENU_MINIMIZE: 'menu:minimize',
+  MENU_MAXIMIZE: 'menu:maximize',
+  MENU_NEW_WINDOW_ACTION: 'menu:newWindowAction',
   // Deep link navigation (main → renderer, for external agentoperator:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
   // Get pending deep link for this window (renderer → main, pull-based for reliable timing)
