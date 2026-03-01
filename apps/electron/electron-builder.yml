@@ -37,10 +37,11 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
-# Auto-update: electron-updater fetches YAML manifests from this URL
+# Auto-update: electron-updater fetches YAML manifests from GitHub Releases
 publish:
-  provider: generic
-  url: https://download.aicowork.chat/electron/latest
+  provider: github
+  owner: zhangtuansia
+  repo: agent-operator
 
 # Extra resources to bundle with the app (outside the app code)
 extraResources:
