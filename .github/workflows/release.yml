@@ -283,14 +283,18 @@ jobs:
         with:
           path: artifacts
 
+      - name: Debug artifact structure
+        run: |
+          echo "=== Artifact directory structure ==="
+          find artifacts -type f | head -50
+
       - name: Merge macOS YAML manifests
         run: |
-          # arm64 yml
-          ARM64_YML="artifacts/build-mac-arm64/apps/electron/release/latest-mac.yml"
-          # x64 yml
-          X64_YML="artifacts/build-mac-x64/apps/electron/release/latest-mac.yml"
+          # Find the actual yml files (path may vary depending on upload-artifact version)
+          ARM64_YML=$(find artifacts/build-mac-arm64 -name "latest-mac.yml" | head -1)
+          X64_YML=$(find artifacts/build-mac-x64 -name "latest-mac.yml" | head -1)
 
-          if [ -f "$ARM64_YML" ] && [ -f "$X64_YML" ]; then
+          if [ -n "$ARM64_YML" ] && [ -n "$X64_YML" ] && [ -f "$ARM64_YML" ] && [ -f "$X64_YML" ]; then
             echo "Merging macOS YAML manifests (arm64 + x64)..."
 
             # Extract files sections from both and merge
@@ -334,9 +338,9 @@ jobs:
             fs.writeFileSync('latest-mac.yml', merged);
             console.log('Merged ' + allFiles.length + ' file entries');
             "
-          elif [ -f "$ARM64_YML" ]; then
+          elif [ -n "$ARM64_YML" ] && [ -f "$ARM64_YML" ]; then
             cp "$ARM64_YML" latest-mac.yml
-          elif [ -f "$X64_YML" ]; then
+          elif [ -n "$X64_YML" ] && [ -f "$X64_YML" ]; then
             cp "$X64_YML" latest-mac.yml
           fi
 
@@ -344,23 +348,21 @@ jobs:
         run: |
           mkdir -p release-files
 
-          # macOS
-          cp artifacts/build-mac-arm64/apps/electron/release/Cowork-arm64.dmg release-files/ 2>/dev/null || true
-          cp artifacts/build-mac-arm64/apps/electron/release/Cowork-arm64.zip release-files/ 2>/dev/null || true
-          cp artifacts/build-mac-x64/apps/electron/release/Cowork-x64.dmg release-files/ 2>/dev/null || true
-          cp artifacts/build-mac-x64/apps/electron/release/Cowork-x64.zip release-files/ 2>/dev/null || true
+          # Copy all release artifacts using find (path structure may vary)
+          for name in Cowork-arm64.dmg Cowork-arm64.zip Cowork-x64.dmg Cowork-x64.zip Cowork-x64.exe Cowork-x86_64.AppImage latest.yml latest-linux.yml; do
+            src=$(find artifacts -name "$name" -type f | head -1)
+            if [ -n "$src" ]; then
+              cp "$src" release-files/
+              echo "  Copied: $name"
+            else
+              echo "  Missing: $name"
+            fi
+          done
 
-          # Windows
-          cp artifacts/build-windows/apps/electron/release/Cowork-x64.exe release-files/ 2>/dev/null || true
+          # Copy merged macOS YAML manifest
+          cp latest-mac.yml release-files/ 2>/dev/null && echo "  Copied: latest-mac.yml" || echo "  Missing: latest-mac.yml"
 
-          # Linux
-          cp artifacts/build-linux/apps/electron/release/Cowork-x86_64.AppImage release-files/ 2>/dev/null || true
-
-          # YAML manifests
-          cp latest-mac.yml release-files/ 2>/dev/null || true
-          cp artifacts/build-windows/apps/electron/release/latest.yml release-files/ 2>/dev/null || true
-          cp artifacts/build-linux/apps/electron/release/latest-linux.yml release-files/ 2>/dev/null || true
-
+          echo ""
           echo "Release files:"
           ls -lh release-files/
 
