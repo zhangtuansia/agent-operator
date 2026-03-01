@@ -25,6 +25,8 @@ jobs:
   build-mac-arm64:
     runs-on: macos-14
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +69,8 @@ jobs:
         run: bun run electron:build
 
       - name: Package (electron-builder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd apps/electron
           npx electron-builder --mac --arm64 --publish always
@@ -85,6 +89,8 @@ jobs:
   build-mac-x64:
     runs-on: macos-15
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -125,6 +131,8 @@ jobs:
         run: bun run electron:build
 
       - name: Package (electron-builder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd apps/electron
           npx electron-builder --mac --x64 --publish always
@@ -143,6 +151,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -186,6 +196,8 @@ jobs:
         run: bun run electron:build
 
       - name: Package (electron-builder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd apps/electron
           npx electron-builder --win --x64 --publish always
@@ -203,6 +215,8 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -243,6 +257,8 @@ jobs:
         run: bun run electron:build
 
       - name: Package (electron-builder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd apps/electron
           npx electron-builder --linux --x64 --publish always
