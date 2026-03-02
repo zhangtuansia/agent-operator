@@ -321,6 +321,8 @@ export interface ElectronAPI {
   getAppVersion(): Promise<{ app: string; os: string; osVersion: string; arch: string }>
   getHomeDir(): Promise<string>
   isDebugMode(): Promise<boolean>
+  getReleaseNotes(): Promise<string>
+  getLatestReleaseVersion(): Promise<string | undefined>
 
   // Auto-update
   checkForUpdates(): Promise<UpdateInfo>

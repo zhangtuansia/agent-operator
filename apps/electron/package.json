@@ -1,6 +1,6 @@
 {
   "name": "@agent-operator/electron",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Electron desktop app for Cowork",
   "main": "dist/main.cjs",
   "private": true,

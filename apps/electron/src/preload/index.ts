@@ -86,6 +86,8 @@ const api: ElectronAPI = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
+  getReleaseNotes: () => ipcRenderer.invoke(IPC_CHANNELS.GET_RELEASE_NOTES),
+  getLatestReleaseVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION),
 
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
