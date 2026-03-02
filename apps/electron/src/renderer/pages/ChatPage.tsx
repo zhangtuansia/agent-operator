@@ -341,19 +341,19 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'shareToViewer' }) as { success: boolean; url?: string; error?: string } | undefined
     if (result?.success && result.url) {
       await navigator.clipboard.writeText(result.url)
-      toast.success(t('contextMenu.linkCopied'), {
+      toast.success(t('sessionMenu.linkCopied'), {
         description: result.url,
-        action: { label: t('contextMenu.openInBrowser'), onClick: () => window.electronAPI.openUrl(result.url!) },
+        action: { label: t('sessionMenu.openInBrowser'), onClick: () => window.electronAPI.openUrl(result.url!) },
       })
     } else {
-      toast.error(t('contextMenu.failedToShare'), { description: result?.error })
+      toast.error(t('sessionMenu.failedToShare'), { description: result?.error })
     }
   }, [sessionId, t])
 
   const handleCopyLink = React.useCallback(async () => {
     if (sharedUrl) {
       await navigator.clipboard.writeText(sharedUrl)
-      toast.success(t('contextMenu.linkCopied'))
+      toast.success(t('sessionMenu.linkCopied'))
     }
   }, [sharedUrl, t])
 
@@ -364,18 +364,18 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleUpdateShare = React.useCallback(async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'updateShare' }) as { success: boolean; error?: string } | undefined
     if (result?.success) {
-      toast.success(t('contextMenu.shareUpdated'))
+      toast.success(t('sessionMenu.shareUpdated'))
     } else {
-      toast.error(t('contextMenu.failedToUpdateShare'), { description: result?.error })
+      toast.error(t('sessionMenu.failedToUpdateShare'), { description: result?.error })
     }
   }, [sessionId, t])
 
   const handleRevokeShare = React.useCallback(async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'revokeShare' }) as { success: boolean; error?: string } | undefined
     if (result?.success) {
-      toast.success(t('contextMenu.sharingStopped'))
+      toast.success(t('sessionMenu.sharingStopped'))
     } else {
-      toast.error(t('contextMenu.failedToStopSharing'), { description: result?.error })
+      toast.error(t('sessionMenu.failedToStopSharing'), { description: result?.error })
     }
   }, [sessionId, t])
 
@@ -430,7 +430,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
           <HeaderIconButton
             icon={sharedUrl ? downloadIcon : uploadIcon}
             className={sharedUrl ? 'text-accent' : 'text-foreground'}
-            tooltip={sharedUrl ? t('contextMenu.shared') : t('contextMenu.share')}
+            tooltip={sharedUrl ? t('sessionMenu.shared') : t('sessionMenu.share')}
           />
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="end" sideOffset={8}>
@@ -438,26 +438,26 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             <>
               <StyledDropdownMenuItem onClick={handleOpenInBrowser}>
                 <Globe className="h-3.5 w-3.5" />
-                <span className="flex-1">{t('contextMenu.openInBrowser')}</span>
+                <span className="flex-1">{t('sessionMenu.openInBrowser')}</span>
               </StyledDropdownMenuItem>
               <StyledDropdownMenuItem onClick={handleCopyLink}>
                 <Copy className="h-3.5 w-3.5" />
-                <span className="flex-1">{t('contextMenu.copyLink')}</span>
+                <span className="flex-1">{t('sessionMenu.copyLink')}</span>
               </StyledDropdownMenuItem>
               <StyledDropdownMenuItem onClick={handleUpdateShare}>
                 <RefreshCw className="h-3.5 w-3.5" />
-                <span className="flex-1">{t('contextMenu.updateShare')}</span>
+                <span className="flex-1">{t('sessionMenu.updateShare')}</span>
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
               <StyledDropdownMenuItem onClick={handleRevokeShare} variant="destructive">
                 <Link2Off className="h-3.5 w-3.5" />
-                <span className="flex-1">{t('contextMenu.stopSharing')}</span>
+                <span className="flex-1">{t('sessionMenu.stopSharing')}</span>
               </StyledDropdownMenuItem>
             </>
           ) : (
             <StyledDropdownMenuItem onClick={handleShare}>
               {uploadIcon}
-              <span className="flex-1">{t('contextMenu.share')}</span>
+              <span className="flex-1">{t('sessionMenu.share')}</span>
             </StyledDropdownMenuItem>
           )}
         </StyledDropdownMenuContent>
