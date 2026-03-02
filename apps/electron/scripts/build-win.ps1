@@ -165,15 +165,27 @@ Write-Host "Copying SDK..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
 Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
 
-# 5. Copy interceptor
+# 5. Copy interceptor and dependencies
 $InterceptorSource = "$RootDir\packages\shared\src\network-interceptor.ts"
+$InterceptorImplSource = "$RootDir\packages\shared\src\network\interceptor.ts"
 if (-not (Test-Path $InterceptorSource)) {
-    Write-Host "ERROR: Interceptor not found at $InterceptorSource" -ForegroundColor Red
+    Write-Host "ERROR: Interceptor shim not found at $InterceptorSource" -ForegroundColor Red
     exit 1
 }
-Write-Host "Copying interceptor..."
+if (-not (Test-Path $InterceptorImplSource)) {
+    Write-Host "ERROR: Interceptor implementation not found at $InterceptorImplSource" -ForegroundColor Red
+    exit 1
+}
+Write-Host "Copying interceptor and dependencies..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src" | Out-Null
+New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src\network" | Out-Null
+New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src\config" | Out-Null
 Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
+Copy-Item -Recurse -Force "$RootDir\packages\shared\src\network\*.ts" "$ElectronDir\packages\shared\src\network\"
+Copy-Item "$RootDir\packages\shared\src\interceptor-common.ts" "$ElectronDir\packages\shared\src\"
+Copy-Item "$RootDir\packages\shared\src\feature-flags.ts" "$ElectronDir\packages\shared\src\"
+Copy-Item "$RootDir\packages\shared\src\config\feature-flags.ts" "$ElectronDir\packages\shared\src\config\"
+Copy-Item "$RootDir\packages\shared\src\config\paths.ts" "$ElectronDir\packages\shared\src\config\"
 
 # 6. Build Electron app
 Write-Host "Building Electron app..."

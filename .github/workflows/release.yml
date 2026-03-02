@@ -53,9 +53,12 @@ jobs:
 
           # Copy interceptor files
           mkdir -p apps/electron/packages/shared/src/config
+          mkdir -p apps/electron/packages/shared/src/network
           cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
           cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
           cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/network/*.ts apps/electron/packages/shared/src/network/
+          cp packages/shared/src/config/feature-flags.ts apps/electron/packages/shared/src/config/
           cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
 
       - name: Build Electron app
@@ -115,9 +118,12 @@ jobs:
           cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
 
           mkdir -p apps/electron/packages/shared/src/config
+          mkdir -p apps/electron/packages/shared/src/network
           cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
           cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
           cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/network/*.ts apps/electron/packages/shared/src/network/
+          cp packages/shared/src/config/feature-flags.ts apps/electron/packages/shared/src/config/
           cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
 
       - name: Build Electron app
@@ -180,9 +186,12 @@ jobs:
 
           # Copy interceptor files
           New-Item -ItemType Directory -Force -Path apps/electron/packages/shared/src/config
+          New-Item -ItemType Directory -Force -Path apps/electron/packages/shared/src/network
           Copy-Item packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
           Copy-Item packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
           Copy-Item packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          Copy-Item packages/shared/src/network/*.ts apps/electron/packages/shared/src/network/
+          Copy-Item packages/shared/src/config/feature-flags.ts apps/electron/packages/shared/src/config/
           Copy-Item packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
 
       - name: Build Electron app
@@ -241,9 +250,12 @@ jobs:
           cp -r node_modules/@anthropic-ai/claude-agent-sdk apps/electron/node_modules/@anthropic-ai/
 
           mkdir -p apps/electron/packages/shared/src/config
+          mkdir -p apps/electron/packages/shared/src/network
           cp packages/shared/src/network-interceptor.ts apps/electron/packages/shared/src/
           cp packages/shared/src/interceptor-common.ts apps/electron/packages/shared/src/
           cp packages/shared/src/feature-flags.ts apps/electron/packages/shared/src/
+          cp packages/shared/src/network/*.ts apps/electron/packages/shared/src/network/
+          cp packages/shared/src/config/feature-flags.ts apps/electron/packages/shared/src/config/
           cp packages/shared/src/config/paths.ts apps/electron/packages/shared/src/config/
 
       - name: Build Electron app

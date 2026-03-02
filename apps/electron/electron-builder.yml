@@ -20,6 +20,8 @@ files:
   - packages/shared/src/network-interceptor.ts
   - packages/shared/src/interceptor-common.ts
   - packages/shared/src/feature-flags.ts
+  - packages/shared/src/network/**/*
+  - packages/shared/src/config/feature-flags.ts
   - packages/shared/src/config/paths.ts
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
