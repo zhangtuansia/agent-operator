@@ -480,22 +480,44 @@ search() {
   echo "---"
   echo ""
 
-  # Extract and format each result
-  # Note: This is a simplified parser. For production, use jq or node.js
-  echo "$SEARCH_RESPONSE" | grep -o '"title":"[^"]*","url":"[^"]*","snippet":"[^"]*"' | while IFS= read -r result; do
-    local TITLE=$(echo "$result" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
-    local URL=$(echo "$result" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
-    local SNIPPET=$(echo "$result" | sed -n 's/.*"snippet":"\([^"]*\)".*/\1/p')
+  # Extract and format each result using node for reliable JSON parsing
+  if resolve_http_node_runtime; then
+    env "${HTTP_NODE_ENV_PREFIX[@]}" "$HTTP_NODE_CMD" "${HTTP_NODE_ARGS[@]}" -e '
+      try {
+        const data = JSON.parse(process.argv[1]);
+        const results = data.results || data.organic || [];
+        results.forEach(r => {
+          const title = r.title || "";
+          const url = r.url || r.link || "";
+          const snippet = r.snippet || r.description || "";
+          console.log("## " + title);
+          console.log("");
+          console.log("**URL:** [" + url + "](" + url + ")");
+          console.log("");
+          console.log(snippet);
+          console.log("");
+          console.log("---");
+          console.log("");
+        });
+      } catch(e) { process.stderr.write("JSON parse error: " + e.message + "\n"); }
+    ' "$SEARCH_RESPONSE"
+  else
+    # Fallback: basic grep extraction (may miss results with escaped quotes)
+    echo "$SEARCH_RESPONSE" | grep -o '"title":"[^"]*","url":"[^"]*","snippet":"[^"]*"' | while IFS= read -r result; do
+      local TITLE=$(echo "$result" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
+      local URL=$(echo "$result" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+      local SNIPPET=$(echo "$result" | sed -n 's/.*"snippet":"\([^"]*\)".*/\1/p')
 
-    echo "## $TITLE"
-    echo ""
-    echo "**URL:** [$URL]($URL)"
-    echo ""
-    echo "$SNIPPET"
-    echo ""
-    echo "---"
-    echo ""
-  done
+      echo "## $TITLE"
+      echo ""
+      echo "**URL:** [$URL]($URL)"
+      echo ""
+      echo "$SNIPPET"
+      echo ""
+      echo "---"
+      echo ""
+    done
+  fi
 }
 
 # Main execution

@@ -28,6 +28,7 @@ export interface SessionListContextValue {
   searchQuery?: string
   selectedSessionId?: string | null
   isMultiSelectActive: boolean
+  selectedIds: Set<string>
 
   // Per-session lookup maps
   sessionOptions?: Map<string, SessionOptions>

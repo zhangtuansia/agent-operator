@@ -265,7 +265,8 @@ ${featuredEntries}
 </featured_skills>
 ${others.length > 0 ? `\n<other_skills>\n${otherEntries}\n</other_skills>\n` : ''}
 When the user's request matches a skill, read its SKILL.md (at \`location\`) and follow the instructions inside.
-${skills.some((s) => s.slug === 'web-search') ? `**IMPORTANT:** Do NOT use the built-in WebSearch tool. ALWAYS use the \`web-search\` skill instead.\n` : ''}
+\`$SKILLS_ROOT\` is pre-set in the shell environment. Use it directly in bash commands — do NOT export or override it.
+${skills.some((s) => s.slug === 'web-search') ? `Prefer the \`web-search\` skill for search tasks. Fall back to the built-in WebSearch/WebFetch tools only when the skill is unavailable or fails.\n` : ''}
 `;
 }
 

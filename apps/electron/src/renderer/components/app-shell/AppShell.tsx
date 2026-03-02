@@ -1211,11 +1211,11 @@ function AppShellContent({
 
     // Sessions section
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
-    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
     // Status sub-items
     for (const state of todoStates) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
     }
+    result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
     // Label sub-items
     for (const label of flattenLabels(labelConfigs)) {
       result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
@@ -1231,7 +1231,7 @@ function AppShellContent({
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:automations:scheduled', type: 'nav', action: handleAutomationsScheduledClick })
     result.push({ id: 'nav:automations:event', type: 'nav', action: handleAutomationsEventClick })
-    result.push({ id: 'nav:automations:agentic', type: 'nav', action: handleAutomationsAgenticClick })
+    // nav:automations:agentic hidden (not useful yet)
     // Settings
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
@@ -1363,7 +1363,13 @@ function AppShellContent({
 
     // Automations navigator
     if (isAutomationsNavigation(navState)) {
-      return t('sidebar.automations')
+      if (!automationFilter) return t('sidebar.automations')
+      switch (automationFilter.automationType) {
+        case 'scheduled': return t('sidebar.scheduled')
+        case 'event': return t('sidebar.eventBased')
+        case 'agentic': return t('sidebar.agentic')
+        default: return t('sidebar.automations')
+      }
     }
 
     // Settings navigator
@@ -1394,7 +1400,7 @@ function AppShellContent({
       default:
         return t('sessionList.allChats')
     }
-  }, [navState, chatFilter, todoStates, labelConfigs, t])
+  }, [navState, chatFilter, todoStates, labelConfigs, automationFilter, t])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1511,14 +1517,6 @@ function AppShellContent({
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
                       onClick: handleAllChatsClick,
                     },
-                    {
-                      id: "nav:flagged",
-                      title: t('sessionList.flagged'),
-                      label: String(flaggedCount),
-                      icon: <Flag className="h-3.5 w-3.5" />,
-                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                      onClick: handleFlaggedClick,
-                    },
                     // Status: expandable section with dynamic status sub-items
                     {
                       id: "nav:states",
@@ -1550,6 +1548,15 @@ function AppShellContent({
                         acceptsDrop: true,
                         onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
                       })),
+                    },
+                    // Flagged
+                    {
+                      id: "nav:flagged",
+                      title: t('sessionList.flagged'),
+                      label: String(flaggedCount),
+                      icon: <Flag className="h-3.5 w-3.5" />,
+                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                      onClick: handleFlaggedClick,
                     },
                     // Labels: navigable header + hierarchical tree
                     ...(labelConfigs.length > 0 ? [{
@@ -1682,15 +1689,16 @@ function AppShellContent({
                           onClick: handleAutomationsEventClick,
                           contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
                         },
-                        {
-                          id: "nav:automations:agentic",
-                          title: t('sidebar.agentic') ?? 'Agentic',
-                          label: String(automationTypeCounts.agentic),
-                          icon: Bot,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" as const : "ghost" as const,
-                          onClick: handleAutomationsAgenticClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
+                        // Agentic automation type hidden (not useful yet)
+                        // {
+                        //   id: "nav:automations:agentic",
+                        //   title: t('sidebar.agentic') ?? 'Agentic',
+                        //   label: String(automationTypeCounts.agentic),
+                        //   icon: Bot,
+                        //   variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" as const : "ghost" as const,
+                        //   onClick: handleAutomationsAgenticClick,
+                        //   contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
+                        // },
                       ],
                     },
                     // --- Separator ---
@@ -1872,6 +1880,18 @@ function AppShellContent({
                     <SkillAddDropdown
                       workspaceId={activeWorkspaceId}
                       workspaceRootPath={activeWorkspace.rootPath}
+                    />
+                  )}
+                  {/* Add Automation button (only for automations mode) */}
+                  {isAutomationsNavigation(navState) && activeWorkspace && (
+                    <EditPopover
+                      trigger={
+                        <HeaderIconButton
+                          icon={<Plus className="h-4 w-4" />}
+                          tooltip={t('automations.addAutomation')}
+                        />
+                      }
+                      {...getEditConfig('automation-config', activeWorkspace.rootPath)}
                     />
                   )}
                 </>

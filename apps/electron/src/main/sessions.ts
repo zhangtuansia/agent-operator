@@ -2448,6 +2448,8 @@ export class SessionManager {
           // Initialize thinking level at construction to avoid race conditions
           thinkingLevel: managed.thinkingLevel,
           isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          // Workspace-level AutomationSystem for agent lifecycle hook events
+          automationSystem: this.automationSystems.get(managed.workspace.rootPath),
           // Always pass session object - id is required for plan mode callbacks
           // sdkSessionId is optional and used for conversation resumption
           session: sessionConfig,

@@ -54,6 +54,7 @@ import type { ValidationIssue } from '../config/validators.ts';
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
+import type { AutomationSystem, SdkAutomationCallbackMatcher } from '../automations/index.ts';
 
 // Re-export permission mode functions for application usage
 export {
@@ -129,6 +130,8 @@ export interface OperatorAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
+  automationSystem?: AutomationSystem;
 }
 
 // Permission request tracking
@@ -396,6 +399,8 @@ export class OperatorAgent {
   private thinkingLevel: ThinkingLevel = 'think';
   // Ultrathink override - when true, boosts to max thinking for one message (resets after query)
   private ultrathinkOverride: boolean = false;
+  // Workspace-level AutomationSystem instance (shared across all agents in the workspace)
+  private automationSystem?: AutomationSystem;
   // Config file watcher for hot-reloading source changes
   private configWatcher: ConfigWatcher | null = null;
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
@@ -513,6 +518,9 @@ export class OperatorAgent {
         this.onAuthRequest?.(request);
       },
     });
+
+    // Store workspace-level AutomationSystem (for agent lifecycle hook events)
+    this.automationSystem = config.automationSystem;
 
     // Start config watcher for hot-reloading source changes
     // Only start in non-headless mode to avoid overhead in batch/script scenarios
@@ -928,10 +936,20 @@ export class OperatorAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        // Use PreToolUse hook to intercept tool calls (plan mode blocking happens here)
-        hooks: {
+        // User hooks from automations.json are merged with internal hooks
+        hooks: (() => {
+          // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
+          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
+          if (Object.keys(userHooks).length > 0) {
+            debug('[OperatorAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
+          }
+
+          // Internal hooks for permission handling and summarization
+          // Note: Using 'any' because SDK hook types differ from SdkAutomationCallbackMatcher
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const internalHooks: Record<string, any[]> = {
           PreToolUse: [{
-            hooks: [async (input) => {
+            hooks: [async (input: any) => {
               // Only handle PreToolUse events
               if (input.hook_event_name !== 'PreToolUse') {
                 return { continue: true };
@@ -1396,7 +1414,7 @@ export class OperatorAgent {
           }],
           // PostToolUse hook to summarize large MCP tool results
           PostToolUse: [{
-            hooks: [async (input) => {
+            hooks: [async (input: any) => {
               // Only handle PostToolUse events
               if (input.hook_event_name !== 'PostToolUse') {
                 return { continue: true };
@@ -1490,20 +1508,38 @@ export class OperatorAgent {
           // SUBAGENT HOOKS: Logging only - parent tracking uses SDK's parent_tool_use_id
           // ═══════════════════════════════════════════════════════════════════════════
           SubagentStart: [{
-            hooks: [async (input, _hookToolUseID) => {
+            hooks: [async (input: any, _hookToolUseID: any) => {
               const typedInput = input as { agent_id?: string; agent_type?: string };
               console.log(`[OperatorAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
               return { continue: true };
             }],
           }],
           SubagentStop: [{
-            hooks: [async (input, _toolUseID) => {
+            hooks: [async (input: any, _toolUseID: any) => {
               const typedInput = input as { agent_id?: string };
               console.log(`[OperatorAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
               return { continue: true };
             }],
           }],
-        },
+          };
+
+          // Merge internal hooks with user hooks from automations.json
+          // Internal hooks run first (permissions), then user hooks
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mergedHooks: Record<string, any[]> = { ...internalHooks };
+          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
+            if (!matchers) continue;
+            if (mergedHooks[event]) {
+              // Append user hooks after internal hooks
+              mergedHooks[event] = [...mergedHooks[event]!, ...matchers];
+            } else {
+              // Add new event hooks
+              mergedHooks[event] = matchers;
+            }
+          }
+
+          return mergedHooks;
+        })(),
         // Continue from previous session if we have one (enables conversation history & auto compaction)
         // Skip resume on retry (after session expiry) to start fresh
         ...(!_isRetry && this.sessionId ? { resume: this.sessionId } : {}),

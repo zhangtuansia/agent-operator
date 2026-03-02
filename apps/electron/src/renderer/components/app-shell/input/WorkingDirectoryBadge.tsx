@@ -166,10 +166,9 @@ export function WorkingDirectoryBadge({
           <FreeFormInputContextBadge
             icon={<Icon_Home className="h-4 w-4" />}
             label={folderName}
-            isExpanded={isEmptySession}
-            hasSelection={hasFolder}
-            collapsedLabelClassName="max-w-[72px]"
-            showChevron={true}
+            isExpanded={false}
+            hasSelection={false}
+            showChevron={false}
             isOpen={popoverOpen}
             tooltip={
               hasFolder ? (

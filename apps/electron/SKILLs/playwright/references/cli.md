@@ -3,12 +3,11 @@
 Use the wrapper script unless the CLI is already installed globally:
 
 ```bash
-export SKILLS_ROOT="${COWORK_SKILLS_ROOT:-${SKILLS_ROOT:-$HOME/Library/Application Support/@agent-operator/electron/SKILLs}}"
-export PWCLI="$SKILLS_ROOT/playwright/scripts/playwright_cli.sh"
+PWCLI="$SKILLS_ROOT/playwright/scripts/playwright_cli.sh"
 "$PWCLI" --help
 ```
 
-Installed skills resolve from `$COWORK_SKILLS_ROOT` / `$SKILLS_ROOT` (production default: app `userData/SKILLs`, macOS usually `~/Library/Application Support/@agent-operator/electron/SKILLs`).
+`$SKILLS_ROOT` is pre-set in the environment. Just use it directly.
 
 Optional convenience alias:
 

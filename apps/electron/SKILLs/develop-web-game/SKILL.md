@@ -11,12 +11,11 @@ Build games in small steps and validate every change. Treat each iteration as: i
 ## Skill paths (set once)
 
 ```bash
-export SKILLS_ROOT="${COWORK_SKILLS_ROOT:-${SKILLS_ROOT:-$HOME/Library/Application Support/@agent-operator/electron/SKILLs}}"
-export WEB_GAME_CLIENT="$SKILLS_ROOT/develop-web-game/scripts/web_game_playwright_client.js"
-export WEB_GAME_ACTIONS="$SKILLS_ROOT/develop-web-game/references/action_payloads.json"
+WEB_GAME_CLIENT="$SKILLS_ROOT/develop-web-game/scripts/web_game_playwright_client.js"
+WEB_GAME_ACTIONS="$SKILLS_ROOT/develop-web-game/references/action_payloads.json"
 ```
 
-Installed skills resolve from `$COWORK_SKILLS_ROOT` / `$SKILLS_ROOT` (production default: app `userData/SKILLs`, macOS usually `~/Library/Application Support/@agent-operator/electron/SKILLs`).
+`$SKILLS_ROOT` is pre-set in the environment. Just use it directly — do NOT export or override it.
 
 ## Workflow
 

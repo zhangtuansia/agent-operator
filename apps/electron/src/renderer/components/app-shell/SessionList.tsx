@@ -574,6 +574,7 @@ export function SessionList({
     searchQuery: resolvedSearchQuery,
     selectedSessionId: selectionStore.state.selected,
     isMultiSelectActive,
+    selectedIds: selectionStore.state.selectedIds,
     sessionOptions,
     contentSearchResults,
   }), [
@@ -583,7 +584,7 @@ export function SessionList({
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
     handleSelectSessionById, handleOpenInNewWindow, handleFocusZone, handleKeyDown,
     sessionStatuses, flatLabels, labels, resolvedSearchQuery,
-    selectionStore.state.selected, isMultiSelectActive,
+    selectionStore.state.selected, isMultiSelectActive, selectionStore.state.selectedIds,
     sessionOptions, contentSearchResults,
   ])
 

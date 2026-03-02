@@ -13,12 +13,16 @@ import type { LoadedSkill } from './types.ts';
  */
 const BUILTIN_TRIGGERS: Record<string, string[]> = {
   'web-search': [
-    'search', 'google', 'look up', 'find out',
+    'search', 'google', 'look up', 'find out', 'latest', 'current',
+    'what is', 'how to', 'news', 'update', 'who is', 'when did',
     '搜索', '搜一下', '查找', '查一下', '查查', '新闻', '最新', '热门',
+    '了解', '是什么', '怎么',
   ],
   'playwright': [
     'browser', 'open url', 'screenshot', 'scrape', 'crawl',
+    'open', 'website', 'login', 'sign in', 'web page',
     '浏览器', '截图', '抓取', '爬取', '打开网页', '网页操作',
+    '打开', '访问', '登录', '推特', '网站',
   ],
   'pdf': ['pdf', 'PDF'],
   'docx': ['docx', 'DOCX', 'word文档', 'Word文档'],

@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react"
 import { useActionLabel } from "@/actions"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
@@ -51,6 +52,47 @@ export function SessionItem({
   const title = getSessionTitle(item)
   const chatMatchCount = ctx.contentSearchResults.get(item.id)?.matchCount
   const hasMatch = chatMatchCount != null && chatMatchCount > 0
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/x-session-id', item.id)
+
+    // Multi-select: include all selected IDs
+    if (isInMultiSelect && ctx.selectedIds.size > 1) {
+      e.dataTransfer.setData('application/x-session-ids', JSON.stringify([...ctx.selectedIds]))
+    }
+
+    // Custom drag image
+    const el = e.currentTarget as HTMLElement
+    const clone = el.cloneNode(true) as HTMLElement
+    clone.style.position = 'absolute'
+    clone.style.top = '-9999px'
+    clone.style.width = `${el.offsetWidth}px`
+    clone.style.opacity = '0.85'
+    clone.style.borderRadius = '8px'
+    clone.style.background = 'var(--background)'
+    clone.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+
+    // Add count badge for multi-select
+    if (isInMultiSelect && ctx.selectedIds.size > 1) {
+      const badge = document.createElement('div')
+      badge.textContent = String(ctx.selectedIds.size)
+      badge.style.cssText = 'position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:10px;background:var(--accent);color:white;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;padding:0 6px;'
+      clone.style.position = 'relative'
+      clone.appendChild(badge)
+    }
+
+    document.body.appendChild(clone)
+    e.dataTransfer.setDragImage(clone, 20, 20)
+    requestAnimationFrame(() => clone.remove())
+
+    setIsDragging(true)
+  }, [item.id, isInMultiSelect, ctx.selectedIds])
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false)
+  }, [])
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -81,7 +123,16 @@ export function SessionItem({
         : "top-0 bottom-0"
 
   return (
-    <div className={cn(depth > 0 && "relative pl-5")}>
+    <div
+      className={cn(
+        depth > 0 && "relative pl-5",
+        "transition-[transform,opacity] duration-200 ease-out",
+        isDragging && "scale-[0.97] opacity-30",
+      )}
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
       {depth > 0 && (
         <div
           className={cn("absolute left-[22px] w-px bg-foreground/10 pointer-events-none", childLineClassName)}

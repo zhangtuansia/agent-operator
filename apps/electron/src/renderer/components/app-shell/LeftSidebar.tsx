@@ -4,7 +4,7 @@ import { useState } from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
 
-import { cn, isHexColor } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -123,6 +123,17 @@ function useSidebarDrop(link: LinkItem) {
 
     if (!onSessionDrop) return
 
+    // Batch drop: multiple selected sessions
+    const sessionIdsJson = e.dataTransfer.getData('application/x-session-ids')
+    if (sessionIdsJson) {
+      try {
+        const ids = JSON.parse(sessionIdsJson) as string[]
+        for (const id of ids) onSessionDrop(id)
+        return
+      } catch { /* fall through to single */ }
+    }
+
+    // Single drop
     const sessionId = e.dataTransfer.getData('application/x-session-id')
     if (sessionId) {
       onSessionDrop(sessionId)
@@ -291,11 +302,12 @@ function SidebarDropItem({
         "group flex w-full items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "px-2",
+        "transition-[transform,box-shadow,background-color] duration-150 ease-out",
         link.variant === "default"
           ? "bg-foreground/[0.07]"
           : "hover:bg-foreground/5",
-        // Drag-over highlight
-        isDragOver && "ring-2 ring-accent ring-inset bg-accent/10"
+        // Drag-over highlight with scale bump
+        isDragOver && "ring-2 ring-accent ring-inset bg-accent/10 scale-[1.04] shadow-md"
       )}
     >
       {/* Icon container with hover toggle for expandable items */}
@@ -410,23 +422,26 @@ function SidebarDropItem({
 }
 
 /**
- * Helper to render icon - either component (function/forwardRef) or React element
+ * Helper to render icon - either component (function/forwardRef) or React element.
+ * Colors are always applied via inline style (resolved CSS color strings from EntityColor).
  */
 function renderIcon(link: LinkItem) {
   const isComponent = typeof link.icon === 'function' ||
     (typeof link.icon === 'object' && link.icon !== null && 'render' in link.icon)
-  const defaultColor = "text-foreground/60"
+  // Default color for items without explicit iconColor (foreground at 60% opacity)
+  const defaultColor = 'color-mix(in oklch, var(--foreground) 60%, transparent)'
 
   // Lucide components are always colorable; ReactNode icons check iconColorable
   // Default to true for backwards compatibility (most icons are colorable)
   const applyColor = link.iconColorable !== false
+  const colorStyle = applyColor ? { color: link.iconColor || defaultColor } : undefined
 
   if (isComponent) {
     const Icon = link.icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>
     return (
       <Icon
-        className={cn("h-3.5 w-3.5 shrink-0", applyColor && !isHexColor(link.iconColor) && (link.iconColor || defaultColor))}
-        style={applyColor && isHexColor(link.iconColor) ? { color: link.iconColor } : undefined}
+        className="h-3.5 w-3.5 shrink-0"
+        style={colorStyle}
       />
     )
   }
@@ -434,12 +449,8 @@ function renderIcon(link: LinkItem) {
   // Use [&>svg]:w-full [&>svg]:h-full to size SVG children and [&>div>svg] for wrapped SVGs
   return (
     <span
-      className={cn(
-        "h-3.5 w-3.5 shrink-0 flex items-center justify-center",
-        "[&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full",
-        applyColor && !isHexColor(link.iconColor) && (link.iconColor || defaultColor)
-      )}
-      style={applyColor && isHexColor(link.iconColor) ? { color: link.iconColor } : undefined}
+      className="h-3.5 w-3.5 shrink-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full"
+      style={colorStyle}
     >
       {link.icon as React.ReactNode}
     </span>
