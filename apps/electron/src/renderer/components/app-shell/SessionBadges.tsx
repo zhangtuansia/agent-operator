@@ -11,6 +11,7 @@ import { ConnectionIcon } from "@/components/icons/ConnectionIcon"
 import { useOptionalAppShellContext } from "@/context/AppShellContext"
 import * as storage from "@/lib/local-storage"
 import { useSessionListContext } from "@/context/SessionListContext"
+import { useTranslation } from "@/i18n"
 import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG } from "@agent-operator/shared/agent/modes"
 import { hasUnreadMeta } from "@/utils/session"
@@ -22,6 +23,7 @@ interface SessionBadgesProps {
 
 export function SessionBadges({ item }: SessionBadgesProps) {
   const ctx = useSessionListContext()
+  const { t } = useTranslation()
   const permissionMode = ctx.sessionOptions?.get(item.id)?.permissionMode
 
   const resolvedLabels = useMemo(() => {
@@ -52,7 +54,7 @@ export function SessionBadges({ item }: SessionBadgesProps) {
         <Spinner className="text-[8px] text-foreground shrink-0" />
       )}
       {!item.isProcessing && hasUnreadMeta(item) && (
-        <EntityListBadge colorClass="bg-accent text-white">New</EntityListBadge>
+        <EntityListBadge colorClass="bg-accent text-white">{t('sessionBadges.new')}</EntityListBadge>
       )}
       {item.isFlagged && (
         <EntityListBadge variant="icon" colorClass="bg-foreground/5">
@@ -60,7 +62,7 @@ export function SessionBadges({ item }: SessionBadgesProps) {
         </EntityListBadge>
       )}
       {item.lastMessageRole === 'plan' && (
-        <EntityListBadge colorClass="bg-success/10 text-success">Plan</EntityListBadge>
+        <EntityListBadge colorClass="bg-success/10 text-success">{t('sessionBadges.plan')}</EntityListBadge>
       )}
       {connectionDetails && (
         <EntityListBadge variant="icon">

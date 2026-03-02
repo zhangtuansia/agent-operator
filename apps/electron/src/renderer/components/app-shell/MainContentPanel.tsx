@@ -273,7 +273,7 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
   if (!automation) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p className="text-sm">Automation not found</p>
+        <p className="text-sm">{t('emptyStates.selectAutomation')}</p>
       </div>
     )
   }

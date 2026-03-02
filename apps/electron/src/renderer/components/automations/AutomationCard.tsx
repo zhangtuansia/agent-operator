@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { AutomationAvatar } from './AutomationAvatar'
 import { AutomationActionPreview } from './AutomationActionPreview'
 import { Switch } from '@/components/ui/switch'
+import { useTranslation } from '@/i18n'
 import { getEventDisplayName, type AutomationListItem } from './types'
 
 export interface AutomationCardProps {
@@ -29,6 +30,7 @@ export function AutomationCard({
   onTest,
   className,
 }: AutomationCardProps) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   return (
@@ -74,17 +76,19 @@ export function AutomationCard({
         <div className="border-t border-border/30 px-4 py-3 space-y-3">
           {/* Trigger info */}
           <div className="space-y-1">
-            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">When</h5>
+            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('automations.when')}</h5>
             <div className="text-xs text-foreground/70">
               <span className="font-medium">{getEventDisplayName(automation.event)}</span>
               {automation.matcher && (
                 <span className="ml-2">
-                  matching <code className="font-mono bg-foreground/5 px-1 rounded">{automation.matcher}</code>
+                  {t('automations.matching')}{' '}
+                  <code className="font-mono bg-foreground/5 px-1 rounded">{automation.matcher}</code>
                 </span>
               )}
               {automation.cron && (
                 <span className="ml-2">
-                  at <code className="font-mono bg-foreground/5 px-1 rounded">{automation.cron}</code>
+                  {t('automations.at')}{' '}
+                  <code className="font-mono bg-foreground/5 px-1 rounded">{automation.cron}</code>
                 </span>
               )}
             </div>
@@ -92,7 +96,7 @@ export function AutomationCard({
 
           {/* Actions */}
           <div className="space-y-1">
-            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Then</h5>
+            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('automations.then')}</h5>
             <AutomationActionPreview actions={automation.actions} />
           </div>
 
@@ -103,7 +107,7 @@ export function AutomationCard({
                 onClick={onTest}
                 className="px-2.5 py-1 text-xs font-medium rounded-md bg-foreground/[0.03] shadow-minimal hover:bg-foreground/[0.06] transition-colors"
               >
-                Run Test
+                {t('automations.runTest')}
               </button>
             )}
           </div>

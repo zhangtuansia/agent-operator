@@ -15,6 +15,7 @@ import { useAtomValue } from 'jotai'
 import { Archive, Flag, FlagOff, Trash2, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMenuComponents } from '@/components/ui/menu-context'
+import { useTranslation } from '@/i18n'
 import { useSelectedIds } from '@/hooks/useSession'
 import { useSessionSelection } from '@/hooks/useSession'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
@@ -25,6 +26,7 @@ import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
 export function BatchSessionMenu() {
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
+  const { t } = useTranslation()
 
   const selectedIds = useSelectedIds()
   const { clearMultiSelect } = useSessionSelection()
@@ -108,20 +110,20 @@ export function BatchSessionMenu() {
   // Batch flag/unflag
   const handleBatchFlag = useCallback(() => {
     selectedIds.forEach(id => onFlagSession(id))
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} flagged`)
-  }, [selectedIds, onFlagSession])
+    toast.success(t('toasts.batchSessionsFlagged', { count: selectedIds.size }))
+  }, [selectedIds, onFlagSession, t])
 
   const handleBatchUnflag = useCallback(() => {
     selectedIds.forEach(id => onUnflagSession(id))
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} unflagged`)
-  }, [selectedIds, onUnflagSession])
+    toast.success(t('toasts.batchSessionsUnflagged', { count: selectedIds.size }))
+  }, [selectedIds, onUnflagSession, t])
 
   // Batch archive
   const handleBatchArchive = useCallback(() => {
     selectedIds.forEach(id => onArchiveSession(id))
     clearMultiSelect()
-    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} archived`)
-  }, [selectedIds, onArchiveSession, clearMultiSelect])
+    toast.success(t('toasts.batchSessionsArchived', { count: selectedIds.size }))
+  }, [selectedIds, onArchiveSession, clearMultiSelect, t])
 
   // Batch delete
   const handleBatchDelete = useCallback(async () => {
@@ -134,8 +136,8 @@ export function BatchSessionMenu() {
       await onDeleteSession(ids[i], true) // skip confirmation for remaining
     }
     clearMultiSelect()
-    toast(`${count} ${count === 1 ? 'session' : 'sessions'} deleted`)
-  }, [selectedIds, onDeleteSession, clearMultiSelect])
+    toast.success(t('toasts.batchSessionsDeleted', { count }))
+  }, [selectedIds, onDeleteSession, clearMultiSelect, t])
 
   // Resolve current status icon for the submenu trigger
   const statusIcon = activeStatusId
@@ -153,7 +155,7 @@ export function BatchSessionMenu() {
     <>
       {/* Header showing selection count */}
       <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
-        {count} {count === 1 ? 'session' : 'sessions'} selected
+        {t('sessionList.selectedSessions', { count })}
       </div>
       <Separator />
 
@@ -167,7 +169,7 @@ export function BatchSessionMenu() {
           ) : (
             <span className="h-3.5 w-3.5" />
           )}
-          <span className="flex-1">Status</span>
+          <span className="flex-1">{t('sessionMenu.status')}</span>
         </SubTrigger>
         <SubContent>
           <StatusMenuItems
@@ -184,7 +186,7 @@ export function BatchSessionMenu() {
         <Sub>
           <SubTrigger className="pr-2">
             <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">Labels</span>
+            <span className="flex-1">{t('sessionMenu.labels')}</span>
           </SubTrigger>
           <SubContent>
             <LabelMenuItems
@@ -201,19 +203,19 @@ export function BatchSessionMenu() {
       {allFlagged ? (
         <MenuItem onClick={handleBatchUnflag}>
           <FlagOff className="h-3.5 w-3.5" />
-          <span className="flex-1">Unflag All</span>
+          <span className="flex-1">{t('sessionMenu.unflagAll')}</span>
         </MenuItem>
       ) : (
         <MenuItem onClick={handleBatchFlag}>
           <Flag className="h-3.5 w-3.5 text-info" />
-          <span className="flex-1">Flag All</span>
+          <span className="flex-1">{t('sessionMenu.flagAll')}</span>
         </MenuItem>
       )}
 
       {/* Archive */}
       <MenuItem onClick={handleBatchArchive}>
         <Archive className="h-3.5 w-3.5" />
-        <span className="flex-1">Archive</span>
+        <span className="flex-1">{t('sessionMenu.archive')}</span>
       </MenuItem>
 
       <Separator />
@@ -221,7 +223,7 @@ export function BatchSessionMenu() {
       {/* Delete */}
       <MenuItem onClick={handleBatchDelete} variant="destructive">
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete</span>
+        <span className="flex-1">{t('sessionMenu.delete')}</span>
       </MenuItem>
     </>
   )

@@ -7,6 +7,7 @@
 
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { AutomationAction } from './types'
 
 export interface AutomationActionRowProps {
@@ -19,7 +20,8 @@ export interface AutomationActionRowProps {
  * Highlight @mentions in prompt strings
  */
 function PromptText({ text }: { text: string }) {
-  if (!text) return <span className="text-sm text-muted-foreground italic">Empty prompt</span>
+  const { t } = useTranslation()
+  if (!text) return <span className="text-sm text-muted-foreground italic">{t('automations.emptyPrompt')}</span>
   const parts = text.split(/(@\w[\w-]*)/g)
   return (
     <span className="text-sm break-words">

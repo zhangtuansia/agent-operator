@@ -264,10 +264,10 @@ export function SessionList({
 
       const groups: EntityListGroup<SessionListRow>[] = []
       if (matchingRows.rows.length > 0) {
-        groups.push({ key: 'matching', label: 'In Current View', items: matchingRows.rows })
+        groups.push({ key: 'matching', label: t('sessionList.searchInCurrentView'), items: matchingRows.rows })
       }
       if (otherRows.rows.length > 0) {
-        groups.push({ key: 'other', label: 'Other Conversations', items: otherRows.rows })
+        groups.push({ key: 'other', label: t('sessionList.searchOtherConversations'), items: otherRows.rows })
       }
 
       return {
@@ -318,6 +318,7 @@ export function SessionList({
     matchingSessionIds,
     expandedParentIds,
     forcedExpandedParentIds,
+    t,
   ])
 
   const flatRows = rowData.rows
@@ -592,8 +593,8 @@ export function SessionList({
       return (
         <EntityListEmptyScreen
           icon={<Archive />}
-          title="No archived sessions"
-          description="Sessions you archive will appear here. Archive sessions to keep your list tidy while preserving conversations."
+          title={t('sessionList.noArchivedSessions')}
+          description={t('sessionList.noArchivedSessionsDescription')}
           className="h-full"
         />
       )
@@ -602,8 +603,8 @@ export function SessionList({
     return (
       <EntityListEmptyScreen
         icon={<Inbox />}
-        title="No sessions yet"
-        description="Sessions with your agent appear here. Start one to get going."
+        title={t('sessionList.noSessionsYet')}
+        description={t('sessionList.noSessionsYetDescription')}
         className="h-full"
       >
         <button
@@ -615,7 +616,7 @@ export function SessionList({
           }}
           className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
         >
-          New Session
+          {t('chat.newChat')}
         </button>
       </EntityListEmptyScreen>
     )
@@ -669,7 +670,7 @@ export function SessionList({
             )}
             {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
               <div className="px-4 py-3 text-sm text-muted-foreground">
-                No results in current filter
+                {t('sessionList.noResultsInCurrentFilter')}
               </div>
             )}
           </>
@@ -677,15 +678,15 @@ export function SessionList({
         emptyState={
           isSearchMode && !isSearchingContent ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">No sessions found</p>
+              <p className="text-sm text-muted-foreground">{t('sessionList.noSessionsFound')}</p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">
-                Searched titles and message content
+                {t('sessionList.searchedTitlesAndMessages')}
               </p>
               <button
                 onClick={() => onSearchChange?.('')}
                 className="text-xs text-foreground hover:underline mt-2"
               >
-                Clear search
+                {t('sessionList.clearSearch')}
               </button>
             </div>
           ) : undefined
@@ -711,11 +712,11 @@ export function SessionList({
       <RenameDialog
         open={renameDialogOpen}
         onOpenChange={setRenameDialogOpen}
-        title="Rename Session"
+        title={t('renameDialog.renameConversation')}
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
-        placeholder="Enter session name..."
+        placeholder={t('renameDialog.enterName')}
       />
     </div>
   )

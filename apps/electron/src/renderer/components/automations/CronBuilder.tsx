@@ -13,6 +13,7 @@ import * as React from 'react'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Clock, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import { describeCron as describeCronExpression, computeNextRuns } from './utils'
 
 // ============================================================================
@@ -25,15 +26,17 @@ interface CronPreset {
   description: string
 }
 
-const PRESETS: CronPreset[] = [
-  { label: 'Every minute',       cron: '* * * * *',     description: 'Runs every minute' },
-  { label: 'Every 15 min',       cron: '*/15 * * * *',  description: 'Runs every 15 minutes' },
-  { label: 'Every hour',         cron: '0 * * * *',     description: 'At the top of every hour' },
-  { label: 'Daily at midnight',  cron: '0 0 * * *',     description: 'Once a day at 00:00' },
-  { label: 'Daily at 9am',       cron: '0 9 * * *',     description: 'Once a day at 09:00' },
-  { label: 'Weekdays at 9am',    cron: '0 9 * * 1-5',   description: 'Monday–Friday at 09:00' },
-  { label: 'Monthly on 1st',     cron: '0 0 1 * *',     description: 'First day of each month at 00:00' },
-]
+function getPresets(t: (key: string, params?: Record<string, string | number>) => string): CronPreset[] {
+  return [
+    { label: t('automations.cron.presetEveryMinute'), cron: '* * * * *', description: t('automations.cron.presetEveryMinute') },
+    { label: t('automations.cron.presetEvery15Min'), cron: '*/15 * * * *', description: t('automations.cron.presetEvery15Min') },
+    { label: t('automations.cron.presetEveryHour'), cron: '0 * * * *', description: t('automations.cron.presetEveryHour') },
+    { label: t('automations.cron.presetDailyMidnight'), cron: '0 0 * * *', description: t('automations.cron.presetDailyMidnight') },
+    { label: t('automations.cron.presetDaily9am'), cron: '0 9 * * *', description: t('automations.cron.presetDaily9am') },
+    { label: t('automations.cron.presetWeekdays9am'), cron: '0 9 * * 1-5', description: t('automations.cron.presetWeekdays9am') },
+    { label: t('automations.cron.presetMonthlyFirst'), cron: '0 0 1 * *', description: t('automations.cron.presetMonthlyFirst') },
+  ]
+}
 
 // ============================================================================
 // Cron Field Definitions
@@ -46,38 +49,46 @@ interface FieldDef {
   options?: { value: string; label: string }[]
 }
 
-const FIELDS: FieldDef[] = [
-  { label: 'Minute', min: 0, max: 59 },
-  { label: 'Hour', min: 0, max: 23 },
-  { label: 'Day', min: 1, max: 31 },
-  { label: 'Month', min: 1, max: 12, options: [
+function getFields(t: (key: string, params?: Record<string, string | number>) => string): FieldDef[] {
+  return [
+    { label: t('automations.cron.fieldMinute'), min: 0, max: 59 },
+    { label: t('automations.cron.fieldHour'), min: 0, max: 23 },
+    { label: t('automations.cron.fieldDay'), min: 1, max: 31 },
+    { label: t('automations.cron.fieldMonth'), min: 1, max: 12, options: [
     { value: '1', label: 'Jan' }, { value: '2', label: 'Feb' }, { value: '3', label: 'Mar' },
     { value: '4', label: 'Apr' }, { value: '5', label: 'May' }, { value: '6', label: 'Jun' },
     { value: '7', label: 'Jul' }, { value: '8', label: 'Aug' }, { value: '9', label: 'Sep' },
     { value: '10', label: 'Oct' }, { value: '11', label: 'Nov' }, { value: '12', label: 'Dec' },
   ]},
-  { label: 'Weekday', min: 0, max: 6, options: [
+    { label: t('automations.cron.fieldWeekday'), min: 0, max: 6, options: [
     { value: '0', label: 'Sun' }, { value: '1', label: 'Mon' }, { value: '2', label: 'Tue' },
     { value: '3', label: 'Wed' }, { value: '4', label: 'Thu' }, { value: '5', label: 'Fri' },
     { value: '6', label: 'Sat' },
   ]},
-]
+  ]
+}
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function validateCron(cron: string): string | null {
+function validateCron(
+  cron: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  fields: FieldDef[],
+): string | null {
   const parts = cron.trim().split(/\s+/)
-  if (parts.length !== 5) return 'Schedule needs 5 parts: minute, hour, day, month, and weekday'
+  if (parts.length !== 5) return t('automations.cron.validationFiveParts')
   // Basic validation per field
-  const ranges = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 7]]
   for (let i = 0; i < 5; i++) {
     const part = parts[i]
     if (part === '*') continue
     if (/^\*\/\d+$/.test(part)) continue
     if (/^[\d,\-\/]+$/.test(part)) continue
-    return `Invalid value in ${FIELDS[i]?.label ?? `field ${i + 1}`}: "${part}"`
+    return t('automations.cron.validationInvalidValue', {
+      field: fields[i]?.label ?? String(i + 1),
+      value: part,
+    })
   }
   return null
 }
@@ -131,8 +142,12 @@ export function CronBuilder({
   onTimezoneChange,
   className,
 }: CronBuilderProps) {
+  const { t, language } = useTranslation()
   const [rawInput, setRawInput] = useState(value)
   const [fields, setFields] = useState<string[]>(value.split(/\s+/))
+  const presets = useMemo(() => getPresets(t), [t])
+  const fieldDefs = useMemo(() => getFields(t), [t])
+  const locale = language === 'zh' ? 'zh-CN' : 'en-US'
 
   // Sync raw input and fields
   useEffect(() => {
@@ -167,7 +182,7 @@ export function CronBuilder({
     onChange?.(cron)
   }, [onChange])
 
-  const validationError = useMemo(() => validateCron(rawInput), [rawInput])
+  const validationError = useMemo(() => validateCron(rawInput, t, fieldDefs), [rawInput, t, fieldDefs])
   const description = useMemo(() => describeCronExpression(rawInput), [rawInput])
   const nextRuns = useMemo(() => computeNextRuns(rawInput), [rawInput])
 
@@ -176,10 +191,10 @@ export function CronBuilder({
       {/* Layer 1: Common Schedules */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Common Schedules
+          {t('automations.cron.commonSchedules')}
         </h4>
         <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map((preset) => (
+          {presets.map((preset) => (
             <button
               key={preset.cron}
               onClick={() => handlePreset(preset.cron)}
@@ -199,10 +214,10 @@ export function CronBuilder({
       {/* Layer 2: Custom Schedule */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Custom Schedule
+          {t('automations.cron.customSchedule')}
         </h4>
         <div className="grid grid-cols-5 gap-2">
-          {FIELDS.map((field, i) => (
+          {fieldDefs.map((field, i) => (
             <CronField
               key={field.label}
               field={field}
@@ -216,7 +231,7 @@ export function CronBuilder({
       {/* Layer 3: Advanced */}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
-          Advanced
+          {t('automations.cron.advanced')}
         </h4>
         <input
           type="text"
@@ -250,18 +265,18 @@ export function CronBuilder({
         {/* Next runs */}
         {nextRuns.length > 0 && !validationError && (
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Next runs:</span>
+            <span className="text-xs text-muted-foreground">{t('automations.nextRuns')}:</span>
             <div className="flex flex-col gap-0.5">
               {(() => {
                 const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
                 return nextRuns.map((date, i) => (
                   <span key={i} className="text-xs text-foreground/70 tabular-nums">
-                    {date.toLocaleDateString('en-US', {
+                    {date.toLocaleDateString(locale, {
                       weekday: 'short',
                       month: 'short',
                       day: 'numeric',
                       ...(spansYears && { year: 'numeric' }),
-                    })} {date.toLocaleTimeString('en-US', {
+                    })} {date.toLocaleTimeString(locale, {
                       hour: '2-digit',
                       minute: '2-digit',
                       hour12: false,
@@ -275,8 +290,8 @@ export function CronBuilder({
 
         {/* Timezone */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Timezone:</span>
-          <span className="font-medium text-foreground/70">{timezone || 'System default'}</span>
+          <span>{t('automations.timezone')}:</span>
+          <span className="font-medium text-foreground/70">{timezone || t('automations.systemDefault')}</span>
         </div>
       </div>
     </div>

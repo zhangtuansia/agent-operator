@@ -12,6 +12,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
+import { useTranslation } from '@/i18n'
 import { automationsAtom } from '@/atoms/automations'
 import { parseAutomationsConfig, type AutomationListItem, type TestResult, type ExecutionEntry } from '@/components/automations/types'
 
@@ -39,6 +40,7 @@ export function useAutomations(
   activeWorkspaceId: string | null | undefined,
   activeWorkspaceRootPath: string | undefined,
 ): UseAutomationsResult {
+  const { t } = useTranslation()
   const [automations, setAutomations] = useState<AutomationListItem[]>([])
   const [automationTestResults, setAutomationTestResults] = useState<Record<string, TestResult>>({})
   const [automationPendingDelete, setAutomationPendingDelete] = useState<string | null>(null)
@@ -101,7 +103,7 @@ export function useAutomations(
     }).then((result) => {
       const actions = result.actions
       if (!actions || actions.length === 0) {
-        setAutomationTestResults(prev => ({ ...prev, [automationId]: { state: 'error', stderr: 'No actions to execute' } }))
+        setAutomationTestResults(prev => ({ ...prev, [automationId]: { state: 'error', stderr: t('automations.noActionsToExecute') } }))
         return
       }
       const hasError = actions.some(a => !a.success)
@@ -119,7 +121,7 @@ export function useAutomations(
     }).catch((err: Error) => {
       setAutomationTestResults(prev => ({ ...prev, [automationId]: { state: 'error', stderr: err.message } }))
     })
-  }, [findAutomation, activeWorkspaceId])
+  }, [findAutomation, activeWorkspaceId, t])
 
   const handleToggleAutomation = useCallback((automationId: string) => {
     const automation = findAutomation(automationId)
@@ -130,16 +132,16 @@ export function useAutomations(
       automation.matcherIndex,
       !automation.enabled,
     ).catch(() => {
-      toast.error('Failed to toggle automation')
+      toast.error(t('automations.failedToToggle'))
     })
-  }, [findAutomation, activeWorkspaceId])
+  }, [findAutomation, activeWorkspaceId, t])
 
   const handleDuplicateAutomation = useCallback((automationId: string) => {
     const automation = findAutomation(automationId)
     if (!automation || !activeWorkspaceId) return
     window.electronAPI.duplicateAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
-      .catch(() => toast.error('Failed to duplicate automation'))
-  }, [findAutomation, activeWorkspaceId])
+      .catch(() => toast.error(t('automations.failedToDuplicate')))
+  }, [findAutomation, activeWorkspaceId, t])
 
   // Delete: show confirmation dialog
   const handleDeleteAutomation = useCallback((automationId: string) => {
@@ -151,9 +153,9 @@ export function useAutomations(
   const confirmDeleteAutomation = useCallback(() => {
     if (!pendingDeleteAutomation || !activeWorkspaceId) return
     window.electronAPI.deleteAutomation(activeWorkspaceId, pendingDeleteAutomation.event, pendingDeleteAutomation.matcherIndex)
-      .catch(() => toast.error('Failed to delete automation'))
+      .catch(() => toast.error(t('automations.failedToDelete')))
     setAutomationPendingDelete(null)
-  }, [pendingDeleteAutomation, activeWorkspaceId])
+  }, [pendingDeleteAutomation, activeWorkspaceId, t])
 
   // Fetch execution history for a specific automation
   const getAutomationHistory = useCallback(async (automationId: string): Promise<ExecutionEntry[]> => {
