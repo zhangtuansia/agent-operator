@@ -44,6 +44,7 @@ export const en = {
     remove: 'Remove',
     update: 'Update',
     configure: 'Configure',
+    learnMore: 'Learn more',
   },
 
   // Network status
@@ -1034,6 +1035,17 @@ export const en = {
     connectionDefault: 'Default',
     notAuthenticated: 'Not authenticated',
     extendedReasoning: 'Extended reasoning depth',
+    modelDescriptionMostCapable: 'Most capable',
+    modelDescriptionBalanced: 'Balanced',
+    modelDescriptionFastEfficient: 'Fast & efficient',
+    modelDescriptionMostCapableCodex: 'Most capable Codex model',
+    modelDescriptionMostCapable1MContext: 'Most capable, 1M context',
+    thinkingOffLabel: 'No Thinking',
+    thinkingOffDescription: 'Fastest responses, no reasoning',
+    thinkingStandardLabel: 'Thinking',
+    thinkingStandardDescription: 'Balanced speed and reasoning',
+    thinkingMaxLabel: 'Max Thinking',
+    thinkingMaxDescription: 'Deepest reasoning for complex tasks',
     context: 'Context',
     contextUsed: '{percent}% context used',
     contextUsedWait: '{percent}% context used — wait for current operation',
@@ -1112,6 +1124,14 @@ export const en = {
   sessionBadges: {
     new: 'New',
     plan: 'Plan',
+  },
+
+  // Multi-select panel
+  multiSelectPanel: {
+    toggleHint: 'Use {modKey}+Click to toggle, {shiftKey}+Click for range',
+    clearHint: 'Press Esc to clear selection',
+    changeStatus: 'Change Status',
+    setLabels: 'Set Labels',
   },
 
   // Toast messages
@@ -1239,6 +1259,11 @@ export const en = {
     results: 'Results',
     skills: 'Skills',
     sources: 'Sources',
+    files: 'Files',
+    header: 'Mention files, skills, sources',
+    noResults: 'No results',
+    skill: 'Skill',
+    source: 'Source',
   },
 
   // Source status indicators

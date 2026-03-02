@@ -13,6 +13,16 @@ import { useLanguage } from '@/context/LanguageContext'
 // Built-in status IDs that have i18n translations
 const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
 
+function getTranslatedStatusLabel(
+  stateId: string,
+  fallbackLabel: string,
+  t: (key: string) => string
+): string {
+  return (BUILT_IN_STATUS_IDS as readonly string[]).includes(stateId)
+    ? t(`statusLabels.${stateId}`)
+    : fallbackLabel
+}
+
 // Re-export types for backwards compatibility
 export { type SessionStatusId, type SessionStatus, getStateIcon, getStateColor }
 
@@ -35,9 +45,7 @@ function StateItemContent({ state }: { state: SessionStatus }) {
   const applyColor = state.iconColorable
 
   // Translate built-in status labels, pass through custom ones
-  const label = (BUILT_IN_STATUS_IDS as readonly string[]).includes(state.id)
-    ? t(`statusLabels.${state.id}`)
-    : state.label
+  const label = getTranslatedStatusLabel(state.id, state.label, t)
 
   return (
     <>
@@ -114,9 +122,7 @@ export function SessionStatusMenu({
         {states.map((state) => {
           const isActive = activeState === state.id
           // Use translated label for cmdk search matching
-          const translatedLabel = (BUILT_IN_STATUS_IDS as readonly string[]).includes(state.id)
-            ? t(`statusLabels.${state.id}`)
-            : state.label
+          const translatedLabel = getTranslatedStatusLabel(state.id, state.label, t)
           return (
             <CommandPrimitive.Item
               key={state.id}
@@ -148,7 +154,7 @@ export function SessionStatusMenu({
               <span className="shrink-0 flex items-center opacity-60">
                 {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
               </span>
-              <div className="flex-1 min-w-0">{isArchived ? t('contextMenu.unarchive') : t('contextMenu.archive')}</div>
+              <div className="flex-1 min-w-0">{isArchived ? t('sessionMenu.unarchive') : t('sessionMenu.archive')}</div>
             </CommandPrimitive.Item>
           </>
         )}

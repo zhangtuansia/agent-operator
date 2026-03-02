@@ -25,6 +25,8 @@ export interface FreeFormInputContextBadgeProps {
   disabled?: boolean
   /** Additional className for the button */
   className?: string
+  /** Max-width class for collapsed label text (selection state only) */
+  collapsedLabelClassName?: string
   /** Ref forwarding for positioning dropdowns */
   buttonRef?: React.RefObject<HTMLButtonElement>
   /** Data attribute for tutorials */
@@ -53,6 +55,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       isOpen = false,
       disabled = false,
       className,
+      collapsedLabelClassName = "max-w-[140px]",
       buttonRef,
       'data-tutorial': dataTutorial,
     },
@@ -100,7 +103,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
             </span>
           ) : (
             // Collapsed with selection: fading text with max width
-            <FadingText className="max-w-[140px]" fadeWidth={20}>
+            <FadingText className={collapsedLabelClassName} fadeWidth={20}>
               {label}
             </FadingText>
           )

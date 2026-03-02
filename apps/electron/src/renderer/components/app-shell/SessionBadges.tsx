@@ -25,6 +25,15 @@ export function SessionBadges({ item }: SessionBadgesProps) {
   const ctx = useSessionListContext()
   const { t } = useTranslation()
   const permissionMode = ctx.sessionOptions?.get(item.id)?.permissionMode
+  const permissionModeLabel = permissionMode
+    ? (
+        permissionMode === 'safe'
+          ? t('permissionModes.safe')
+          : permissionMode === 'ask'
+            ? t('permissionModes.ask')
+            : t('permissionModes.allowAll')
+      )
+    : null
 
   const resolvedLabels = useMemo(() => {
     if (!item.labels || item.labels.length === 0 || ctx.flatLabels.length === 0) return []
@@ -75,7 +84,7 @@ export function SessionBadges({ item }: SessionBadgesProps) {
           permissionMode === 'ask' && "bg-info/10 text-info",
           permissionMode === 'allow-all' && "bg-accent/10 text-accent"
         )}>
-          {PERMISSION_MODE_CONFIG[permissionMode].shortName}
+          {permissionModeLabel}
         </EntityListBadge>
       )}
       {resolvedLabels.map(({ config, rawValue }, idx) => (

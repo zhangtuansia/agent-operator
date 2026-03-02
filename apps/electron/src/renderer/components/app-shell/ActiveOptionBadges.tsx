@@ -17,6 +17,19 @@ import { getState } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { useLanguage } from '@/context/LanguageContext'
 
+// Built-in status IDs that have i18n translations
+const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+
+function getTranslatedStatusLabel(
+  stateId: string,
+  fallbackLabel: string,
+  t: (key: string) => string
+): string {
+  return (BUILT_IN_STATUS_IDS as readonly string[]).includes(stateId)
+    ? t(`statusLabels.${stateId}`)
+    : fallbackLabel
+}
+
 // ============================================================================
 // Permission Mode Icon Component
 // ============================================================================
@@ -325,6 +338,7 @@ function StateBadge({
   sessionStatuses: SessionStatus[]
   onSessionStatusChange?: (stateId: string) => void
 }) {
+  const { t } = useLanguage()
   const [open, setOpen] = React.useState(false)
 
   const handleSelect = React.useCallback((stateId: string) => {
@@ -332,6 +346,7 @@ function StateBadge({
     onSessionStatusChange?.(stateId)
   }, [onSessionStatusChange])
 
+  const translatedLabel = getTranslatedStatusLabel(state.id, state.label, t)
   const badgeColor = state.resolvedColor || 'var(--foreground)'
   const applyColor = state.iconColorable
 
@@ -355,7 +370,7 @@ function StateBadge({
           >
             {state.icon}
           </span>
-          <span className="whitespace-nowrap">{state.label}</span>
+          <span className="max-w-[120px] truncate whitespace-nowrap" title={translatedLabel}>{translatedLabel}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-40" />
         </button>
       </PopoverTrigger>

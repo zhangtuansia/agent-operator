@@ -1379,6 +1379,7 @@ export function ResponseCard({
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
+  translations,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1389,6 +1390,19 @@ export function ResponseCard({
   const [isFullscreen, setIsFullscreen] = useState(false)
   // Dark mode detection - scroll fade only shown in dark mode
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const uiText = useMemo(() => ({
+    copy: translations?.copy ?? 'Copy',
+    copied: translations?.copied ?? 'Copied!',
+    viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
+    typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
+    plan: translations?.plan ?? 'Plan',
+    viewFullscreen: translations?.viewFullscreen ?? 'View Fullscreen',
+    acceptPlan: translations?.acceptPlan ?? 'Accept Plan',
+    accept: translations?.accept ?? 'Accept',
+    acceptDescription: translations?.acceptDescription ?? 'Execute the plan immediately',
+    acceptCompact: translations?.acceptCompact ?? 'Accept & Compact',
+    acceptCompactDescription: translations?.acceptCompactDescription ?? 'Works best for complex, longer plans',
+  }), [translations])
 
   // Detect dark mode from document class and listen for changes
   useEffect(() => {
@@ -1469,7 +1483,7 @@ export function ResponseCard({
               "text-muted-foreground/50 hover:text-foreground",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
             )}
-            title="View Fullscreen"
+            title={uiText.viewFullscreen}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -1483,7 +1497,7 @@ export function ResponseCard({
               )}
             >
               <ListTodo className={cn(SIZE_CONFIG.iconSize, "text-success")} />
-              <span className="font-medium text-success">Plan</span>
+              <span className="font-medium text-success">{uiText.plan}</span>
             </div>
           )}
 
@@ -1527,12 +1541,12 @@ export function ResponseCard({
                   {copied ? (
                     <>
                       <Check className={SIZE_CONFIG.iconSize} />
-                      <span>Copied!</span>
+                      <span>{uiText.copied}</span>
                     </>
                   ) : (
                     <>
                       <Copy className={SIZE_CONFIG.iconSize} />
-                      <span>Copy</span>
+                      <span>{uiText.copy}</span>
                     </>
                   )}
                 </button>
@@ -1546,7 +1560,7 @@ export function ResponseCard({
                     )}
                   >
                     <ExternalLink className={SIZE_CONFIG.iconSize} />
-                    <span>View as Markdown</span>
+                    <span>{uiText.viewAsMarkdown}</span>
                   </button>
                 )}
               </div>
@@ -1562,11 +1576,16 @@ export function ResponseCard({
                   )}
                 >
                   <span className="text-xs text-muted-foreground">
-                    Type your feedback in chat or
+                    {uiText.typeFeedbackOr}
                   </span>
                   <AcceptPlanDropdown
                     onAccept={onAccept}
                     onAcceptWithCompact={onAcceptWithCompact}
+                    label={uiText.acceptPlan}
+                    acceptLabel={uiText.accept}
+                    acceptDescription={uiText.acceptDescription}
+                    acceptCompactLabel={uiText.acceptCompact}
+                    acceptCompactDescription={uiText.acceptCompactDescription}
                   />
                 </div>
               )}
@@ -1744,6 +1763,7 @@ export const TurnCard = React.memo(function TurnCard({
   displayMode = 'detailed',
   animateResponse = false,
   compactMode = false,
+  translations,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
   // This provides a single source of truth for lifecycle state,
@@ -2094,6 +2114,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
+            translations={translations}
           />
         </div>
       ))}
@@ -2121,6 +2142,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
+                translations={translations}
               />
             </motion.div>
           )}
@@ -2141,6 +2163,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
+            translations={translations}
           />
         </div>
       )}

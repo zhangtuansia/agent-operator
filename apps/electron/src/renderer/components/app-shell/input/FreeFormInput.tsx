@@ -57,7 +57,7 @@ import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shar
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import type { PermissionMode } from '@agent-operator/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@agent-operator/shared/agent/thinking-levels'
+import { type ThinkingLevel, THINKING_LEVELS } from '@agent-operator/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
@@ -377,9 +377,38 @@ export function FreeFormInput({
   const showConnectionIcons = storage.get(storage.KEYS.showConnectionIcons, true)
 
   const modelButtonLabel = React.useMemo(() => {
-    if (connectionUnavailable) return 'Unavailable'
+    if (connectionUnavailable) return t('input.connectionUnavailable')
     return currentModelDisplayName
-  }, [connectionUnavailable, currentModelDisplayName])
+  }, [connectionUnavailable, currentModelDisplayName, t])
+
+  const getLocalizedModelDescription = React.useCallback((description: string): string => {
+    const descriptionMap: Record<string, string> = {
+      'Most capable': t('input.modelDescriptionMostCapable'),
+      'Balanced': t('input.modelDescriptionBalanced'),
+      'Fast & efficient': t('input.modelDescriptionFastEfficient'),
+      'Most capable Codex model': t('input.modelDescriptionMostCapableCodex'),
+      'Most capable, 1M context': t('input.modelDescriptionMostCapable1MContext'),
+    }
+    return descriptionMap[description] ?? description
+  }, [t])
+
+  const getThinkingLevelLabel = React.useCallback((level: ThinkingLevel): string => {
+    const labelMap: Record<ThinkingLevel, string> = {
+      off: t('input.thinkingOffLabel'),
+      think: t('input.thinkingStandardLabel'),
+      max: t('input.thinkingMaxLabel'),
+    }
+    return labelMap[level]
+  }, [t])
+
+  const getThinkingLevelDescription = React.useCallback((level: ThinkingLevel): string => {
+    const descriptionMap: Record<ThinkingLevel, string> = {
+      off: t('input.thinkingOffDescription'),
+      think: t('input.thinkingStandardDescription'),
+      max: t('input.thinkingMaxDescription'),
+    }
+    return descriptionMap[level]
+  }, [t])
 
   const connectionsByProvider = React.useMemo(() => {
     const groups: Record<string, typeof llmConnections> = {
@@ -1473,7 +1502,7 @@ export function FreeFormInput({
                   {availableModels.map((model) => {
                     const modelId = typeof model === 'string' ? model : model.id
                     const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
-                    const description = typeof model === 'string' ? '' : model.description
+                    const description = typeof model === 'string' ? '' : getLocalizedModelDescription(model.description)
                     const isSelected = currentModel === modelId
                     return (
                       <StyledDropdownMenuItem
@@ -1505,12 +1534,12 @@ export function FreeFormInput({
                   <DropdownMenuSub>
                     <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
                       <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
+                        <div className="font-medium text-sm">{getThinkingLevelLabel(thinkingLevel)}</div>
                         <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
                       </div>
                     </StyledDropdownMenuSubTrigger>
                     <StyledDropdownMenuSubContent className="min-w-[220px]">
-                      {THINKING_LEVELS.map(({ id, name, description }) => {
+                      {THINKING_LEVELS.map(({ id }) => {
                         const isSelected = thinkingLevel === id
                         return (
                           <StyledDropdownMenuItem
@@ -1519,8 +1548,8 @@ export function FreeFormInput({
                             className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                           >
                             <div className="text-left">
-                              <div className="font-medium text-sm">{name}</div>
-                              <div className="text-xs text-muted-foreground">{description}</div>
+                              <div className="font-medium text-sm">{getThinkingLevelLabel(id)}</div>
+                              <div className="text-xs text-muted-foreground">{getThinkingLevelDescription(id)}</div>
                             </div>
                             {isSelected && (
                               <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />

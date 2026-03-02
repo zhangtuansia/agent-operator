@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './empty'
 import { getDocUrl, type DocFeature } from '@agent-operator/shared/docs/doc-links'
+import { useLanguage } from '@/context/LanguageContext'
 
 export interface EntityListEmptyScreenProps {
   icon: React.ReactNode
@@ -28,6 +29,7 @@ export function EntityListEmptyScreen({
   children,
   className = 'flex-1',
 }: EntityListEmptyScreenProps) {
+  const { t } = useLanguage()
   const hasActions = docKey || children
 
   return (
@@ -46,7 +48,7 @@ export function EntityListEmptyScreen({
               onClick={() => window.electronAPI.openUrl(getDocUrl(docKey))}
               className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
             >
-              Learn more
+              {t('common.learnMore')}
             </button>
           )}
           {children}

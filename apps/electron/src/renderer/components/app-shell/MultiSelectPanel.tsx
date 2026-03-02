@@ -11,13 +11,13 @@
 import * as React from 'react'
 import { Archive, Tag, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator, StyledDropdownMenuSubContent, StyledDropdownMenuSubTrigger, DropdownMenuSub } from '@/components/ui/styled-dropdown'
 import type { SessionStatusId, SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
+import { useTranslation } from '@/i18n'
 
 export interface MultiSelectPanelProps {
   /** Number of selected sessions */
@@ -54,6 +54,8 @@ export function MultiSelectPanel({
   onClearSelection,
   className,
 }: MultiSelectPanelProps) {
+  const { t } = useTranslation()
+
   return (
     <div
       className={cn(
@@ -67,25 +69,11 @@ export function MultiSelectPanel({
           <span className="text-2xl font-semibold text-accent">{count}</span>
         </div>
         <h2 className="text-lg font-medium text-foreground">
-          {count} {count === 1 ? 'Chat' : 'Chats'} selected
+          {t('sessionList.selectedSessions', { count })}
         </h2>
         <div className="text-sm text-foreground/50 flex flex-col items-center gap-1">
-          <span>
-            Use{' '}
-            <KbdGroup>
-              <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
-              <Kbd>Click</Kbd>
-            </KbdGroup>{' '}
-            to toggle,{' '}
-            <KbdGroup>
-              <Kbd>⇧</Kbd>
-              <Kbd>Click</Kbd>
-            </KbdGroup>{' '}
-            for range
-          </span>
-          <span>
-            Press <Kbd>Esc</Kbd> to clear selection
-          </span>
+          <span>{t('multiSelectPanel.toggleHint', { modKey: isMac ? '⌘' : 'Ctrl', shiftKey: 'Shift' })}</span>
+          <span>{t('multiSelectPanel.clearHint')}</span>
         </div>
       </div>
 
@@ -100,7 +88,7 @@ export function MultiSelectPanel({
                 className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Change Status
+                {t('multiSelectPanel.changeStatus')}
               </Button>
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="center">
@@ -122,7 +110,7 @@ export function MultiSelectPanel({
                 className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
               >
                 <Tag className="w-4 h-4" />
-                Set Labels
+                {t('multiSelectPanel.setLabels')}
               </Button>
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="center" className="min-w-[220px]">
@@ -149,7 +137,7 @@ export function MultiSelectPanel({
             className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
           >
             <Archive className="w-4 h-4" />
-            Archive
+            {t('sessionMenu.archive')}
           </Button>
         )}
       </div>

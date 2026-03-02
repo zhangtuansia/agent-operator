@@ -477,6 +477,11 @@ interface ManagedSession {
   // We defer title generation until the first response completes to avoid
   // competing with the main chat request on cold start.
   pendingInitialTitleMessage?: string
+  // Session started with an initial auto title and may need one follow-up
+  // refresh after the conversation evolves past the first user message.
+  needsAutoTitleRefresh?: boolean
+  // Set when the user manually renames the chat; prevents auto title overwrite.
+  titleEditedByUser?: boolean
   // Message queue for handling new messages while processing
   // When a message arrives during processing, we interrupt and queue
   messageQueue: Array<{
@@ -1398,22 +1403,32 @@ export class SessionManager {
       sessionLog.warn('Copilot CLI not found; Copilot sessions will use SDK default resolution')
     }
 
-    // Set path to fetch interceptor for SDK subprocess
-    // This interceptor captures API errors and adds metadata to MCP tool schemas
-    // In monorepo, packages folder is at root level
-    // Check if we're already at monorepo root (running from project root) or need to go up (running from apps/electron)
-    let monorepoRoot = basePath
-    if (!app.isPackaged) {
-      // Check for the actual interceptor file (not just the directory) to avoid
-      // stale/partial copies under apps/electron/packages/shared/
+    // Set path to fetch interceptor for SDK subprocess.
+    // This interceptor captures API errors and adds metadata to MCP tool schemas.
+    // Packaged app should resolve from bundled node_modules; dev resolves from monorepo paths.
+    const interceptorCandidates: string[] = []
+    if (app.isPackaged) {
+      interceptorCandidates.push(
+        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
+        // Backward-compatible fallback for older package layouts.
+        join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts'),
+      )
+    } else {
+      // In dev, detect monorepo root whether running from repo root or apps/electron.
+      let monorepoRoot = basePath
       if (!existsSync(join(basePath, 'packages', 'shared', 'src', 'config', 'paths.ts'))) {
-        // Not at root, go up two levels (from apps/electron)
         monorepoRoot = join(basePath, '..', '..')
       }
+      interceptorCandidates.push(
+        join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts'),
+        // Fallback for non-monorepo installs.
+        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
+      )
     }
-    const interceptorPath = join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts')
-    if (!existsSync(interceptorPath)) {
-      const error = `Network interceptor not found at ${interceptorPath}. The app package may be corrupted.`
+
+    const interceptorPath = interceptorCandidates.find(p => existsSync(p))
+    if (!interceptorPath) {
+      const error = `Network interceptor not found. Tried: ${interceptorCandidates.join(', ')}. The app package may be corrupted.`
       sessionLog.error(error)
       throw new Error(error)
     }
@@ -1566,6 +1581,8 @@ export class SessionManager {
             messageQueue: [],
             backgroundShellCommands: new Map(),
             messagesLoaded: false,  // Mark as not loaded
+            needsAutoTitleRefresh: false,
+            titleEditedByUser: false,
             // Shared viewer state - loaded from metadata for persistence across restarts
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
@@ -2197,6 +2214,8 @@ export class SessionManager {
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
+      needsAutoTitleRefresh: false,
+      titleEditedByUser: false,
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -3185,6 +3204,8 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.name = name
+      managed.titleEditedByUser = true
+      managed.needsAutoTitleRefresh = false
       this.persistSession(managed)
       // Notify renderer of the name change
       this.sendEvent({ type: 'title_generated', sessionId, title: name }, managed.workspace.id)
@@ -3258,6 +3279,7 @@ export class SessionManager {
         return { success: false, error: 'Session was deleted' }
       }
       managed.name = title
+      managed.needsAutoTitleRefresh = false
       this.persistSession(managed)
       // title_generated will also clear isRegeneratingTitle via the event handler
       this.sendEvent({ type: 'title_generated', sessionId, title }, managed.workspace.id)
@@ -3278,6 +3300,7 @@ export class SessionManager {
       const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates, titleLanguage)
       if (fallbackTitle) {
         managed.name = fallbackTitle
+        managed.needsAutoTitleRefresh = false
         this.persistSession(managed)
         this.sendEvent({ type: 'title_generated', sessionId, title: fallbackTitle }, managed.workspace.id)
         sessionLog.warn(
@@ -3631,6 +3654,7 @@ export class SessionManager {
         // Defer AI title generation until the first response completes.
         // This avoids running a second model call in parallel with the main reply.
         managed.pendingInitialTitleMessage = message
+        managed.needsAutoTitleRefresh = true
       }
     }
 
@@ -4052,6 +4076,27 @@ ${skillContents.join('\n\n')}
         managed.pendingInitialTitleMessage = undefined
         void this.generateTitle(managed, titleSourceMessage)
       }
+
+      // After the second user turn, refresh the title once using recent context.
+      // This avoids "stuck on first sentence" titles while keeping model calls bounded.
+      if (
+        reason === 'complete'
+        && managed.needsAutoTitleRefresh
+        && !managed.titleEditedByUser
+        && !managed.isAsyncOperationOngoing
+      ) {
+        const userMessageCount = managed.messages.filter((m) => m.role === 'user').length
+        if (userMessageCount >= 2) {
+          managed.needsAutoTitleRefresh = false
+          void this.refreshTitle(sessionId).catch((error) => {
+            sessionLog.warn(
+              `Auto title refresh failed for session ${sessionId}:`,
+              error instanceof Error ? error.message : error,
+            )
+          })
+        }
+      }
+
       // No queue - emit complete to UI (include tokenUsage for real-time updates)
       this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
     }

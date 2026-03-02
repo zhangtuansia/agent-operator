@@ -8,6 +8,19 @@ import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
+// Built-in status IDs that have i18n translations
+const BUILT_IN_STATUS_IDS = ['backlog', 'todo', 'needs-review', 'done', 'cancelled'] as const
+
+function getTranslatedStatusLabel(
+  stateId: string,
+  fallbackLabel: string,
+  t: (key: string) => string
+): string {
+  return (BUILT_IN_STATUS_IDS as readonly string[]).includes(stateId)
+    ? t(`statusLabels.${stateId}`)
+    : fallbackLabel
+}
+
 export interface ShareMenuItemsProps {
   sessionId: string
   sharedUrl: string
@@ -84,11 +97,13 @@ export function StatusMenuItems({
   menu,
 }: StatusMenuItemsProps) {
   const { MenuItem } = menu
+  const { t } = useTranslation()
 
   return (
     <>
       {sessionStatuses.map((state) => {
         const applyColor = state.iconColorable
+        const translatedLabel = getTranslatedStatusLabel(state.id, state.label, t)
         const bareIcon = React.isValidElement(state.icon)
           ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
           : state.icon
@@ -101,7 +116,7 @@ export function StatusMenuItems({
             <span style={applyColor ? { color: state.resolvedColor } : undefined}>
               {bareIcon}
             </span>
-            <span className="flex-1">{state.label}</span>
+            <span className="flex-1">{translatedLabel}</span>
           </MenuItem>
         )
       })}

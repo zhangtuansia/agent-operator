@@ -21,12 +21,27 @@ interface AcceptPlanDropdownProps {
   onAcceptWithCompact: () => void
   /** Additional className for the trigger button */
   className?: string
+  /** Trigger label */
+  label?: string
+  /** Immediate execute option label */
+  acceptLabel?: string
+  /** Immediate execute option description */
+  acceptDescription?: string
+  /** Compact option label */
+  acceptCompactLabel?: string
+  /** Compact option description */
+  acceptCompactDescription?: string
 }
 
 export function AcceptPlanDropdown({
   onAccept,
   onAcceptWithCompact,
   className,
+  label = 'Accept Plan',
+  acceptLabel = 'Accept',
+  acceptDescription = 'Execute the plan immediately',
+  acceptCompactLabel = 'Accept & Compact',
+  acceptCompactDescription = 'Works best for complex, longer plans',
 }: AcceptPlanDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
@@ -157,7 +172,7 @@ export function AcceptPlanDropdown({
           style={{ '--shadow-color': '34, 136, 82' } as React.CSSProperties}
         >
           <Check className="h-3.5 w-3.5" />
-          <span>Accept Plan</span>
+          <span>{label}</span>
           <ChevronDown className={cn(
             "h-3 w-3 transition-transform duration-150",
             isOpen && "rotate-180"
@@ -186,9 +201,9 @@ export function AcceptPlanDropdown({
               "transition-colors"
             )}
           >
-            <span className="text-[13px] font-medium">Accept</span>
+            <span className="text-[13px] font-medium">{acceptLabel}</span>
             <span className="text-xs text-muted-foreground">
-              Execute the plan immediately
+              {acceptDescription}
             </span>
           </button>
 
@@ -202,9 +217,9 @@ export function AcceptPlanDropdown({
               "transition-colors"
             )}
           >
-            <span className="text-[13px] font-medium">Accept & Compact</span>
+            <span className="text-[13px] font-medium">{acceptCompactLabel}</span>
             <span className="text-xs text-muted-foreground">
-              Works best for complex, longer plans
+              {acceptCompactDescription}
             </span>
           </button>
         </div>,

@@ -23,6 +23,22 @@ function addRecentDir(path: string): void {
 }
 
 /**
+ * Compact long folder names for badge display.
+ * Keeps both prefix and suffix for UUID-like names.
+ */
+function shortenFolderName(name: string): string {
+  const uuidLike = /^[0-9a-fA-F-]{16,}$/.test(name)
+  if (uuidLike && name.length > 10) {
+    // UUID-like directory names are noisy; keep only the tail.
+    return `...${name.slice(-4)}`
+  }
+
+  const maxLength = 12
+  if (name.length <= maxLength) return name
+  return `${name.slice(0, maxLength - 3)}...`
+}
+
+/**
  * Format path for display, with home directory shortened
  */
 function formatPathForDisplay(path: string, homeDir: string): string {
@@ -128,8 +144,11 @@ export function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder
+  const rawFolderName = hasFolder
     ? (workingDirectory.split('/').pop() || 'Folder')
+    : ''
+  const folderName = hasFolder
+    ? shortenFolderName(rawFolderName)
     : t('input.workInFolder')
 
   // Show reset option when a folder is selected and it differs from session folder
@@ -149,6 +168,7 @@ export function WorkingDirectoryBadge({
             label={folderName}
             isExpanded={isEmptySession}
             hasSelection={hasFolder}
+            collapsedLabelClassName="max-w-[72px]"
             showChevron={true}
             isOpen={popoverOpen}
             tooltip={
