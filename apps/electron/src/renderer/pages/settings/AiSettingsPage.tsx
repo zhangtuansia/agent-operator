@@ -87,6 +87,7 @@ import { ProviderLogo } from '@/components/icons/ProviderLogo'
  */
 function getModelOptionsForConnection(
   connection: LlmConnectionWithStatus | undefined,
+  t: (key: string) => string,
 ): Array<{ value: string; label: string; description: string }> {
   if (!connection) return []
 
@@ -96,7 +97,11 @@ function getModelOptionsForConnection(
         return { value: m, label: getModelShortName(m), description: '' }
       }
       const def = m as ModelDefinition
-      return { value: def.id, label: def.name, description: def.description }
+      return {
+        value: def.id,
+        label: def.name,
+        description: getLocalizedModelDescription(def.description, t),
+      }
     })
   }
 
@@ -104,8 +109,38 @@ function getModelOptionsForConnection(
   return registryModels.map((m) => ({
     value: m.id,
     label: m.name,
-    description: m.description,
+    description: getLocalizedModelDescription(m.description, t),
   }))
+}
+
+function getLocalizedModelDescription(description: string, t: (key: string) => string): string {
+  const descriptionMap: Record<string, string> = {
+    'Most capable': t('input.modelDescriptionMostCapable'),
+    'Balanced': t('input.modelDescriptionBalanced'),
+    'Fast & efficient': t('input.modelDescriptionFastEfficient'),
+    'Most capable Codex model': t('input.modelDescriptionMostCapableCodex'),
+    'Most capable, 1M context': t('input.modelDescriptionMostCapable1MContext'),
+  }
+
+  return descriptionMap[description] ?? description
+}
+
+function getLocalizedThinkingLevelLabel(level: ThinkingLevel, t: (key: string) => string): string {
+  const labelMap: Record<ThinkingLevel, string> = {
+    off: t('input.thinkingOffLabel'),
+    think: t('input.thinkingStandardLabel'),
+    max: t('input.thinkingMaxLabel'),
+  }
+  return labelMap[level]
+}
+
+function getLocalizedThinkingLevelDescription(level: ThinkingLevel, t: (key: string) => string): string {
+  const descriptionMap: Record<ThinkingLevel, string> = {
+    off: t('input.thinkingOffDescription'),
+    think: t('input.thinkingStandardDescription'),
+    max: t('input.thinkingMaxDescription'),
+  }
+  return descriptionMap[level]
 }
 
 export const meta: DetailsPageMeta = {
@@ -524,7 +559,11 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange, t 
     }
     if (settings?.thinkingLevel) {
       const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
-      parts.push(level?.name || settings.thinkingLevel)
+      parts.push(
+        level
+          ? getLocalizedThinkingLevelLabel(level.id, t)
+          : settings.thinkingLevel,
+      )
     }
     return parts.join(' · ')
   }
@@ -604,7 +643,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange, t 
                     label: t('apiSettings.aiPage.useDefault'),
                     description: t('apiSettings.aiPage.inheritFromAppSettings'),
                   },
-                  ...getModelOptionsForConnection(workspaceEffectiveConnection),
+                  ...getModelOptionsForConnection(workspaceEffectiveConnection, t),
                 ]}
               />
               <SettingsMenuSelectRow
@@ -618,10 +657,10 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange, t 
                     label: t('apiSettings.aiPage.useDefault'),
                     description: t('apiSettings.aiPage.inheritFromAppSettings'),
                   },
-                  ...THINKING_LEVELS.map(({ id, name, description }) => ({
+                  ...THINKING_LEVELS.map(({ id }) => ({
                     value: id,
-                    label: name,
-                    description,
+                    label: getLocalizedThinkingLevelLabel(id, t),
+                    description: getLocalizedThinkingLevelDescription(id, t),
                   })),
                 ]}
               />
@@ -1088,17 +1127,17 @@ export default function AiSettingsPage() {
                       description={t('workspaceSettings.defaultModelDescription')}
                       value={defaultModel}
                       onValueChange={handleDefaultModelChange}
-                      options={getModelOptionsForConnection(defaultConnection)}
+                      options={getModelOptionsForConnection(defaultConnection, t)}
                     />
                     <SettingsMenuSelectRow
                       label={t('workspaceSettings.thinkingLevel')}
                       description={t('workspaceSettings.thinkingLevelDescription')}
                       value={defaultThinking}
                       onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                      options={THINKING_LEVELS.map(({ id, name, description }) => ({
+                      options={THINKING_LEVELS.map(({ id }) => ({
                         value: id,
-                        label: name,
-                        description,
+                        label: getLocalizedThinkingLevelLabel(id, t),
+                        description: getLocalizedThinkingLevelDescription(id, t),
                       }))}
                     />
                   </SettingsCard>

@@ -57,9 +57,25 @@ export function SettingsMenuSelect({
 }: SettingsMenuSelectProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
+  const [triggerWidth, setTriggerWidth] = React.useState(0)
 
   const selectedOption = options.find((o) => o.value === value)
   const portalContainer = triggerRef.current?.closest('[data-slot="dialog-content"]') as HTMLElement | null
+  const panelWidth = Math.min(360, Math.max(menuWidth, triggerWidth))
+  const panelMaxHeight = 320
+
+  React.useEffect(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+
+    const updateWidth = () => setTriggerWidth(trigger.offsetWidth)
+    updateWidth()
+
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(trigger)
+
+    return () => observer.disconnect()
+  }, [])
 
   const handleSelect = (optionValue: string) => {
     onValueChange(optionValue)
@@ -96,11 +112,11 @@ export function SettingsMenuSelect({
       </PopoverTrigger>
       <PopoverContent
         container={portalContainer ?? undefined}
-        align="start"
-        sideOffset={4}
+        align="end"
+        sideOffset={6}
         collisionPadding={8}
-        className="p-1.5"
-        style={{ width: menuWidth }}
+        className="p-1.5 overflow-y-auto"
+        style={{ width: panelWidth, maxHeight: panelMaxHeight }}
         onMouseLeave={() => onHover?.(null)}
       >
         <div className="space-y-0.5">

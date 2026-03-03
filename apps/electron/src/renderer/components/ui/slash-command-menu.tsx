@@ -4,6 +4,7 @@ import { Brain, Check } from 'lucide-react'
 import { Icon_Folder } from '@agent-operator/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@agent-operator/shared/agent/modes'
+import { useLanguage } from '@/context/LanguageContext'
 
 // ============================================================================
 // Types
@@ -94,6 +95,13 @@ const ultrathinkCommand: SlashCommand = {
   label: 'Ultrathink',
   description: 'Extended reasoning for complex problems',
   icon: <Brain className={MENU_ICON_SIZE} />,
+}
+
+function getLocalizedUltrathinkCommand(t: (key: string) => string): SlashCommand {
+  return {
+    ...ultrathinkCommand,
+    description: t('slashCommandMenu.ultrathinkDescription'),
+  }
 }
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
@@ -547,12 +555,14 @@ export function useInlineSlashCommand({
   recentFolders = [],
   homeDir,
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
+  const { t } = useLanguage()
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const [slashStart, setSlashStart] = React.useState(-1)
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
+  const localizedUltrathinkCommand = React.useMemo(() => getLocalizedUltrathinkCommand(t), [t])
 
   // Build sections from commands and folders
   const sections = React.useMemo((): SlashSection[] => {
@@ -569,7 +579,7 @@ export function useInlineSlashCommand({
     result.push({
       id: 'features',
       label: 'Features',
-      items: [ultrathinkCommand],
+      items: [localizedUltrathinkCommand],
     })
 
     // Recent folders section - sorted alphabetically by folder name, show all
@@ -595,7 +605,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir])
+  }, [recentFolders, homeDir, localizedUltrathinkCommand])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

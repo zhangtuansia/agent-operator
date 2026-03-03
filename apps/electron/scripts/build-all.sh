@@ -107,10 +107,17 @@ setup_dependencies() {
         log_error "Interceptor not found at $shared_src/network-interceptor.ts"
         exit 1
     fi
+    if [ ! -f "$shared_src/network/interceptor.ts" ]; then
+        log_error "Interceptor implementation not found at $shared_src/network/interceptor.ts"
+        exit 1
+    fi
     mkdir -p "$dest_src/config"
+    mkdir -p "$dest_src/network"
     cp "$shared_src/network-interceptor.ts" "$dest_src/"
     cp "$shared_src/interceptor-common.ts" "$dest_src/"
     cp "$shared_src/feature-flags.ts" "$dest_src/"
+    cp "$shared_src/network/"*.ts "$dest_src/network/"
+    cp "$shared_src/config/feature-flags.ts" "$dest_src/config/"
     cp "$shared_src/config/paths.ts" "$dest_src/config/"
 
     log_info "Dependencies ready"

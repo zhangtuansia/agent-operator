@@ -1,8 +1,9 @@
 import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
+import { fileURLToPath } from 'url'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SavedWindow } from './window-state'
 
@@ -215,7 +216,24 @@ export class WindowManager {
       } else {
         // In prod, use file:// URL directly if it's a file URL, otherwise extract query
         if (restoreUrl.startsWith('file://')) {
-          window.loadURL(restoreUrl)
+          try {
+            const savedUrl = new URL(restoreUrl)
+            const restoreFilePath = resolve(fileURLToPath(savedUrl))
+            const expectedRendererPath = resolve(join(__dirname, 'renderer/index.html'))
+
+            if (restoreFilePath === expectedRendererPath) {
+              window.loadURL(restoreUrl)
+            } else {
+              windowLog.warn('Ignoring restoreUrl from different renderer bundle:', restoreFilePath)
+              const query: Record<string, string> = {}
+              savedUrl.searchParams.forEach((value, key) => { query[key] = value })
+              query.workspaceId = query.workspaceId || workspaceId
+              window.loadFile(expectedRendererPath, { query })
+            }
+          } catch {
+            windowLog.warn('Failed to parse file restoreUrl, using default renderer:', restoreUrl)
+            window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
+          }
         } else {
           // Extract query params and load file with them
           try {

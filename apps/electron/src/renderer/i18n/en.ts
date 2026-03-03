@@ -1138,6 +1138,8 @@ export const en = {
   toasts: {
     conversationDeleted: 'Conversation deleted',
     conversationFlagged: 'Conversation flagged',
+    conversationArchived: 'Conversation archived',
+    conversationRestored: 'Conversation restored',
     batchSessionsFlagged: 'Flagged {count} conversations',
     batchSessionsUnflagged: 'Unflagged {count} conversations',
     batchSessionsArchived: 'Archived {count} conversations',
@@ -1146,7 +1148,9 @@ export const en = {
     batchAutomationsDisabled: 'Disabled {count} automations',
     batchAutomationsDeleted: 'Deleted {count} automations',
     addedToFlagged: 'Added to your flagged items',
+    movedToArchive: 'Moved to archive',
     flagRemoved: 'Flag removed',
+    movedFromArchive: 'Moved from archive',
     removedFromFlagged: 'Removed from flagged items',
     undo: 'Undo',
     deletedSource: 'Deleted source',

@@ -1140,6 +1140,8 @@ export const zh: TranslationKeys = {
   toasts: {
     conversationDeleted: '对话已删除',
     conversationFlagged: '对话已标记',
+    conversationArchived: '对话已归档',
+    conversationRestored: '对话已恢复',
     batchSessionsFlagged: '已标记 {count} 个会话',
     batchSessionsUnflagged: '已取消标记 {count} 个会话',
     batchSessionsArchived: '已归档 {count} 个会话',
@@ -1148,7 +1150,9 @@ export const zh: TranslationKeys = {
     batchAutomationsDisabled: '已禁用 {count} 个自动化',
     batchAutomationsDeleted: '已删除 {count} 个自动化',
     addedToFlagged: '已添加到标记项目',
+    movedToArchive: '已移入归档',
     flagRemoved: '已取消标记',
+    movedFromArchive: '已从归档恢复',
     removedFromFlagged: '已从标记项目中移除',
     undo: '撤销',
     deletedSource: '已删除数据源',

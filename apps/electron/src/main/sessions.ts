@@ -113,6 +113,16 @@ function getBundledBunPath(): string | undefined {
 }
 
 /**
+ * IM sessions may be created with placeholder names like "IM-feishu-1730000000000".
+ * Treat these as auto-generated placeholders so first-turn title generation can
+ * replace them immediately.
+ */
+function isAutoTitlePlaceholder(name?: string): boolean {
+  if (!name || !name.trim()) return true
+  return /^IM-[a-z0-9_-]+-\d{10,16}$/i.test(name.trim())
+}
+
+/**
  * Write sensitive files atomically with restricted permissions.
  */
 async function writeFileSecure(targetPath: string, content: string, mode: number = 0o600): Promise<void> {
@@ -1409,7 +1419,10 @@ export class SessionManager {
     const interceptorCandidates: string[] = []
     if (app.isPackaged) {
       interceptorCandidates.push(
+        // Prefer direct implementation to avoid shim dependency issues.
+        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network', 'interceptor.ts'),
         join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
+        join(basePath, 'packages', 'shared', 'src', 'network', 'interceptor.ts'),
         // Backward-compatible fallback for older package layouts.
         join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts'),
       )
@@ -1420,7 +1433,9 @@ export class SessionManager {
         monorepoRoot = join(basePath, '..', '..')
       }
       interceptorCandidates.push(
+        join(monorepoRoot, 'packages', 'shared', 'src', 'network', 'interceptor.ts'),
         join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts'),
+        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network', 'interceptor.ts'),
         // Fallback for non-monorepo installs.
         join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
       )
@@ -3636,10 +3651,10 @@ export class SessionManager {
         status: 'accepted'
       }, managed.workspace.id)
 
-      // If this is the first user message and no title exists, set one immediately
-      // AI generation will enhance it later, but we always have a title from the start
+      // If this is the first user message and title is empty or placeholder,
+      // set one immediately. AI generation will enhance it later.
       const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
-      if (isFirstUserMessage && !managed.name) {
+      if (isFirstUserMessage && isAutoTitlePlaceholder(managed.name)) {
         // Sanitize message to remove XML blocks (e.g. <edit_request>) before using as title
         const sanitized = sanitizeForTitle(message)
         const initialTitle = sanitized.slice(0, 50) + (sanitized.length > 50 ? '…' : '')
@@ -4071,12 +4086,44 @@ ${skillContents.join('\n\n')}
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
     } else {
+      let startedInitialTitleGeneration = false
+
       // First user message title generation is intentionally deferred until
       // the first successful completion to reduce initial response latency.
       if (reason === 'complete' && managed.pendingInitialTitleMessage) {
         const titleSourceMessage = managed.pendingInitialTitleMessage
         managed.pendingInitialTitleMessage = undefined
         void this.generateTitle(managed, titleSourceMessage)
+        startedInitialTitleGeneration = true
+      }
+
+      // Backward-compat: older IM sessions may still have placeholder titles
+      // (e.g., "IM-feishu-...") without pendingInitialTitleMessage set.
+      // Recover by generating or refreshing title after completion.
+      if (
+        reason === 'complete'
+        && !startedInitialTitleGeneration
+        && isAutoTitlePlaceholder(managed.name)
+        && !managed.titleEditedByUser
+        && !managed.isAsyncOperationOngoing
+      ) {
+        const userMessages = managed.messages
+          .filter((m) => m.role === 'user')
+          .map((m) => m.content.trim())
+          .filter((content) => content.length > 0)
+
+        if (userMessages.length >= 2) {
+          managed.needsAutoTitleRefresh = false
+          void this.refreshTitle(sessionId).catch((error) => {
+            sessionLog.warn(
+              `Auto title recovery refresh failed for session ${sessionId}:`,
+              error instanceof Error ? error.message : error,
+            )
+          })
+        } else if (userMessages.length === 1) {
+          managed.needsAutoTitleRefresh = true
+          void this.generateTitle(managed, userMessages[0])
+        }
       }
 
       // After the second user turn, refresh the title once using recent context.

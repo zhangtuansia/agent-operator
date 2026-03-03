@@ -30,6 +30,8 @@ export interface IMSessionManager {
     title: string;
     workingDirectory: string;
     systemPrompt?: string;
+    platform?: IMPlatform;
+    conversationId?: string;
   }): Promise<string>;
 
   /** Send a message to an existing session */
@@ -95,6 +97,7 @@ const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes for agent response
 const PERMISSION_TIMEOUT_MS = 60_000; // 60 seconds for user to confirm
 const IM_ALLOW_RE = /^(允许|同意|yes|y)$/i;
 const IM_DENY_RE = /^(拒绝|不同意|no|n)$/i;
+const IM_NEW_RE = /^\/new(?:\s+([\s\S]*))?$/i;
 
 // ============================================================
 // Cowork Handler
@@ -135,6 +138,13 @@ export class IMCoworkHandler extends EventEmitter {
    * and returns the accumulated Agent response.
    */
   async processMessage(message: IMMessage, replyFn: IMReplyFn): Promise<void> {
+    const newCommand = this.parseNewCommand(message.content);
+    if (newCommand) {
+      const response = await this.handleNewCommand(message, newCommand.initialMessage);
+      await replyFn(response);
+      return;
+    }
+
     // Check if this is a permission confirmation reply
     const permReply = await this.handlePendingPermissionReply(message, replyFn);
     if (permReply !== null) {
@@ -216,14 +226,20 @@ export class IMCoworkHandler extends EventEmitter {
     if (!forceNew) {
       const existing = imStorage.getSessionMapping(conversationId, platform);
       if (existing) {
-        if (this.sessionManager.sessionExists(existing.sessionId)) {
+        if (existing.workspaceId === this.workspaceId && this.sessionManager.sessionExists(existing.sessionId)) {
           imStorage.updateSessionLastActive(conversationId, platform);
           this.imSessionIds.add(existing.sessionId);
           return existing.sessionId;
         }
 
-        // Stale mapping — clean up
-        console.warn(`[IMCoworkHandler] Stale mapping for ${platform}:${conversationId}`);
+        // Stale mapping or workspace changed — clean up and recreate
+        if (existing.workspaceId !== this.workspaceId) {
+          console.warn(
+            `[IMCoworkHandler] Mapping workspace changed for ${platform}:${conversationId} (${existing.workspaceId} -> ${this.workspaceId}), recreating`
+          );
+        } else {
+          console.warn(`[IMCoworkHandler] Stale mapping for ${platform}:${conversationId}`);
+        }
         imStorage.deleteSessionMapping(conversationId, platform);
         this.imSessionIds.delete(existing.sessionId);
         this.sessionConversationMap.delete(existing.sessionId);
@@ -238,6 +254,8 @@ export class IMCoworkHandler extends EventEmitter {
       title,
       workingDirectory: this.workingDirectory,
       systemPrompt,
+      platform,
+      conversationId,
     });
 
     // Save mapping
@@ -466,7 +484,65 @@ export class IMCoworkHandler extends EventEmitter {
     }
   }
 
+  private clearPendingPermissionForConversation(
+    conversationId: string,
+    platform: IMPlatform
+  ): void {
+    const key = `${platform}:${conversationId}`;
+    const pending = this.pendingPermissions.get(key);
+    if (!pending) return;
+
+    if (pending.timeoutId) clearTimeout(pending.timeoutId);
+    this.pendingPermissions.delete(key);
+    this.sessionManager.respondToPermission(pending.requestId, {
+      behavior: 'deny',
+      message: 'Cancelled by /new command.',
+    });
+  }
+
   // ---- Helpers ----
+
+  private parseNewCommand(content: string): { initialMessage?: string } | null {
+    const trimmed = content.trim();
+    const match = trimmed.match(IM_NEW_RE);
+    if (!match) return null;
+
+    const initialMessage = (match[1] ?? '').trim();
+    if (!initialMessage) {
+      return {};
+    }
+    return { initialMessage };
+  }
+
+  private async handleNewCommand(
+    message: IMMessage,
+    initialMessage?: string
+  ): Promise<string> {
+    const { conversationId, platform } = message;
+
+    this.clearPendingPermissionForConversation(conversationId, platform);
+
+    const existing = imStorage.getSessionMapping(conversationId, platform);
+    if (existing) {
+      this.rejectAccumulator(existing.sessionId, new Error('Session reset by /new command'));
+      this.clearPendingPermissions(existing.sessionId);
+      this.imSessionIds.delete(existing.sessionId);
+      this.sessionConversationMap.delete(existing.sessionId);
+      imStorage.deleteSessionMapping(conversationId, platform);
+      this.sessionManager.stopSession(existing.sessionId);
+    }
+
+    if (!initialMessage) {
+      return '已开启新对话，请发送你的问题。';
+    }
+
+    const nextMessage: IMMessage = {
+      ...message,
+      content: initialMessage,
+    };
+    const response = await this.processMessageInternal(nextMessage, true);
+    return `已开启新对话。\n\n${response}`;
+  }
 
   private isSessionNotFoundError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);

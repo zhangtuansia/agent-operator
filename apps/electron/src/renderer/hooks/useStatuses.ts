@@ -5,9 +5,36 @@
  * Auto-refreshes when workspace changes.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { StatusConfig } from '@agent-operator/shared/statuses'
 import { clearIconCache } from '@/config/session-status-config'
+import { useLanguage } from '@/context/LanguageContext'
+
+const BUILT_IN_STATUS_LABELS_EN: Record<string, string> = {
+  backlog: 'Backlog',
+  todo: 'Todo',
+  'needs-review': 'Needs Review',
+  done: 'Done',
+  cancelled: 'Cancelled',
+}
+
+function getLocalizedBuiltInStatusLabel(
+  status: StatusConfig,
+  t: (key: string) => string
+): StatusConfig {
+  const englishDefault = BUILT_IN_STATUS_LABELS_EN[status.id]
+  if (!englishDefault) return status
+
+  const localized = t(`statusLabels.${status.id}`)
+  const currentLabel = (status.label || '').trim()
+
+  // Only replace untouched default labels. Preserve any user-customized label.
+  if (!currentLabel || currentLabel === englishDefault || currentLabel === localized) {
+    return { ...status, label: localized }
+  }
+
+  return status
+}
 
 export interface UseStatusesResult {
   statuses: StatusConfig[]
@@ -25,13 +52,18 @@ export interface UseStatusesResult {
  * - Use file watcher in main process (more complex but real-time)
  */
 export function useStatuses(workspaceId: string | null): UseStatusesResult {
-  const [statuses, setStatuses] = useState<StatusConfig[]>([])
+  const { t } = useLanguage()
+  const [rawStatuses, setRawStatuses] = useState<StatusConfig[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const statuses = useMemo(() => {
+    return rawStatuses.map((status) => getLocalizedBuiltInStatusLabel(status, t))
+  }, [rawStatuses, t])
+
   const refresh = useCallback(async () => {
     if (!workspaceId) {
-      setStatuses([])
+      setRawStatuses([])
       setIsLoading(false)
       return
     }
@@ -39,7 +71,7 @@ export function useStatuses(workspaceId: string | null): UseStatusesResult {
     try {
       setIsLoading(true)
       const configs = await window.electronAPI.listStatuses(workspaceId)
-      setStatuses(configs)
+      setRawStatuses(configs)
       setError(null)
     } catch (err) {
       console.error('[useStatuses] Failed to load statuses:', err)

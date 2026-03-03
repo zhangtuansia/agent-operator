@@ -87,16 +87,31 @@ function findLastFinalMessageId(messages: Message[]): string | undefined {
 }
 
 /**
+ * Fallback preview from first user message when session.preview is not yet persisted.
+ * This keeps list titles responsive for brand-new chats before backend title events land.
+ */
+function getFirstUserPreview(messages: Message[]): string | undefined {
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      const content = msg.content?.trim()
+      if (content) return content
+    }
+  }
+  return undefined
+}
+
+/**
  * Extract metadata from a full session object
  */
 export function extractSessionMeta(session: Session): SessionMeta {
   const messages = session.messages || []
   const lastFinalMessageId = findLastFinalMessageId(messages)
+  const preview = session.preview ?? getFirstUserPreview(messages)
 
   return {
     id: session.id,
     name: session.name,
-    preview: session.preview,
+    preview,
     workspaceId: session.workspaceId,
     createdAt: session.createdAt,
     lastMessageAt: session.lastMessageAt,

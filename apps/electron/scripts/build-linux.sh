@@ -122,12 +122,19 @@ echo "Copying SDK..."
 mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
 cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
-# 5. Copy interceptor
-INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
-require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
-echo "Copying interceptor..."
-mkdir -p "$ELECTRON_DIR/packages/shared/src"
-cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
+# 5. Copy interceptor and dependencies
+SHARED_SRC="$ROOT_DIR/packages/shared/src"
+require_path "$SHARED_SRC/network-interceptor.ts" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
+require_path "$SHARED_SRC/network/interceptor.ts" "Interceptor dependency" "Ensure packages/shared/src/network/interceptor.ts exists."
+echo "Copying interceptor and dependencies..."
+mkdir -p "$ELECTRON_DIR/packages/shared/src/config"
+mkdir -p "$ELECTRON_DIR/packages/shared/src/network"
+cp "$SHARED_SRC/network-interceptor.ts" "$ELECTRON_DIR/packages/shared/src/"
+cp "$SHARED_SRC/interceptor-common.ts" "$ELECTRON_DIR/packages/shared/src/"
+cp "$SHARED_SRC/feature-flags.ts" "$ELECTRON_DIR/packages/shared/src/"
+cp "$SHARED_SRC/network/"*.ts "$ELECTRON_DIR/packages/shared/src/network/"
+cp "$SHARED_SRC/config/feature-flags.ts" "$ELECTRON_DIR/packages/shared/src/config/"
+cp "$SHARED_SRC/config/paths.ts" "$ELECTRON_DIR/packages/shared/src/config/"
 
 # 6. Build Electron app
 echo "Building Electron app..."

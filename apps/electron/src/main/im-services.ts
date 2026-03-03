@@ -139,6 +139,8 @@ export class IMServiceManager {
 
     ipcMain.handle(IPC_CHANNELS.IM_SET_SETTINGS, async (_event, settings) => {
       saveIMSettings(settings)
+      // Re-setup message handler in case workspace routing changed
+      this.setupMessageHandler()
     })
 
     // Channel lifecycle
@@ -195,17 +197,40 @@ export class IMServiceManager {
   }
 
   private createCoworkHandler(): void {
-    // Get first workspace as the default working directory for IM sessions
-    // In the future, this could be configured per-channel
+    // Recreate handler with latest settings/workspace routing
+    if (this.coworkHandler) {
+      this.coworkHandler.destroy()
+      this.coworkHandler = null
+    }
+
     try {
-      const { getWorkspaces } = require('@agent-operator/shared/config')
+      const { getWorkspaces, loadStoredConfig } = require('@agent-operator/shared/config')
       const workspaces = getWorkspaces()
       if (workspaces.length === 0) {
         mainLog.warn('[IM] No workspaces configured, CoworkHandler not created')
         return
       }
 
-      const workspace = workspaces[0]
+      const imSettings = getIMSettings()
+      const config = loadStoredConfig()
+      const configuredWorkspaceId = imSettings.workspaceId
+      const activeWorkspaceId = config?.activeWorkspaceId
+
+      const workspace = (
+        (configuredWorkspaceId
+          ? workspaces.find((w: { id: string }) => w.id === configuredWorkspaceId)
+          : undefined) ||
+        (activeWorkspaceId
+          ? workspaces.find((w: { id: string }) => w.id === activeWorkspaceId)
+          : undefined) ||
+        workspaces[0]
+      )
+
+      if (!workspace) {
+        mainLog.warn('[IM] No workspace resolved for IM sessions')
+        return
+      }
+
       const workingDirectory = workspace.rootPath
 
       // Track requestId → sessionId for permission responses
@@ -214,11 +239,15 @@ export class IMServiceManager {
       // Create real session manager adapter
       const sessionManagerAdapter: IMSessionManager = {
         createSession: async (options) => {
+          const labels = ['im']
+          if (options.platform) {
+            labels.push(`im:${options.platform}`)
+          }
           const session = await this.sessionManager.createSession(workspace.id, {
             permissionMode: 'allow-all',
             workingDirectory: options.workingDirectory || workingDirectory,
             name: options.title,
-            labels: ['im'],
+            labels,
           } as any)
           return session.id
         },
