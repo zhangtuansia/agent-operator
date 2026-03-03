@@ -1,12 +1,12 @@
-# Release - 打包并上传到 R2
+# Release - 通过 GitHub Actions 自动打包发布
 
-打包 Electron 应用并上传到 Cloudflare R2 (cowork bucket)。
+推送 git tag 触发 GitHub Actions 自动打包所有平台并创建 GitHub Release。
 
 ## 流程
 
 ### 1. 询问版本号
 
-首先询问用户要发布的版本号，格式如 `0.1.6`（标准 semver）。
+首先询问用户要发布的版本号，格式如 `0.2.3`（标准 semver）。
 
 ### 2. 更新版本号
 
@@ -14,120 +14,81 @@
 - `apps/electron/package.json` - 主要版本文件
 - `package.json` - 根目录版本（可选同步）
 
-### 3. 打包所有平台
-
-运行打包脚本，为每个平台下载对应的 Bun 运行时并打包：
+### 3. 提交并推送
 
 ```bash
-cd apps/electron && ./scripts/build-all.sh all
+git add apps/electron/package.json package.json
+git commit -m "chore: bump version to x.y.z"
+git push origin main
 ```
 
-这会打包：
-- **macOS arm64**: `Cowork-arm64.dmg` + `Cowork-arm64.zip`
-- **macOS x64**: `Cowork-x64.dmg` + `Cowork-x64.zip`
-- **Windows x64**: `Cowork-x64.exe`
-- **Linux x64**: `Cowork-x86_64.AppImage`
-
-同时生成 electron-updater YAML 清单（`--publish always` 已内置）：
-- `latest-mac.yml` — macOS 自动更新清单
-- `latest.yml` — Windows 自动更新清单
-- `latest-linux.yml` — Linux 自动更新清单
-
-打包脚本会自动：
-1. 下载对应平台的 Bun 运行时到 `vendor/bun/`
-2. 安装依赖并复制 SDK
-3. 构建 Electron 应用
-4. 使用 electron-builder 打包（含 `--publish always` 生成自动更新清单）
-
-### 4. 上传到 R2
-
-上传到 Cloudflare R2 的 `cowork` bucket：
+### 4. 创建并推送 tag
 
 ```bash
-bun run scripts/upload.ts --electron --latest
+git tag v{version}
+git push origin v{version}
 ```
 
-上传结构：
-```
-cowork/
-├── downloads/
-│   └── {version}/
-│       ├── Cowork-arm64.dmg
-│       ├── Cowork-x64.dmg
-│       ├── Cowork-x64.exe
-│       └── Cowork-x86_64.AppImage
-└── electron/
-    ├── {version}/
-    │   └── manifest.json
-    └── latest/
-        ├── latest-mac.yml        ← electron-updater macOS 清单
-        ├── latest.yml            ← electron-updater Windows 清单
-        ├── latest-linux.yml      ← electron-updater Linux 清单
-        ├── Cowork-arm64.zip      ← macOS arm64 自动更新包
-        ├── Cowork-x64.zip        ← macOS x64 自动更新包
-        ├── Cowork-x64.exe        ← Windows 自动更新包
-        └── Cowork-x86_64.AppImage ← Linux 自动更新包
-```
+推送 `v*` tag 后，GitHub Actions (`release.yml`) 会自动：
 
-`electron/latest` (无斜杠路径) 是版本指针 JSON：`{"version": "x.x.x"}`
+1. **并行构建 4 个平台**：
+   - macOS ARM64 (`macos-14` runner)
+   - macOS x64 (`macos-15` runner)
+   - Windows x64 (`windows-latest` runner)
+   - Linux x64 (`ubuntu-latest` runner)
 
-### 5. 环境变量
+2. 每个平台自动：
+   - 下载对应的 Bun 运行时
+   - 安装依赖、复制 SDK 和 interceptor
+   - 构建 Electron 应用
+   - 使用 electron-builder 打包（含 `--publish always` 生成更新清单）
 
-上传需要配置以下环境变量（在 `.env` 文件中）：
+3. **合并 macOS YAML 清单**（arm64 + x64）
 
-```
-R2_ACCOUNT_ID=xxx
-R2_ACCESS_KEY_ID=xxx
-R2_SECRET_ACCESS_KEY=xxx
-R2_BUCKET_NAME=cowork
-```
+4. **创建 Draft GitHub Release**，包含所有产物：
+   - `Cowork-arm64.dmg` + `Cowork-arm64.zip` (macOS ARM)
+   - `Cowork-x64.dmg` + `Cowork-x64.zip` (macOS Intel)
+   - `Cowork-x64.exe` (Windows)
+   - `Cowork-x86_64.AppImage` (Linux)
+   - `latest-mac.yml`, `latest.yml`, `latest-linux.yml` (自动更新清单)
 
-## 快速命令
+### 5. 发布 Release
 
-单独打包某个平台（推荐用 build-dmg.sh，支持签名和公证）：
+GitHub Actions 创建的是 **Draft Release**，需要用户去 GitHub 页面手动点击 Publish。
+也可以用 CLI：
+
 ```bash
-cd apps/electron && ./scripts/build-dmg.sh arm64           # macOS ARM
-cd apps/electron && ./scripts/build-dmg.sh x64             # macOS Intel
-cd apps/electron && ./scripts/build-dmg.sh arm64 --upload --latest  # 打包+上传
+gh release edit v{version} --draft=false
 ```
 
-使用 build-all.sh：
+### 6. 检查构建状态
+
 ```bash
-cd apps/electron && ./scripts/build-all.sh mac arm64   # macOS ARM
-cd apps/electron && ./scripts/build-all.sh mac x64     # macOS Intel
-cd apps/electron && ./scripts/build-all.sh win x64     # Windows
-cd apps/electron && ./scripts/build-all.sh linux x64   # Linux
+gh run list --workflow=release.yml --limit=3
+gh run view {run-id}
 ```
 
-只上传不打包：
+## 手动触发（可选）
+
+不推 tag 也可以通过 workflow_dispatch 手动触发：
+
 ```bash
-bun run scripts/upload.ts --electron --latest
+gh workflow run release.yml --field tag=v{version}
+```
+
+## 本地打包（仅调试用）
+
+本地只能打当前平台的包，跨平台打包必须用 CI：
+
+```bash
+cd apps/electron && ./scripts/build-dmg.sh arm64    # macOS ARM
+cd apps/electron && ./scripts/build-dmg.sh x64       # macOS Intel
 ```
 
 ## 注意事项
 
-### Bun 运行时打包（关键）
-
-每个平台需要打包**对应平台的 Bun 二进制文件**，不能混用！
-
-| 平台 | Bun 下载包 | 二进制文件名 |
-|------|-----------|-------------|
-| macOS ARM | `bun-darwin-aarch64` | `bun` |
-| macOS Intel | `bun-darwin-x64` | `bun` |
-| Windows x64 | `bun-windows-x64-baseline` | `bun.exe` |
-| Linux x64 | `bun-linux-x64` | `bun` |
-| Linux ARM | `bun-linux-aarch64` | `bun` |
-
-### 自动更新 YAML 清单
-
-`--publish always` 是关键！没有它，electron-builder 不会生成：
-- YAML 清单（`latest-mac.yml` 等）
-- macOS ZIP 文件（`Cowork-arm64.zip` 等）
-
-如果 `upload.ts` 输出 "WARNING: Missing YAML manifests"，说明打包时缺少了 `--publish always`。
-
-### 其他注意事项
-
 1. **版本号格式**：标准 semver `x.y.z`
-2. **R2 权限**：确保 API Token 有 `Object Read & Write` 权限
-3. **Windows 特殊处理**：Windows 的 Bun 放在 `extraResources` 而非 `files`，避免 EBUSY 锁定问题
+2. **Tag 格式**：必须是 `v` 前缀（如 `v0.2.3`），才能触发 release workflow
+3. **Secrets**：GitHub repo 需要配置 `GOOGLE_OAUTH_CLIENT_ID/SECRET`、`SLACK_OAUTH_CLIENT_ID/SECRET`、`MICROSOFT_OAUTH_CLIENT_ID/SECRET`
+4. **Draft Release**：CI 创建的是草稿，需手动发布
+5. **自动更新**：发布后 electron-updater 会通过 GitHub Releases 的 YAML 清单推送更新
