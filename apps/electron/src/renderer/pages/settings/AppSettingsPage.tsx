@@ -121,52 +121,15 @@ export default function AppSettingsPage() {
             <SettingsSection title={t('appSettings.about')}>
               <SettingsCard>
                 <SettingsRow label={t('appSettings.version')}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center">
                     <span className="text-muted-foreground">
                       {updateChecker.updateInfo?.currentVersion ?? t('common.loading')}
                     </span>
-                    {/* Show download progress next to version when downloading */}
-                    {updateChecker.isDownloading && (
-                      <span className="text-xs text-primary">
-                        {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
-                      </span>
-                    )}
-                    {/* Show new version badge when ready */}
-                    {updateChecker.isReadyToInstall && updateChecker.updateInfo?.latestVersion && (
-                      <span className="text-xs text-green-600 dark:text-green-400">
-                        → {updateChecker.updateInfo.latestVersion}
-                      </span>
-                    )}
                   </div>
                 </SettingsRow>
                 <SettingsRow label={t('appSettings.checkForUpdates')}>
                   <div className="flex flex-col items-end gap-1.5">
-                    {/* Ready to install */}
-                    {updateChecker.isReadyToInstall ? (
-                      <Button
-                        size="sm"
-                        onClick={updateChecker.installUpdate}
-                      >
-                        {t('appSettings.restartToUpdate')}
-                      </Button>
-                    ) : /* Downloading */ updateChecker.isDownloading ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled
-                      >
-                        <Spinner className="mr-1.5" />
-                        {t('appSettings.downloadProgress').replace('{progress}', String(updateChecker.downloadProgress))}
-                      </Button>
-                    ) : /* Download error */ updateChecker.updateInfo?.downloadState === 'error' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCheckForUpdates}
-                      >
-                        {t('appSettings.retryDownload')}
-                      </Button>
-                    ) : /* Checking */ isCheckingForUpdates ? (
+                    {isCheckingForUpdates ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -175,7 +138,7 @@ export default function AppSettingsPage() {
                         <Spinner className="mr-1.5" />
                         {t('appSettings.checking')}
                       </Button>
-                    ) : /* Default: Check Now */ (
+                    ) : (
                       <Button
                         variant="outline"
                         size="sm"
@@ -184,11 +147,9 @@ export default function AppSettingsPage() {
                         {t('appSettings.checkNow')}
                       </Button>
                     )}
-                    {updateChecker.updateInfo?.downloadState === 'error' && (
-                      <p className="max-w-[24rem] text-right text-xs text-destructive/90 break-all">
-                        {updateChecker.updateInfo.error || t('appSettings.downloadFailed')}
-                      </p>
-                    )}
+                    <p className="max-w-[24rem] text-right text-xs text-muted-foreground">
+                      {t('appSettings.manualUpdateHint')}
+                    </p>
                   </div>
                 </SettingsRow>
               </SettingsCard>

@@ -31,7 +31,8 @@ export type LlmProviderType =
   | 'openai_compat'
   | 'bedrock'
   | 'vertex'
-  | 'copilot';
+  | 'copilot'
+  | 'pi';
 
 /**
  * @deprecated Use LlmProviderType instead.
@@ -247,6 +248,13 @@ export function isCopilotProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
+ * Whether provider uses Pi backend.
+ */
+export function isPiProvider(providerType: LlmProviderType): boolean {
+  return providerType === 'pi';
+}
+
+/**
  * Registry models for standard providers.
  * Compat providers intentionally return empty here.
  */
@@ -267,6 +275,10 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
     return [];
   }
 
+  if (providerType === 'pi') {
+    return [];
+  }
+
   return CLAUDE_MODELS;
 }
 
@@ -282,6 +294,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
   if (providerType === 'openai') return OPENAI_MODELS;
   if (providerType === 'bedrock') return BEDROCK_MODELS;
   if (providerType === 'copilot') return [];
+  if (providerType === 'pi') return [];
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.5',
     'anthropic/claude-sonnet-4.5',
@@ -297,6 +310,9 @@ export function getDefaultModelForConnection(providerType: LlmProviderType): str
   if (providerType === 'copilot') {
     // Copilot models are dynamic; use a stable placeholder until listModels() refreshes.
     return 'gpt-5';
+  }
+  if (providerType === 'pi') {
+    return 'pi/claude-sonnet-4-5-20250929';
   }
   const models = getDefaultModelsForConnection(providerType);
   const first = models[0];
@@ -375,6 +391,7 @@ export function isValidProviderAuthCombination(
     bedrock: ['bearer_token', 'iam_credentials', 'environment'],
     vertex: ['oauth', 'service_account_file', 'environment'],
     copilot: ['oauth'],
+    pi: ['api_key'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

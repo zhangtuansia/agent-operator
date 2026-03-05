@@ -20,6 +20,7 @@ import {
   ListTodo,
   Pencil,
   FilePenLine,
+  GitBranch,
 } from 'lucide-react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
@@ -32,6 +33,12 @@ import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from '../ui/StyledDropdown'
 
 // ============================================================================
 // Utilities
@@ -208,6 +215,8 @@ export interface ResponseContent {
   streamStartTime?: number
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
+  /** ID of the underlying message (used for branching) */
+  messageId?: string
 }
 
 // ============================================================================
@@ -219,6 +228,9 @@ export interface TurnCardTranslations {
   copy?: string
   copied?: string
   viewAsMarkdown?: string
+  branch?: string
+  branchFromMessage?: string
+  branchDescription?: string
   typeFeedbackOr?: string
   plan?: string
   viewFullscreen?: string
@@ -235,6 +247,9 @@ export interface ResponseCardTranslations {
   copy?: string
   copied?: string
   viewAsMarkdown?: string
+  branch?: string
+  branchFromMessage?: string
+  branchDescription?: string
   typeFeedbackOr?: string
   plan?: string
   viewFullscreen?: string
@@ -307,6 +322,8 @@ export interface TurnCardProps {
   animateResponse?: boolean
   /** Hide footers for compact embedding (EditPopover) */
   compactMode?: boolean
+  /** Callback to branch the session from a specific message */
+  onBranch?: (messageId: string) => void
   /** Translations for UI strings (optional, defaults to English) */
   translations?: TurnCardTranslations
 }
@@ -1344,8 +1361,55 @@ export interface ResponseCardProps {
   showAcceptPlan?: boolean
   /** Hide footer for compact embedding (EditPopover) */
   compactMode?: boolean
+  /** Callback to branch the session from this response */
+  onBranch?: () => void
   /** Translations for UI strings (optional, defaults to English) */
   translations?: ResponseCardTranslations
+}
+
+interface BranchDropdownProps {
+  onBranch: () => void
+  branchLabel: string
+  branchFromMessageLabel: string
+  branchDescriptionLabel: string
+}
+
+function BranchDropdown({
+  onBranch,
+  branchLabel,
+  branchFromMessageLabel,
+  branchDescriptionLabel,
+}: BranchDropdownProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={branchLabel}
+          title={branchLabel}
+          className={cn(
+            "p-1 rounded-[4px] transition-colors select-none",
+            "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+            "data-[state=open]:text-foreground data-[state=open]:bg-foreground/5",
+            "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          )}
+        >
+          <GitBranch className={SIZE_CONFIG.iconSize} />
+        </button>
+      </DropdownMenuTrigger>
+
+      <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
+        <StyledDropdownMenuItem onClick={onBranch} className="items-start py-2">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] leading-tight">{branchFromMessageLabel}</span>
+            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+              {branchDescriptionLabel}
+            </span>
+          </div>
+        </StyledDropdownMenuItem>
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 const MAX_HEIGHT = 540
@@ -1379,6 +1443,7 @@ export function ResponseCard({
   isLastResponse = true,
   showAcceptPlan = true,
   compactMode = false,
+  onBranch,
   translations,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
@@ -1394,6 +1459,9 @@ export function ResponseCard({
     copy: translations?.copy ?? 'Copy',
     copied: translations?.copied ?? 'Copied!',
     viewAsMarkdown: translations?.viewAsMarkdown ?? 'View as Markdown',
+    branch: translations?.branch ?? 'Branch',
+    branchFromMessage: translations?.branchFromMessage ?? 'Branch from this message',
+    branchDescription: translations?.branchDescription ?? "Explore an alternate direction without disrupting this conversation's flow.",
     typeFeedbackOr: translations?.typeFeedbackOr ?? 'Type your feedback in chat or',
     plan: translations?.plan ?? 'Plan',
     viewFullscreen: translations?.viewFullscreen ?? 'View Fullscreen',
@@ -1565,30 +1633,41 @@ export function ResponseCard({
                 )}
               </div>
 
-              {/* Right side - Accept Plan dropdown (only shown for plan variant when it's the last response) */}
-              {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
-                <div
-                  className={cn(
-                    "flex items-center gap-3 transition-all duration-200",
-                    isLastResponse
-                      ? "opacity-100 translate-x-0"
-                      : "opacity-0 translate-x-2 pointer-events-none"
-                  )}
-                >
-                  <span className="text-xs text-muted-foreground">
-                    {uiText.typeFeedbackOr}
-                  </span>
-                  <AcceptPlanDropdown
-                    onAccept={onAccept}
-                    onAcceptWithCompact={onAcceptWithCompact}
-                    label={uiText.acceptPlan}
-                    acceptLabel={uiText.accept}
-                    acceptDescription={uiText.acceptDescription}
-                    acceptCompactLabel={uiText.acceptCompact}
-                    acceptCompactDescription={uiText.acceptCompactDescription}
+              {/* Right side */}
+              <div className="flex items-center gap-3">
+                {/* Accept Plan dropdown (plan variant only, last response) */}
+                {isPlan && showAcceptPlan && onAccept && onAcceptWithCompact && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 transition-all duration-200",
+                      isLastResponse
+                        ? "opacity-100 translate-x-0"
+                        : "opacity-0 translate-x-2 pointer-events-none"
+                    )}
+                  >
+                    <span className="text-xs text-muted-foreground">
+                      {uiText.typeFeedbackOr}
+                    </span>
+                    <AcceptPlanDropdown
+                      onAccept={onAccept}
+                      onAcceptWithCompact={onAcceptWithCompact}
+                      label={uiText.acceptPlan}
+                      acceptLabel={uiText.accept}
+                      acceptDescription={uiText.acceptDescription}
+                      acceptCompactLabel={uiText.acceptCompact}
+                      acceptCompactDescription={uiText.acceptCompactDescription}
+                    />
+                  </div>
+                )}
+                {onBranch && (
+                  <BranchDropdown
+                    onBranch={onBranch}
+                    branchLabel={uiText.branch}
+                    branchFromMessageLabel={uiText.branchFromMessage}
+                    branchDescriptionLabel={uiText.branchDescription}
                   />
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1763,6 +1842,7 @@ export const TurnCard = React.memo(function TurnCard({
   displayMode = 'detailed',
   animateResponse = false,
   compactMode = false,
+  onBranch,
   translations,
 }: TurnCardProps) {
   // Derive the turn phase from props using the state machine.
@@ -2114,6 +2194,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
+            onBranch={onBranch ? () => onBranch(planActivity.id) : undefined}
             translations={translations}
           />
         </div>
@@ -2142,6 +2223,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
+                onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
                 translations={translations}
               />
             </motion.div>
@@ -2163,6 +2245,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
+            onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
             translations={translations}
           />
         </div>

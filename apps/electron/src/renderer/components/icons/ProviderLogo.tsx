@@ -24,6 +24,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   claude_oauth: claudeLogo,
   api_key: claudeLogo,
   codex: openaiLogo,
+  pi: claudeLogo,
   deepseek: deepseekLogo,
   minimax: minimaxLogo,
   openai: openaiLogo,

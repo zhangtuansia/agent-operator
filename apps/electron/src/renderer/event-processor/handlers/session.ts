@@ -429,6 +429,7 @@ export function handleConnectionChanged(
       session: {
         ...session,
         llmConnection: event.connectionSlug,
+        supportsBranching: event.supportsBranching ?? session.supportsBranching,
       },
       streaming,
     },

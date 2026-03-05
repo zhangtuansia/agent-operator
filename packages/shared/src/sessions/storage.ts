@@ -490,6 +490,10 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       // Archive state
       isArchived: header.isArchived,
       archivedAt: header.archivedAt,
+      // Branching metadata
+      branchFromMessageId: header.branchFromMessageId,
+      branchFromSdkSessionId: header.branchFromSdkSessionId,
+      branchFromSessionPath: header.branchFromSessionPath,
       // Sub-session hierarchy
       parentSessionId: header.parentSessionId,
       siblingOrder: header.siblingOrder,
@@ -875,6 +879,7 @@ export async function createSubSession(
     model?: string;
     todoState?: SessionConfig['todoState'];
     labels?: string[];
+    branchFromMessageId?: string;
   }
 ): Promise<SessionConfig> {
   // Verify parent exists
@@ -886,6 +891,18 @@ export async function createSubSession(
   // Prevent nested sub-sessions (max 1 level)
   if (parent.parentSessionId) {
     throw new Error('Cannot create sub-session of a sub-session (max 1 level)');
+  }
+
+  let initialMessages: StoredSession['messages'] = [];
+  if (options?.branchFromMessageId) {
+    const branchIndex = parent.messages.findIndex((message) => message.id === options.branchFromMessageId);
+    if (branchIndex === -1) {
+      throw new Error(`Branch message not found in parent session: ${options.branchFromMessageId}`);
+    }
+    // Copy history up to the selected message so the branch starts from that point.
+    initialMessages = parent.messages
+      .slice(0, branchIndex + 1)
+      .map((message) => ({ ...message }));
   }
 
   // Create child session with parentSessionId set
@@ -903,6 +920,19 @@ export async function createSubSession(
   const storedSession = loadSession(workspaceRootPath, session.id);
   if (storedSession) {
     storedSession.parentSessionId = parentSessionId;
+    if (initialMessages.length > 0) {
+      storedSession.messages = initialMessages;
+      storedSession.lastReadMessageId = initialMessages[initialMessages.length - 1]?.id;
+      storedSession.hasUnread = false;
+      // Branched sessions should start with fresh usage accounting.
+      storedSession.tokenUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      };
+    }
     await saveSession(storedSession);
   }
 

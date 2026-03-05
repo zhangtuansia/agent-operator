@@ -18,7 +18,7 @@ if (existsSync(srcDir)) {
   console.log("⚠️ No resources directory found");
 }
 
-type McpServerName = "bridge-mcp-server" | "session-mcp-server";
+type McpServerName = "bridge-mcp-server" | "session-mcp-server" | "pi-agent-server";
 
 function syncMcpServer(server: McpServerName): void {
   const preferredBuiltPath = join(ROOT_DIR, "packages", server, "dist", "index.js");
@@ -30,6 +30,12 @@ function syncMcpServer(server: McpServerName): void {
       : null;
 
   if (!sourcePath) {
+    if (server === "pi-agent-server") {
+      console.warn(
+        `[resources] Optional ${server}/index.js not found. PI provider will be unavailable until it is built.`
+      );
+      return;
+    }
     throw new Error(
       `[resources] Missing ${server}/index.js. Checked:\n- ${preferredBuiltPath}\n- ${fallbackResourcePath}`
     );
@@ -44,3 +50,4 @@ function syncMcpServer(server: McpServerName): void {
 
 syncMcpServer("bridge-mcp-server");
 syncMcpServer("session-mcp-server");
+syncMcpServer("pi-agent-server");

@@ -25,6 +25,7 @@ function inferProviderId(connection: ConnectionIconProps['connection']): string 
 
   const providerType = (connection.providerType || connection.type || '').toLowerCase()
   if (providerType.includes('anthropic') || providerType === 'bedrock') return 'anthropic'
+  if (providerType === 'pi') return 'pi'
   if (providerType.includes('openai') || providerType === 'copilot') return 'openai'
 
   const name = connection.name.toLowerCase()

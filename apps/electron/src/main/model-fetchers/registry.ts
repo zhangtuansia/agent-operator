@@ -11,12 +11,14 @@ import { AnthropicModelFetcher } from './anthropic'
 import { CopilotModelFetcher } from './copilot'
 import { OpenAIModelFetcher } from './openai'
 import { BedrockVertexModelFetcher } from './bedrock-vertex'
+import { PiModelFetcher } from './pi'
 
 // Shared instances — fetchers are stateless
 const anthropicFetcher = new AnthropicModelFetcher()
 const copilotFetcher = new CopilotModelFetcher()
 const openAIFetcher = new OpenAIModelFetcher()
 const bedrockVertexFetcher = new BedrockVertexModelFetcher()
+const piFetcher = new PiModelFetcher()
 
 export const MODEL_FETCHERS: ModelFetcherMap = {
   anthropic: anthropicFetcher,
@@ -24,4 +26,5 @@ export const MODEL_FETCHERS: ModelFetcherMap = {
   openai: openAIFetcher,
   bedrock: bedrockVertexFetcher,
   vertex: bedrockVertexFetcher, // Shared instance — same implementation
+  pi: piFetcher,
 }

@@ -189,6 +189,33 @@ export function useSessionEvents({
 
       // Check if session is currently streaming (atom is source of truth)
       const atomSession = store.get(sessionAtomFamily(sessionId))
+
+      // Some metadata events can arrive before the newly created session is inserted
+      // into atoms (branch/new-session creation race). Ignore those instead of
+      // creating an empty "processing" placeholder session.
+      if (!atomSession) {
+        if (event.type === 'permission_mode_changed') {
+          console.log('[useSessionEvents] permission_mode_changed (session pending):', event.sessionId, event.permissionMode)
+          setSessionOptions(prevOpts => {
+            const next = new Map(prevOpts)
+            const current = next.get(event.sessionId) ?? defaultSessionOptions
+            next.set(event.sessionId, { ...current, permissionMode: event.permissionMode })
+            return next
+          })
+          return
+        }
+
+        if (
+          event.type === 'working_directory_changed' ||
+          event.type === 'session_model_changed' ||
+          event.type === 'connection_changed' ||
+          event.type === 'sources_changed' ||
+          event.type === 'labels_changed'
+        ) {
+          return
+        }
+      }
+
       const isStreaming = atomSession?.isProcessing === true
       const isHandoff = handoffEventTypesRef.current.has(event.type)
 

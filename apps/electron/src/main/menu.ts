@@ -86,25 +86,14 @@ export async function rebuildMenu(): Promise<void> {
     return
   }
 
-  // Get current update state
-  const { getUpdateInfo, installUpdate, checkForUpdates } = await import('./auto-update')
-  const updateInfo = getUpdateInfo()
-  const updateReady = updateInfo.available && updateInfo.downloadState === 'ready'
-
-  // Build the update menu item based on state
-  const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
-    ? {
-        label: `Install Update…\t【${updateInfo.latestVersion}】`,
-        click: async () => {
-          await installUpdate()
-        }
-      }
-    : {
-        label: 'Check for Updates…',
-        click: async () => {
-          await checkForUpdates({ autoDownload: true })
-        }
-      }
+  // Auto-update is disabled; always route to manual GitHub releases downloads.
+  const { openReleaseDownloadsPage } = await import('./auto-update')
+  const updateMenuItem: Electron.MenuItemConstructorOptions = {
+    label: 'Download Latest Version…',
+    click: async () => {
+      await openReleaseDownloadsPage()
+    }
+  }
 
   const template: Electron.MenuItemConstructorOptions[] = [
     // App menu (macOS only)
@@ -211,22 +200,10 @@ export async function rebuildMenu(): Promise<void> {
       label: 'Debug',
       submenu: [
         {
-          label: 'Check for Updates',
+          label: 'Open Release Downloads',
           click: async () => {
-            const { checkForUpdates } = await import('./auto-update')
-            const info = await checkForUpdates({ autoDownload: true })
-            mainLog.info('[debug-menu] Update check result:', info)
-          }
-        },
-        {
-          label: 'Install Update',
-          click: async () => {
-            const { installUpdate } = await import('./auto-update')
-            try {
-              await installUpdate()
-            } catch (err) {
-              mainLog.error('[debug-menu] Install failed:', err)
-            }
+            const { openReleaseDownloadsPage } = await import('./auto-update')
+            await openReleaseDownloadsPage()
           }
         },
         { type: 'separator' as const },

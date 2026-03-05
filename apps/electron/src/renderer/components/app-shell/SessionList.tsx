@@ -25,6 +25,8 @@ import { useLanguage } from "@/context/LanguageContext"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@agent-operator/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
+import * as storage from "@/lib/local-storage"
+import { KEYS } from "@/lib/local-storage"
 import {
   buildSessionBlocks,
   flattenSessionBlocks,
@@ -144,6 +146,10 @@ export function SessionList({
   const [renameName, setRenameName] = useState("")
   const [expandedParentIds, setExpandedParentIds] = useState<Set<string>>(new Set())
   const [collapsedForcedParentIds, setCollapsedForcedParentIds] = useState<Set<string>>(new Set())
+  const [collapsedDateGroupKeys, setCollapsedDateGroupKeys] = useState<Set<string>>(() => {
+    const stored = storage.get<string[]>(KEYS.collapsedSessionGroups, [])
+    return new Set(stored)
+  })
   // Track if search input has actual DOM focus (for proper keyboard navigation gating)
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false)
 
@@ -285,6 +291,7 @@ export function SessionList({
 
     const groupsByKey = new Map<string, EntityListGroup<SessionListRow>>()
     const orderedGroups: EntityListGroup<SessionListRow>[] = []
+    const visibleRows: SessionListRow[] = []
     let currentGroupKey: string | null = null
 
     for (const row of flattened.rows) {
@@ -293,10 +300,14 @@ export function SessionList({
         currentGroupKey = day.toISOString()
 
         if (!groupsByKey.has(currentGroupKey)) {
+          const collapsed = collapsedDateGroupKeys.has(currentGroupKey)
           const group: EntityListGroup<SessionListRow> = {
             key: currentGroupKey,
             label: formatDateGroupLabel(day, t),
             items: [],
+            collapsible: true,
+            collapsed,
+            itemCount: 0,
           }
           groupsByKey.set(currentGroupKey, group)
           orderedGroups.push(group)
@@ -304,11 +315,17 @@ export function SessionList({
       }
 
       if (!currentGroupKey) continue
-      groupsByKey.get(currentGroupKey)?.items.push(row)
+      const group = groupsByKey.get(currentGroupKey)
+      if (!group) continue
+      group.itemCount = (group.itemCount ?? 0) + 1
+      if (!group.collapsed) {
+        group.items.push(row)
+        visibleRows.push(row)
+      }
     }
 
     return {
-      rows: flattened.rows,
+      rows: visibleRows,
       groups: orderedGroups,
       visibleChildIdsByParent: flattened.visibleChildIdsByParent,
     }
@@ -318,10 +335,44 @@ export function SessionList({
     matchingSessionIds,
     expandedParentIds,
     forcedExpandedParentIds,
+    collapsedDateGroupKeys,
     t,
   ])
 
   const flatRows = rowData.rows
+
+  const handleToggleDateGroup = useCallback((groupKey: string) => {
+    setCollapsedDateGroupKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupKey)) {
+        next.delete(groupKey)
+      } else {
+        next.add(groupKey)
+      }
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    if (isSearchMode) return
+    const validKeys = new Set(rowData.groups.map(group => group.key))
+    setCollapsedDateGroupKeys((prev) => {
+      let changed = false
+      const next = new Set<string>()
+      for (const key of prev) {
+        if (validKeys.has(key)) {
+          next.add(key)
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [isSearchMode, rowData.groups])
+
+  useEffect(() => {
+    storage.set(KEYS.collapsedSessionGroups, Array.from(collapsedDateGroupKeys))
+  }, [collapsedDateGroupKeys])
 
   const rowIndexMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -589,7 +640,7 @@ export function SessionList({
   ])
 
   // --- Empty state (non-search) — render before EntityList ---
-  if (flatRows.length === 0 && !searchActive) {
+  if (flatRows.length === 0 && !searchActive && rowData.groups.length === 0) {
     if (currentFilter?.kind === 'archived') {
       return (
         <EntityListEmptyScreen
@@ -629,6 +680,7 @@ export function SessionList({
       <SessionListProvider value={listContext}>
       <EntityList<SessionListRow>
         groups={rowData.groups}
+        onToggleGroup={!isSearchMode ? handleToggleDateGroup : undefined}
         getKey={(row) => row.item.id}
         renderItem={(row, _indexInGroup, isFirstInGroup) => {
           const flatIndex = rowIndexMap.get(row.item.id) ?? 0

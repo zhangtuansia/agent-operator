@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { rm, readFile, mkdir, writeFile, rename, open, appendFile } from 'fs/promises'
-import { OperatorAgent, CodexAgent, CopilotAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { OperatorAgent, CodexAgent, CopilotAgent, PiAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
@@ -84,6 +84,7 @@ import {
 } from '@agent-operator/shared/codex'
 import type { SdkMcpServerConfig } from '@agent-operator/shared/agent/backend'
 import { AutomationSystem, AUTOMATIONS_HISTORY_FILE } from '@agent-operator/shared/automations'
+import { rollbackFailedBranchCreation } from './session-branch-cleanup'
 
 /**
  * Feature flags for agent behavior
@@ -117,9 +118,41 @@ function getBundledBunPath(): string | undefined {
  * Treat these as auto-generated placeholders so first-turn title generation can
  * replace them immediately.
  */
+const AUTO_TITLE_PLACEHOLDERS = new Set([
+  'handle current task',
+  'new chat',
+  '处理当前任务内容',
+  '新对话',
+])
+
 function isAutoTitlePlaceholder(name?: string): boolean {
   if (!name || !name.trim()) return true
-  return /^IM-[a-z0-9_-]+-\d{10,16}$/i.test(name.trim())
+  const trimmed = name.trim()
+  if (/^IM-[a-z0-9_-]+-\d{10,16}$/i.test(trimmed)) return true
+  return AUTO_TITLE_PLACEHOLDERS.has(trimmed.toLowerCase())
+}
+
+const FAST_RESPONSE_MAX_CHARS = 24
+
+/**
+ * Enable a temporary per-message thinking override for very short messages.
+ * Keeps session-level thinking defaults unchanged.
+ */
+function shouldUseFastResponseThinkingOverride(
+  message: string,
+  attachments?: FileAttachment[],
+  options?: SendMessageOptions,
+): boolean {
+  if (options?.ultrathinkEnabled) return false
+  if ((options?.skillSlugs?.length ?? 0) > 0) return false
+  if ((attachments?.length ?? 0) > 0) return false
+
+  const trimmed = message.trim()
+  if (!trimmed) return false
+  if (trimmed.includes('\n') || trimmed.includes('```')) return false
+  if (trimmed.startsWith('/') || trimmed.startsWith('@') || trimmed.startsWith('#')) return false
+
+  return trimmed.length <= FAST_RESPONSE_MAX_CHARS
 }
 
 /**
@@ -136,7 +169,7 @@ async function writeFileSecure(targetPath: string, content: string, mode: number
   await rename(tempPath, targetPath)
 }
 
-type McpServerDir = 'bridge-mcp-server' | 'session-mcp-server'
+type McpServerDir = 'bridge-mcp-server' | 'session-mcp-server' | 'pi-agent-server'
 
 function resolveMcpServerPath(serverDir: McpServerDir): { path: string; exists: boolean } {
   const candidates = app.isPackaged
@@ -270,12 +303,22 @@ function resolveSessionConnection(
 function resolveSessionProvider(
   connection: ReturnType<typeof resolveSessionConnection>,
   agentType: AgentType,
-): 'anthropic' | 'openai' | 'copilot' {
+): 'anthropic' | 'openai' | 'copilot' | 'pi' {
   const providerType = connection?.providerType
   if (!providerType) return agentType === 'codex' ? 'openai' : 'anthropic'
   if (providerType === 'openai' || providerType === 'openai_compat') return 'openai'
   if (providerType === 'copilot') return 'copilot'
+  if (providerType === 'pi') return 'pi'
   return 'anthropic'
+}
+
+/**
+ * Branching capability for a session.
+ * Child sessions are intentionally non-branchable (max hierarchy depth: 1).
+ */
+function resolveSupportsBranching(managed: ManagedSession): boolean {
+  if (managed.agent && typeof managed.agent.supportsBranching === 'boolean') return managed.agent.supportsBranching
+  return true
 }
 
 function getConnectionModelIds(
@@ -382,7 +425,7 @@ async function refreshMcpOAuthTokensIfNeeded(
 
   if (refreshed.length > 0) {
     sessionLog.debug(`[OAuth] Rebuilding servers after ${refreshed.length} token refresh(es)`)
-    const enabledSources = sources.filter((source) => source.config.enabled && source.config.isAuthenticated)
+    const enabledSources = sources.filter((source) => isSourceUsable(source))
     const { mcpServers, apiServers } = await buildServersFromSources(
       enabledSources,
       sessionPath,
@@ -403,7 +446,7 @@ async function refreshMcpOAuthTokensIfNeeded(
 }
 
 // Agent type union for supported backends
-type Agent = OperatorAgent | CodexAgent | CopilotAgent
+type Agent = OperatorAgent | CodexAgent | CopilotAgent | PiAgent
 
 interface ManagedSession {
   id: string
@@ -514,6 +557,12 @@ interface ManagedSession {
   isArchived?: boolean
   // Timestamp when session was archived
   archivedAt?: number
+  // Branching metadata
+  branchFromMessageId?: string
+  branchFromSdkSessionId?: string
+  branchFromSessionPath?: string
+  // Parent session ID for branch/sub-session hierarchy
+  parentSessionId?: string
   // Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic')
   labels?: string[]
 }
@@ -655,6 +704,8 @@ export class SessionManager {
   private windowManager: WindowManager | null = null
   private copilotCliPath: string | undefined
   private copilotInterceptorPath: string | undefined
+  private piServerPath: string | undefined
+  private piInterceptorPath: string | undefined
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
@@ -1065,7 +1116,7 @@ export class SessionManager {
     // Rebuild MCP and API servers for session's enabled sources
     const enabledSlugs = managed.enabledSourceSlugs || []
     const enabledSources = allSources.filter(s =>
-      enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
+      enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
     )
     const { mcpServers, apiServers } = await buildServersFromSources(
       enabledSources,
@@ -1467,6 +1518,27 @@ export class SessionManager {
       sessionLog.warn('Copilot interceptor not found; run `bun run electron:build` to build it')
     }
 
+    // Resolve generic interceptor bundle for Pi subprocess (--require).
+    const piInterceptorCandidates = [
+      join(basePath, 'dist', 'interceptor.cjs'),
+      join(basePath, 'apps', 'electron', 'dist', 'interceptor.cjs'),
+    ]
+    const resolvedPiInterceptor = piInterceptorCandidates.find(p => existsSync(p))
+    if (resolvedPiInterceptor) {
+      this.piInterceptorPath = resolvedPiInterceptor
+      sessionLog.info('Resolved Pi interceptor path:', resolvedPiInterceptor)
+    } else {
+      sessionLog.warn('Pi interceptor bundle not found; Pi will run without interceptor preload')
+    }
+
+    const piServer = resolveMcpServerPath('pi-agent-server')
+    if (piServer.exists) {
+      this.piServerPath = piServer.path
+      sessionLog.info('Resolved Pi agent server path:', piServer.path)
+    } else {
+      sessionLog.warn(`Pi agent server not found at ${piServer.path}. PI provider will be unavailable.`)
+    }
+
     // In packaged app: use bundled Bun binary
     // In development: use system 'bun' command (or 'node' on Windows where bun may crash)
     if (app.isPackaged) {
@@ -1591,6 +1663,10 @@ export class SessionManager {
             hidden: meta.hidden,
             isArchived: meta.isArchived,
             archivedAt: meta.archivedAt,
+            branchFromMessageId: meta.branchFromMessageId,
+            branchFromSdkSessionId: meta.branchFromSdkSessionId,
+            branchFromSessionPath: meta.branchFromSessionPath,
+            parentSessionId: meta.parentSessionId,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
@@ -1675,6 +1751,10 @@ export class SessionManager {
         hidden: managed.hidden,
         isArchived: managed.isArchived,
         archivedAt: managed.archivedAt,
+        branchFromMessageId: managed.branchFromMessageId,
+        branchFromSdkSessionId: managed.branchFromSdkSessionId,
+        branchFromSessionPath: managed.branchFromSessionPath,
+        parentSessionId: managed.parentSessionId,
         labels: managed.labels,
         thinkingLevel: managed.thinkingLevel,
         agentType: managed.agentType,
@@ -2017,6 +2097,11 @@ export class SessionManager {
         hidden: m.hidden,
         isArchived: m.isArchived,
         archivedAt: m.archivedAt,
+        branchFromMessageId: m.branchFromMessageId,
+        branchFromSdkSessionId: m.branchFromSdkSessionId,
+        branchFromSessionPath: m.branchFromSessionPath,
+        parentSessionId: m.parentSessionId,
+        supportsBranching: resolveSupportsBranching(m),
         enabledSourceSlugs: m.enabledSourceSlugs,
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
@@ -2059,6 +2144,11 @@ export class SessionManager {
       hidden: m.hidden,
       isArchived: m.isArchived,
       archivedAt: m.archivedAt,
+      branchFromMessageId: m.branchFromMessageId,
+      branchFromSdkSessionId: m.branchFromSdkSessionId,
+      branchFromSessionPath: m.branchFromSessionPath,
+      parentSessionId: m.parentSessionId,
+      supportsBranching: resolveSupportsBranching(m),
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
       sharedUrl: m.sharedUrl,
@@ -2110,6 +2200,9 @@ export class SessionManager {
       managed.hidden = storedSession.hidden
       managed.llmConnection = storedSession.llmConnection
       managed.connectionLocked = storedSession.connectionLocked
+      managed.branchFromMessageId = storedSession.branchFromMessageId
+      managed.branchFromSdkSessionId = storedSession.branchFromSdkSessionId
+      managed.branchFromSessionPath = storedSession.branchFromSessionPath
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
@@ -2158,11 +2251,15 @@ export class SessionManager {
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
     // Get default thinking level from workspace config, fallback to global defaults
     const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
+    const defaultEnabledSourceSlugs = options?.enabledSourceSlugs ?? wsConfig?.defaults?.enabledSourceSlugs
+    const targetAgentType = getAgentType()
     // Resolve connection for this session using: session option > workspace default > global default
     const resolvedConnection = resolveSessionConnection(
       options?.llmConnection,
       wsConfig?.defaults?.defaultLlmConnection,
     )
+    const targetProvider = resolveSessionProvider(resolvedConnection, targetAgentType)
+    const targetProviderType = resolvedConnection?.providerType ?? null
     // Model resolution priority:
     // 1. explicit session option
     // 2. workspace default model
@@ -2184,10 +2281,76 @@ export class SessionManager {
       resolvedWorkingDir = options.workingDirectory
     }
 
+    let validatedBranch: {
+      sourceSessionId: string
+      sourceMessageId: string
+      sourceSession: StoredSession
+      branchIndex: number
+      branchFromSdkSessionId?: string
+      branchFromSessionPath?: string
+    } | undefined
+
+    if (options?.branchFromSessionId || options?.branchFromMessageId) {
+      if (!options.branchFromSessionId || !options.branchFromMessageId) {
+        throw new Error('Invalid branch request: both branchFromSessionId and branchFromMessageId are required')
+      }
+
+      const sourceSessionId = options.branchFromSessionId
+      const sourceManaged = this.sessions.get(sourceSessionId)
+      if (sourceManaged) {
+        if (sourceManaged.workspace.rootPath !== workspaceRootPath) {
+          throw new Error('Invalid branch request: source session belongs to a different workspace')
+        }
+
+        // Flush source session so branch copy reads the latest persisted messages.
+        this.persistSession(sourceManaged)
+        await sessionPersistenceQueue.flush(sourceManaged.id)
+      }
+
+      const sourceSession = loadStoredSession(workspaceRootPath, sourceSessionId)
+      if (!sourceSession) {
+        throw new Error(`Invalid branch request: source session ${sourceSessionId} not found`)
+      }
+
+      const sourceAgentType = sourceManaged?.agentType ?? sourceSession.agentType ?? targetAgentType
+      const sourceConnection = resolveSessionConnection(
+        sourceManaged?.llmConnection ?? sourceSession.llmConnection,
+        wsConfig?.defaults?.defaultLlmConnection,
+      )
+      const sourceProvider = resolveSessionProvider(sourceConnection, sourceAgentType)
+      const sourceProviderType = sourceConnection?.providerType ?? null
+
+      if (sourceProvider !== targetProvider || sourceProviderType !== targetProviderType) {
+        throw new Error('Branching is only supported within the same provider/backend. Switch this panel connection and try again.')
+      }
+
+      const branchIndex = sourceSession.messages.findIndex((message) => message.id === options.branchFromMessageId)
+      if (branchIndex === -1) {
+        throw new Error(`Invalid branch request: message ${options.branchFromMessageId} not found in source session`)
+      }
+
+      const sourceSessionStoragePath = getSessionStoragePath(workspaceRootPath, sourceSessionId)
+      // For Claude/Codex-style resume/fork, SDK session lookup is keyed by sdkCwd.
+      // Pi backend expects the parent session storage path (for .pi-sessions).
+      const branchContextPath = targetProvider === 'pi'
+        ? sourceSessionStoragePath
+        : (sourceManaged?.sdkCwd ?? sourceSession.sdkCwd ?? sourceSessionStoragePath)
+
+      validatedBranch = {
+        sourceSessionId,
+        sourceMessageId: options.branchFromMessageId,
+        sourceSession,
+        branchIndex,
+        branchFromSdkSessionId: sourceManaged?.sdkSessionId ?? sourceSession.sdkSessionId,
+        branchFromSessionPath: branchContextPath,
+      }
+    }
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
+      enabledSourceSlugs: defaultEnabledSourceSlugs,
       model: resolvedModel,
       llmConnection: resolvedConnection?.slug,
       hidden: options?.hidden,
@@ -2197,14 +2360,50 @@ export class SessionManager {
       isFlagged: options?.isFlagged,
     })
 
+    if (validatedBranch) {
+      const branchedSession = loadStoredSession(workspaceRootPath, storedSession.id)
+      if (!branchedSession) {
+        throw new Error(`Failed to load newly created branch session: ${storedSession.id}`)
+      }
+
+      const copiedMessages = validatedBranch.sourceSession.messages
+        .slice(0, validatedBranch.branchIndex + 1)
+        .map((message) => ({ ...message }))
+
+      branchedSession.messages = copiedMessages
+      branchedSession.branchFromMessageId = validatedBranch.sourceMessageId
+      branchedSession.branchFromSdkSessionId = validatedBranch.branchFromSdkSessionId
+      branchedSession.branchFromSessionPath = validatedBranch.branchFromSessionPath
+      branchedSession.lastReadMessageId = copiedMessages[copiedMessages.length - 1]?.id
+      branchedSession.hasUnread = false
+      branchedSession.tokenUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      }
+
+      await saveStoredSession(branchedSession)
+      storedSession.branchFromMessageId = validatedBranch.sourceMessageId
+      storedSession.branchFromSdkSessionId = validatedBranch.branchFromSdkSessionId
+      storedSession.branchFromSessionPath = validatedBranch.branchFromSessionPath
+    }
+
+    const isBranch = !!validatedBranch
+    const initialMessages = validatedBranch
+      ? validatedBranch.sourceSession.messages
+        .slice(0, validatedBranch.branchIndex + 1)
+        .map(storedToMessage)
+      : []
     const managed: ManagedSession = {
       id: storedSession.id,
       workspace,
       agent: null,  // Lazy-load agent on first message
       tokenRefreshManager: createSessionTokenRefreshManager(),
-      agentType: getAgentType(),  // Current agent type setting
+      agentType: targetAgentType,
       createdAt: storedSession.createdAt,
-      messages: [],
+      messages: initialMessages,
       isProcessing: false,
       lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,
       streamingText: '',
@@ -2215,22 +2414,58 @@ export class SessionManager {
       isFlagged: storedSession.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
       todoState: storedSession.todoState,
+      enabledSourceSlugs: defaultEnabledSourceSlugs,
       workingDirectory: resolvedWorkingDir,
       pendingCodexReconnect: false,
       sdkCwd: storedSession.sdkCwd,
       model: storedSession.model,
       llmConnection: storedSession.llmConnection,
       connectionLocked: false,
+      branchFromMessageId: validatedBranch?.sourceMessageId,
+      branchFromSdkSessionId: validatedBranch?.branchFromSdkSessionId,
+      branchFromSessionPath: validatedBranch?.branchFromSessionPath,
       systemPromptPreset: options?.systemPromptPreset,
       hidden: options?.hidden,
       name: storedSession.name,
       labels: storedSession.labels,
+      parentSessionId: storedSession.parentSessionId,
       thinkingLevel: defaultThinkingLevel,
       messageQueue: [],
       backgroundShellCommands: new Map(),
-      messagesLoaded: true,  // New sessions don't need to load messages from disk
+      messagesLoaded: !isBranch,
       needsAutoTitleRefresh: false,
       titleEditedByUser: false,
+    }
+
+    if (isBranch) {
+      await this.ensureMessagesLoaded(managed)
+
+      try {
+        await this.getOrCreateAgent(managed)
+        await managed.agent!.ensureBranchReady()
+      } catch (error) {
+        sessionLog.warn('Branch creation failed during backend preflight handshake', {
+          workspaceId,
+          sessionId: storedSession.id,
+          branchFromSessionId: validatedBranch?.sourceSessionId,
+          branchFromMessageId: validatedBranch?.sourceMessageId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+
+        await rollbackFailedBranchCreation({
+          managed,
+          workspaceRootPath,
+          sessionId: storedSession.id,
+          deleteFromRuntimeSessions: (id) => {
+            this.sessions.delete(id)
+          },
+          deleteStoredSession,
+        })
+
+        throw new Error(
+          `Could not create branch: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -2253,7 +2488,7 @@ export class SessionManager {
       workspaceName: workspace.name,
       createdAt: managed.createdAt,
       lastMessageAt: managed.lastMessageAt,
-      messages: [],
+      messages: managed.messages,
       isProcessing: false,
       isFlagged: storedSession.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
@@ -2263,6 +2498,12 @@ export class SessionManager {
       model: managed.model,
       llmConnection: managed.llmConnection,
       hidden: managed.hidden,
+      enabledSourceSlugs: managed.enabledSourceSlugs,
+      branchFromMessageId: managed.branchFromMessageId,
+      branchFromSdkSessionId: managed.branchFromSdkSessionId,
+      branchFromSessionPath: managed.branchFromSessionPath,
+      parentSessionId: managed.parentSessionId,
+      supportsBranching: resolveSupportsBranching(managed),
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
     }
@@ -2322,6 +2563,9 @@ export class SessionManager {
         id: managed.id,
         workspaceRootPath: managed.workspace.rootPath,
         sdkSessionId: managed.sdkSessionId,
+        branchFromSdkSessionId: managed.branchFromSdkSessionId,
+        branchFromSessionPath: managed.branchFromSessionPath,
+        branchFromMessageId: managed.branchFromMessageId,
         createdAt: managed.createdAt,
         lastUsedAt: managed.lastMessageAt,
         workingDirectory: managed.workingDirectory,
@@ -2449,6 +2693,44 @@ export class SessionManager {
           } : undefined,
         })
         sessionLog.info(`Created Copilot agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      } else if (provider === 'pi') {
+        const piModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
+        if (!this.piServerPath) {
+          throw new Error('PI provider selected, but pi-agent-server is not available. Please run `bun --cwd packages/pi-agent-server run build`.')
+        }
+
+        managed.agent = new PiAgent({
+          provider: 'pi',
+          providerType: resolvedConnection?.providerType,
+          authType: resolvedConnection?.authType,
+          workspace: managed.workspace,
+          model: piModel,
+          thinkingLevel: managed.thinkingLevel,
+          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+          nodePath: getBundledBunPath() ?? 'bun',
+          piServerPath: this.piServerPath,
+          piInterceptorPath: this.piInterceptorPath,
+          session: sessionConfig,
+          onSdkSessionIdUpdate: (sdkSessionId: string) => {
+            managed.sdkSessionId = sdkSessionId
+            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          onSdkSessionIdCleared: () => {
+            managed.sdkSessionId = undefined
+            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+            this.persistSession(managed)
+            sessionPersistenceQueue.flush(managed.id)
+          },
+          getRecoveryMessages,
+          debugMode: isDebugMode ? {
+            enabled: true,
+            logFilePath: getLogFilePath(),
+          } : undefined,
+        })
+        sessionLog.info(`Created Pi agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
       } else {
         // Create Claude agent (Anthropic) - default
 
@@ -2676,7 +2958,7 @@ export class SessionManager {
         }
 
         // Check if source is authenticated (if it requires auth)
-        if (!source.config.isAuthenticated) {
+        if (!isSourceUsable(source)) {
           sessionLog.warn(`Source ${sourceSlug} requires authentication`)
           return false
         }
@@ -2719,7 +3001,7 @@ export class SessionManager {
 
         // Apply source servers to the agent
         const intendedSlugs = allEnabledSources
-          .filter(s => s.config.enabled && s.config.isAuthenticated)
+          .filter(s => isSourceUsable(s))
           .map(s => s.config.slug)
         await this.syncProviderSourceConfig(managed, allEnabledSources, mcpServers, 'source auto-activation')
         managed.agent!.setSourceServers(mcpServers, apiServers, intendedSlugs)
@@ -3074,7 +3356,7 @@ export class SessionManager {
       managed.agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
-      const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+      const intendedSlugs = sources.filter(s => isSourceUsable(s)).map(s => s.config.slug)
       await this.syncProviderSourceConfig(managed, sources, mcpServers, 'source config change')
       managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
       sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${allSources.length} total)`)
@@ -3231,11 +3513,17 @@ export class SessionManager {
 
   /**
    * Resolve language for title generation from the app display language
-   * setting (Settings > App > Language). Defaults to English when unset.
+   * setting (Settings > App > Language). Falls back to system locale when
+   * unset so title language stays aligned with UI language detection.
    */
   private getTitleLanguage(): 'en' | 'zh' {
     const uiLanguage = loadStoredConfig()?.uiLanguage
-    return uiLanguage === 'zh' ? 'zh' : 'en'
+    if (uiLanguage === 'zh' || uiLanguage === 'en') {
+      return uiLanguage
+    }
+
+    const locale = app.getLocale()?.toLowerCase() ?? ''
+    return locale.startsWith('zh') ? 'zh' : 'en'
   }
 
   /**
@@ -3415,6 +3703,7 @@ export class SessionManager {
         type: 'connection_changed',
         sessionId,
         connectionSlug,
+        supportsBranching: resolveSupportsBranching(managed),
       },
       managed.workspace.id
     )
@@ -3572,6 +3861,13 @@ export class SessionManager {
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
     }
+    const sendRequestStartedAt = Date.now()
+    const preChatBreakdown: Array<{ step: string; ms: number }> = []
+    const recordPreChatStep = (step: string, startedAt: number): void => {
+      preChatBreakdown.push({ step, ms: Date.now() - startedAt })
+    }
+    let fastResponseThinkingOverrideApplied = false
+    let thinkingLevelBeforeFastResponseOverride: ThinkingLevel | undefined
 
     // Clear any pending plan execution state when a new user message is sent.
     // This acts as a safety valve - if the user moves on, we don't want to
@@ -3661,7 +3957,9 @@ export class SessionManager {
         managed.name = initialTitle
         this.persistSession(managed)
         // Flush immediately so disk is authoritative before notifying renderer
+        const flushTitleStartAt = Date.now()
         await this.flushSession(managed.id)
+        recordPreChatStep('first_message_title_flush', flushTitleStartAt)
         this.sendEvent({
           type: 'title_generated',
           sessionId,
@@ -3713,7 +4011,9 @@ export class SessionManager {
     const sendSpan = perf.span('session.sendMessage', { sessionId })
 
     // Get or create the agent (lazy loading)
+    const getAgentStartAt = Date.now()
     const agent = await this.getOrCreateAgent(managed)
+    recordPreChatStep('get_or_create_agent', getAgentStartAt)
     sendSpan.mark('agent.ready')
 
     // Ensure runtime auth env matches this session before each Claude turn.
@@ -3733,15 +4033,21 @@ export class SessionManager {
     // OpenAI/Copilot backends handle credentials via their own clients.
     const activeProvider = resolveSessionProvider(resolvedConnection, managed.agentType)
     if (activeProvider === 'anthropic') {
+      const authStartAt = Date.now()
       await this.reinitializeAuth(resolvedConnection?.slug)
+      recordPreChatStep('reinitialize_auth', authStartAt)
       sendSpan.mark('auth.ready')
     }
+    const reconnectStartAt = Date.now()
     await this.flushPendingCodexReconnect(managed, 'before send-message')
+    recordPreChatStep('flush_pending_codex_reconnect', reconnectStartAt)
 
     // Always set all sources for context (even if none are enabled)
+    const loadSourcesStartAt = Date.now()
     const workspaceRootPath = managed.workspace.rootPath
     const allSources = loadWorkspaceSources(workspaceRootPath)
     agent.setAllSources(allSources)
+    recordPreChatStep('load_workspace_sources', loadSourcesStartAt)
     sendSpan.mark('sources.loaded')
 
     // Apply source servers if any are enabled
@@ -3753,12 +4059,14 @@ export class SessionManager {
 
       // Always build server configs fresh (no caching - single source of truth)
       const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+      const buildServersStartAt = Date.now()
       const { mcpServers, apiServers, errors } = await buildServersFromSources(
         sources,
         sessionPath,
         managed.tokenRefreshManager,
         managed.agent.getSummarizeCallback(),
       )
+      recordPreChatStep('build_servers_from_sources', buildServersStartAt)
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
@@ -3781,20 +4089,24 @@ export class SessionManager {
 
       // Refresh expired OAuth tokens before running the chat request.
       // This avoids first-call failures when long-lived sessions hold stale tokens.
+      const refreshTokensStartAt = Date.now()
       const refreshResult = await refreshMcpOAuthTokensIfNeeded(
         agent,
         sources,
         managed.tokenRefreshManager,
         sessionPath,
       )
+      recordPreChatStep('refresh_oauth_tokens', refreshTokensStartAt)
       if (refreshResult.tokensRefreshed) {
         if (refreshResult.refreshedSources && refreshResult.refreshedMcpServers) {
+          const syncSourcesStartAt = Date.now()
           await this.syncProviderSourceConfig(
             managed,
             refreshResult.refreshedSources,
             refreshResult.refreshedMcpServers,
             'token refresh',
           )
+          recordPreChatStep('sync_provider_source_config', syncSourcesStartAt)
         }
         sendSpan.mark('oauth.tokens.refreshed')
       }
@@ -3822,6 +4134,20 @@ export class SessionManager {
         agent.setUltrathinkOverride(true)
       }
 
+      const shouldUseFastResponseMode = shouldUseFastResponseThinkingOverride(message, attachments, options)
+      if (shouldUseFastResponseMode) {
+        const currentThinkingLevel = agent.getThinkingLevel()
+        if (currentThinkingLevel !== 'off') {
+          fastResponseThinkingOverrideApplied = true
+          thinkingLevelBeforeFastResponseOverride = currentThinkingLevel
+          agent.setThinkingLevel('off')
+          sessionLog.info(
+            `Fast response mode ENABLED (temporary thinking=off, original=${currentThinkingLevel}, chars=${message.trim().length})`
+          )
+          sendSpan.mark('fast_response_mode.enabled')
+        }
+      }
+
       // Process the message through the agent
       sessionLog.info('Calling agent.chat()...')
       if (attachments?.length) {
@@ -3830,14 +4156,18 @@ export class SessionManager {
 
       // Inject skill content into message — from @mentions and/or auto-matching
       let finalMessage = message
+      const importSkillsStartAt = Date.now()
       const { loadSkill, loadAllSkills, matchSkillsToMessage } = await import('@agent-operator/shared/skills')
+      recordPreChatStep('import_skills_module', importSkillsStartAt)
 
       // Collect explicit @mentioned slugs
       const mentionedSlugs = options?.skillSlugs ?? []
 
       // Auto-match skills from message content (keyword triggers)
+      const matchSkillsStartAt = Date.now()
       const allSkills = loadAllSkills(workspaceRootPath)
       const autoMatchedSlugs = matchSkillsToMessage(message, allSkills, mentionedSlugs)
+      recordPreChatStep('match_skills', matchSkillsStartAt)
 
       // Merge: explicit @mentions first, then auto-matched (deduplicated)
       const allSlugs = [...mentionedSlugs, ...autoMatchedSlugs]
@@ -3851,6 +4181,7 @@ export class SessionManager {
         }
 
         const skillContents: string[] = []
+        const loadSkillContentStartAt = Date.now()
         for (const slug of allSlugs) {
           const skill = loadSkill(workspaceRootPath, slug)
           if (skill && skill.content) {
@@ -3862,6 +4193,7 @@ ${skill.content}
             sessionLog.warn(`Could not load skill: ${slug}`)
           }
         }
+        recordPreChatStep('load_skill_content', loadSkillContentStartAt)
 
         if (skillContents.length > 0) {
           const skillContext = `<skill_context>
@@ -3876,6 +4208,11 @@ ${skillContents.join('\n\n')}
         }
       }
 
+      const preChatLatencyMs = Date.now() - sendRequestStartedAt
+      const preChatBreakdownText = preChatBreakdown.length > 0
+        ? preChatBreakdown.map(item => `${item.step}:${item.ms}ms`).join(', ')
+        : 'none'
+      sessionLog.info(`Pre-chat latency: ${preChatLatencyMs}ms (${preChatBreakdownText})`)
       sendSpan.mark('chat.starting')
       const chatIterator = agent.chat(finalMessage, attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
@@ -3885,8 +4222,11 @@ ${skillContents.join('\n\n')}
       for await (const event of chatIterator) {
         if (firstTextEventAt === null && (event.type === 'text_delta' || event.type === 'text_complete')) {
           firstTextEventAt = Date.now()
+          const modelFirstTextLatencyMs = firstTextEventAt - messageSentAt
+          const preChatToModelStartMs = messageSentAt - sendRequestStartedAt
+          const endToEndFirstTextLatencyMs = firstTextEventAt - sendRequestStartedAt
           sessionLog.info(
-            `First text event latency: ${firstTextEventAt - messageSentAt}ms (${event.type})`
+            `First text event latency: model=${modelFirstTextLatencyMs}ms preChat=${preChatToModelStartMs}ms endToEnd=${endToEndFirstTextLatencyMs}ms (${event.type})`
           )
         }
 
@@ -3924,8 +4264,9 @@ ${skillContents.join('\n\n')}
         if (event.type === 'complete') {
           sessionLog.info('Chat completed via complete event')
           const totalLatencyMs = Date.now() - messageSentAt
+          const endToEndLatencyMs = Date.now() - sendRequestStartedAt
           sessionLog.info(
-            `Response total latency: ${totalLatencyMs}ms (firstText=${firstTextEventAt === null ? 'none' : `${firstTextEventAt - messageSentAt}ms`})`
+            `Response total latency: model=${totalLatencyMs}ms endToEnd=${endToEndLatencyMs}ms (firstText=${firstTextEventAt === null ? 'none' : `${firstTextEventAt - messageSentAt}ms`})`
           )
 
           // Check if we got an assistant response in this turn
@@ -3996,6 +4337,15 @@ ${skillContents.join('\n\n')}
         this.onProcessingStopped(sessionId, 'error')
       }
     } finally {
+      if (fastResponseThinkingOverrideApplied) {
+        const restoreTarget = managed.thinkingLevel ?? thinkingLevelBeforeFastResponseOverride ?? DEFAULT_THINKING_LEVEL
+        const currentThinkingLevel = agent.getThinkingLevel()
+        if (currentThinkingLevel !== restoreTarget) {
+          agent.setThinkingLevel(restoreTarget)
+        }
+        sessionLog.info(`Fast response mode DISABLED (restored thinking=${restoreTarget})`)
+      }
+
       // Only handle cleanup for unexpected exits (loop break without complete event)
       // Normal completion returns early after calling onProcessingStopped
       // Errors are handled in catch block
@@ -4461,7 +4811,19 @@ To view this task's output:
           managed.lastMessageRole = 'assistant'
         }
 
-        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
+        this.sendEvent(
+          {
+            type: 'text_complete',
+            sessionId,
+            text: event.text,
+            isIntermediate: event.isIntermediate,
+            turnId: event.turnId,
+            parentToolUseId: textParentToolUseId,
+            timestamp: assistantMessage.timestamp,
+            messageId: assistantMessage.id,
+          },
+          workspaceId,
+        )
 
         // Persist session after complete message to prevent data loss on quit
         this.persistSession(managed)

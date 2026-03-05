@@ -95,6 +95,16 @@ export interface Session {
   isArchived?: boolean
   /** Timestamp when session was archived */
   archivedAt?: number
+  /** Message ID this session branched from (if created from message branch) */
+  branchFromMessageId?: string
+  /** Parent SDK session ID used to initialize backend-level branch context */
+  branchFromSdkSessionId?: string
+  /** Parent session storage path (used by Pi backend branch preflight) */
+  branchFromSessionPath?: string
+  /** Parent session ID when this session is a branch/sub-session */
+  parentSessionId?: string
+  /** Whether branching is currently supported for this session */
+  supportsBranching?: boolean
   /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
   labels?: string[]
 }
@@ -125,7 +135,7 @@ export interface PermissionRequest {
  */
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
-  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
+  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; timestamp?: number; messageId?: string }
   | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; turnId?: string; parentToolUseId?: string }
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean }
   | { type: 'parent_update'; sessionId: string; toolUseId: string; parentToolUseId: string }
@@ -161,7 +171,7 @@ export type SessionEvent =
   | { type: 'session_archived'; sessionId: string }
   | { type: 'session_unarchived'; sessionId: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
-  | { type: 'connection_changed'; sessionId: string; connectionSlug: string }
+  | { type: 'connection_changed'; sessionId: string; connectionSlug: string; supportsBranching?: boolean }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_deleted'; sessionId: string }

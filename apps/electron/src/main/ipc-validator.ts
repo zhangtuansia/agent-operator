@@ -6,7 +6,19 @@
  */
 
 import type { IpcMainInvokeEvent } from 'electron'
-import type { ZodSchema, ZodError } from 'zod'
+
+type ValidationIssueLike = {
+  path: ReadonlyArray<unknown>
+  message: string
+}
+
+type ValidationErrorLike = {
+  issues: ReadonlyArray<ValidationIssueLike>
+}
+
+type ValidationResult =
+  | { success: true; data: unknown }
+  | { success: false; error: ValidationErrorLike }
 
 /**
  * Custom error class for IPC validation failures.
@@ -14,11 +26,11 @@ import type { ZodSchema, ZodError } from 'zod'
  */
 export class IpcValidationError extends Error {
   constructor(
-    public readonly zodError: ZodError,
+    public readonly zodError: ValidationErrorLike,
     public readonly channel?: string
   ) {
     const issues = zodError.issues
-      .map(issue => `${issue.path.join('.')}: ${issue.message}`)
+      .map(issue => `${issue.path.map(String).join('.')}: ${issue.message}`)
       .join('; ')
 
     super(`IPC validation failed${channel ? ` for ${channel}` : ''}: ${issues}`)
@@ -31,7 +43,7 @@ export class IpcValidationError extends Error {
   get userMessage(): string {
     const firstIssue = this.zodError.issues[0]
     if (firstIssue) {
-      return `Invalid ${firstIssue.path.join('.') || 'input'}: ${firstIssue.message}`
+      return `Invalid ${firstIssue.path.map(String).join('.') || 'input'}: ${firstIssue.message}`
     }
     return 'Invalid input'
   }
@@ -47,17 +59,17 @@ export class IpcValidationError extends Error {
  * @returns Validated and typed data
  */
 export function validateIpcArgs<T>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   args: unknown,
   channel?: string
 ): T {
-  const result = schema.safeParse(args)
+  const result = schema.safeParse(args) as ValidationResult
 
   if (!result.success) {
     throw new IpcValidationError(result.error, channel)
   }
 
-  return result.data
+  return result.data as T
 }
 
 /**
@@ -78,12 +90,12 @@ export function validateIpcArgs<T>(
  * @param channel - Optional channel name for error messages
  */
 export function createValidatedHandler<T, R>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   handler: (arg: T) => Promise<R>,
   channel?: string
 ): (event: IpcMainInvokeEvent, arg: unknown) => Promise<R> {
   return async (_event: IpcMainInvokeEvent, arg: unknown) => {
-    const validated = validateIpcArgs(schema, arg, channel)
+    const validated = validateIpcArgs<T>(schema, arg, channel)
     return handler(validated)
   }
 }
@@ -107,12 +119,12 @@ export function createValidatedHandler<T, R>(
  * @param channel - Optional channel name for error messages
  */
 export function createValidatedMultiArgHandler<T extends unknown[], R>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   handler: (args: T) => Promise<R>,
   channel?: string
 ): (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<R> {
   return async (_event: IpcMainInvokeEvent, ...args: unknown[]) => {
-    const validated = validateIpcArgs(schema, args, channel)
+    const validated = validateIpcArgs<T>(schema, args, channel)
     return handler(validated)
   }
 }
@@ -133,12 +145,12 @@ export function createValidatedMultiArgHandler<T extends unknown[], R>(
  * ```
  */
 export function createValidatedHandlerWithEvent<T, R>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   handler: (event: IpcMainInvokeEvent, arg: T) => Promise<R>,
   channel?: string
 ): (event: IpcMainInvokeEvent, arg: unknown) => Promise<R> {
   return async (event: IpcMainInvokeEvent, arg: unknown) => {
-    const validated = validateIpcArgs(schema, arg, channel)
+    const validated = validateIpcArgs<T>(schema, arg, channel)
     return handler(event, validated)
   }
 }
@@ -147,12 +159,12 @@ export function createValidatedHandlerWithEvent<T, R>(
  * Create a validated multi-arg IPC handler with event access.
  */
 export function createValidatedMultiArgHandlerWithEvent<T extends unknown[], R>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   handler: (event: IpcMainInvokeEvent, args: T) => Promise<R>,
   channel?: string
 ): (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<R> {
   return async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-    const validated = validateIpcArgs(schema, args, channel)
+    const validated = validateIpcArgs<T>(schema, args, channel)
     return handler(event, validated)
   }
 }
@@ -166,12 +178,12 @@ export function createValidatedMultiArgHandlerWithEvent<T extends unknown[], R>(
  * @param channel - Optional channel name for error messages
  */
 export function wrapWithValidation<T, R>(
-  schema: ZodSchema<T>,
+  schema: { safeParse: (...args: any[]) => any },
   existingHandler: (event: IpcMainInvokeEvent, arg: T) => Promise<R>,
   channel?: string
 ): (event: IpcMainInvokeEvent, arg: unknown) => Promise<R> {
   return async (event: IpcMainInvokeEvent, arg: unknown) => {
-    const validated = validateIpcArgs(schema, arg, channel)
+    const validated = validateIpcArgs<T>(schema, arg, channel)
     return existingHandler(event, validated)
   }
 }

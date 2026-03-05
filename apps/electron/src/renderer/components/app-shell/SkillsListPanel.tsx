@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { MoreHorizontal } from 'lucide-react'
+import { toast } from 'sonner'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -86,6 +87,18 @@ interface SkillItemProps {
 function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete }: SkillItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
+  const { t } = useLanguage()
+
+  const handleShowInFinder = async () => {
+    if (!workspaceId) return
+    try {
+      await window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
+    } catch (err) {
+      toast.error(t('toasts.failedToShowInFinder'), {
+        description: err instanceof Error ? err.message : t('toasts.noDetailsProvided'),
+      })
+    }
+  }
 
   return (
     <div className="skill-item" data-selected={isSelected || undefined}>
@@ -155,9 +168,7 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                       window.electronAPI.openUrl(`agentoperator://skills/skill/${skill.slug}?window=focused`)
                     }}
                     onShowInFinder={() => {
-                      if (workspaceId) {
-                        window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
-                      }
+                      void handleShowInFinder()
                     }}
                     onDelete={onDelete}
                   />
@@ -178,9 +189,7 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                 window.electronAPI.openUrl(`agentoperator://skills/skill/${skill.slug}?window=focused`)
               }}
               onShowInFinder={() => {
-                if (workspaceId) {
-                  window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
-                }
+                void handleShowInFinder()
               }}
               onDelete={onDelete}
             />

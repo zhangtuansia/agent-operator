@@ -1,20 +1,15 @@
 /**
  * Update Checker Hook
  *
- * Provides update checking functionality:
- * - Listens for update availability broadcasts from main process
- * - Tracks download progress
- * - Provides methods to check for updates and install
- * - Shows toast notification when update is ready
- * - Persistent dismissal across app restarts (per version)
+ * Auto-update is disabled on desktop builds without code signing.
+ * This hook now routes update actions to the GitHub Releases download page.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import type { UpdateInfo } from '../../shared/types'
 import { useLanguage } from '@/context/LanguageContext'
-
-const UPDATE_TOAST_ID = 'update-available'
+import { RELEASE_DOWNLOADS_URL } from '@agent-operator/shared/branding'
 
 interface UseUpdateCheckerResult {
   /** Current update info */
@@ -27,149 +22,52 @@ interface UseUpdateCheckerResult {
   isReadyToInstall: boolean
   /** Download progress (0-100) */
   downloadProgress: number
-  /** Check for updates manually */
+  /** Open releases download page */
   checkForUpdates: () => Promise<void>
-  /** Install the downloaded update and restart */
+  /** Open releases download page */
   installUpdate: () => Promise<void>
 }
 
 /**
- * Hook for managing app updates
+ * Hook for update actions (manual download flow).
  */
 export function useUpdateChecker(): UseUpdateCheckerResult {
   const { t } = useLanguage()
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
-  // Track if we've shown the toast for this version to avoid duplicates
-  const shownToastVersionRef = useRef<string | null>(null)
-  // Track surfaced error signatures so repeated update broadcasts don't spam.
-  const shownErrorSignatureRef = useRef<string | null>(null)
 
-  // Show toast notification when update is ready
-  const showUpdateToast = useCallback((version: string, onInstall: () => void) => {
-    // Don't show if already shown for this version in this session
-    if (shownToastVersionRef.current === version) {
-      return
-    }
-    shownToastVersionRef.current = version
-
-    toast.info(t('updates.updateReady').replace('{version}', version), {
-      id: UPDATE_TOAST_ID,
-      description: t('updates.restartToApply'),
-      duration: 10000, // 10 seconds, then auto-dismiss
-      action: {
-        label: t('updates.restart'),
-        onClick: onInstall,
-      },
-      onDismiss: () => {
-        // Persist dismissal so we don't show again after app restart
-        window.electronAPI.dismissUpdate(version)
-      },
-    })
-  }, [t])
-
-  // Install the update
-  const installUpdate = useCallback(async () => {
+  const openReleaseDownloads = useCallback(async () => {
     try {
-      // Dismiss the update toast first
-      toast.dismiss(UPDATE_TOAST_ID)
-      toast.info(t('toasts.installingUpdate'), {
-        description: t('updates.appWillRestart'),
-        duration: 3000,
-      })
-      await window.electronAPI.installUpdate()
+      await window.electronAPI.openUrl(RELEASE_DOWNLOADS_URL)
+      toast.success(t('updates.openedReleasePage'))
     } catch (error) {
-      console.error('[useUpdateChecker] Install failed:', error)
-      toast.error(t('toasts.failedToInstallUpdate'), {
+      console.error('[useUpdateChecker] Failed to open release downloads page:', error)
+      toast.error(t('updates.openReleasePageFailed'), {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }, [t])
 
-  // Load initial state and check if update ready
+  // Load current version info once (for About section).
   useEffect(() => {
-    const checkAndNotify = async (info: UpdateInfo) => {
-      if (info.downloadState === 'error') {
-        const errorMessage = info.error?.trim() || t('appSettings.downloadFailed')
-        const signature = `${info.latestVersion ?? 'unknown'}:${errorMessage}`
-        if (shownErrorSignatureRef.current !== signature) {
-          shownErrorSignatureRef.current = signature
-          toast.error(t('updates.updateFailed'), {
-            description: errorMessage,
-          })
-        }
-        return
-      }
-
-      // Reset when updater moves out of error state.
-      shownErrorSignatureRef.current = null
-
-      if (!info.available || !info.latestVersion) return
-      if (info.downloadState !== 'ready') return
-
-      // Check if this version was dismissed
-      const dismissedVersion = await window.electronAPI.getDismissedUpdateVersion()
-      if (dismissedVersion === info.latestVersion) {
-        console.log('[useUpdateChecker] Update dismissed, skipping toast')
-        return
-      }
-
-      // Show toast for ready update
-      showUpdateToast(info.latestVersion, installUpdate)
-    }
-
-    // Get initial update info
-    window.electronAPI.getUpdateInfo().then((info) => {
-      setUpdateInfo(info)
-      checkAndNotify(info)
+    window.electronAPI.getUpdateInfo().then(setUpdateInfo).catch((error) => {
+      console.error('[useUpdateChecker] Failed to read update info:', error)
     })
+  }, [])
 
-    // Subscribe to update availability changes
-    const cleanupAvailable = window.electronAPI.onUpdateAvailable((info) => {
-      setUpdateInfo(info)
-      checkAndNotify(info)
-    })
-
-    // Subscribe to download progress updates
-    const cleanupProgress = window.electronAPI.onUpdateDownloadProgress((progress) => {
-      setUpdateInfo((prev) => prev ? { ...prev, downloadProgress: progress } : prev)
-    })
-
-    return () => {
-      cleanupAvailable()
-      cleanupProgress()
-    }
-  }, [showUpdateToast, installUpdate, t])
-
-  // Check for updates manually
   const checkForUpdates = useCallback(async () => {
-    try {
-      const info = await window.electronAPI.checkForUpdates()
-      setUpdateInfo(info)
+    await openReleaseDownloads()
+  }, [openReleaseDownloads])
 
-      if (!info.available) {
-        toast.success(t('toasts.youreUpToDate'), {
-          description: t('toasts.runningLatestVersion'),
-          duration: 3000,
-        })
-      } else if (info.downloadState === 'ready' && info.latestVersion) {
-        // If already ready, show toast (clear any previous dismissal since user explicitly checked)
-        shownToastVersionRef.current = null // Reset so toast can show again
-        showUpdateToast(info.latestVersion, installUpdate)
-      }
-    } catch (error) {
-      console.error('[useUpdateChecker] Check failed:', error)
-      toast.error(t('toasts.failedToCheckForUpdates'), {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      })
-    }
-  }, [t, showUpdateToast, installUpdate])
+  const installUpdate = useCallback(async () => {
+    await openReleaseDownloads()
+  }, [openReleaseDownloads])
 
   return {
     updateInfo,
-    updateAvailable: updateInfo?.available ?? false,
-    isDownloading: updateInfo?.downloadState === 'downloading',
-    isReadyToInstall: updateInfo?.downloadState === 'ready',
-    downloadProgress: updateInfo?.downloadProgress ?? 0,
+    updateAvailable: false,
+    isDownloading: false,
+    isReadyToInstall: false,
+    downloadProgress: 0,
     checkForUpdates,
     installUpdate,
   }

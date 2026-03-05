@@ -44,6 +44,8 @@ export interface TextCompleteEvent {
   turnId?: string
   isIntermediate?: boolean
   parentToolUseId?: string
+  timestamp?: number
+  messageId?: string
 }
 
 /**
@@ -251,6 +253,7 @@ export interface ConnectionChangedEvent {
   type: 'connection_changed'
   sessionId: string
   connectionSlug: string
+  supportsBranching?: boolean
 }
 
 /**

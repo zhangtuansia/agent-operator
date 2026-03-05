@@ -15,9 +15,10 @@
 
 import * as React from 'react'
 import { PatchDiff, type PatchDiffProps } from '@pierre/diffs/react'
-import { DIFFS_TAG_NAME, registerCustomTheme, resolveTheme } from '@pierre/diffs'
+import { DIFFS_TAG_NAME } from '@pierre/diffs'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
+import { registerCraftShikiThemes } from '../code-viewer/registerShikiThemes'
 
 // ── Custom element + theme registration (same as ShikiDiffViewer) ──────────
 // Idempotent: safe to run even if ShikiDiffViewer already registered these.
@@ -33,16 +34,8 @@ if (typeof HTMLElement !== 'undefined' && !customElements.get(DIFFS_TAG_NAME)) {
   customElements.define(DIFFS_TAG_NAME, FileDiffContainer)
 }
 
-// Transparent-bg variants of pierre's built-in themes so the app's
-// CSS variable (--background) shows through for custom theme support.
-registerCustomTheme('craft-dark', async () => {
-  const theme = await resolveTheme('pierre-dark')
-  return { ...theme, name: 'craft-dark', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
-registerCustomTheme('craft-light', async () => {
-  const theme = await resolveTheme('pierre-light')
-  return { ...theme, name: 'craft-light', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
+// Reuse shared one-time theme registration to avoid duplicate registration warnings.
+registerCraftShikiThemes()
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

@@ -35,6 +35,30 @@ files:
     to: node_modules/@github
     filter:
       - "**/*"
+  - from: node_modules/@mariozechner
+    to: node_modules/@mariozechner
+    filter:
+      - "**/*"
+  - from: node_modules/@sinclair
+    to: node_modules/@sinclair
+    filter:
+      - "**/*"
+  - from: node_modules/duck-duck-scrape
+    to: node_modules/duck-duck-scrape
+    filter:
+      - "**/*"
+  - from: node_modules/node-html-parser
+    to: node_modules/node-html-parser
+    filter:
+      - "**/*"
+  - from: node_modules/turndown
+    to: node_modules/turndown
+    filter:
+      - "**/*"
+  - from: node_modules/pdfjs-dist
+    to: node_modules/pdfjs-dist
+    filter:
+      - "**/*"
 
 extraMetadata:
   main: dist/main.cjs

@@ -95,9 +95,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     try {
       await window.electronAPI.openSkillInFinder(workspaceId, skillSlug)
     } catch (err) {
-      console.error('Failed to open skill in finder:', err)
+      toast.error(t('toasts.failedToShowInFinder'), {
+        description: err instanceof Error ? err.message : t('toasts.noDetailsProvided'),
+      })
     }
-  }, [skill, workspaceId, skillSlug])
+  }, [skill, workspaceId, skillSlug, t])
 
   // Handle delete
   const handleDelete = useCallback(async () => {

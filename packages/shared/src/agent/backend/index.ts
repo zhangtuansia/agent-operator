@@ -12,7 +12,7 @@
  *
  * Usage:
  * ```typescript
- * import { createAgent, type AgentBackend } from '@craft-agent/shared/agent/backend';
+ * import { createAgent, type AgentBackend } from '@craft-operator/shared/agent/backend';
  *
  * const agent = createAgent({
  *   provider: 'anthropic',
@@ -67,3 +67,4 @@ export {
 export { ClaudeAgent } from '../claude-agent.ts';
 export { CodexAgent, CodexBackend } from '../codex-agent.ts';
 export { CopilotAgent, CopilotBackend } from '../copilot-agent.ts';
+export { PiAgent, PiBackend } from '../pi-agent.ts';

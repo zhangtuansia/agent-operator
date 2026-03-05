@@ -169,6 +169,7 @@ const QUICK_TEMPLATES: QuickTemplate[] = [
   { slug: 'codex', name: 'Codex (ChatGPT Plus)', provider: 'openai', providerType: 'openai', authType: 'oauth' },
   { slug: 'codex-api', name: 'Codex (OpenAI API)', provider: 'openai', providerType: 'openai', authType: 'api_key' },
   { slug: 'copilot', name: 'GitHub Copilot', provider: 'openai', providerType: 'copilot', authType: 'oauth' },
+  { slug: 'pi-api', name: 'PI (API Key)', provider: 'pi', providerType: 'pi', authType: 'api_key' },
   { slug: 'deepseek-api', name: 'DeepSeek', provider: 'deepseek', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.deepseek.com/anthropic' },
   { slug: 'glm-api', name: '智谱 GLM', provider: 'glm', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic' },
   { slug: 'minimax-api', name: 'MiniMax', provider: 'minimax', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.minimaxi.com/anthropic' },
@@ -180,6 +181,7 @@ const PROVIDER_TYPES: LlmProviderType[] = [
   'anthropic',
   'openai',
   'copilot',
+  'pi',
   'anthropic_compat',
   'openai_compat',
   'bedrock',
@@ -209,6 +211,8 @@ function getProviderLabel(provider: string, t: (key: string) => string): string 
       return t('apiSettings.aiPage.providerOpenAICompat')
     case 'copilot':
       return t('apiSettings.aiPage.providerCopilot')
+    case 'pi':
+      return t('apiSettings.aiPage.providerPi')
     case 'bedrock':
       return t('apiSettings.providerBedrock')
     case 'vertex':
@@ -230,6 +234,8 @@ function getProviderDescription(provider: string, t: (key: string) => string): s
       return t('apiSettings.aiPage.providerOpenAICompat')
     case 'copilot':
       return 'GitHub Copilot'
+    case 'pi':
+      return 'Pi Backend'
     case 'bedrock':
       return 'AWS Bedrock'
     case 'vertex':
@@ -274,6 +280,8 @@ function defaultAuthForProvider(providerType: LlmProviderType): LlmAuthType {
       return 'api_key_with_endpoint'
     case 'copilot':
       return 'oauth'
+    case 'pi':
+      return 'api_key'
     case 'bedrock':
       return 'environment'
     case 'vertex':

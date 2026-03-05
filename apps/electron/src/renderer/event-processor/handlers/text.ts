@@ -89,16 +89,29 @@ export function handleTextComplete(
   }
 
   if (msgIndex !== -1) {
+    const existingMsg = session.messages[msgIndex]
+
+    // Keep distinct intermediate thinking blocks; don't overwrite a completed one
+    // with a later intermediate text_complete event.
+    if (!existingMsg.isStreaming && existingMsg.isIntermediate && event.isIntermediate) {
+      msgIndex = -1
+    }
+  }
+
+  if (msgIndex !== -1) {
     // Update existing message with final content
     // Only update lastMessageAt for final (non-intermediate) messages
     const shouldUpdateTimestamp = !event.isIntermediate
     const updatedSession = updateMessageAt(session, msgIndex, {
+      // Replace temporary renderer-generated ID with authoritative main-process ID
+      ...(event.messageId ? { id: event.messageId } : {}),
       content: event.text,  // Complete text from SDK
       isStreaming: false,
       isPending: false,
       isIntermediate: event.isIntermediate,
       turnId: event.turnId,
       parentToolUseId: event.parentToolUseId,
+      ...(event.timestamp ? { timestamp: event.timestamp } : {}),
     }, shouldUpdateTimestamp)
     return { session: updatedSession, streaming: null }
   }
@@ -107,10 +120,10 @@ export function handleTextComplete(
   // This handles the race condition where text_complete arrives
   // before text_delta's setSessions has been processed
   const newMessage: Message = {
-    id: generateMessageId(),
+    id: event.messageId ?? generateMessageId(),
     role: 'assistant',
     content: event.text,
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     isStreaming: false,
     isPending: false,
     isIntermediate: event.isIntermediate,

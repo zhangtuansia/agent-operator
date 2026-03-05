@@ -161,6 +161,6 @@ export function createEmptySession(sessionId: string, workspaceId: string, works
     workspaceName,
     lastMessageAt: Date.now(),
     messages: [],
-    isProcessing: true,
+    isProcessing: false,
   }
 }

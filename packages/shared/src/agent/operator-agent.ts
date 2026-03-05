@@ -368,6 +368,7 @@ export class OperatorAgent {
   private currentQueryAbortController: AbortController | null = null;
   private lastAbortReason: AbortReason | null = null;
   private sessionId: string | null = null;
+  private branchFromSdkSessionId: string | null = null;
   private isHeadless: boolean = false;
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   private alwaysAllowedCommands: Set<string> = new Set(); // Base commands allowed for this session (e.g., "ls", "cat")
@@ -471,6 +472,10 @@ export class OperatorAgent {
   // This enables auto-enabling sources when the agent tries to use their tools.
   public onSourceActivationRequest: ((sourceSlug: string) => Promise<boolean>) | null = null;
 
+  get supportsBranching(): boolean {
+    return true;
+  }
+
   constructor(config: OperatorAgentConfig) {
     // Resolve model: prioritize session model > config model > global config > provider default
     // This ensures that when using non-Anthropic providers (DeepSeek, GLM, etc.),
@@ -490,6 +495,9 @@ export class OperatorAgent {
     // Initialize sessionId from session config for conversation resumption
     if (config.session?.sdkSessionId) {
       this.sessionId = config.session.sdkSessionId;
+    }
+    if (config.session?.branchFromSdkSessionId) {
+      this.branchFromSdkSessionId = config.session.branchFromSdkSessionId;
     }
 
     // Initialize permission mode state with callbacks
@@ -3289,6 +3297,56 @@ Please continue the conversation naturally from where we left off.
 
   setSessionId(sessionId: string | null): void {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * Ensure branched sessions establish SDK fork context at creation time.
+   * This prevents transcript-only branches without backend branch continuity.
+   */
+  async ensureBranchReady(): Promise<void> {
+    if (this.sessionId || !this.branchFromSdkSessionId) return;
+
+    const branchCwd =
+      this.config.session?.branchFromSessionPath
+      ?? this.config.session?.sdkCwd
+      ?? (this.config.session?.id
+        ? getSessionPath(this.workspaceRootPath, this.config.session.id)
+        : this.workspaceRootPath);
+
+    const options: Options = {
+      ...getDefaultOptions(),
+      model: this.getModel(),
+      maxTurns: 0,
+      resume: this.branchFromSdkSessionId,
+      forkSession: true,
+      cwd: branchCwd,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      tools: { type: 'preset', preset: 'claude_code' },
+    };
+
+    let capturedSessionId: string | null = null;
+
+    try {
+      const preflightQuery: Query = query({ prompt: ' ', options });
+      for await (const msg of preflightQuery) {
+        if ('session_id' in msg && msg.session_id) {
+          capturedSessionId = msg.session_id;
+          break;
+        }
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to establish branch context during creation (cwd=${branchCwd}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (!capturedSessionId) {
+      throw new Error('Failed to establish branch context during creation: no forked session ID received');
+    }
+
+    this.sessionId = capturedSessionId;
+    this.config.onSdkSessionIdUpdate?.(capturedSessionId);
   }
 
   /**

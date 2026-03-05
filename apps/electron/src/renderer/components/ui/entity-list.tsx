@@ -11,6 +11,7 @@
  */
 
 import * as React from 'react'
+import { ChevronRight } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,12 @@ export interface EntityListGroup<T> {
   label: string
   /** Items in this group */
   items: T[]
+  /** Whether this group can be collapsed */
+  collapsible?: boolean
+  /** Whether this group is currently collapsed */
+  collapsed?: boolean
+  /** Optional total item count (used for collapsed summary) */
+  itemCount?: number
 }
 
 export interface EntityListProps<T> {
@@ -48,6 +55,8 @@ export interface EntityListProps<T> {
   containerProps?: Record<string, string>
   /** Additional ScrollArea class */
   scrollAreaClassName?: string
+  /** Called when a collapsible group header is clicked */
+  onToggleGroup?: (groupKey: string) => void
   className?: string
 }
 
@@ -55,11 +64,43 @@ export interface EntityListProps<T> {
 // Section Header
 // ============================================================================
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({
+  label,
+  collapsible = false,
+  collapsed = false,
+  itemCount,
+  onToggle,
+}: {
+  label: string
+  collapsible?: boolean
+  collapsed?: boolean
+  itemCount?: number
+  onToggle?: () => void
+}) {
+  const headerLabel = collapsed && typeof itemCount === 'number'
+    ? `${label} · ${itemCount}`
+    : label
+
+  if (collapsible) {
+    return (
+      <button
+        type="button"
+        className="w-full px-4 py-2 flex items-center gap-1.5 text-left hover:bg-foreground/[0.03] transition-colors"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+      >
+        <ChevronRight className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', !collapsed && 'rotate-90')} />
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          {headerLabel}
+        </span>
+      </button>
+    )
+  }
+
   return (
     <div className="px-4 py-2">
       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
+        {headerLabel}
       </span>
     </div>
   )
@@ -80,6 +121,7 @@ export function EntityList<T>({
   containerRef,
   containerProps,
   scrollAreaClassName,
+  onToggleGroup,
   className,
 }: EntityListProps<T>) {
   // Determine if we have content
@@ -110,8 +152,14 @@ export function EntityList<T>({
             {hasGroups
               ? groups!.map((group) => (
                   <div key={group.key}>
-                    <SectionHeader label={group.label} />
-                    {group.items.map((item, indexInGroup) =>
+                    <SectionHeader
+                      label={group.label}
+                      collapsible={group.collapsible}
+                      collapsed={group.collapsed}
+                      itemCount={group.itemCount}
+                      onToggle={group.collapsible ? () => onToggleGroup?.(group.key) : undefined}
+                    />
+                    {!group.collapsed && group.items.map((item, indexInGroup) =>
                       <React.Fragment key={getKey(item)}>
                         {renderItem(item, indexInGroup, indexInGroup === 0)}
                       </React.Fragment>

@@ -18,6 +18,7 @@ import type { AgentBackend, BackendConfig, AgentProvider, LlmProviderType, LlmAu
 import { ClaudeAgent } from '../claude-agent.ts';
 import { CodexAgent } from '../codex-agent.ts';
 import { CopilotAgent } from '../copilot-agent.ts';
+import { PiAgent } from '../pi-agent.ts';
 import {
   getLlmConnection,
   getDefaultLlmConnection,
@@ -91,6 +92,11 @@ export function createBackend(config: BackendConfig): AgentBackend {
       // Auth is handled via GitHub OAuth
       return new CopilotAgent(config);
 
+    case 'pi':
+      // PiAgent implements AgentBackend directly
+      // Runtime is provided by pi-agent-server subprocess.
+      return new PiAgent(config);
+
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -108,7 +114,7 @@ export const createAgent = createBackend;
  * @returns Array of provider identifiers that have working implementations
  */
 export function getAvailableProviders(): AgentProvider[] {
-  return ['anthropic', 'openai', 'copilot'];
+  return ['anthropic', 'openai', 'copilot', 'pi'];
 }
 
 /**
@@ -152,6 +158,10 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     // GitHub Copilot backend
     case 'copilot':
       return 'copilot';
+
+    // Pi backend
+    case 'pi':
+      return 'pi';
 
     default:
       // Exhaustive check
@@ -297,4 +307,3 @@ export function createBackendFromConnection(
   const config = createConfigFromConnection(connection, baseConfig);
   return createBackend(config);
 }
-

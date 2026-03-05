@@ -24,7 +24,9 @@ export function buildTitlePrompt(message: string, language: TitleGenerationLangu
   if (language === 'zh') {
     return [
       '请判断用户当前想完成的任务。',
-      '只回复一个简短任务标题（4-12个中文字符，或2-5个英文单词）。',
+      '只回复一个简短任务标题（4-12个中文字符）。',
+      '标题必须使用简体中文。',
+      '不要输出英文、拼音或中英混写。',
       '尽量用动词开头，只输出纯文本，不要 Markdown，不要解释。',
       '示例："修复登录报错"、"添加深色模式"、"重构接口层"、"梳理代码结构"',
       '',
@@ -36,6 +38,8 @@ export function buildTitlePrompt(message: string, language: TitleGenerationLangu
 
   return [
     'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
+    'The title must be in English only.',
+    'Do not output Chinese or mixed-language text.',
     'Start with a verb. Use plain text only - no markdown.',
     'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
     '',
@@ -61,7 +65,9 @@ export function buildRegenerateTitlePrompt(
   if (language === 'zh') {
     return [
       '根据以下最近对话，判断当前会话的核心任务。',
-      '只回复一个简短任务标题（4-12个中文字符，或2-5个英文单词）。',
+      '只回复一个简短任务标题（4-12个中文字符）。',
+      '标题必须使用简体中文。',
+      '不要输出英文、拼音或中英混写。',
       '尽量用动词开头，只输出纯文本，不要 Markdown，不要解释。',
       '示例："修复登录报错"、"添加深色模式"、"重构接口层"、"梳理代码结构"',
       '',
@@ -78,6 +84,8 @@ export function buildRegenerateTitlePrompt(
   return [
     'Based on these recent messages, what is the current focus of this conversation?',
     'Reply with ONLY a short task description (2-5 words).',
+    'The title must be in English only.',
+    'Do not output Chinese or mixed-language text.',
     'Start with a verb. Use plain text only - no markdown.',
     'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
     '',
@@ -115,6 +123,27 @@ function trimToFallbackMaxLength(value: string): string {
 
 function isLikelyCJK(value: string): boolean {
   return /[\u3400-\u9fff]/.test(value);
+}
+
+function hasLatinLetters(value: string): boolean {
+  return /[A-Za-z]/.test(value);
+}
+
+function matchesTitleLanguage(value: string, language: TitleGenerationLanguage): boolean {
+  if (language === 'zh') {
+    return isLikelyCJK(value);
+  }
+  // English mode: reject any CJK content and require at least one latin letter.
+  return !isLikelyCJK(value) && hasLatinLetters(value);
+}
+
+function enforceTitleLanguage(
+  value: string,
+  language: TitleGenerationLanguage,
+): string | null {
+  const normalized = normalizeTitle(value);
+  if (!normalized) return null;
+  return matchesTitleLanguage(normalized, language) ? normalized : null;
 }
 
 function sanitizeFallbackCandidate(raw: string): string {
@@ -156,10 +185,12 @@ export function buildFallbackTitleFromMessages(
     if (!sanitized) continue;
 
     const clamped = trimToFallbackMaxLength(sanitized);
-    if (clamped.length >= FALLBACK_MIN_LENGTH) return clamped;
+    const languageSafeCandidate = enforceTitleLanguage(clamped, language);
+    if (!languageSafeCandidate) continue;
+    if (languageSafeCandidate.length >= FALLBACK_MIN_LENGTH) return languageSafeCandidate;
 
     if (!shortCandidate) {
-      shortCandidate = clamped;
+      shortCandidate = languageSafeCandidate;
     }
   }
 
@@ -230,8 +261,10 @@ export async function generateSessionTitle(
 ): Promise<string | null> {
   try {
     const prompt = buildTitlePrompt(userMessage, language);
-
-    return await queryTitle(prompt);
+    const generated = await queryTitle(prompt);
+    const languageSafeTitle = enforceTitleLanguage(generated, language);
+    if (languageSafeTitle) return languageSafeTitle;
+    throw new Error(`title language mismatch: expected ${language}`);
   } catch (error) {
     console.error('[title-generator] Failed to generate title:', error);
     const fallbackTitle = buildFallbackTitleFromMessages([userMessage], language);
@@ -256,8 +289,10 @@ export async function regenerateSessionTitle(
 ): Promise<string | null> {
   try {
     const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse, language);
-
-    return await queryTitle(prompt);
+    const generated = await queryTitle(prompt);
+    const languageSafeTitle = enforceTitleLanguage(generated, language);
+    if (languageSafeTitle) return languageSafeTitle;
+    throw new Error(`title language mismatch: expected ${language}`);
   } catch (error) {
     console.error('[title-generator] Failed to regenerate title:', error);
     const fallbackCandidates = recentUserMessages.length > 0

@@ -18,6 +18,7 @@ export const KEYS = {
   listFilter: 'list-filter',
   expandedFolders: 'expanded-folders',
   collapsedSidebarItems: 'collapsed-sidebar-items',
+  collapsedSessionGroups: 'collapsed-session-groups', // Collapsed group keys in session list
 
   // Right sidebar (chat page)
   rightSidebarVisible: 'right-sidebar-visible',

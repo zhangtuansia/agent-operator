@@ -47,6 +47,7 @@ import { useSessionEvents } from '@/hooks/useSessionEvents'
 import { useMenuEvents } from '@/hooks/useMenuEvents'
 import { useSplashScreen } from '@/hooks/useSplashScreen'
 import { networkStatusAtom } from '@/hooks/useNetworkStatus'
+import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -354,7 +355,15 @@ export default function App() {
   }, [appState, windowWorkspaceId, refreshLlmConnections])
 
   const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
-    const session = await window.electronAPI.createSession(workspaceId, options)
+    const normalizedPermissionMode = normalizePermissionMode(options?.permissionMode as string | undefined)
+    const sanitizedOptions = options
+      ? {
+          ...options,
+          permissionMode: normalizedPermissionMode,
+        }
+      : options
+
+    const session = await window.electronAPI.createSession(workspaceId, sanitizedOptions)
     // Add to per-session atom and metadata map (no sessionsAtom)
     addSession(session)
 

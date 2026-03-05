@@ -43,6 +43,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'pendingPlanExecution',
   // Archive
   'isArchived', 'archivedAt',
+  // Branching metadata
+  'branchFromMessageId', 'branchFromSdkSessionId', 'branchFromSessionPath',
   // Hierarchy
   'parentSessionId', 'siblingOrder',
 ] as const;
@@ -154,6 +156,12 @@ export interface SessionConfig {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
+  /** Message ID this session branched from (if created from message branch). */
+  branchFromMessageId?: string;
+  /** Parent SDK session ID used to initialize backend-level branch context. */
+  branchFromSdkSessionId?: string;
+  /** Parent session context path (sdkCwd for Claude/Codex, session storage path for Pi). */
+  branchFromSessionPath?: string;
   // Sub-session hierarchy (1 level max)
   /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
   parentSessionId?: string;
@@ -240,6 +248,12 @@ export interface SessionHeader {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
+  /** Message ID this session branched from (if created from message branch). */
+  branchFromMessageId?: string;
+  /** Parent SDK session ID used to initialize backend-level branch context. */
+  branchFromSdkSessionId?: string;
+  /** Parent session storage path (used by Pi backend branch preflight). */
+  branchFromSessionPath?: string;
   // Sub-session hierarchy (1 level max)
   /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
   parentSessionId?: string;
@@ -321,6 +335,12 @@ export interface SessionMetadata {
   isArchived?: boolean;
   /** Timestamp when session was archived (for retention policy) */
   archivedAt?: number;
+  /** Message ID this session branched from (if created from message branch). */
+  branchFromMessageId?: string;
+  /** Parent SDK session ID used to initialize backend-level branch context. */
+  branchFromSdkSessionId?: string;
+  /** Parent session storage path (used by Pi backend branch preflight). */
+  branchFromSessionPath?: string;
   // Sub-session hierarchy (1 level max)
   /** Parent session ID (if this is a sub-session). Null/undefined = root session. */
   parentSessionId?: string;

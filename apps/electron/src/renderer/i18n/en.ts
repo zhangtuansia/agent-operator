@@ -208,8 +208,8 @@ export const en = {
     // About
     about: 'About',
     version: 'Version',
-    checkForUpdates: 'Check for updates',
-    checkNow: 'Check Now',
+    checkForUpdates: 'Download updates',
+    checkNow: 'Open Releases page',
     checking: 'Checking...',
     updateTo: 'Update to',
     restartToUpdate: 'Restart to Update',
@@ -219,6 +219,7 @@ export const en = {
     downloadUpdate: 'Download Update',
     downloadFailed: 'Download failed',
     retryDownload: 'Retry Download',
+    manualUpdateHint: 'Auto-update is disabled. Download and install the latest version from GitHub Releases.',
 
     // System Permissions (macOS)
     systemPermissions: 'System Permissions',
@@ -367,6 +368,7 @@ export const en = {
       providerOpenAI: 'OpenAI',
       providerOpenAICompat: 'OpenAI Compatible',
       providerCopilot: 'GitHub Copilot',
+      providerPi: 'Pi Backend',
       providerVertex: 'Google Vertex',
       unknownProvider: 'Unknown',
 
@@ -1063,6 +1065,9 @@ export const en = {
     copy: 'Copy',
     copied: 'Copied!',
     viewAsMarkdown: 'View as Markdown',
+    branch: 'Branch',
+    branchFromMessage: 'Branch from this message',
+    branchDescription: "Explore an alternate direction without disrupting this conversation's flow.",
     typeFeedbackOr: 'Type your feedback in chat or',
     plan: 'Plan',
     viewFullscreen: 'View Fullscreen',
@@ -1157,6 +1162,7 @@ export const en = {
     deletedSkill: 'Deleted skill',
     failedToDeleteSource: 'Failed to delete source',
     failedToDeleteSkill: 'Failed to delete skill',
+    failedToShowInFinder: 'Failed to show in Finder',
     patternCopied: 'Pattern copied to clipboard',
     failedToCopyPattern: 'Failed to copy pattern',
     createdWorkspace: 'Created workspace',
@@ -1314,6 +1320,8 @@ export const en = {
     messagePreview: 'Message Preview',
     responsePreview: 'Response Preview',
     turnDetails: 'Turn Details',
+    branchCreateFailed: 'Could not create branch',
+    branchCreateFailedDescription: 'Failed to create a branch session. Please try again.',
     openInNewWindow: 'Open in new window',
     error: 'Error',
     hideTechnicalDetails: 'Hide technical details',
@@ -1363,6 +1371,8 @@ export const en = {
     updateFailed: 'Update failed',
     updateAvailable: 'Update available',
     newVersionAvailable: 'A new version is available.',
+    openedReleasePage: 'Opened GitHub Releases download page.',
+    openReleasePageFailed: 'Failed to open the download page',
   },
 
   // Permissions table

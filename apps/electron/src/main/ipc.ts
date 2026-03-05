@@ -9,7 +9,17 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
+import {
+  IPC_CHANNELS,
+  type FileAttachment,
+  type StoredAttachment,
+  type AuthType,
+  type BillingMethodInfo,
+  type SendMessageOptions,
+  type LlmConnectionSetup,
+  type CreateSessionOptions,
+  type SessionCommand,
+} from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import {
   getAuthType,
@@ -310,6 +320,12 @@ export function registerIpcHandlers(
   sessionManager: SessionManager,
   windowManager: WindowManager,
 ): void {
+  type ImportSessionsArgs = {
+    workspaceId: string
+    source: 'openai' | 'anthropic'
+    filePath: string
+  }
+
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -446,8 +462,10 @@ export function registerIpcHandlers(
   // Create a new session
   ipcMain.handle(IPC_CHANNELS.CREATE_SESSION, async (_event, workspaceId: unknown, options?: unknown) => {
     // Validate inputs
-    const validatedWorkspaceId = validateIpcArgs(WorkspaceIdSchema, workspaceId, 'CREATE_SESSION.workspaceId')
-    const validatedOptions = options ? validateIpcArgs(CreateSessionOptionsSchema, options, 'CREATE_SESSION.options') : undefined
+    const validatedWorkspaceId = validateIpcArgs<string>(WorkspaceIdSchema, workspaceId, 'CREATE_SESSION.workspaceId')
+    const validatedOptions = options
+      ? validateIpcArgs<CreateSessionOptions>(CreateSessionOptionsSchema, options, 'CREATE_SESSION.options')
+      : undefined
 
     const end = perf.start('ipc.createSession', { workspaceId: validatedWorkspaceId })
     const session = sessionManager.createSession(validatedWorkspaceId, validatedOptions)
@@ -459,7 +477,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.CREATE_SUB_SESSION, async (_event, workspaceId: string, parentSessionId: string, options?: unknown) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
     const { createSubSession } = await import('@agent-operator/shared/sessions')
-    const validatedOptions = options ? validateIpcArgs(CreateSessionOptionsSchema, options, 'CREATE_SUB_SESSION.options') : undefined
+    const validatedOptions = options
+      ? validateIpcArgs<CreateSessionOptions>(CreateSessionOptionsSchema, options, 'CREATE_SUB_SESSION.options')
+      : undefined
     const session = await createSubSession(workspace.rootPath, parentSessionId, validatedOptions)
     sessionManager.reloadSessions()
     return session
@@ -473,7 +493,7 @@ export function registerIpcHandlers(
   // Import sessions from external platforms (OpenAI, Anthropic)
   ipcMain.handle(IPC_CHANNELS.IMPORT_SESSIONS, async (_event, args: unknown) => {
     const { ImportSessionsArgsSchema } = await import('@agent-operator/shared/ipc/schemas')
-    const validated = validateIpcArgs(ImportSessionsArgsSchema, args, 'IMPORT_SESSIONS')
+    const validated = validateIpcArgs<ImportSessionsArgs>(ImportSessionsArgsSchema, args, 'IMPORT_SESSIONS')
 
     const workspace = getWorkspaceOrThrow(validated.workspaceId)
     const { parseOpenAIExport, parseAnthropicExport } = await import('@agent-operator/shared/importers')
@@ -616,44 +636,44 @@ export function registerIpcHandlers(
     command: unknown
   ) => {
     // Validate inputs
-    const validatedSessionId = validateIpcArgs(SessionIdSchema, sessionId, 'SESSION_COMMAND.sessionId')
-    const validatedCommand = validateIpcArgs(SessionCommandSchema, command, 'SESSION_COMMAND.command')
+    const validatedSessionIdStr = validateIpcArgs<string>(SessionIdSchema, sessionId, 'SESSION_COMMAND.sessionId')
+    const validatedCommand = validateIpcArgs<SessionCommand>(SessionCommandSchema, command, 'SESSION_COMMAND.command')
 
     switch (validatedCommand.type) {
       case 'flag':
-        return sessionManager.flagSession(validatedSessionId)
+        return sessionManager.flagSession(validatedSessionIdStr)
       case 'unflag':
-        return sessionManager.unflagSession(validatedSessionId)
+        return sessionManager.unflagSession(validatedSessionIdStr)
       case 'archive':
-        return sessionManager.archiveSession(validatedSessionId)
+        return sessionManager.archiveSession(validatedSessionIdStr)
       case 'unarchive':
-        return sessionManager.unarchiveSession(validatedSessionId)
+        return sessionManager.unarchiveSession(validatedSessionIdStr)
       case 'rename':
-        return sessionManager.renameSession(validatedSessionId, validatedCommand.name)
+        return sessionManager.renameSession(validatedSessionIdStr, validatedCommand.name)
       case 'setTodoState':
-        return sessionManager.setTodoState(validatedSessionId, validatedCommand.state)
+        return sessionManager.setTodoState(validatedSessionIdStr, validatedCommand.state)
       case 'markRead':
-        return sessionManager.markSessionRead(validatedSessionId)
+        return sessionManager.markSessionRead(validatedSessionIdStr)
       case 'markUnread':
-        return sessionManager.markSessionUnread(validatedSessionId)
+        return sessionManager.markSessionUnread(validatedSessionIdStr)
       case 'setPermissionMode':
-        return sessionManager.setSessionPermissionMode(validatedSessionId, validatedCommand.mode)
+        return sessionManager.setSessionPermissionMode(validatedSessionIdStr, validatedCommand.mode)
       case 'setThinkingLevel':
         // Validate thinking level before passing to session manager
         if (!isValidThinkingLevel(validatedCommand.level)) {
           throw new Error(`Invalid thinking level: ${validatedCommand.level}. Valid values: 'off', 'think', 'max'`)
         }
-        return sessionManager.setSessionThinkingLevel(validatedSessionId, validatedCommand.level)
+        return sessionManager.setSessionThinkingLevel(validatedSessionIdStr, validatedCommand.level)
       case 'setConnection':
-        return sessionManager.setSessionConnection(validatedSessionId, validatedCommand.connectionSlug)
+        return sessionManager.setSessionConnection(validatedSessionIdStr, validatedCommand.connectionSlug)
       case 'updateWorkingDirectory':
-        return sessionManager.updateWorkingDirectory(validatedSessionId, validatedCommand.dir)
+        return sessionManager.updateWorkingDirectory(validatedSessionIdStr, validatedCommand.dir)
       case 'setSources':
-        return sessionManager.setSessionSources(validatedSessionId, validatedCommand.sourceSlugs)
+        return sessionManager.setSessionSources(validatedSessionIdStr, validatedCommand.sourceSlugs)
       case 'setLabels':
-        return sessionManager.setSessionLabels(validatedSessionId, validatedCommand.labels)
+        return sessionManager.setSessionLabels(validatedSessionIdStr, validatedCommand.labels)
       case 'showInFinder': {
-        const sessionPath = sessionManager.getSessionPath(validatedSessionId)
+        const sessionPath = sessionManager.getSessionPath(validatedSessionIdStr)
         if (sessionPath) {
           shell.showItemInFolder(sessionPath)
         }
@@ -661,27 +681,27 @@ export function registerIpcHandlers(
       }
       case 'copyPath': {
         // Return the session folder path for copying to clipboard
-        const sessionPath = sessionManager.getSessionPath(validatedSessionId)
+        const sessionPath = sessionManager.getSessionPath(validatedSessionIdStr)
         return sessionPath ? { success: true, path: sessionPath } : { success: false }
       }
       case 'shareToViewer':
-        return sessionManager.shareToViewer(validatedSessionId)
+        return sessionManager.shareToViewer(validatedSessionIdStr)
       case 'updateShare':
-        return sessionManager.updateShare(validatedSessionId)
+        return sessionManager.updateShare(validatedSessionIdStr)
       case 'revokeShare':
-        return sessionManager.revokeShare(validatedSessionId)
+        return sessionManager.revokeShare(validatedSessionIdStr)
       case 'startOAuth':
-        return sessionManager.startSessionOAuth(validatedSessionId, validatedCommand.requestId)
+        return sessionManager.startSessionOAuth(validatedSessionIdStr, validatedCommand.requestId)
       case 'refreshTitle':
-        ipcLog.info(`IPC: refreshTitle received for session ${validatedSessionId}`)
-        return sessionManager.refreshTitle(validatedSessionId)
+        ipcLog.info(`IPC: refreshTitle received for session ${validatedSessionIdStr}`)
+        return sessionManager.refreshTitle(validatedSessionIdStr)
       // Pending plan execution (Accept & Compact flow)
       case 'setPendingPlanExecution':
-        return sessionManager.setPendingPlanExecution(validatedSessionId, validatedCommand.planPath)
+        return sessionManager.setPendingPlanExecution(validatedSessionIdStr, validatedCommand.planPath)
       case 'markCompactionComplete':
-        return sessionManager.markCompactionComplete(validatedSessionId)
+        return sessionManager.markCompactionComplete(validatedSessionIdStr)
       case 'clearPendingPlanExecution':
-        return sessionManager.clearPendingPlanExecution(validatedSessionId)
+        return sessionManager.clearPendingPlanExecution(validatedSessionIdStr)
       default: {
         const _exhaustive: never = validatedCommand
         throw new Error(`Unknown session command: ${JSON.stringify(validatedCommand)}`)
@@ -1093,11 +1113,11 @@ export function registerIpcHandlers(
     return `file://${process.resourcesPath}/fonts`
   })
 
-  // Auto-update handlers
-  // Manual check from UI - auto-download so user can install immediately
+  // Auto-update handlers (manual download flow: open GitHub Releases)
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
-    const { checkForUpdates } = await import('./auto-update')
-    return checkForUpdates({ autoDownload: true })
+    const { openReleaseDownloadsPage, getUpdateInfo } = await import('./auto-update')
+    await openReleaseDownloadsPage()
+    return getUpdateInfo()
   })
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_GET_INFO, async () => {
@@ -1106,8 +1126,8 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async () => {
-    const { installUpdate } = await import('./auto-update')
-    return installUpdate()
+    const { openReleaseDownloadsPage } = await import('./auto-update')
+    return openReleaseDownloadsPage()
   })
 
   // Dismiss update for this version (persists across restarts)
@@ -1396,7 +1416,12 @@ export function registerIpcHandlers(
       provider = providerConfig?.provider
     }
 
-    return { authType, hasCredential, provider }
+    const billingAuthType: BillingMethodInfo['authType'] =
+      authType === 'api_key' || authType === 'oauth_token' || authType === 'bedrock'
+        ? authType
+        : 'api_key'
+
+    return { authType: billingAuthType, hasCredential, provider }
   })
 
   // Update billing method and credential
@@ -2088,8 +2113,8 @@ export function registerIpcHandlers(
   // Valid keys: 'name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'defaultLlmConnection', 'localMcpEnabled'
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: unknown, key: unknown, value: unknown) => {
     // Validate inputs
-    const validatedWorkspaceId = validateIpcArgs(WorkspaceIdSchema, workspaceId, 'WORKSPACE_SETTINGS_UPDATE.workspaceId')
-    const validatedKey = validateIpcArgs(WorkspaceSettingKeySchema, key, 'WORKSPACE_SETTINGS_UPDATE.key')
+    const validatedWorkspaceId = validateIpcArgs<string>(WorkspaceIdSchema, workspaceId, 'WORKSPACE_SETTINGS_UPDATE.workspaceId')
+    const validatedKey = validateIpcArgs<string>(WorkspaceSettingKeySchema, key, 'WORKSPACE_SETTINGS_UPDATE.key')
 
     const workspace = getWorkspaceOrThrow(validatedWorkspaceId)
 
@@ -3317,12 +3342,19 @@ export function registerIpcHandlers(
     if (!workspace) throw new Error('Workspace not found')
 
     const { join } = await import('path')
+    const { existsSync } = await import('fs')
     const { shell } = await import('electron')
-    const { getWorkspaceSkillsPath } = await import('@agent-operator/shared/workspaces')
+    const { loadSkill } = await import('@agent-operator/shared/skills')
 
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
-    await shell.showItemInFolder(skillDir)
+    // Resolve by loaded skill source (project/workspace/global/bundled), not workspace-only path.
+    const skill = loadSkill(workspace.rootPath, skillSlug)
+    if (!skill) {
+      throw new Error(`Skill not found: ${skillSlug}`)
+    }
+
+    const skillFile = join(skill.path, 'SKILL.md')
+    const revealPath = existsSync(skillFile) ? skillFile : skill.path
+    shell.showItemInFolder(revealPath)
   })
 
   // Import skill from URL

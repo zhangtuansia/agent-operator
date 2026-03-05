@@ -106,6 +106,10 @@ export const MINI_AGENT_MCP_KEYS = ['session', 'agent-operators-docs'] as const;
  * - runMiniCompletion(): Simple text completion using backend's auth
  */
 export abstract class BaseAgent implements AgentBackend {
+  /** Whether this backend supports session branching. Subclasses can override. */
+  protected _supportsBranching = true;
+  get supportsBranching(): boolean { return this._supportsBranching; }
+
   // ============================================================
   // Configuration (protected for subclass access)
   // ============================================================
@@ -781,6 +785,14 @@ Please continue the conversation naturally from where we left off.
    */
   async runMiniCompletion(_prompt: string): Promise<string | null> {
     return null;
+  }
+
+  /**
+   * Ensure branch sessions are backend-ready before first user message.
+   * Default implementation is a no-op.
+   */
+  async ensureBranchReady(): Promise<void> {
+    // No-op by default
   }
 
   // ============================================================

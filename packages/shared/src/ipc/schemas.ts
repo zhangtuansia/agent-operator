@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod'
+import { normalizePermissionMode } from '../agent/mode-types'
 
 // =============================================================================
 // Base Schemas
@@ -27,7 +28,15 @@ export const FilePathSchema = z.string().min(1).max(4096)
 // Permission Mode and Thinking Level
 // =============================================================================
 
-export const PermissionModeSchema = z.enum(['safe', 'ask', 'allow-all'])
+const PermissionModeEnumSchema = z.enum(['safe', 'ask', 'allow-all'])
+
+export const PermissionModeSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value
+    return normalizePermissionMode(value) ?? value
+  },
+  PermissionModeEnumSchema,
+)
 
 export const ThinkingLevelSchema = z.enum(['off', 'think', 'max'])
 
@@ -144,6 +153,9 @@ export const CreateSessionOptionsSchema = z.object({
   labels: z.array(z.string()).optional(),
   todoState: z.string().optional(),
   isFlagged: z.boolean().optional(),
+  enabledSourceSlugs: z.array(z.string()).optional(),
+  branchFromMessageId: z.string().optional(),
+  branchFromSessionId: z.string().optional(),
 })
 
 // =============================================================================

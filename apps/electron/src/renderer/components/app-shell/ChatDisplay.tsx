@@ -12,10 +12,12 @@ import {
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
+import { toast } from "sonner"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { cn } from "@/lib/utils"
+import { navigate, routes } from "@/lib/navigate"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import {
@@ -39,11 +41,11 @@ import {
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import { useLanguage } from "@/context/LanguageContext"
-import { useTranslation } from "@/i18n"
+import { useOptionalAppShellContext } from "@/context/AppShellContext"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import { extractLabelId } from '@agent-operator/shared/labels'
-import type { PermissionMode } from "@agent-operator/shared/agent/modes"
+import { normalizePermissionMode, type PermissionMode } from "@agent-operator/shared/agent/modes"
 import type { ThinkingLevel } from "@agent-operator/shared/agent/thinking-levels"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@agent-operator/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
@@ -253,6 +255,11 @@ export function ChatDisplay({
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
+  const processingStateRef = React.useRef<{ sessionId: string | null; isProcessing: boolean }>({
+    sessionId: null,
+    isProcessing: false,
+  })
+  const [processingStartTime, setProcessingStartTime] = React.useState<number | undefined>(undefined)
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
@@ -269,6 +276,7 @@ export function ChatDisplay({
 
   // i18n for translations
   const { t } = useLanguage()
+  const appShellContext = useOptionalAppShellContext()
   const overlayHeaderTranslations = useMemo(() => ({
     open: t('fileViewer.openWithDefaultApp'),
     revealInFinder: t('fileViewer.showInFinder'),
@@ -288,6 +296,9 @@ export function ChatDisplay({
     copy: t('turnCard.copy'),
     copied: t('turnCard.copied'),
     viewAsMarkdown: t('turnCard.viewAsMarkdown'),
+    branch: t('turnCard.branch'),
+    branchFromMessage: t('turnCard.branchFromMessage'),
+    branchDescription: t('turnCard.branchDescription'),
     typeFeedbackOr: t('turnCard.typeFeedbackOr'),
     plan: t('turnCard.plan'),
     viewFullscreen: t('turnCard.viewFullscreen'),
@@ -349,6 +360,52 @@ export function ChatDisplay({
       textareaRef.current?.focus()
     }
   }, [session?.id, isFocused, isSearchModeActive, textareaRef])
+
+  // Track processing start time per session to avoid using stale branch history timestamps.
+  // The previous implementation used the "last user message time", which can be days old
+  // in branched sessions and causes absurd elapsed displays (e.g., 3000+ minutes).
+  useEffect(() => {
+    const currentSessionId = session?.id ?? null
+    const isProcessing = !!session?.isProcessing
+    const prev = processingStateRef.current
+    const sessionChanged = prev.sessionId !== currentSessionId
+
+    if (!session || !currentSessionId) {
+      setProcessingStartTime(undefined)
+      processingStateRef.current = { sessionId: currentSessionId, isProcessing }
+      return
+    }
+
+    const computeStartTime = (): number => {
+      const now = Date.now()
+      const pendingUser = [...session.messages]
+        .reverse()
+        .find((m) => m.role === 'user' && (m.isPending || m.isQueued))
+      const candidate = pendingUser?.timestamp ?? session.lastMessageAt
+
+      // If candidate is stale/invalid, start from "now" to avoid giant elapsed timers.
+      if (
+        typeof candidate !== 'number' ||
+        !Number.isFinite(candidate) ||
+        candidate <= 0 ||
+        candidate > now + 2000 ||
+        now - candidate > 5 * 60 * 1000
+      ) {
+        return now
+      }
+      return candidate
+    }
+
+    if (sessionChanged) {
+      setProcessingStartTime(isProcessing ? computeStartTime() : undefined)
+    } else if (!prev.isProcessing && isProcessing) {
+      setProcessingStartTime(computeStartTime())
+    } else if (prev.isProcessing && !isProcessing) {
+      setProcessingStartTime(undefined)
+    }
+
+    processingStateRef.current = { sessionId: currentSessionId, isProcessing }
+  }, [session?.id, session?.isProcessing, session?.lastMessageAt, session?.messages.length, session])
 
   // ============================================================================
   // Overlay State Management
@@ -1065,6 +1122,40 @@ export function ChatDisplay({
                           expandedActivityGroups={expandedActivityGroups}
                           onExpandedActivityGroupsChange={setExpandedActivityGroups}
                           translations={turnCardTranslations}
+                          onBranch={session.supportsBranching === false ? undefined : async (messageId: string) => {
+                            if (!session) return
+                            try {
+                              const createSession = appShellContext?.onCreateSession
+                                ? appShellContext.onCreateSession
+                                : window.electronAPI.createSession
+                              const normalizedPermissionMode = normalizePermissionMode(
+                                session.permissionMode as string | undefined
+                              )
+                              const child = await createSession(session.workspaceId, {
+                                name: session.name ? `${session.name} - ${t('turnCard.branch')}` : undefined,
+                                model: session.model,
+                                llmConnection: session.llmConnection,
+                                permissionMode: normalizedPermissionMode,
+                                workingDirectory: session.workingDirectory,
+                                todoState: session.todoState,
+                                labels: session.labels,
+                                enabledSourceSlugs: session.enabledSourceSlugs,
+                                branchFromSessionId: session.id,
+                                branchFromMessageId: messageId,
+                              })
+                              navigate(routes.view.allChats(child.id))
+                            } catch (error) {
+                              const errorMessage = error instanceof Error
+                                ? error.message
+                                : (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message?: unknown }).message === 'string')
+                                  ? (error as { message: string }).message
+                                  : t('chatDisplay.branchCreateFailedDescription')
+                              console.error('[ChatDisplay] Failed to create branch session:', { messageId, error, errorMessage })
+                              toast.error(t('chatDisplay.branchCreateFailed'), {
+                                description: errorMessage,
+                              })
+                            }
+                          }}
                           onAcceptPlan={() => {
                             window.dispatchEvent(new CustomEvent('cowork:approve-plan', {
                               detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
@@ -1189,16 +1280,12 @@ export function ChatDisplay({
                   </motion.div>
                 </AnimatePresence>
                 {/* Processing Indicator - always visible while processing */}
-                {session.isProcessing && (() => {
-                  // Find the last user message timestamp for accurate elapsed time
-                  const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
-                  return (
-                    <ProcessingIndicator
-                      startTime={lastUserMsg?.timestamp}
-                      statusMessage={session.currentStatus?.message}
-                    />
-                  )
-                })()}
+                {session.isProcessing && (
+                  <ProcessingIndicator
+                    startTime={processingStartTime}
+                    statusMessage={session.currentStatus?.message}
+                  />
+                )}
                 {/* Scroll Anchor: For auto-scroll to bottom */}
                 <div ref={messagesEndRef} />
               </div>

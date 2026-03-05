@@ -848,6 +848,9 @@ export function unwrapPowerShellCommand(command: string): string | null {
   return match[1].replace(/\\"/g, '"');
 }
 
+/** Read cmdlets that read files */
+const READ_CMDLETS = ['get-content', 'gc', 'type'];
+
 /** Write cmdlets that output to files */
 const WRITE_CMDLETS = ['out-file', 'set-content', 'add-content'];
 
@@ -891,6 +894,64 @@ export function extractPowerShellWriteTarget(command: string): string | null {
     debug('[PowerShellValidator] Extracted write target:', targetPath);
   }
   return targetPath;
+}
+
+/**
+ * Extract file path from PowerShell read commands using AST analysis.
+ * Used to detect file reads (Get-Content, gc, type) for prerequisite tracking.
+ *
+ * Handles complex cases like:
+ * - Get-Content -Path "file.txt" -Encoding UTF8
+ * - gc file.txt | Select-String "pattern"
+ * - powershell.exe -Command "Get-Content file.txt"
+ *
+ * @param command - The PowerShell command string
+ * @returns The file path if a read cmdlet is detected, null otherwise
+ */
+export function extractPowerShellReadTarget(command: string): string | null {
+  if (!isPowerShellAvailable()) return null;
+
+  // If wrapped in powershell.exe -Command "...", unwrap and re-parse the inner command.
+  const innerCommand = unwrapPowerShellCommand(command);
+  if (innerCommand) {
+    return extractPowerShellReadTarget(innerCommand);
+  }
+
+  const parseResult = parseCommand(command);
+  if (!parseResult.success || !parseResult.ast) return null;
+
+  // Find the first command in any pipeline (where read cmdlets appear as data source)
+  const firstCmd = findFirstPipelineCommand(parseResult.ast);
+  if (!firstCmd) return null;
+
+  // Check if it's a read cmdlet
+  const cmdName = getCommandName(firstCmd);
+  if (!cmdName || !READ_CMDLETS.includes(cmdName.toLowerCase())) return null;
+
+  // Extract -Path or -LiteralPath parameter value
+  let targetPath = extractParameterValue(firstCmd, ['Path', 'LiteralPath']);
+
+  // Fallback: positional parameter (e.g. Get-Content C:\temp\file.txt)
+  if (!targetPath) {
+    targetPath = extractFirstPositionalArg(firstCmd);
+  }
+
+  return targetPath;
+}
+
+/**
+ * Find the first CommandAst in a pipeline within the AST.
+ * Read cmdlets are typically the data source (first in pipeline).
+ */
+function findFirstPipelineCommand(ast: ASTNode): CommandAst | null {
+  const pipeline = findFirstPipeline(ast);
+  if (!pipeline || !pipeline.PipelineElements?.length) return null;
+
+  const firstElement = pipeline.PipelineElements[0];
+  if (firstElement?.Type === 'CommandAst') {
+    return firstElement as CommandAst;
+  }
+  return null;
 }
 
 /**

@@ -15,15 +15,16 @@
  */
 
 // Auto-update disabled flag (set to true to fully disable updater logic).
-const AUTO_UPDATE_DISABLED = false;
+const AUTO_UPDATE_DISABLED = true;
 
 import { autoUpdater } from 'electron-updater'
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import { mainLog } from './logger'
 import {
   getDismissedUpdateVersion,
   clearDismissedUpdateVersion,
 } from '@agent-operator/shared/config'
+import { RELEASE_DOWNLOADS_URL } from '@agent-operator/shared/branding'
 import type { UpdateInfo } from '../shared/types'
 import type { WindowManager } from './window-manager'
 
@@ -61,6 +62,13 @@ export function setWindowManager(wm: WindowManager): void {
  */
 export function getUpdateInfo(): UpdateInfo {
   return { ...updateInfo }
+}
+
+/**
+ * Open GitHub releases page for manual downloads.
+ */
+export async function openReleaseDownloadsPage(): Promise<void> {
+  await shell.openExternal(RELEASE_DOWNLOADS_URL)
 }
 
 /**
@@ -192,7 +200,15 @@ interface CheckOptions {
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
   if (AUTO_UPDATE_DISABLED) {
-    mainLog.info('[auto-update] Auto-update is disabled')
+    mainLog.info('[auto-update] Auto-update is disabled (manual downloads via GitHub Releases)')
+    updateInfo = {
+      ...updateInfo,
+      available: false,
+      latestVersion: null,
+      downloadState: 'idle',
+      downloadProgress: 0,
+      error: undefined,
+    }
     return updateInfo
   }
 
@@ -228,6 +244,12 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
  * Then relaunches the app automatically.
  */
 export async function installUpdate(): Promise<void> {
+  if (AUTO_UPDATE_DISABLED) {
+    mainLog.info('[auto-update] installUpdate requested while disabled; opening releases page')
+    await openReleaseDownloadsPage()
+    return
+  }
+
   if (updateInfo.downloadState !== 'ready') {
     throw new Error('No update ready to install')
   }
@@ -272,6 +294,11 @@ export interface UpdateOnLaunchResult {
  * - Auto-downloads if update available
  */
 export async function checkForUpdatesOnLaunch(): Promise<UpdateOnLaunchResult> {
+  if (AUTO_UPDATE_DISABLED) {
+    mainLog.info('[auto-update] Launch update check skipped (disabled)')
+    return { action: 'none', reason: 'disabled' }
+  }
+
   mainLog.info('[auto-update] Checking for updates on launch...')
 
   const info = await checkForUpdates({ autoDownload: true })

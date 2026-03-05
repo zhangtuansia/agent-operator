@@ -30,10 +30,9 @@ import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 
 /**
- * Provider identifier for AI backends.
  * Provider identifier for backend selection.
  */
-export type AgentProvider = 'anthropic' | 'openai' | 'copilot';
+export type AgentProvider = 'anthropic' | 'openai' | 'copilot' | 'pi';
 
 
 // ============================================================
@@ -173,6 +172,12 @@ export interface AgentBackend {
    */
   isProcessing(): boolean;
 
+  /**
+   * Ensure branch sessions are backend-ready before first user message.
+   * Backends that don't need preflight can implement this as a no-op.
+   */
+  ensureBranchReady(): Promise<void>;
+
   // ============================================================
   // Model & Thinking Configuration
   // ============================================================
@@ -211,6 +216,9 @@ export interface AgentBackend {
 
   /** Get SDK session ID (for resume, null if no session) */
   getSessionId(): string | null;
+
+  /** Whether this backend supports session branching */
+  readonly supportsBranching: boolean;
 
   // ============================================================
   // Source Management
@@ -285,11 +293,12 @@ export interface AgentBackend {
 export interface BackendConfig {
   /**
    * Provider/SDK to use for this backend.
-   * Determines which agent class is instantiated:
-   * - 'anthropic' → ClaudeAgent (Anthropic SDK)
-   * - 'openai' → CodexAgent (OpenAI via app-server)
-   * - 'copilot' → CopilotAgent (GitHub Copilot via @github/copilot-sdk)
-   */
+ * Determines which agent class is instantiated:
+ * - 'anthropic' → ClaudeAgent (Anthropic SDK)
+ * - 'openai' → CodexAgent (OpenAI via app-server)
+ * - 'copilot' → CopilotAgent (GitHub Copilot via @github/copilot-sdk)
+ * - 'pi' → PiAgent (Pi coding agent via subprocess bridge)
+ */
   provider: AgentProvider;
 
   /**
@@ -385,6 +394,17 @@ export interface BackendConfig {
    * Used by Codex (via config.toml) and Copilot (via mcpServers runtime config).
    */
   bridgeServerPath?: string;
+
+  /**
+   * Path to pi-agent-server executable.
+   * Used by PiAgent to spawn the Pi subprocess bridge.
+   */
+  piServerPath?: string;
+
+  /**
+   * Optional interceptor bundle path (CJS) preloaded by Pi subprocess.
+   */
+  piInterceptorPath?: string;
 
   /** Callback when SDK session ID is captured/updated */
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;
