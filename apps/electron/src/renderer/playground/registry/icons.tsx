@@ -6,10 +6,10 @@ import { SquarePenRounded } from '@/components/icons/SquarePenRounded'
 
 export const iconComponents: ComponentEntry[] = [
   {
-    id: 'cowork-logo',
-    name: 'CoworkLogo',
+    id: 'dazi-logo',
+    name: 'DaziLogo',
     category: 'Icons',
-    description: 'Full Cowork branding logo with text',
+    description: 'Full Dazi branding logo with text',
     component: CoworkLogo,
     props: [
       {
@@ -26,10 +26,10 @@ export const iconComponents: ComponentEntry[] = [
     ],
   },
   {
-    id: 'cowork-symbol',
-    name: 'CoworkSymbol',
+    id: 'dazi-symbol',
+    name: 'DaziSymbol',
     category: 'Icons',
-    description: 'Cowork "E" pixel art symbol icon (brand color: #9570BE)',
+    description: 'Dazi pixel-art symbol icon (brand color: #9570BE)',
     component: CoworkSymbol,
     props: [
       {

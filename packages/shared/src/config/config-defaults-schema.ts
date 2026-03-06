@@ -35,7 +35,7 @@ export interface ConfigDefaults {
  */
 export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
   version: '1.0',
-  description: 'Default configuration values for Cowork',
+  description: 'Default configuration values for Dazi',
   defaults: {
     authType: 'api_key',
     notificationsEnabled: true,

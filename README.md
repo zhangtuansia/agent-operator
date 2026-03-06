@@ -1,12 +1,12 @@
-# Cowork
+# 搭子（Dazi）
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![Website](https://img.shields.io/badge/Website-aicowork.chat-brightgreen)](https://www.aicowork.chat)
 
-Cowork is a powerful desktop application for working effectively with AI agents. It enables intuitive multitasking, seamless connection to any API or Service, session sharing, and a more document-centric workflow - in a beautiful and fluid UI.
+Dazi is a powerful desktop application for working effectively with AI agents. It enables intuitive multitasking, seamless connection to any API or Service, session sharing, and a more document-centric workflow - in a beautiful and fluid UI.
 
-Built on top of Claude Agent SDK, Cowork brings the power of Claude to a native desktop experience with advanced features like multi-session management, permission controls, and extensible source connections.
+Built on top of Claude Agent SDK, Dazi brings the power of Claude to a native desktop experience with advanced features like multi-session management, permission controls, and extensible source connections.
 
 **Key Highlights:**
 - 🖥️ Native desktop app with beautiful UI
@@ -16,9 +16,9 @@ Built on top of Claude Agent SDK, Cowork brings the power of Claude to a native 
 - 🎨 Customizable themes and workspaces
 - 📦 Skills system for specialized agent instructions
 
-Cowork is open source under the Apache 2.0 license. Visit [aicowork.chat](https://www.aicowork.chat) for more information.
+Dazi is open source under the Apache 2.0 license. Visit [aicowork.chat](https://www.aicowork.chat) for more information.
 
-<img width="1372" height="870" alt="Cowork Screenshot" src="assets/screenshot.webp" />
+<img width="1372" height="870" alt="Dazi Screenshot" src="assets/screenshot.webp" />
 
 ## Installation
 
@@ -135,7 +135,7 @@ bun run electron:start
 # Type checking
 bun run typecheck:all
 
-# Debug logging (writes to ~/Library/Logs/Cowork/)
+# Debug logging (writes to ~/Library/Logs/Dazi/)
 # Logs are automatically enabled in development
 ```
 
@@ -212,7 +212,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Cowork" is a trademark. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Dazi" and "搭子" are trademarks. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 

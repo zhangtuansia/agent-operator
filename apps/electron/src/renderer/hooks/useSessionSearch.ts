@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
-import { isToday, isYesterday, format, startOfDay } from "date-fns"
+import { startOfDay } from "date-fns"
 
 import { searchLog } from "@/lib/logger"
 import { parseLabelEntry, getDescendantIds } from "@agent-operator/shared/labels"
 import type { LabelConfig } from "@agent-operator/shared/labels"
 import { fuzzyScore } from "@agent-operator/shared/search"
+import type { Language } from "@/i18n"
 import { getSessionTitle } from "@/utils/session"
+import { formatSessionDateHeader } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@agent-operator/shared/views"
 import type { SessionFilter } from "@/contexts/NavigationContext"
@@ -49,6 +51,8 @@ export interface UseSessionSearchOptions {
   labelConfigs?: LabelConfig[]
   /** Translation function for date headers (Today/Yesterday) */
   t?: (key: string) => string
+  /** Current UI language for date formatting */
+  language: Language
 }
 
 export interface UseSessionSearchResult {
@@ -82,13 +86,7 @@ export interface UseSessionSearchResult {
 // Pure helpers (moved from SessionList)
 // ---------------------------------------------------------------------------
 
-function formatDateHeader(date: Date, t?: (key: string) => string): string {
-  if (isToday(date)) return t?.('sessionList.today') || 'Today'
-  if (isYesterday(date)) return t?.('sessionList.yesterday') || 'Yesterday'
-  return format(date, "MMM d")
-}
-
-function groupSessionsByDate(sessions: SessionMeta[], t?: (key: string) => string): DateGroup[] {
+function groupSessionsByDate(sessions: SessionMeta[], language: Language, t?: (key: string) => string): DateGroup[] {
   const groups = new Map<string, { date: Date; sessions: SessionMeta[] }>()
 
   for (const session of sessions) {
@@ -106,7 +104,7 @@ function groupSessionsByDate(sessions: SessionMeta[], t?: (key: string) => strin
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .map(group => ({
       ...group,
-      label: formatDateHeader(group.date, t),
+      label: formatSessionDateHeader(group.date, language, t),
     }))
 }
 
@@ -229,6 +227,7 @@ export function useSessionSearch({
   labelFilterMap,
   labelConfigs,
   t,
+  language,
 }: UseSessionSearchOptions): UseSessionSearchResult {
 
   const [contentSearchResults, setContentSearchResults] = useState<Map<string, ContentSearchResult>>(new Map())
@@ -459,7 +458,7 @@ export function useSessionSearch({
 
   // --- Derived render data ---
 
-  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems, t), [paginatedItems, t])
+  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems, language, t), [paginatedItems, language, t])
 
   const flatItems = useMemo(() => {
     if (isSearchMode) {

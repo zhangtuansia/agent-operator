@@ -432,7 +432,7 @@ The MCP URL \`https://api.githubcopilot.com/mcp/\` is **CORRECT**. Do NOT use We
 
 #### Authentication - OAuth Will Fail (Expected)
 
-GitHub's MCP server requires OAuth with a **pre-registered client app**. Cowork is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
+GitHub's MCP server requires OAuth with a **pre-registered client app**. Dazi is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
 
 **The ONLY solution is a Personal Access Token (PAT):**
 

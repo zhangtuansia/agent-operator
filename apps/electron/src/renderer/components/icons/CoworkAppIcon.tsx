@@ -12,7 +12,7 @@ export function CoworkAppIcon({ className, size = 64 }: CoworkAppIconProps) {
   return (
     <img
       src={coworkLogo}
-      alt="Cowork"
+      alt="Dazi"
       width={size}
       height={size}
       className={className}

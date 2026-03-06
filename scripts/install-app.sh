@@ -118,7 +118,7 @@ esac
 # Set platform-specific variables
 if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
-    APP_NAME="Cowork.app"
+    APP_NAME="Dazi.app"
     INSTALL_DIR="/Applications"
     ext="dmg"
 else
@@ -127,7 +127,7 @@ else
         error "Linux currently only supports x64 architecture. Your architecture: $arch"
     fi
     platform="linux-${arch}"
-    APP_NAME="Cowork-x64.AppImage"
+    APP_NAME="Dazi-x64.AppImage"
     INSTALL_DIR="$HOME/.local/bin"
     ext="AppImage"
 fi
@@ -164,7 +164,7 @@ if [ "$HAS_JQ" = true ]; then
 else
     checksum=$(get_checksum_from_manifest "$manifest_json" "$platform")
     # Fallback filename if not using jq
-    filename="Cowork-${arch}.${ext}"
+    filename="Dazi-${arch}.${ext}"
 fi
 
 # Validate checksum format (SHA256 = 64 hex characters)
@@ -174,7 +174,7 @@ fi
 
 # Use default filename if not in manifest
 if [ -z "$filename" ]; then
-    filename="Cowork-${arch}.${ext}"
+    filename="Dazi-${arch}.${ext}"
 fi
 
 info "Expected checksum: ${checksum:0:16}..."
@@ -213,22 +213,22 @@ if [ "$OS_TYPE" = "darwin" ]; then
 
     # Quit the app if it's running (use bundle ID for reliability)
     APP_BUNDLE_ID="com.cowork.app"
-    if pgrep -x "Cowork" >/dev/null 2>&1; then
-        info "Quitting Cowork..."
+    if pgrep -x "Dazi" >/dev/null 2>&1; then
+        info "Quitting Dazi..."
         osascript -e "tell application id \"$APP_BUNDLE_ID\" to quit" 2>/dev/null || true
         # Wait for app to quit (max 5 seconds) - POSIX compatible loop
         i=0
         while [ $i -lt 10 ]; do
-            if ! pgrep -x "Cowork" >/dev/null 2>&1; then
+            if ! pgrep -x "Dazi" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.5
             i=$((i + 1))
         done
         # Force kill if still running
-        if pgrep -x "Cowork" >/dev/null 2>&1; then
+        if pgrep -x "Dazi" >/dev/null 2>&1; then
             warn "App didn't quit gracefully. Force quitting (unsaved data may be lost)..."
-            pkill -9 -x "Cowork" 2>/dev/null || true
+            pkill -9 -x "Dazi" 2>/dev/null || true
             # Wait longer for macOS to release file handles
             sleep 3
         fi
@@ -275,10 +275,10 @@ if [ "$OS_TYPE" = "darwin" ]; then
     echo ""
     success "Installation complete!"
     echo ""
-    printf "%b\n" "  Cowork has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
+    printf "%b\n" "  Dazi has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
     echo ""
     printf "%b\n" "  You can launch it from ${BOLD}Applications${NC} or by running:"
-    printf "%b\n" "    ${BOLD}open -a 'Cowork'${NC}"
+    printf "%b\n" "    ${BOLD}open -a 'Dazi'${NC}"
     echo ""
 
 else
@@ -289,12 +289,12 @@ else
     APP_DIR="$HOME/.cowork/app"
     WRAPPER_PATH="$INSTALL_DIR/cowork"
     LEGACY_WRAPPER_PATH="$INSTALL_DIR/agent-operators"
-    APPIMAGE_INSTALL_PATH="$APP_DIR/Cowork-x64.AppImage"
+    APPIMAGE_INSTALL_PATH="$APP_DIR/Dazi-x64.AppImage"
 
     # Kill the app if it's running
-    if pgrep -f "Cowork.*AppImage" >/dev/null 2>&1; then
-        info "Stopping Cowork..."
-        pkill -f "Cowork.*AppImage" 2>/dev/null || true
+    if pgrep -f "Dazi.*AppImage" >/dev/null 2>&1; then
+        info "Stopping Dazi..."
+        pkill -f "Dazi.*AppImage" 2>/dev/null || true
         sleep 2
     fi
 
@@ -314,15 +314,15 @@ else
     info "Creating launcher at $WRAPPER_PATH..."
     cat > "$WRAPPER_PATH" << 'WRAPPER_EOF'
 #!/bin/bash
-# Cowork launcher - handles Linux-specific AppImage issues
+# Dazi launcher - handles Linux-specific AppImage issues
 
-APPIMAGE_PATH="$HOME/.cowork/app/Cowork-x64.AppImage"
+APPIMAGE_PATH="$HOME/.cowork/app/Dazi-x64.AppImage"
 ELECTRON_CACHE="$HOME/.config/@cowork"
 ELECTRON_CACHE_ALT="$HOME/.cache/@cowork"
 
 # Verify AppImage exists
 if [ ! -f "$APPIMAGE_PATH" ]; then
-    echo "Error: Cowork not found at $APPIMAGE_PATH"
+    echo "Error: Dazi not found at $APPIMAGE_PATH"
     echo "Reinstall: curl -fsSL https://download.aicowork.chat/install-app.sh | bash"
     exit 1
 fi
@@ -333,9 +333,9 @@ if [ -z "$DISPLAY" ]; then
 fi
 
 # Clear stale cache referencing AppImage mount paths
-# AppImage creates a new /tmp/.mount_Cowork-XXXX each launch, so any cached path is stale
+# AppImage creates a new /tmp/.mount_Dazi-XXXX each launch, so any cached path is stale
 for cache_dir in "$ELECTRON_CACHE" "$ELECTRON_CACHE_ALT"; do
-    if [ -d "$cache_dir" ] && grep -rq '/tmp/\.mount_Cowork' "$cache_dir" 2>/dev/null; then
+    if [ -d "$cache_dir" ] && grep -rq '/tmp/\.mount_Dazi' "$cache_dir" 2>/dev/null; then
         rm -rf "$cache_dir"
     fi
 done

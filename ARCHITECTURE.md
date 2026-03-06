@@ -1,4 +1,4 @@
-# Cowork 项目架构文档
+# 搭子（Dazi）项目架构文档
 
 ## 目录
 
@@ -17,7 +17,7 @@
 
 ## 一、项目概述
 
-**Cowork** 是一个开源的 Electron 桌面应用，旨在成为 Claude Code 的替代品，提供更美观的 UI 和更好的 Agent 工作流程体验。
+**搭子（Dazi）** 是一个开源的 Electron 桌面应用，旨在成为 Claude Code 的替代品，提供更美观的 UI 和更好的 Agent 工作流程体验。
 
 | 属性 | 值 |
 |------|------|
@@ -29,11 +29,11 @@
 
 ### 核心理念
 
-Cowork **不是**调用 Claude Code CLI，而是直接使用 **Claude Agent SDK**（`@anthropic-ai/claude-agent-sdk`）来实现类似 Claude Code 的功能，同时提供更好的用户界面和更灵活的权限控制。
+**搭子（Dazi）**不是调用 Claude Code CLI，而是直接使用 **Claude Agent SDK**（`@anthropic-ai/claude-agent-sdk`）来实现类似 Claude Code 的功能，同时提供更好的用户界面和更灵活的权限控制。
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Cowork                         │
+│                 搭子（Dazi）                      │
 │  ┌─────────────┐    ┌───────────────────────────────┐  │
 │  │  Electron   │    │  @anthropic-ai/claude-agent-sdk │  │
 │  │  UI (React) │ ←→ │   (与 Claude Code 相同的 SDK)   │  │
@@ -271,7 +271,7 @@ export class OperatorAgent {
 
 ### 5.2 与 Claude Code 的关键差异
 
-| 特性 | Claude Code CLI | Cowork |
+| 特性 | Claude Code CLI | 搭子（Dazi） |
 |------|-----------------|--------------|
 | 界面 | 终端 CLI | Electron GUI |
 | 权限系统 | SDK 内置 | 自定义三级权限 |

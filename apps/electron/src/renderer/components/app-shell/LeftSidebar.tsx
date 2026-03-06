@@ -25,6 +25,8 @@ export interface SidebarContextMenuConfig {
   onConfigureStatuses?: () => void
   /** Handler for "Add Source" action - for sources type */
   onAddSource?: () => void
+  /** Handler for "Quick Add Google Workspace (gws)" action - for sources type */
+  onQuickAddGoogleWorkspaceSource?: () => void
   /** Handler for "Add Skill" action - for skills type */
   onAddSkill?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
@@ -95,6 +97,22 @@ function useSidebarDrop(link: LinkItem) {
   const [isDragOver, setIsDragOver] = useState(false)
   const acceptsDrop = link.acceptsDrop
   const onSessionDrop = link.onSessionDrop
+
+  React.useEffect(() => {
+    if (!acceptsDrop) return
+
+    const clearDragState = () => setIsDragOver(false)
+
+    window.addEventListener('drop', clearDragState, true)
+    window.addEventListener('dragend', clearDragState, true)
+    window.addEventListener('session-drag-end', clearDragState as EventListener)
+
+    return () => {
+      window.removeEventListener('drop', clearDragState, true)
+      window.removeEventListener('dragend', clearDragState, true)
+      window.removeEventListener('session-drag-end', clearDragState as EventListener)
+    }
+  }, [acceptsDrop])
 
   const handleDragOver = React.useCallback((e: React.DragEvent) => {
     if (!acceptsDrop || !onSessionDrop) return
@@ -302,12 +320,12 @@ function SidebarDropItem({
         "group flex w-full items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "px-2",
-        "transition-[transform,box-shadow,background-color] duration-150 ease-out",
+        "transition-[box-shadow,background-color,border-color] duration-150 ease-out",
         link.variant === "default"
           ? "bg-foreground/[0.07]"
           : "hover:bg-foreground/5",
-        // Drag-over highlight with scale bump
-        isDragOver && "ring-2 ring-accent ring-inset bg-accent/10 scale-[1.04] shadow-md"
+        // Drag-over highlight: avoid scaling in dense lists or the target row bleeds into neighbors
+        isDragOver && "bg-accent/10 ring-1 ring-accent/70 ring-inset"
       )}
     >
       {/* Icon container with hover toggle for expandable items */}
@@ -393,6 +411,7 @@ function SidebarDropItem({
             labelId={link.contextMenu.labelId}
             onConfigureStatuses={link.contextMenu.onConfigureStatuses}
             onAddSource={link.contextMenu.onAddSource}
+            onQuickAddGoogleWorkspace={link.contextMenu.onQuickAddGoogleWorkspaceSource}
             onAddSkill={link.contextMenu.onAddSkill}
             onConfigureLabels={link.contextMenu.onConfigureLabels}
             onAddLabel={link.contextMenu.onAddLabel}

@@ -1,11 +1,11 @@
-# Cowork Windows Installer
+# Dazi Windows Installer
 # Usage: irm https://download.aicowork.chat/install-app.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
 $VERSIONS_URL = "https://download.aicowork.chat/electron"
 $DOWNLOAD_DIR = "$env:TEMP\cowork-install"
-$APP_NAME = "Cowork"
+$APP_NAME = "Dazi"
 
 # Colors for output
 function Write-Info { Write-Host "> $args" -ForegroundColor Blue }
@@ -65,7 +65,7 @@ if (-not $checksum -or $checksum.Length -ne 64) {
 
 # Use default filename if not in manifest
 if (-not $filename) {
-    $filename = "Cowork-$arch.exe"
+    $filename = "Dazi-$arch.exe"
 }
 
 # Use default URL if not in manifest
@@ -148,9 +148,9 @@ if ($actualHash -ne $checksum) {
 Write-Success "Checksum verified!"
 
 # Close the app if it's running
-$process = Get-Process -Name "Cowork" -ErrorAction SilentlyContinue
+$process = Get-Process -Name "Dazi" -ErrorAction SilentlyContinue
 if ($process) {
-    Write-Info "Closing Cowork..."
+    Write-Info "Closing Dazi..."
     $process | Stop-Process -Force
     Start-Sleep -Seconds 2
 }
@@ -185,9 +185,9 @@ Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 # Add command line shortcut
 Write-Info "Adding 'cowork' command to PATH..."
 
-$binDir = "$env:LOCALAPPDATA\Cowork\bin"
+$binDir = "$env:LOCALAPPDATA\Dazi\bin"
 $cmdFile = "$binDir\cowork.cmd"
-$exePath = "$env:LOCALAPPDATA\Programs\Cowork\Cowork.exe"
+$exePath = "$env:LOCALAPPDATA\Programs\Dazi\Dazi.exe"
 
 # Create bin directory
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -211,7 +211,7 @@ Write-Host "--------------------------------------------------------------------
 Write-Host ""
 Write-Success "Installation complete!"
 Write-Host ""
-Write-Host "  Cowork has been installed."
+Write-Host "  Dazi has been installed."
 Write-Host ""
 Write-Host "  Launch from:"
 Write-Host "    - Start Menu or desktop shortcut"

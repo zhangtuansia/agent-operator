@@ -168,7 +168,7 @@ export function initializeDocs(): void {
 
 const SOURCES_MD = `# Sources Configuration Guide
 
-This guide explains how to configure sources (MCP servers, APIs, local filesystems) in Cowork.
+This guide explains how to configure sources (MCP servers, APIs, local filesystems) in Dazi.
 
 ## Source Setup Process
 
@@ -827,7 +827,7 @@ Use \`source_test\` with the source slug:
 
 const SKILLS_MD = `# Skills Configuration Guide
 
-This guide explains how to create and configure skills in Cowork.
+This guide explains how to create and configure skills in Dazi.
 
 ## What Are Skills?
 
@@ -841,13 +841,13 @@ Skills are specialized instructions that extend Claude's capabilities for specif
 
 ## Same Format as Claude Code SDK
 
-Cowork uses **the identical SKILL.md format** as the Claude Code SDK. This means:
+Dazi uses **the identical SKILL.md format** as the Claude Code SDK. This means:
 
-1. **Format compatibility**: Any skill written for Claude Code works in Cowork
+1. **Format compatibility**: Any skill written for Claude Code works in Dazi
 2. **Same frontmatter fields**: \`name\`, \`description\`, \`globs\`, \`alwaysAllow\`
 3. **Same content structure**: Markdown body with instructions for Claude
 
-**What Cowork adds:**
+**What Dazi adds:**
 - **Visual icons**: Display custom icons in the UI for each skill
 - **Workspace organization**: Skills are scoped to workspaces
 - **UI management**: Browse, edit, and validate skills through the interface
@@ -1312,11 +1312,11 @@ Rules are additive - they can only allow more operations, not restrict further.
 
 const THEMES_MD = `# Theme Configuration Guide
 
-This guide explains how to customize the visual theme of Cowork.
+This guide explains how to customize the visual theme of Dazi.
 
 ## Overview
 
-Cowork uses a 6-color theme system with cascading configuration:
+Dazi uses a 6-color theme system with cascading configuration:
 - **App-level theme**: \`~/.cowork/theme.json\` - Global defaults
 - **Workspace-level theme**: \`~/.cowork/workspaces/{id}/theme.json\` - Per-workspace overrides
 

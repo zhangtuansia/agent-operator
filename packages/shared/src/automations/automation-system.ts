@@ -19,6 +19,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
 import { AUTOMATIONS_HISTORY_FILE } from './constants.ts';
+import { normalizePermissionMode } from '../agent/mode-types.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, type AutomationsConfigProvider } from './handlers/index.ts';
@@ -184,12 +185,19 @@ export class AutomationSystem implements AutomationsConfigProvider {
         if (!Array.isArray(matchers)) continue;
         for (const m of matchers as Record<string, unknown>[]) {
           if (!m.id) { m.id = generateShortId(); changed = true; }
+          if (typeof m.permissionMode === 'string') {
+            const normalized = normalizePermissionMode(m.permissionMode);
+            if (normalized && normalized !== m.permissionMode) {
+              m.permissionMode = normalized;
+              changed = true;
+            }
+          }
         }
       }
 
       if (changed) {
         writeFileSync(configPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
-        log.debug('[AutomationSystem] Backfilled missing matcher IDs');
+        log.debug('[AutomationSystem] Backfilled matcher metadata and normalized legacy fields');
       }
     } catch {
       // Non-critical — IDs will be backfilled on next mutation via IPC

@@ -1,7 +1,9 @@
 import * as React from "react"
+import { isToday, isYesterday } from "date-fns"
 import type { Session } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
 import type { SessionStatusId } from "../config/session-status-config"
+import type { Language } from "../i18n"
 
 /** Common session fields used by getSessionTitle */
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
@@ -136,6 +138,21 @@ export function hasUnreadMessages(session: Session): boolean {
   const lastFinalId = getLastFinalAssistantMessageId(session)
   if (!lastFinalId) return false  // No final assistant message yet
   return lastFinalId !== session.lastReadMessageId
+}
+
+export function formatSessionDateHeader(
+  date: Date,
+  language: Language,
+  t?: (key: string) => string
+): string {
+  if (isToday(date)) return t?.('sessionList.today') || (language === 'zh' ? '今天' : 'Today')
+  if (isYesterday(date)) return t?.('sessionList.yesterday') || (language === 'zh' ? '昨天' : 'Yesterday')
+
+  const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
 }
 
 /**

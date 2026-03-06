@@ -191,6 +191,7 @@ export const CustomModelSchema = z.object({
 export const CreateSourceConfigSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   provider: z.string().max(50).optional(),
+  icon: z.string().max(2000).optional(),
   type: z.enum(['mcp', 'api', 'local']).optional(),
   enabled: z.boolean().optional(),
   mcp: z.object({

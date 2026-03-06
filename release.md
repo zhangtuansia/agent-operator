@@ -1,6 +1,6 @@
 # Release - 打包并上传到 R2
 
-打包 Electron 应用并上传到 Cloudflare R2 (cowork bucket)。
+打包搭子（Dazi）Electron 应用并上传到 Cloudflare R2 (cowork bucket)。
 
 ## 流程
 
@@ -23,10 +23,10 @@ cd apps/electron && ./scripts/build-all.sh all
 ```
 
 这会打包：
-- **macOS arm64**: `Cowork-arm64.dmg` + `Cowork-arm64.zip`
-- **macOS x64**: `Cowork-x64.dmg` + `Cowork-x64.zip`
-- **Windows x64**: `Cowork-x64.exe`
-- **Linux x64**: `Cowork-x86_64.AppImage`
+- **macOS arm64**: `Dazi-arm64.dmg` + `Dazi-arm64.zip`
+- **macOS x64**: `Dazi-x64.dmg` + `Dazi-x64.zip`
+- **Windows x64**: `Dazi-x64.exe`
+- **Linux x64**: `Dazi-x86_64.AppImage`
 
 同时生成 electron-updater YAML 清单：
 - `latest-mac.yml` — macOS 自动更新清单
@@ -55,10 +55,10 @@ bun run scripts/upload.ts --electron --latest
 cowork/
 ├── downloads/
 │   └── {version}/
-│       ├── Cowork-arm64.dmg
-│       ├── Cowork-x64.dmg
-│       ├── Cowork-x64.exe
-│       └── Cowork-x86_64.AppImage
+│       ├── Dazi-arm64.dmg
+│       ├── Dazi-x64.dmg
+│       ├── Dazi-x64.exe
+│       └── Dazi-x86_64.AppImage
 └── electron/
     ├── {version}/
     │   └── manifest.json
@@ -66,10 +66,10 @@ cowork/
         ├── latest-mac.yml        ← electron-updater macOS 清单
         ├── latest.yml            ← electron-updater Windows 清单
         ├── latest-linux.yml      ← electron-updater Linux 清单
-        ├── Cowork-arm64.zip      ← macOS arm64 自动更新包
-        ├── Cowork-x64.zip        ← macOS x64 自动更新包
-        ├── Cowork-x64.exe        ← Windows 自动更新包
-        └── Cowork-x86_64.AppImage ← Linux 自动更新包
+        ├── Dazi-arm64.zip      ← macOS arm64 自动更新包
+        ├── Dazi-x64.zip        ← macOS x64 自动更新包
+        ├── Dazi-x64.exe        ← Windows 自动更新包
+        └── Dazi-x86_64.AppImage ← Linux 自动更新包
 ```
 
 `electron/latest` (无斜杠) 是版本指针 JSON：`{"version": "x.x.x"}`
@@ -142,7 +142,7 @@ bun run scripts/upload.ts --electron --latest
 
 `--publish always` 是关键！没有它，electron-builder 不会生成：
 - YAML 清单（`latest-mac.yml` 等）
-- macOS ZIP 文件（`Cowork-arm64.zip` 等）
+- macOS ZIP 文件（`Dazi-arm64.zip` 等）
 
 如果 `upload.ts` 输出 "WARNING: Missing YAML manifests"，说明打包时缺少了 `--publish always`。
 

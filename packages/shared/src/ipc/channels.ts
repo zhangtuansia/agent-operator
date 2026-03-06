@@ -219,6 +219,7 @@ export const IPC_CHANNELS = {
 
   // Source permissions config
   SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
+  SOURCES_UPDATE: 'sources:update',
   // Workspace permissions config (for Explore mode)
   WORKSPACE_GET_PERMISSIONS: 'workspace:getPermissions',
   // Default permissions from ~/.cowork/permissions/default.json
@@ -227,6 +228,8 @@ export const IPC_CHANNELS = {
   DEFAULT_PERMISSIONS_CHANGED: 'permissions:defaultsChanged',
   // MCP tools listing
   SOURCES_GET_MCP_TOOLS: 'sources:getMcpTools',
+  // Ensure Google Workspace CLI (gws) is installed and return executable path
+  SOURCES_ENSURE_GWS_INSTALLED: 'sources:ensureGwsInstalled',
 
   // Skills (workspace-scoped)
   SKILLS_GET: 'skills:get',

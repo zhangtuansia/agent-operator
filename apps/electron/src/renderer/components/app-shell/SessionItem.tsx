@@ -92,6 +92,7 @@ export function SessionItem({
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false)
+    window.dispatchEvent(new CustomEvent('session-drag-end'))
   }, [])
 
   const handleClick = (e: React.MouseEvent) => {

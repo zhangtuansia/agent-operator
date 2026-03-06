@@ -81,6 +81,20 @@ describe('validation', () => {
       const result = validateAutomationsConfig(config);
       expect(result.valid).toBe(true);
     });
+
+    it('should normalize legacy permission mode aliases', () => {
+      const config = {
+        automations: {
+          SchedulerTick: [{
+            permissionMode: 'auto',
+            actions: [{ type: 'prompt', prompt: 'Run automatically' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+      expect(result.config?.automations.SchedulerTick?.[0]?.permissionMode).toBe('allow-all');
+    });
   });
 
   describe('validateAutomationsContent', () => {
@@ -212,6 +226,20 @@ describe('validation', () => {
       });
       const result = validateAutomationsContent(json);
       expect(result.valid).toBe(true); // Warning, not error
+      expect(result.warnings.some(w => w.message.includes('allow-all'))).toBe(true);
+    });
+
+    it('should accept legacy auto permission mode and warn on normalized allow-all', () => {
+      const json = JSON.stringify({
+        automations: {
+          LabelAdd: [{
+            permissionMode: 'auto',
+            actions: [{ type: 'prompt', prompt: 'echo legacy' }],
+          }],
+        },
+      });
+      const result = validateAutomationsContent(json);
+      expect(result.valid).toBe(true);
       expect(result.warnings.some(w => w.message.includes('allow-all'))).toBe(true);
     });
 

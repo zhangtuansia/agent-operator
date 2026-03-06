@@ -37,6 +37,7 @@ export interface SourcesListPanelProps {
   workspaceRootPath?: string
   onDeleteSource: (sourceSlug: string) => void
   onSourceClick: (source: LoadedSource) => void
+  onQuickAddGoogleWorkspaceSource?: () => void
   selectedSourceSlug?: string | null
   localMcpEnabled?: boolean
   className?: string
@@ -48,6 +49,7 @@ export function SourcesListPanel({
   workspaceRootPath,
   onDeleteSource,
   onSourceClick,
+  onQuickAddGoogleWorkspaceSource,
   selectedSourceSlug,
   localMcpEnabled = true,
   className,
@@ -83,20 +85,31 @@ export function SourcesListPanel({
           title={emptyMessage}
           description={t('sources.emptyDescription')}
         >
-          {workspaceRootPath && (
-            <EditPopover
-              align="center"
-              trigger={
-                <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  {t('sources.addSource')}
-                </button>
-              }
-              {...getEditConfig(
-                sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
-                workspaceRootPath
-              )}
-            />
-          )}
+          <div className="flex flex-col items-center gap-2">
+            {workspaceRootPath && (
+              <EditPopover
+                align="center"
+                trigger={
+                  <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                    {t('sources.addSource')}
+                  </button>
+                }
+                {...getEditConfig(
+                  sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                  workspaceRootPath
+                )}
+              />
+            )}
+            {onQuickAddGoogleWorkspaceSource && (
+              <button
+                type="button"
+                onClick={onQuickAddGoogleWorkspaceSource}
+                className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-accent/10 text-accent hover:bg-accent/15 transition-colors"
+              >
+                {t('sources.quickAddGoogleWorkspace')}
+              </button>
+            )}
+          </div>
         </EntityListEmptyScreen>
       }
       mapItem={(source) => {

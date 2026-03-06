@@ -2,13 +2,13 @@
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability in Cowork, please report it responsibly.
+We take security seriously. If you discover a security vulnerability in Dazi, please report it responsibly.
 
 ### How to Report
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to: **security@craft.do**
+Instead, please send an email to: **security@aicowork.chat**
 
 Include the following information:
 - Description of the vulnerability
@@ -25,9 +25,9 @@ Include the following information:
 ### Scope
 
 This policy applies to:
-- The Cowork desktop application
+- The Dazi desktop application
 - The `@agent-operator/*` npm packages
-- Official Cowork repositories
+- Official Dazi repositories
 
 ### Out of Scope
 
@@ -46,7 +46,7 @@ We only provide security updates for the latest version. Please keep your instal
 
 ## Security Best Practices
 
-When using Cowork:
+When using Dazi:
 
 1. **Keep credentials secure**: Never commit `.env` files or credentials
 2. **Use environment variables**: Store secrets in environment variables

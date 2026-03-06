@@ -111,13 +111,14 @@ describe('createBackend / createAgent', () => {
 });
 
 describe('getAvailableProviders', () => {
-  it('should return anthropic, openai, and copilot', () => {
+  it('should return anthropic, openai, copilot, and pi', () => {
     const providers = getAvailableProviders();
 
     expect(providers).toContain('anthropic');
     expect(providers).toContain('openai');
     expect(providers).toContain('copilot');
-    expect(providers).toHaveLength(3);
+    expect(providers).toContain('pi');
+    expect(providers).toHaveLength(4);
   });
 });
 

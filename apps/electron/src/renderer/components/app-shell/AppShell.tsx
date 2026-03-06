@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
   Bot,
-  CheckCircle2,
   Settings,
   ChevronRight,
   ChevronDown,
@@ -80,7 +79,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useTranslation } from "@/i18n"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, FolderSourceConfig } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -95,6 +94,35 @@ function getTranslatedStatusLabel(stateId: string, label: string, t: (key: strin
   return (BUILT_IN_STATUS_IDS as readonly string[]).includes(stateId)
     ? t(`statusLabels.${stateId}`)
     : label
+}
+
+function shallowStringArrayEqual(left?: string[], right?: string[]): boolean {
+  const leftValue = left ?? []
+  const rightValue = right ?? []
+  if (leftValue.length !== rightValue.length) return false
+  return leftValue.every((value, index) => value === rightValue[index])
+}
+
+function shallowRecordEqual(left?: Record<string, string>, right?: Record<string, string>): boolean {
+  const leftEntries = Object.entries(left ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  const rightEntries = Object.entries(right ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  if (leftEntries.length !== rightEntries.length) return false
+  return leftEntries.every(([key, value], index) => {
+    const [otherKey, otherValue] = rightEntries[index] ?? []
+    return key === otherKey && value === otherValue
+  })
+}
+
+function hasGoogleWorkspaceServiceArgs(args?: string[]): boolean {
+  if (!args || args.length === 0) return false
+
+  return args.some((arg, index) => {
+    if (arg === '-s' || arg === '--services') {
+      return typeof args[index + 1] === 'string' && args[index + 1]!.trim().length > 0
+    }
+
+    return arg.startsWith('--services=') || arg.startsWith('-s=')
+  })
 }
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -729,9 +757,14 @@ function AppShellContent({
       : metas
   }, [sessionMetaMap, activeWorkspaceId])
 
+  const activeSessionMetas = useMemo(
+    () => workspaceSessionMetas.filter(s => !s.isArchived),
+    [workspaceSessionMetas]
+  )
+
   // Count sessions by todo state (scoped to workspace)
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
-  const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
+  const flaggedCount = activeSessionMetas.filter(s => s.isFlagged).length
 
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
@@ -1007,6 +1040,10 @@ function AppShellContent({
     navigate(routes.view.flagged())
   }, [navigate])
 
+  const handleArchivedClick = useCallback(() => {
+    navigate(routes.view.archived())
+  }, [navigate])
+
   const handleScheduledClick = useCallback(() => {
     navigate(routes.view.scheduled())
   }, [navigate])
@@ -1178,6 +1215,133 @@ function AppShellContent({
     }
   }, [activeWorkspace, t])
 
+  // Quick add template: Google Workspace via gws MCP CLI
+  const handleQuickAddGoogleWorkspaceSource = useCallback(async () => {
+    if (!activeWorkspaceId) return
+
+    const installingToastId = toast.loading(t('toasts.installingGoogleWorkspaceCli'))
+
+    let gwsCommand: string
+    let gwsArgsPrefix: string[] = []
+    let gwsEnv: Record<string, string> | undefined
+    try {
+      const ensureResult = await window.electronAPI.ensureGwsInstalled()
+      if (!ensureResult.success || !ensureResult.command) {
+        toast.error(t('toasts.failedToInstallGoogleWorkspaceCli'), {
+          id: installingToastId,
+          description: ensureResult.error || t('toasts.googleWorkspaceInstallHint'),
+        })
+        return
+      }
+      gwsCommand = ensureResult.command
+      gwsArgsPrefix = ensureResult.argsPrefix ?? []
+      gwsEnv = ensureResult.env
+
+      if (ensureResult.installed) {
+        toast.success(t('toasts.googleWorkspaceCliInstalled'), {
+          id: installingToastId,
+        })
+      } else {
+        toast.dismiss(installingToastId)
+      }
+    } catch (error) {
+      console.error('[Chat] Failed to auto-install Google Workspace CLI:', error)
+      toast.error(t('toasts.failedToInstallGoogleWorkspaceCli'), {
+        id: installingToastId,
+        description: t('toasts.googleWorkspaceInstallHint'),
+      })
+      return
+    }
+
+    const desiredArgs = [...gwsArgsPrefix, 'mcp', '-s', 'all']
+
+    const validateGoogleWorkspaceSource = async (sourceSlug: string) => {
+      const toolsResult = await window.electronAPI.getMcpTools(activeWorkspaceId, sourceSlug)
+      if (!toolsResult.success) {
+        const lowerError = (toolsResult.error || '').toLowerCase()
+        const isLikelyMissingGws = lowerError.includes('enoent')
+          || lowerError.includes('not found')
+          || lowerError.includes('spawn')
+        toast.warning(t('toasts.googleWorkspaceSourceNeedsSetup'), {
+          description: isLikelyMissingGws
+            ? t('toasts.googleWorkspaceInstallHint')
+            : (toolsResult.error || t('toasts.googleWorkspaceInstallHint')),
+        })
+      }
+    }
+
+    const existing = sources.find((source) => {
+      if (source.config.provider !== 'googleworkspace') return false
+      if (source.config.type !== 'mcp') return false
+      const mcp = source.config.mcp
+      if (!mcp || mcp.transport !== 'stdio') return false
+      return true
+    })
+
+    if (existing) {
+      const existingMcp = existing.config.mcp
+      const needsRepair =
+        !existingMcp
+        || existingMcp.transport !== 'stdio'
+        || existingMcp.command !== gwsCommand
+        || !shallowStringArrayEqual(existingMcp.args, desiredArgs)
+        || !shallowRecordEqual(existingMcp.env, gwsEnv)
+        || existingMcp.authType !== 'none'
+        || !hasGoogleWorkspaceServiceArgs(existingMcp.args)
+
+      if (needsRepair) {
+        const updated = await window.electronAPI.updateSource(activeWorkspaceId, existing.config.slug, {
+          enabled: true,
+          mcp: {
+            ...existingMcp,
+            transport: 'stdio',
+            command: gwsCommand,
+            args: desiredArgs,
+            env: gwsEnv,
+            authType: 'none',
+          },
+        } as Partial<FolderSourceConfig>)
+
+        toast.success(t('toasts.googleWorkspaceSourceUpdated'))
+        navigate(routes.view.sourcesMcp(updated.slug))
+        await validateGoogleWorkspaceSource(updated.slug)
+        return
+      }
+
+      toast.info(t('toasts.googleWorkspaceSourceExists'))
+      navigate(routes.view.sourcesMcp(existing.config.slug))
+      await validateGoogleWorkspaceSource(existing.config.slug)
+      return
+    }
+
+    try {
+      const created = await window.electronAPI.createSource(activeWorkspaceId, {
+        name: 'Google Workspace (gws)',
+        provider: 'googleworkspace',
+        icon: 'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
+        type: 'mcp',
+        enabled: true,
+        mcp: {
+          transport: 'stdio',
+          command: gwsCommand,
+          args: desiredArgs,
+          env: gwsEnv,
+          authType: 'none',
+        },
+      })
+
+      toast.success(t('toasts.googleWorkspaceSourceAdded'))
+      navigate(routes.view.sourcesMcp(created.slug))
+      await validateGoogleWorkspaceSource(created.slug)
+    } catch (error) {
+      console.error('[Chat] Failed to quick-add Google Workspace source:', error)
+      toast.error(t('toasts.failedToAddGoogleWorkspaceSource'), {
+        id: installingToastId,
+        description: t('toasts.googleWorkspaceInstallHint'),
+      })
+    }
+  }, [activeWorkspaceId, navigate, sources, t])
+
   // Delete Skill
   const handleDeleteSkill = useCallback(async (skillSlug: string) => {
     if (!activeWorkspace) return
@@ -1209,14 +1373,18 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // Sessions section
+    // Sessions section: all sessions with nested statuses, flagged, and archived
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
-    // Status sub-items
     for (const state of todoStates) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
     }
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-    // Label sub-items
+    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
+
+    // Labels section
+    if (labelConfigs.length > 0) {
+      result.push({ id: 'nav:labels', type: 'nav', action: () => handleLabelClick('__all__') })
+    }
     for (const label of flattenLabels(labelConfigs)) {
       result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
     }
@@ -1236,7 +1404,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1502,7 +1670,7 @@ function AppShellContent({
                 </div>
                 {/* Primary Nav: All Chats (with expandable submenu), Sources */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom pb-4">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom pb-4 scrollbar-narrow">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
@@ -1512,51 +1680,53 @@ function AppShellContent({
                     {
                       id: "nav:allChats",
                       title: t('sessionList.allSessions') ?? 'All Sessions',
-                      label: String(workspaceSessionMetas.length),
+                      label: String(activeSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
                       onClick: handleAllChatsClick,
-                    },
-                    // Status: expandable section with dynamic status sub-items
-                    {
-                      id: "nav:states",
-                      title: t('sidebar.status') ?? 'Status',
-                      icon: CheckCircle2,
-                      variant: "ghost" as const,
-                      onClick: () => toggleExpanded('nav:states'),
                       expandable: true,
-                      expanded: isExpanded('nav:states'),
-                      onToggle: () => toggleExpanded('nav:states'),
+                      expanded: isExpanded('nav:allChats'),
+                      onToggle: () => toggleExpanded('nav:allChats'),
                       contextMenu: {
                         type: 'allChats' as const,
                         onConfigureStatuses: openConfigureStatuses,
                       },
-                      items: todoStates.map(state => ({
-                        id: `nav:state:${state.id}`,
-                        title: getTranslatedStatusLabel(state.id, state.label, t),
-                        label: String(todoStateCounts[state.id] || 0),
-                        icon: state.icon,
-                        iconColor: state.resolvedColor,
-                        iconColorable: state.iconColorable,
-                        variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                        onClick: () => handleTodoStateClick(state.id),
-                        contextMenu: {
-                          type: 'status' as const,
-                          statusId: state.id,
-                          onConfigureStatuses: openConfigureStatuses,
+                      items: [
+                        ...todoStates.map(state => ({
+                          id: `nav:state:${state.id}`,
+                          title: getTranslatedStatusLabel(state.id, state.label, t),
+                          label: String(todoStateCounts[state.id] || 0),
+                          icon: state.icon,
+                          iconColor: state.resolvedColor,
+                          iconColorable: state.iconColorable,
+                          variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                          onClick: () => handleTodoStateClick(state.id),
+                          contextMenu: {
+                            type: 'status' as const,
+                            statusId: state.id,
+                            onConfigureStatuses: openConfigureStatuses,
+                          },
+                          acceptsDrop: true,
+                          onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
+                        })),
+                        { id: "separator:states-flagged", type: "separator" as const },
+                        {
+                          id: "nav:flagged",
+                          title: t('sessionList.flagged'),
+                          label: String(flaggedCount),
+                          icon: <Flag className="h-3.5 w-3.5" />,
+                          variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                          onClick: handleFlaggedClick,
                         },
-                        acceptsDrop: true,
-                        onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
-                      })),
-                    },
-                    // Flagged
-                    {
-                      id: "nav:flagged",
-                      title: t('sessionList.flagged'),
-                      label: String(flaggedCount),
-                      icon: <Flag className="h-3.5 w-3.5" />,
-                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                      onClick: handleFlaggedClick,
+                        {
+                          id: "nav:archived",
+                          title: t('sidebar.archived') ?? 'Archived',
+                          label: archivedCount > 0 ? String(archivedCount) : undefined,
+                          icon: Archive,
+                          variant: (chatFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleArchivedClick,
+                        },
+                      ],
                     },
                     // Labels: navigable header + hierarchical tree
                     ...(labelConfigs.length > 0 ? [{
@@ -1575,15 +1745,6 @@ function AppShellContent({
                         onAddLabel: () => navigate(routes.view.settings('labels')),
                       },
                     }] : []),
-                    // Archived
-                    {
-                      id: "nav:archived",
-                      title: t('sidebar.archived') ?? 'Archived',
-                      label: archivedCount > 0 ? String(archivedCount) : undefined,
-                      icon: Archive,
-                      variant: (chatFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
-                      onClick: () => navigate(routes.view.archived()),
-                    },
                     // --- Separator ---
                     { id: "separator:chats-sources", type: "separator" },
                     // --- Sources & Skills Section ---
@@ -1601,6 +1762,7 @@ function AppShellContent({
                       contextMenu: {
                         type: 'sources',
                         onAddSource: () => openAddSource(),
+                        onQuickAddGoogleWorkspaceSource: handleQuickAddGoogleWorkspaceSource,
                       },
                       items: [
                         {
@@ -1626,6 +1788,7 @@ function AppShellContent({
                           contextMenu: {
                             type: 'sources' as const,
                             onAddSource: () => openAddSource('mcp'),
+                            onQuickAddGoogleWorkspaceSource: handleQuickAddGoogleWorkspaceSource,
                             sourceType: 'mcp' as const,
                           },
                         },
@@ -1905,6 +2068,7 @@ function AppShellContent({
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onDeleteSource={handleDeleteSource}
                 onSourceClick={handleSourceSelect}
+                onQuickAddGoogleWorkspaceSource={handleQuickAddGoogleWorkspaceSource}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
                 sourceFilter={sourceFilter}
@@ -1967,6 +2131,8 @@ function AppShellContent({
                       navigate(routes.view.allChats(selectedMeta.id))
                     } else if (chatFilter.kind === 'flagged') {
                       navigate(routes.view.flagged(selectedMeta.id))
+                    } else if (chatFilter.kind === 'archived') {
+                      navigate(routes.view.archived(selectedMeta.id))
                     } else if (chatFilter.kind === 'state') {
                       navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
                     } else if (chatFilter.kind === 'label') {

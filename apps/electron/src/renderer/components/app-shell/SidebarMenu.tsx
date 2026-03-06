@@ -21,6 +21,7 @@ import {
   Settings2,
   Plus,
   Trash2,
+  Briefcase,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useLanguage } from '@/context/LanguageContext'
@@ -38,6 +39,8 @@ export interface SidebarMenuProps {
   onConfigureStatuses?: () => void
   /** Handler for "Add Source" action - only for sources type */
   onAddSource?: () => void
+  /** Handler for "Quick Add Google Workspace (gws)" action - for sources type */
+  onQuickAddGoogleWorkspace?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
@@ -62,11 +65,13 @@ export function SidebarMenu({
   labelId,
   onConfigureStatuses,
   onAddSource,
+  onQuickAddGoogleWorkspace,
   onAddSkill,
   onConfigureLabels,
   onAddLabel,
   onDeleteLabel,
   onAddAutomation,
+  sourceType,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -94,12 +99,19 @@ export function SidebarMenu({
 
   // Sources: show "Add Source"
   if (type === 'sources') {
+    const showQuickAddGoogleWorkspace = sourceType !== 'api' && sourceType !== 'local'
     return (
       <>
         {onAddSource && (
           <MenuItem onClick={onAddSource}>
             <Plus className="h-3.5 w-3.5" />
             <span className="flex-1">{t('sources.addSource')}</span>
+          </MenuItem>
+        )}
+        {showQuickAddGoogleWorkspace && onQuickAddGoogleWorkspace && (
+          <MenuItem onClick={onQuickAddGoogleWorkspace}>
+            <Briefcase className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('sources.quickAddGoogleWorkspace')}</span>
           </MenuItem>
         )}
       </>

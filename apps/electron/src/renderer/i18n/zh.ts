@@ -485,16 +485,16 @@ export const zh: TranslationKeys = {
 
     // Basic Info
     basicInfo: '基本信息',
-    basicInfoDescription: '帮助 Cowork 为您提供个性化回复。',
+    basicInfoDescription: '帮助 Dazi 为您提供个性化回复。',
     yourName: '姓名',
-    yourNameDescription: 'Cowork 应该如何称呼您。',
+    yourNameDescription: 'Dazi 应该如何称呼您。',
     yourNamePlaceholder: '您的姓名',
     timezone: '时区',
     timezoneDescription: '用于解析"明天"或"下周"等相对日期。',
     timezonePlaceholder: '例如：Asia/Shanghai',
     timezoneAuto: '自动（跟随系统）',
     preferredLanguage: '语言',
-    preferredLanguageDescription: 'Cowork 回复时使用的首选语言。',
+    preferredLanguageDescription: 'Dazi 回复时使用的首选语言。',
     preferredLanguagePlaceholder: '例如：中文',
 
     // Location
@@ -509,8 +509,8 @@ export const zh: TranslationKeys = {
 
     // Notes
     notes: '备注',
-    notesDescription: '帮助 Cowork 了解您偏好的自由文本内容。',
-    notesPlaceholder: '您希望 Cowork 了解的任何其他信息...',
+    notesDescription: '帮助 Dazi 了解您偏好的自由文本内容。',
+    notesPlaceholder: '您希望 Dazi 了解的任何其他信息...',
   },
 
   // Permissions Settings
@@ -644,6 +644,7 @@ export const zh: TranslationKeys = {
     addFirstSource: '添加您的第一个数据源',
     connectSource: '连接数据源',
     addSource: '添加数据源',
+    quickAddGoogleWorkspace: '快速添加 Google Workspace (gws)',
     searchSources: '搜索数据源...',
     noSourcesConfigured: '未配置数据源。',
     addSourcesInSettings: '在设置中添加数据源。',
@@ -775,7 +776,7 @@ export const zh: TranslationKeys = {
 
   // Onboarding
   onboarding: {
-    welcome: '欢迎使用 Cowork',
+    welcome: '欢迎使用搭子',
     welcomeDescription: '您的 AI 协作工作区。连接一切，组织会话，高效协作所需的一切！',
     getStarted: '开始使用',
     updateSettings: '更新设置',
@@ -789,7 +790,7 @@ export const zh: TranslationKeys = {
     startChatting: '开始聊天，开始工作。',
     gitBashWarning: {
       title: '需要 Git Bash',
-      description: 'Cowork 需要 Git Bash 才能在 Windows 上运行 shell 命令。系统中未检测到 Git Bash。',
+      description: '搭子需要 Git Bash 才能在 Windows 上运行 shell 命令。系统中未检测到 Git Bash。',
       installTitle: '安装 Git for Windows',
       installDescription: '获取 Git Bash 最简单的方式，免费且包含所需组件。',
       downloadButton: '下载 Git for Windows',
@@ -1015,7 +1016,7 @@ export const zh: TranslationKeys = {
 
   // Input
   input: {
-    placeholder: '向 Cowork 提问...',
+    placeholder: '向搭子提问...',
     placeholderHint1: '你想先处理什么？',
     placeholderHint2: '使用 Shift + Tab 在 探索 和 自动 之间切换',
     placeholderHint3: '输入 @ 提及文件、文件夹或 Skills',
@@ -1164,6 +1165,15 @@ export const zh: TranslationKeys = {
     deletedSkill: '已删除 Skills',
     failedToDeleteSource: '删除数据源失败',
     failedToDeleteSkill: '删除 Skills 失败',
+    googleWorkspaceSourceAdded: '已添加 Google Workspace 数据源',
+    googleWorkspaceSourceUpdated: '已更新 Google Workspace 数据源配置',
+    googleWorkspaceSourceNeedsSetup: 'Google Workspace 数据源已创建，但仍需完成配置',
+    googleWorkspaceSourceExists: 'Google Workspace 数据源已存在',
+    failedToAddGoogleWorkspaceSource: '添加 Google Workspace 数据源失败',
+    installingGoogleWorkspaceCli: '正在准备 Google Workspace CLI...',
+    googleWorkspaceCliInstalled: 'Google Workspace CLI 已安装',
+    failedToInstallGoogleWorkspaceCli: '自动安装 Google Workspace CLI 失败',
+    googleWorkspaceInstallHint: '应用会优先使用内置 gws。若仍失败，请先重启应用；若仍有问题，再尝试执行 `npm i -g @googleworkspace/cli`。',
     failedToShowInFinder: '在访达中显示失败',
     patternCopied: '模式已复制到剪贴板',
     failedToCopyPattern: '复制模式失败',
@@ -1309,7 +1319,7 @@ export const zh: TranslationKeys = {
   reauthDialog: {
     sessionExpired: '会话已过期',
     sessionExpiredDescription: '您的会话已过期或不再有效。',
-    pleaseLogInAgain: '请重新登录以继续使用 Cowork。',
+    pleaseLogInAgain: '请重新登录以继续使用搭子。',
     conversationsPreserved: '您的对话和设置已保留。',
     loginFailed: '登录失败',
     loggingIn: '登录中...',
@@ -1574,7 +1584,7 @@ export const zh: TranslationKeys = {
     stack3Toasts: '堆叠 3 条提示',
     typeSlashToTrigger: '输入 / 触发',
     typeSlashToSeeCommands: '输入 / 查看命令...',
-    messageCowork: '向 Cowork 发送消息...',
+    messageCowork: '向搭子发送消息...',
     authorizationComplete: '授权完成',
     authorizationFailed: '授权失败',
     oauthCallbackPreview: 'OAuth 回调预览',

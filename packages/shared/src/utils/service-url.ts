@@ -11,6 +11,12 @@
  *
  * This is a pure function safe for both Node.js and browser contexts.
  */
+const PROVIDER_DOMAIN_FALLBACKS: Record<string, string> = {
+  googleworkspace: 'google.com',
+  'google-workspace': 'google.com',
+  gws: 'google.com',
+}
+
 export function deriveServiceUrl(
   config: {
     mcp?: { url?: string };
@@ -23,7 +29,9 @@ export function deriveServiceUrl(
 
   // For stdio sources (no URL), try provider name as domain
   if (!url && config.provider) {
-    url = `https://${config.provider}.com`;
+    const provider = config.provider.toLowerCase()
+    const mappedDomain = PROVIDER_DOMAIN_FALLBACKS[provider]
+    url = mappedDomain ? `https://${mappedDomain}` : `https://${provider}.com`
   }
 
   return url;

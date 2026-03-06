@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import type { ValidationIssue } from '../config/validators.ts';
+import { normalizePermissionMode } from '../agent/mode-types.ts';
 import { APP_EVENTS, AGENT_EVENTS } from './types.ts';
 
 // ============================================================================
@@ -32,7 +33,13 @@ export const AutomationMatcherSchema = z.object({
   matcher: z.string().optional(),
   cron: z.string().optional(),
   timezone: z.string().optional(),
-  permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional(),
+  permissionMode: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value;
+      return normalizePermissionMode(value) ?? value;
+    },
+    z.enum(['safe', 'ask', 'allow-all'])
+  ).optional(),
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),

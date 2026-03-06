@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -80,6 +81,8 @@ export function AppMenu({
   isSidebarVisible = true,
 }: AppMenuProps) {
   const { t } = useLanguage()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [iconHovered, setIconHovered] = useState(false)
 
   const handleOpenSettingsItem = (subpage: SettingsSubpage) => {
     if (onOpenSettingsSubpage) {
@@ -102,10 +105,21 @@ export function AppMenu({
   return (
     <div className="flex items-center gap-[5px] w-full">
       {/* App Logo Menu */}
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label={t('appMenu.settings')}>
-            <AiGenerate3d className="h-4 w-4 text-foreground/70" />
+          <TopBarButton
+            aria-label={t('appMenu.settings')}
+            isActive={menuOpen}
+            onMouseEnter={() => setIconHovered(true)}
+            onMouseLeave={() => setIconHovered(false)}
+            onFocus={() => setIconHovered(true)}
+            onBlur={() => setIconHovered(false)}
+          >
+            <AiGenerate3d
+              className="h-[19px] w-[19px] text-foreground/80"
+              isHovered={iconHovered}
+              isMenuOpen={menuOpen}
+            />
           </TopBarButton>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="start" minWidth="min-w-48">

@@ -834,7 +834,7 @@ export class AppServerClient extends EventEmitter {
   private async initialize(): Promise<void> {
     const params: InitializeParams = {
       clientInfo: {
-        name: 'Cowork',
+        name: 'Dazi',
         title: null,
         version: '0.3.1', // TODO: Get from package.json
       },

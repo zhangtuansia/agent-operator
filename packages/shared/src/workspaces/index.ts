@@ -12,6 +12,8 @@ export type {
   WorkspaceSummary,
 } from './types.ts';
 
+export { getDefaultWorkspaceName } from './default-name.ts';
+
 // Storage functions
 export {
   // Path utilities

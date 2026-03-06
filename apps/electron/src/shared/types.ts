@@ -84,6 +84,7 @@ export type {
   McpValidationResult,
   McpToolWithPermission,
   McpToolsResult,
+  EnsureGwsInstalledResult,
   ShareResult,
   RefreshTitleResult,
   OnboardingSaveResult,
@@ -255,6 +256,7 @@ import type {
   UpdateInfo,
   WorkspaceSettings,
   McpToolsResult,
+  EnsureGwsInstalledResult,
   CredentialResponse,
   SendMessageOptions,
   DeepLinkNavigation,
@@ -429,6 +431,12 @@ export interface ElectronAPI {
   getBillingMethod(): Promise<BillingMethodInfo>
   updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
 
+  // Settings - Agent Type (Claude vs Codex)
+  getAgentType(): Promise<AgentType>
+  setAgentType(agentType: AgentType): Promise<void>
+  checkCodexAuth(): Promise<boolean>
+  startCodexLogin(): Promise<{ success: boolean; error?: string }>
+
   // Settings - Provider Config (for third-party APIs)
   getStoredConfig(): Promise<{
     providerConfig?: {
@@ -487,6 +495,7 @@ export interface ElectronAPI {
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
   createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
+  updateSource(workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; accessToken?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
@@ -494,6 +503,7 @@ export interface ElectronAPI {
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@agent-operator/shared/agent').PermissionsConfigFile | null>
   getDefaultPermissionsConfig(): Promise<{ config: import('@agent-operator/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  ensureGwsInstalled(): Promise<EnsureGwsInstalledResult>
 
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void
@@ -622,6 +632,9 @@ export interface ElectronAPI {
 
   // Filesystem search (for @ mention file selection)
   searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>
+
+  // Debug logging from renderer to main log sinks
+  debugLog(...args: unknown[]): Promise<void>
 
   // Power Management
   getKeepAwakeWhileRunning(): Promise<boolean>

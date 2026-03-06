@@ -483,16 +483,16 @@ export const en = {
 
     // Basic Info
     basicInfo: 'Basic Info',
-    basicInfoDescription: 'Help Cowork personalize responses to you.',
+    basicInfoDescription: 'Help Dazi personalize responses to you.',
     yourName: 'Name',
-    yourNameDescription: 'How Cowork should address you.',
+    yourNameDescription: 'How Dazi should address you.',
     yourNamePlaceholder: 'Your name',
     timezone: 'Timezone',
     timezoneDescription: 'Used for relative dates like \'tomorrow\' or \'next week\'.',
     timezonePlaceholder: 'e.g., America/New_York',
     timezoneAuto: 'Auto (System Default)',
     preferredLanguage: 'Language',
-    preferredLanguageDescription: 'Preferred language for Cowork\'s responses.',
+    preferredLanguageDescription: 'Preferred language for Dazi\'s responses.',
     preferredLanguagePlaceholder: 'e.g., English',
 
     // Location
@@ -507,8 +507,8 @@ export const en = {
 
     // Notes
     notes: 'Notes',
-    notesDescription: 'Free-form context that helps Cowork understand your preferences.',
-    notesPlaceholder: 'Any additional context you\'d like Cowork to know...',
+    notesDescription: 'Free-form context that helps Dazi understand your preferences.',
+    notesPlaceholder: 'Any additional context you\'d like Dazi to know...',
   },
 
   // Permissions Settings
@@ -642,6 +642,7 @@ export const en = {
     addFirstSource: 'Add your first source',
     connectSource: 'Connect a source',
     addSource: 'Add Source',
+    quickAddGoogleWorkspace: 'Quick Add Google Workspace (gws)',
     searchSources: 'Search sources...',
     noSourcesConfigured: 'No sources configured.',
     addSourcesInSettings: 'Add sources in Settings.',
@@ -773,7 +774,7 @@ export const en = {
 
   // Onboarding
   onboarding: {
-    welcome: 'Welcome to Cowork',
+    welcome: 'Welcome to Dazi',
     welcomeDescription: 'Your AI-powered workspace. Connect anything. Organize your sessions. Everything you need to collaborate effectively!',
     getStarted: 'Get Started',
     updateSettings: 'Update Settings',
@@ -787,7 +788,7 @@ export const en = {
     startChatting: 'Just start a chat and get to work.',
     gitBashWarning: {
       title: 'Git Bash Required',
-      description: 'Cowork needs Git Bash to run shell commands on Windows. It was not found on your system.',
+      description: 'Dazi needs Git Bash to run shell commands on Windows. It was not found on your system.',
       installTitle: 'Install Git for Windows',
       installDescription: 'The easiest way to get Git Bash. It\'s free and includes everything you need.',
       downloadButton: 'Download Git for Windows',
@@ -1013,7 +1014,7 @@ export const en = {
 
   // Input
   input: {
-    placeholder: 'Ask Cowork anything...',
+    placeholder: 'Ask Dazi anything...',
     placeholderHint1: 'What would you like to work on?',
     placeholderHint2: 'Use Shift + Tab to switch between Explore and Auto',
     placeholderHint3: 'Type @ to mention files, folders, or skills',
@@ -1162,6 +1163,15 @@ export const en = {
     deletedSkill: 'Deleted skill',
     failedToDeleteSource: 'Failed to delete source',
     failedToDeleteSkill: 'Failed to delete skill',
+    googleWorkspaceSourceAdded: 'Added Google Workspace source',
+    googleWorkspaceSourceUpdated: 'Updated Google Workspace source configuration',
+    googleWorkspaceSourceNeedsSetup: 'Google Workspace source created, but setup is required',
+    googleWorkspaceSourceExists: 'Google Workspace source already exists',
+    failedToAddGoogleWorkspaceSource: 'Failed to add Google Workspace source',
+    installingGoogleWorkspaceCli: 'Preparing Google Workspace CLI...',
+    googleWorkspaceCliInstalled: 'Google Workspace CLI installed',
+    failedToInstallGoogleWorkspaceCli: 'Failed to install Google Workspace CLI automatically',
+    googleWorkspaceInstallHint: 'The app uses bundled gws first. If setup still fails, restart the app; if it still fails, try `npm i -g @googleworkspace/cli`.',
     failedToShowInFinder: 'Failed to show in Finder',
     patternCopied: 'Pattern copied to clipboard',
     failedToCopyPattern: 'Failed to copy pattern',
@@ -1307,7 +1317,7 @@ export const en = {
   reauthDialog: {
     sessionExpired: 'Session Expired',
     sessionExpiredDescription: 'Your session has expired or is no longer valid.',
-    pleaseLogInAgain: 'Please log in again to continue using Cowork.',
+    pleaseLogInAgain: 'Please log in again to continue using Dazi.',
     conversationsPreserved: 'Your conversations and settings are preserved.',
     loginFailed: 'Login failed',
     loggingIn: 'Logging in...',
@@ -1572,7 +1582,7 @@ export const en = {
     stack3Toasts: 'Stack 3 Toasts',
     typeSlashToTrigger: 'Type / to trigger',
     typeSlashToSeeCommands: 'Type / to see commands...',
-    messageCowork: 'Message Cowork...',
+    messageCowork: 'Message Dazi...',
     authorizationComplete: 'Authorization Complete',
     authorizationFailed: 'Authorization Failed',
     oauthCallbackPreview: 'OAuth Callback Preview',

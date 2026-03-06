@@ -8,7 +8,7 @@ import { mainLog } from './logger'
 import { getAuthState, getSetupNeeds } from '@agent-operator/shared/auth'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig, type ProviderConfig } from '@agent-operator/shared/config'
-import { getDefaultWorkspacesDir } from '@agent-operator/shared/workspaces'
+import { getDefaultWorkspaceName, getDefaultWorkspacesDir } from '@agent-operator/shared/workspaces'
 import { OperatorOAuth, getMcpBaseUrl } from '@agent-operator/shared/auth'
 import { validateMcpConnection } from '@agent-operator/shared/mcp'
 import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@agent-operator/shared/auth'
@@ -227,10 +227,11 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         if (newConfig.workspaces.length === 0) {
           workspaceId = generateWorkspaceId()
           mainLog.info('[Onboarding:Main] Auto-creating default workspace:', workspaceId)
+          const defaultWorkspaceName = getDefaultWorkspaceName(newConfig.uiLanguage)
 
           const defaultWorkspace = {
             id: workspaceId,
-            name: 'Default',
+            name: defaultWorkspaceName,
             rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
             createdAt: Date.now(),
           }

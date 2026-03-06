@@ -416,6 +416,19 @@ function deriveServiceUrl(config: SourceConfig): string | null {
     return config.api.baseUrl
   }
 
+  // Provider fallback for stdio/local integrations without explicit URL
+  if (config.provider) {
+    const provider = config.provider.toLowerCase()
+    const mappedDomain = (
+      provider === 'googleworkspace'
+        || provider === 'google-workspace'
+        || provider === 'gws'
+    )
+      ? 'google.com'
+      : `${provider}.com`
+    return `https://${mappedDomain}`
+  }
+
   return null
 }
 

@@ -486,6 +486,15 @@ html[data-scenic] {
     display: none;
   }
 
+  .scrollbar-narrow {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-narrow::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
   /* Mask fade utilities - for fading content at edges over transparent/image backgrounds */
   .mask-fade-y {
     mask-image: linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%);

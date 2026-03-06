@@ -30,7 +30,7 @@ function detectInstance(): void {
   const instanceNum = match[1];
   process.env.COWORK_INSTANCE_NUMBER = instanceNum;
   process.env.COWORK_VITE_PORT = `${instanceNum}173`;
-  process.env.COWORK_APP_NAME = `Cowork [${instanceNum}]`;
+  process.env.COWORK_APP_NAME = `Dazi [${instanceNum}]`;
   process.env.COWORK_CONFIG_DIR = join(process.env.HOME || "", `.cowork-${instanceNum}`);
   process.env.COWORK_DEEPLINK_SCHEME = `agentoperator${instanceNum}`;
   console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.COWORK_VITE_PORT}, config=${process.env.COWORK_CONFIG_DIR}`);
@@ -166,7 +166,7 @@ function getElectronEnv(): Record<string, string> {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
     COWORK_CONFIG_DIR: process.env.COWORK_CONFIG_DIR || process.env.OPERATOR_CONFIG_DIR || "",
-    COWORK_APP_NAME: process.env.COWORK_APP_NAME || process.env.OPERATOR_APP_NAME || "Cowork",
+    COWORK_APP_NAME: process.env.COWORK_APP_NAME || process.env.OPERATOR_APP_NAME || "Dazi",
     COWORK_DEEPLINK_SCHEME: process.env.COWORK_DEEPLINK_SCHEME || process.env.OPERATOR_DEEPLINK_SCHEME || "agentoperator",
     COWORK_INSTANCE_NUMBER: process.env.COWORK_INSTANCE_NUMBER || process.env.OPERATOR_INSTANCE_NUMBER || "",
   };

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react"
-import { isToday, isYesterday, format, startOfDay } from "date-fns"
+import { startOfDay } from "date-fns"
 import { useAction } from "@/actions"
 import { Inbox, Archive } from "lucide-react"
 
@@ -33,6 +33,7 @@ import {
   groupSearchBlocks,
   type SessionListRow,
 } from "./session-list-hierarchy"
+import { formatSessionDateHeader } from "@/utils/session"
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -81,12 +82,6 @@ interface SessionListProps {
 // Re-export SessionStatusId for use by parent components
 export type { SessionStatusId }
 
-function formatDateGroupLabel(date: Date, t?: (key: string) => string): string {
-  if (isToday(date)) return t?.('sessionList.today') || 'Today'
-  if (isYesterday(date)) return t?.('sessionList.yesterday') || 'Yesterday'
-  return format(date, 'MMM d')
-}
-
 /**
  * SessionList - Scrollable list of session cards with keyboard navigation
  *
@@ -133,7 +128,7 @@ export function SessionList({
   const { navigate, navigateToSession } = useNavigation()
   const navState = useNavigationState()
   const { showEscapeOverlay } = useEscapeInterrupt()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   // Pre-flatten label tree once for efficient ID lookups in each SessionItem
   const flatLabels = useMemo(() => flattenLabels(labels), [labels])
@@ -178,6 +173,7 @@ export function SessionList({
     labelFilterMap,
     labelConfigs: labels,
     t,
+    language,
   })
 
   const sessionById = useMemo(() => {
@@ -303,7 +299,7 @@ export function SessionList({
           const collapsed = collapsedDateGroupKeys.has(currentGroupKey)
           const group: EntityListGroup<SessionListRow> = {
             key: currentGroupKey,
-            label: formatDateGroupLabel(day, t),
+            label: formatSessionDateHeader(day, language, t),
             items: [],
             collapsible: true,
             collapsed,

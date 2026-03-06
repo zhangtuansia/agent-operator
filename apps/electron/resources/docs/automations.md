@@ -1,10 +1,10 @@
 # Automations Configuration Guide
 
-This guide explains how to configure automations in Cowork to automate workflows based on events.
+This guide explains how to configure automations in Dazi to automate workflows based on events.
 
 ## What Are Automations?
 
-Automations allow you to trigger actions automatically when specific events occur in Cowork. You can:
+Automations allow you to trigger actions automatically when specific events occur in Dazi. You can:
 - Send prompts to create agent sessions based on events
 - Execute prompts on a schedule using cron expressions
 - Automate workflows based on permission mode changes, flags, or session status changes
@@ -38,7 +38,7 @@ Automations are configured in `automations.json` at the root of your workspace:
 
 ## Supported Events
 
-### App Events (triggered by Cowork)
+### App Events (triggered by Dazi)
 
 | Event | Trigger | Match Value |
 |-------|---------|-------------|
@@ -74,7 +74,7 @@ Automations are configured in `automations.json` at the root of your workspace:
 
 ### Prompt Actions
 
-Send a prompt to Cowork (creates a new session for scheduled prompts).
+Send a prompt to Dazi (creates a new session for scheduled prompts).
 
 ```json
 {
@@ -297,7 +297,7 @@ Automations are validated when:
 
 **Using config_validate:**
 
-Ask Cowork to validate your automations configuration:
+Ask Dazi to validate your automations configuration:
 
 ```
 Validate my automations configuration

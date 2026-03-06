@@ -1,20 +1,168 @@
-import type { SVGProps } from "react"
+import { useEffect, useId, useRef, type SVGProps } from "react"
+import { motion, useAnimationControls, useReducedMotion } from "framer-motion"
+
+interface AiGenerate3dProps extends SVGProps<SVGSVGElement> {
+  isHovered?: boolean
+  isMenuOpen?: boolean
+}
 
 /**
- * AI Generate 3D icon from Remix Icon (ri-ai-generate-3d-line)
- * Used for the app menu button as a "more/AI" indicator
+ * Compact ghost icon for the app menu button.
+ * Motion is intentionally subtle so the top bar stays calm:
+ * - idle: very light breathing
+ * - hover: blink once
+ * - menu open: tiny spring feedback
  */
-export function AiGenerate3d(props: SVGProps<SVGSVGElement>) {
+export function AiGenerate3d({
+  isHovered = false,
+  isMenuOpen = false,
+  ...props
+}: AiGenerate3dProps) {
+  const id = useId().replace(/:/g, "")
+  const ghostId = `ghost-${id}`
+  const bodyGrad = `bodyGrad-${id}`
+  const rainbow = `rainbow-${id}`
+  const bottomGlow = `bottomGlow-${id}`
+  const topHighlight = `topHighlight-${id}`
+  const shadow = `shadow-${id}`
+  const leftEyeControls = useAnimationControls()
+  const rightEyeControls = useAnimationControls()
+  const reduceMotion = useReducedMotion()
+  const prevHoverRef = useRef(isHovered)
+  const prevOpenRef = useRef(isMenuOpen)
+
+  useEffect(() => {
+    if (reduceMotion) {
+      prevHoverRef.current = isHovered
+      prevOpenRef.current = isMenuOpen
+      return
+    }
+
+    const hoverTriggered = isHovered && !prevHoverRef.current
+    const openTriggered = isMenuOpen && !prevOpenRef.current
+
+    prevHoverRef.current = isHovered
+    prevOpenRef.current = isMenuOpen
+
+    if (!hoverTriggered && !openTriggered) {
+      return
+    }
+
+    const blink = {
+      ry: [15, 15, 2.25, 15],
+      transition: {
+        duration: 0.24,
+        ease: "easeInOut",
+        times: [0, 0.35, 0.58, 1],
+      },
+    }
+
+    void leftEyeControls.start(blink)
+    void rightEyeControls.start({
+      ...blink,
+      transition: {
+        ...blink.transition,
+        delay: hoverTriggered ? 0.015 : 0,
+      },
+    })
+  }, [isHovered, isMenuOpen, leftEyeControls, reduceMotion, rightEyeControls])
+
+  const idleAnimate = reduceMotion
+    ? {}
+    : {
+        y: [0, -1.1, 0],
+        rotate: [0, -0.8, 0],
+      }
+
+  const idleTransition = reduceMotion
+    ? undefined
+    : {
+        duration: 3.8,
+        ease: "easeInOut",
+        repeat: Infinity,
+      }
+
+  const interactionAnimate = reduceMotion
+    ? {}
+    : {
+        scale: isMenuOpen ? 1.055 : isHovered ? 1.028 : 1,
+        y: isMenuOpen ? -1 : 0,
+      }
+
+  const interactionTransition = reduceMotion
+    ? undefined
+    : {
+        type: "spring",
+        stiffness: 360,
+        damping: 24,
+        mass: 0.42,
+      }
+
   return (
-    <svg
+    <motion.svg
       xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="currentColor"
+      viewBox="0 0 200 230"
+      fill="none"
       {...props}
     >
-      <path d="M15.1416 2.81836L13.1016 3.94824L12 3.31055L4.5 7.65234V7.6582L12 12V20.6895L19.5 16.3467V11.5L21.5 10.3291V17.5L12 23L2.5 17.5V6.5L12 1L15.1416 2.81836ZM18.5293 2.31934C18.7059 1.8935 19.2943 1.89349 19.4707 2.31934L19.7236 2.93066C20.1556 3.97346 20.9615 4.80618 21.9746 5.25684L22.6924 5.57617C23.1026 5.75901 23.1026 6.3562 22.6924 6.53906L21.9326 6.87695C20.9449 7.31624 20.1534 8.11944 19.7139 9.12793L19.4668 9.69336C19.2864 10.1075 18.7137 10.1075 18.5332 9.69336L18.2871 9.12793C17.8476 8.11929 17.0552 7.31628 16.0674 6.87695L15.3076 6.53906C14.8974 6.35622 14.8974 5.75899 15.3076 5.57617L16.0254 5.25684C17.0385 4.80618 17.8445 3.97348 18.2764 2.93066L18.5293 2.31934Z" />
-    </svg>
+      <defs>
+        <radialGradient id={bodyGrad} cx="50%" cy="45%" r="60%" fx="48%" fy="40%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="50%" stopColor="#f5f3ff" />
+          <stop offset="100%" stopColor="#ece4f5" />
+        </radialGradient>
+        <linearGradient id={rainbow} x1="20%" y1="100%" x2="80%" y2="20%">
+          <stop offset="0%" stopColor="#ffb3c6" stopOpacity="0.4" />
+          <stop offset="25%" stopColor="#ffd6a5" stopOpacity="0.25" />
+          <stop offset="50%" stopColor="#caffbf" stopOpacity="0.3" />
+          <stop offset="75%" stopColor="#9bf6ff" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#d5aaff" stopOpacity="0.3" />
+        </linearGradient>
+        <radialGradient id={bottomGlow} cx="50%" cy="90%" r="45%">
+          <stop offset="0%" stopColor="#ffaad4" stopOpacity="0.45" />
+          <stop offset="40%" stopColor="#aae8e8" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id={topHighlight} cx="50%" cy="25%" r="40%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
+        <filter id={shadow}>
+          <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#000000" floodOpacity="0.12" />
+        </filter>
+      </defs>
+      <motion.g animate={idleAnimate} transition={idleTransition}>
+        <motion.g animate={interactionAnimate} transition={interactionTransition}>
+          <g filter={`url(#${shadow})`}>
+            <path
+              id={ghostId}
+              d="M 100 14 C 48 14, 18 58, 18 105 L 18 175 Q 18 200, 38 190 Q 58 180, 68 200 Q 78 218, 100 200 Q 122 218, 132 200 Q 142 180, 162 190 Q 182 200, 182 175 L 182 105 C 182 58, 152 14, 100 14 Z"
+              fill={`url(#${bodyGrad})`}
+            />
+            <use href={`#${ghostId}`} fill={`url(#${rainbow})`} />
+            <use href={`#${ghostId}`} fill={`url(#${bottomGlow})`} />
+            <use href={`#${ghostId}`} fill={`url(#${topHighlight})`} />
+          </g>
+          <motion.ellipse
+            cx="80"
+            cy="105"
+            rx="12"
+            ry="15"
+            fill="#151525"
+            animate={leftEyeControls}
+            initial={{ ry: 15 }}
+          />
+          <motion.ellipse
+            cx="120"
+            cy="105"
+            rx="12"
+            ry="15"
+            fill="#151525"
+            animate={rightEyeControls}
+            initial={{ ry: 15 }}
+          />
+        </motion.g>
+      </motion.g>
+    </motion.svg>
   )
 }

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AutomationSystem, type SessionMetadataSnapshot } from './automation-system.ts';
@@ -65,6 +65,34 @@ describe('AutomationSystem', () => {
       });
 
       expect(system.getConfig()).toEqual({ automations: {} });
+
+      await system.dispose();
+    });
+
+    it('should normalize legacy permission mode aliases on load and persist them', async () => {
+      const configPath = join(tempDir, AUTOMATIONS_CONFIG_FILE);
+      writeFileSync(configPath, JSON.stringify({
+        automations: {
+          SchedulerTick: [
+            {
+              permissionMode: 'auto',
+              actions: [{ type: 'prompt', prompt: 'run legacy automation' }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      expect(system.getConfig()?.automations.SchedulerTick?.[0]?.permissionMode).toBe('allow-all');
+
+      const persisted = JSON.parse(readFileSync(configPath, 'utf-8')) as {
+        automations?: { SchedulerTick?: Array<{ permissionMode?: string }> };
+      };
+      expect(persisted.automations?.SchedulerTick?.[0]?.permissionMode).toBe('allow-all');
 
       await system.dispose();
     });

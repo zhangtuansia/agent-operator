@@ -1,5 +1,5 @@
 /**
- * Centralized branding assets for Cowork
+ * Centralized branding assets for Dazi
  * Used by OAuth callback pages
  */
 

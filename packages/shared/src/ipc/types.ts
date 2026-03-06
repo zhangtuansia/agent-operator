@@ -233,6 +233,18 @@ export interface McpToolsResult {
 }
 
 /**
+ * Result of ensuring Google Workspace CLI (gws) is available.
+ */
+export interface EnsureGwsInstalledResult {
+  success: boolean
+  command?: string
+  argsPrefix?: string[]
+  env?: Record<string, string>
+  installed?: boolean
+  error?: string
+}
+
+/**
  * Result of sharing or revoking a session
  */
 export interface ShareResult {

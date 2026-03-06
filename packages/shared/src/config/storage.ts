@@ -8,7 +8,9 @@ import {
   loadWorkspaceConfig,
   createWorkspaceAtPath,
   isValidWorkspace,
+  saveWorkspaceConfig,
 } from '../workspaces/storage.ts';
+import { getDefaultWorkspaceName } from '../workspaces/default-name.ts';
 import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
@@ -188,8 +190,24 @@ export function loadStoredConfig(): StoredConfig | null {
     }
 
     // Expand path variables (~ and ${HOME}) for portability
+    const localizedDefaultWorkspaceName = getDefaultWorkspaceName(config.uiLanguage);
+    let didMigrateDefaultWorkspaceName = false;
+
     for (const workspace of config.workspaces) {
       workspace.rootPath = expandPath(workspace.rootPath);
+
+      if (workspace.name === 'Default') {
+        workspace.name = localizedDefaultWorkspaceName;
+        didMigrateDefaultWorkspaceName = true;
+
+        const workspaceConfig = loadWorkspaceConfig(workspace.rootPath);
+        if (workspaceConfig?.name === 'Default') {
+          saveWorkspaceConfig(workspace.rootPath, {
+            ...workspaceConfig,
+            name: localizedDefaultWorkspaceName,
+          });
+        }
+      }
     }
 
     // Validate active workspace exists
@@ -204,6 +222,10 @@ export function loadStoredConfig(): StoredConfig | null {
       if (!isValidWorkspace(workspace.rootPath)) {
         createWorkspaceAtPath(workspace.rootPath, workspace.name);
       }
+    }
+
+    if (didMigrateDefaultWorkspaceName) {
+      saveConfig(config);
     }
 
     return config;
@@ -627,13 +649,14 @@ export async function autoDetectExternalCredentials(): Promise<void> {
       };
 
       const workspaceId = generateWorkspaceId();
+      const defaultWorkspaceName = getDefaultWorkspaceName();
       const config: StoredConfig = {
         authType: 'oauth_token',
         llmConnections: [connection],
         defaultLlmConnection: slug,
         workspaces: [{
           id: workspaceId,
-          name: 'Default',
+          name: defaultWorkspaceName,
           rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
           createdAt: Date.now(),
         }],
@@ -680,13 +703,14 @@ export async function autoDetectExternalCredentials(): Promise<void> {
     };
 
     const workspaceId = generateWorkspaceId();
+    const defaultWorkspaceName = getDefaultWorkspaceName();
     const config: StoredConfig = {
       authType: 'api_key',
       llmConnections: [connection],
       defaultLlmConnection: slug,
       workspaces: [{
         id: workspaceId,
-        name: 'Default',
+        name: defaultWorkspaceName,
         rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
         createdAt: Date.now(),
       }],
@@ -727,13 +751,14 @@ export async function autoDetectExternalCredentials(): Promise<void> {
     };
 
     const workspaceId = generateWorkspaceId();
+    const defaultWorkspaceName = getDefaultWorkspaceName();
     const config: StoredConfig = {
       authType: 'bedrock',
       llmConnections: [connection],
       defaultLlmConnection: slug,
       workspaces: [{
         id: workspaceId,
-        name: 'Default',
+        name: defaultWorkspaceName,
         rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
         createdAt: Date.now(),
       }],

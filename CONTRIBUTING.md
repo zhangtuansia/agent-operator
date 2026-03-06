@@ -1,6 +1,6 @@
-# Contributing to Cowork
+# Contributing to Dazi
 
-Thank you for your interest in contributing to Cowork! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Dazi! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 
