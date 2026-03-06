@@ -83,8 +83,8 @@ jobs:
         with:
           name: build-mac-arm64
           path: |
-            apps/electron/release/Cowork-arm64.dmg
-            apps/electron/release/Cowork-arm64.zip
+            apps/electron/release/Dazi-arm64.dmg
+            apps/electron/release/Dazi-arm64.zip
             apps/electron/release/latest-mac.yml
           retention-days: 5
 
@@ -148,8 +148,8 @@ jobs:
         with:
           name: build-mac-x64
           path: |
-            apps/electron/release/Cowork-x64.dmg
-            apps/electron/release/Cowork-x64.zip
+            apps/electron/release/Dazi-x64.dmg
+            apps/electron/release/Dazi-x64.zip
             apps/electron/release/latest-mac.yml
           retention-days: 5
 
@@ -216,7 +216,7 @@ jobs:
         with:
           name: build-windows
           path: |
-            apps/electron/release/Cowork-x64.exe
+            apps/electron/release/Dazi-x64.exe
             apps/electron/release/latest.yml
           retention-days: 5
 
@@ -280,7 +280,7 @@ jobs:
         with:
           name: build-linux
           path: |
-            apps/electron/release/Cowork-x86_64.AppImage
+            apps/electron/release/Dazi-x86_64.AppImage
             apps/electron/release/latest-linux.yml
           retention-days: 5
 
@@ -377,7 +377,7 @@ jobs:
           mkdir -p release-files
 
           # Copy all release artifacts using find (path structure may vary)
-          for name in Cowork-arm64.dmg Cowork-arm64.zip Cowork-x64.dmg Cowork-x64.zip Cowork-x64.exe Cowork-x86_64.AppImage latest.yml latest-linux.yml; do
+          for name in Dazi-arm64.dmg Dazi-arm64.zip Dazi-x64.dmg Dazi-x64.zip Dazi-x64.exe Dazi-x86_64.AppImage latest.yml latest-linux.yml; do
             src=$(find artifacts -name "$name" -type f | head -1)
             if [ -n "$src" ]; then
               cp "$src" release-files/
@@ -398,7 +398,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: Cowork ${{ steps.version.outputs.tag }}
+          name: Dazi ${{ steps.version.outputs.tag }}
           draft: true
           generate_release_notes: true
           files: release-files/*
