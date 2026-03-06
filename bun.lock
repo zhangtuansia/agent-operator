@@ -88,7 +88,7 @@
     },
     "apps/electron": {
       "name": "@agent-operator/electron",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "dependencies": {
         "@agent-operator/core": "workspace:*",
         "@agent-operator/mermaid": "workspace:*",
