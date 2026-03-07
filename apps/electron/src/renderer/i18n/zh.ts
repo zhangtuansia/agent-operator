@@ -56,6 +56,29 @@ export const zh: TranslationKeys = {
     cannotSendOffline: '离线时无法发送消息',
   },
 
+  // Tray Panel
+  trayPanel: {
+    badge: '菜单栏',
+    title: '快捷入口',
+    subtitle: '一个更轻的入口，适合快速处理。',
+    openApp: '打开应用',
+    miniBadge: '专注小窗',
+    quickAsk: '快速提问',
+    quickAskPlaceholder: '问点什么...',
+    quickAskHint: '快速提问默认不加载外部数据源，避免把菜单栏入口做重。',
+    quickAskFootnote: '回车直接发送到迷你窗口。',
+    ask: '提问',
+    openMiniWindow: '迷你窗口',
+    recentSessions: '最近会话',
+    recentSessionsHint: '直接回到最近的工作，不必先打开完整主界面。',
+    noRecentSessions: '还没有最近会话。',
+    noRecentSessionsHint: '可以先用快速提问，或打开主应用开始新会话。',
+    untitledSession: '未命名会话',
+    noPreview: '在迷你窗口中打开这个会话。',
+    noWorkspace: '请先打开 Dazi 完成设置。',
+    active: '进行中',
+  },
+
   // Settings
   settings: {
     title: '设置',

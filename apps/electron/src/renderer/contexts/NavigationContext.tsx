@@ -217,9 +217,18 @@ export function NavigationProvider({
           if (parsed.params.workdir) {
             createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
           }
+          // Tray quick actions use sources=none so they stay lightweight and do not
+          // pull in workspace OAuth sources by default.
+          if (parsed.params.sources === 'none') {
+            createOptions.enabledSourceSlugs = []
+          }
           // Model override for mini agents (e.g., 'haiku', 'sonnet')
           if (parsed.params.model) {
             createOptions.model = parsed.params.model
+          }
+          // Connection override for launcher surfaces using the shared input model menu.
+          if (parsed.params.llmConnection) {
+            createOptions.llmConnection = parsed.params.llmConnection
           }
           // System prompt preset for mini agents (e.g., 'mini')
           if (parsed.params.systemPrompt) {

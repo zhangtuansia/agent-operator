@@ -858,19 +858,20 @@ export class OperatorAgent {
         type: 'http' as const,
         url: 'https://docs.cowork.app/mcp',
       };
+      const includeDocsMcp = this.config.providerType === 'anthropic';
 
       const mcpServers: Options['mcpServers'] = isMiniAgent
         ? {
-            // Mini agents need session tools (config_validate) and docs for reference
+            // Mini agents stay local-only for reliability. Remote docs MCP has caused
+            // auth/provider compatibility failures in lightweight focused windows.
             session: getSessionScopedTools(sessionId, this.workspaceRootPath),
-            'cowork-docs': docsMcpServer,
           }
         : {
             preferences: getPreferencesServer(false),
             // Session-scoped tools (SubmitPlan, source_test, etc.)
             session: getSessionScopedTools(sessionId, this.workspaceRootPath),
             // Cowork documentation - always available for searching setup guides
-            'cowork-docs': docsMcpServer,
+            ...(includeDocsMcp ? { 'cowork-docs': docsMcpServer } : {}),
             // Add user-defined source servers (MCP and API, filtered by local MCP setting)
             // Note: MCP server is now added via sources system
             ...sourceMcpResult.servers,

@@ -54,6 +54,29 @@ export const en = {
     cannotSendOffline: 'Cannot send message while offline',
   },
 
+  // Tray Panel
+  trayPanel: {
+    badge: 'Menu Bar',
+    title: 'Quick Access',
+    subtitle: 'A lighter entry point for quick work.',
+    openApp: 'Open App',
+    miniBadge: 'Focused Mini',
+    quickAsk: 'Quick Ask',
+    quickAskPlaceholder: 'Ask anything...',
+    quickAskHint: 'Quick Ask stays light and skips external sources by default.',
+    quickAskFootnote: 'Press Enter to send into the mini window.',
+    ask: 'Ask',
+    openMiniWindow: 'Mini Window',
+    recentSessions: 'Recent Sessions',
+    recentSessionsHint: 'Jump back into the latest work without opening the full app shell.',
+    noRecentSessions: 'No recent sessions yet.',
+    noRecentSessionsHint: 'Start from Quick Ask or open the full app to create one.',
+    untitledSession: 'Untitled chat',
+    noPreview: 'Open this session in a mini window.',
+    noWorkspace: 'Open Dazi to finish setup.',
+    active: 'Active',
+  },
+
   // Settings
   settings: {
     title: 'Settings',

@@ -116,15 +116,13 @@ export class SourceServerBuilder {
     };
 
     // Handle authentication for HTTP/SSE
-    // Note: Direct isAuthenticated check is safe here because we're inside authType !== 'none' block
     if (mcp.authType !== 'none') {
-      if (token) {
-        (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
-      } else if (source.config.isAuthenticated) {
-        // Source claims to be authenticated but token is missing - needs re-auth
-        debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
+      if (!token) {
+        debug(`[SourceServerBuilder] MCP source ${source.config.slug} requires auth but no token is available`);
         return null;
       }
+
+      (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
     }
 
     return config;

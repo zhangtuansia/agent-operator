@@ -3,12 +3,16 @@ import ReactDOM from 'react-dom/client'
 import { Provider as JotaiProvider } from 'jotai'
 import { useAtomValue } from 'jotai'
 import App from './App'
+import TrayRoot from './TrayRoot'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
 import { Toaster } from '@/components/ui/sonner'
 import { windowWorkspaceIdAtom } from '@/atoms/sessions'
 import { initAnalytics, instrumentElectronApi } from './lib/analytics'
 import './index.css'
+
+const windowParams = new URLSearchParams(window.location.search)
+const isTrayMode = windowParams.get('windowMode') === 'tray'
 
 /**
  * Root component - loads workspace ID for theme context and renders App
@@ -32,9 +36,13 @@ void initAnalytics(window.electronAPI)
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <JotaiProvider>
-      <LanguageProvider>
-        <Root />
-      </LanguageProvider>
+      {isTrayMode ? (
+        <TrayRoot />
+      ) : (
+        <LanguageProvider>
+          <Root />
+        </LanguageProvider>
+      )}
     </JotaiProvider>
   </React.StrictMode>
 )

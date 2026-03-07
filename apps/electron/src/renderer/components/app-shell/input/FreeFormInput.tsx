@@ -53,7 +53,7 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { WorkingDirectoryBadge, getRecentDirs, addRecentDir } from './WorkingDirectoryBadge'
 import { SourceSelectorBadge } from './SourceSelectorBadge'
-import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
+import type { FileAttachment, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
 import type { LabelConfig } from '@agent-operator/shared/labels'
 import type { PermissionMode } from '@agent-operator/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
@@ -168,8 +168,16 @@ export interface FreeFormInputProps {
   }
   /** Enable compact mode for embedded chat input (e.g. EditPopover) */
   compactMode?: boolean
+  /** Lightweight launcher mode for tray/quick-entry surfaces */
+  launcherMode?: boolean
+  /** Show model selector while in launcher mode */
+  launcherShowModelSelector?: boolean
   /** Current session connection slug */
   currentConnection?: string
+  /** Override connection list when AppShell context is unavailable (e.g. tray launcher) */
+  availableLlmConnections?: LlmConnectionWithStatus[]
+  /** Override workspace default connection when AppShell context is unavailable */
+  workspaceDefaultLlmConnection?: string
   /** True when the session connection was removed */
   connectionUnavailable?: boolean
 }
@@ -221,12 +229,21 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
   compactMode = false,
+  launcherMode = false,
+  launcherShowModelSelector = false,
   currentConnection,
+  availableLlmConnections,
+  workspaceDefaultLlmConnection: workspaceDefaultConnectionOverride,
   connectionUnavailable = false,
 }: FreeFormInputProps) {
+  const attachmentsEnabled = !launcherMode
   const appShellCtx = useOptionalAppShellContext()
-  const llmConnections = appShellCtx?.llmConnections ?? []
-  const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
+  const llmConnections = React.useMemo(
+    () => availableLlmConnections ?? appShellCtx?.llmConnections ?? [],
+    [availableLlmConnections, appShellCtx?.llmConnections]
+  )
+  const workspaceDefaultConnection = workspaceDefaultConnectionOverride ?? appShellCtx?.workspaceDefaultLlmConnection
+  const showModelSelector = !launcherMode || launcherShowModelSelector
 
   const { t } = useTranslation()
   const modKey = isMac ? '⌘' : 'Ctrl'
@@ -882,6 +899,7 @@ export function FreeFormInput({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!attachmentsEnabled) return
     dragCounterRef.current++
     if (e.dataTransfer.types.includes('Files')) {
       setIsDraggingOver(true)
@@ -891,6 +909,7 @@ export function FreeFormInput({
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!attachmentsEnabled) return
     dragCounterRef.current--
     if (dragCounterRef.current === 0) {
       setIsDraggingOver(false)
@@ -904,7 +923,7 @@ export function FreeFormInput({
 
   // Clipboard paste handler for files/images
   const handlePaste = async (e: React.ClipboardEvent) => {
-    if (disabled) return
+    if (disabled || !attachmentsEnabled) return
 
     const clipboardItems = e.clipboardData?.files
     if (!clipboardItems || clipboardItems.length === 0) return
@@ -955,6 +974,7 @@ export function FreeFormInput({
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!attachmentsEnabled) return
     dragCounterRef.current = 0
     setIsDraggingOver(false)
     if (disabled) return
@@ -1237,38 +1257,44 @@ export function FreeFormInput({
         onDrop={handleDrop}
       >
         {/* Inline Slash Command Autocomplete */}
-        <InlineSlashCommand
-          open={inlineSlash.isOpen}
-          onOpenChange={(open) => !open && inlineSlash.close()}
-          sections={inlineSlash.sections}
-          activeCommands={activeCommands}
-          onSelectCommand={handleInlineSlashCommandSelect}
-          onSelectFolder={handleInlineSlashFolderSelect}
-          filter={inlineSlash.filter}
-          position={inlineSlash.position}
-        />
+        {!launcherMode && (
+          <InlineSlashCommand
+            open={inlineSlash.isOpen}
+            onOpenChange={(open) => !open && inlineSlash.close()}
+            sections={inlineSlash.sections}
+            activeCommands={activeCommands}
+            onSelectCommand={handleInlineSlashCommandSelect}
+            onSelectFolder={handleInlineSlashFolderSelect}
+            filter={inlineSlash.filter}
+            position={inlineSlash.position}
+          />
+        )}
 
         {/* Inline Mention Autocomplete (skills, sources) */}
-        <InlineMentionMenu
-          open={inlineMention.isOpen}
-          onOpenChange={(open) => !open && inlineMention.close()}
-          sections={inlineMention.sections}
-          onSelect={handleInlineMentionSelect}
-          filter={inlineMention.filter}
-          position={inlineMention.position}
-          workspaceId={workspaceId}
-          maxWidth={280}
-        />
+        {!launcherMode && (
+          <InlineMentionMenu
+            open={inlineMention.isOpen}
+            onOpenChange={(open) => !open && inlineMention.close()}
+            sections={inlineMention.sections}
+            onSelect={handleInlineMentionSelect}
+            filter={inlineMention.filter}
+            position={inlineMention.position}
+            workspaceId={workspaceId}
+            maxWidth={280}
+          />
+        )}
 
         {/* Inline Label Autocomplete (#labels) */}
-        <InlineLabelMenu
-          open={inlineLabel.isOpen}
-          onOpenChange={(open) => !open && inlineLabel.close()}
-          items={inlineLabel.items}
-          onSelect={handleInlineLabelSelect}
-          filter={inlineLabel.filter}
-          position={inlineLabel.position}
-        />
+        {!launcherMode && (
+          <InlineLabelMenu
+            open={inlineLabel.isOpen}
+            onOpenChange={(open) => !open && inlineLabel.close()}
+            items={inlineLabel.items}
+            onSelect={handleInlineLabelSelect}
+            filter={inlineLabel.filter}
+            position={inlineLabel.position}
+          />
+        )}
 
         {/* Add Label EditPopover (triggered from inline # menu "Add New Label") */}
         {addLabelEditConfig && (
@@ -1293,12 +1319,14 @@ export function FreeFormInput({
         )}
 
         {/* Attachment Preview */}
-        <AttachmentPreview
-          attachments={attachments}
-          onRemove={handleRemoveAttachment}
-          disabled={disabled}
-          loadingCount={loadingCount}
-        />
+        {attachmentsEnabled && (
+          <AttachmentPreview
+            attachments={attachments}
+            onRemove={handleRemoveAttachment}
+            disabled={disabled}
+            loadingCount={loadingCount}
+          />
+        )}
 
         {/* Rich Text Input with inline mention badges */}
         {!(compactMode && isProcessing) && (
@@ -1308,8 +1336,8 @@ export function FreeFormInput({
             onChange={handleInputChange}
             onInput={handleRichInput}
             onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onLongTextPaste={handleLongTextPaste}
+            onPaste={attachmentsEnabled ? handlePaste : undefined}
+            onLongTextPaste={attachmentsEnabled ? handleLongTextPaste : undefined}
             onFocus={() => { setIsFocused(true); onFocusChange?.(true) }}
             onBlur={() => {
               // Save caret position before losing focus (for restoration via cowork:focus-input)
@@ -1322,7 +1350,12 @@ export function FreeFormInput({
             skills={skills}
             sources={sources}
             workspaceId={workspaceId}
-            className="min-h-[88px] pl-5 pr-4 pt-4 pb-3 overflow-y-auto"
+            className={cn(
+              "overflow-y-auto",
+              launcherMode
+                ? "min-h-[56px] pl-5 pr-5 pt-4 pb-2.5"
+                : "min-h-[88px] pl-5 pr-4 pt-4 pb-3",
+            )}
             style={{ maxHeight: inputMaxHeight }}
             data-tutorial="chat-input"
           />
@@ -1333,9 +1366,15 @@ export function FreeFormInput({
           {/* Escape interrupt overlay - shown on first Esc press during processing */}
           <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
 
-          <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
-          {/* Left side: Context badges - hidden in compact mode */}
-          {!compactMode && (
+          <div
+            className={cn(
+              "flex items-center gap-1",
+              launcherMode ? "px-3 py-2" : "px-2 py-2",
+              (!compactMode || launcherMode) && "border-t border-border/50",
+            )}
+          >
+          {/* Left side: Context badges - hidden in compact mode, simplified in launcher mode */}
+          {!compactMode && !launcherMode && (
             <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
               {/* 1. Attach Files Badge */}
               <FreeFormInputContextBadge
@@ -1387,18 +1426,20 @@ export function FreeFormInput({
           <div className="flex items-center shrink-0">
 
           {/* 5. Model Selector */}
+          {showModelSelector && (
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                  className={cn(
-                      "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5",
+                    className={cn(
+                      "inline-flex items-center gap-0.5 shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5",
+                      launcherMode ? "h-8 max-w-[180px] px-2 text-[12px]" : "h-7 px-1.5 text-[13px]",
                       connectionUnavailable && "text-destructive",
                     )}
                   >
-                    <span className="max-w-[220px] truncate">{modelButtonLabel}</span>
+                    <span className={cn("truncate", launcherMode ? "max-w-[148px]" : "max-w-[220px]")}>{modelButtonLabel}</span>
                     {!connectionUnavailable && !modelSelectorLocked && (
                       <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
                     )}
@@ -1525,40 +1566,41 @@ export function FreeFormInput({
                 </>
               )}
 
-              {!connectionUnavailable && (
+              {(!connectionUnavailable && onThinkingLevelChange) || (contextStatus?.inputTokens != null && contextStatus.inputTokens > 0) ? (
                 <>
                   {/* Separator before thinking level */}
                   <StyledDropdownMenuSeparator className="my-1" />
 
-                  {/* Thinking Level - Radix submenu with automatic edge detection */}
-                  <DropdownMenuSub>
-                    <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
-                      <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{getThinkingLevelLabel(thinkingLevel)}</div>
-                        <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
-                      </div>
-                    </StyledDropdownMenuSubTrigger>
-                    <StyledDropdownMenuSubContent className="min-w-[220px]">
-                      {THINKING_LEVELS.map(({ id }) => {
-                        const isSelected = thinkingLevel === id
-                        return (
-                          <StyledDropdownMenuItem
-                            key={id}
-                            onSelect={() => onThinkingLevelChange?.(id)}
-                            className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                          >
-                            <div className="text-left">
-                              <div className="font-medium text-sm">{getThinkingLevelLabel(id)}</div>
-                              <div className="text-xs text-muted-foreground">{getThinkingLevelDescription(id)}</div>
-                            </div>
-                            {isSelected && (
-                              <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                            )}
-                          </StyledDropdownMenuItem>
-                        )
-                      })}
-                    </StyledDropdownMenuSubContent>
-                  </DropdownMenuSub>
+                  {onThinkingLevelChange && (
+                    <DropdownMenuSub>
+                      <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
+                        <div className="text-left flex-1">
+                          <div className="font-medium text-sm">{getThinkingLevelLabel(thinkingLevel)}</div>
+                          <div className="text-xs text-muted-foreground">{t('input.extendedReasoning')}</div>
+                        </div>
+                      </StyledDropdownMenuSubTrigger>
+                      <StyledDropdownMenuSubContent className="min-w-[220px]">
+                        {THINKING_LEVELS.map(({ id }) => {
+                          const isSelected = thinkingLevel === id
+                          return (
+                            <StyledDropdownMenuItem
+                              key={id}
+                              onSelect={() => onThinkingLevelChange(id)}
+                              className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                            >
+                              <div className="text-left">
+                                <div className="font-medium text-sm">{getThinkingLevelLabel(id)}</div>
+                                <div className="text-xs text-muted-foreground">{getThinkingLevelDescription(id)}</div>
+                              </div>
+                              {isSelected && (
+                                <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                              )}
+                            </StyledDropdownMenuItem>
+                          )
+                        })}
+                      </StyledDropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  )}
 
                   {/* Context usage footer - only show when we have token data */}
                   {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
@@ -1583,12 +1625,13 @@ export function FreeFormInput({
                     </>
                   )}
                 </>
-              )}
+              ) : null}
             </StyledDropdownMenuContent>
           </DropdownMenu>
+          )}
 
           {/* 5.5 Context Usage Warning Badge - shows when approaching auto-compaction threshold */}
-          {(() => {
+          {!launcherMode && (() => {
             // Calculate usage percentage based on compaction threshold (~77.5% of context window),
             // not the full context window - this gives users meaningful warnings before compaction kicks in.
             // SDK triggers compaction at ~155k tokens for a 200k context window.
@@ -1641,16 +1684,22 @@ export function FreeFormInput({
               type="button"
               size="icon"
               variant="secondary"
-              className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
+              className={cn(
+                "rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20",
+                launcherMode ? "h-9 w-9 ml-0" : "h-7 w-7 ml-2",
+              )}
               onClick={() => handleStop(false)}
             >
-              <Square className="h-3 w-3 fill-current" />
+              <Square className={cn("fill-current", launcherMode ? "h-4 w-4" : "h-3 w-3")} />
             </Button>
           ) : (
             <Button
               type="submit"
               size="icon"
-              className="h-7 w-7 rounded-full shrink-0 ml-2"
+              className={cn(
+                "rounded-full shrink-0",
+                launcherMode ? "h-9 w-9 ml-0" : "h-7 w-7 ml-2",
+              )}
               disabled={!hasContent || disabled}
               data-tutorial="send-button"
             >

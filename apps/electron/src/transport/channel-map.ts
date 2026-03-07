@@ -53,6 +53,7 @@ export const CHANNEL_MAP = {
   confirmCloseWindow: invoke(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE),
   onCloseRequested: listener(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED),
   setTrafficLightsVisible: invoke(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS),
+  setTrayPanelHeight: invoke(IPC_CHANNELS.WINDOW_SET_TRAY_PANEL_HEIGHT),
 
   // Event listeners
   onSessionEvent: listener(IPC_CHANNELS.SESSION_EVENT),

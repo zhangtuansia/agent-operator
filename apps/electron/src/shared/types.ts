@@ -303,6 +303,8 @@ export interface ElectronAPI {
   onCloseRequested(callback: () => void): () => void
   /** Show/hide macOS traffic light buttons (for fullscreen overlays) */
   setTrafficLightsVisible(visible: boolean): Promise<void>
+  /** Resize the tray launcher panel while keeping it docked above the Dock */
+  setTrayPanelHeight(height: number): Promise<boolean>
 
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void

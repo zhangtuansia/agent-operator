@@ -4,6 +4,8 @@ import { motion, useAnimationControls, useReducedMotion } from "framer-motion"
 interface AiGenerate3dProps extends SVGProps<SVGSVGElement> {
   isHovered?: boolean
   isMenuOpen?: boolean
+  blinkOnly?: boolean
+  autoBlinkMs?: number
 }
 
 /**
@@ -16,6 +18,8 @@ interface AiGenerate3dProps extends SVGProps<SVGSVGElement> {
 export function AiGenerate3d({
   isHovered = false,
   isMenuOpen = false,
+  blinkOnly = false,
+  autoBlinkMs = 3200,
   ...props
 }: AiGenerate3dProps) {
   const id = useId().replace(/:/g, "")
@@ -31,8 +35,34 @@ export function AiGenerate3d({
   const prevHoverRef = useRef(isHovered)
   const prevOpenRef = useRef(isMenuOpen)
 
+  const triggerBlink = (delay = 0) => {
+    const blink = {
+      ry: [15, 15, 2.25, 15],
+      transition: {
+        duration: 0.24,
+        ease: "easeInOut",
+        times: [0, 0.35, 0.58, 1],
+      },
+    }
+
+    void leftEyeControls.start(blink)
+    void rightEyeControls.start({
+      ...blink,
+      transition: {
+        ...blink.transition,
+        delay,
+      },
+    })
+  }
+
   useEffect(() => {
     if (reduceMotion) {
+      prevHoverRef.current = isHovered
+      prevOpenRef.current = isMenuOpen
+      return
+    }
+
+    if (blinkOnly) {
       prevHoverRef.current = isHovered
       prevOpenRef.current = isMenuOpen
       return
@@ -48,33 +78,36 @@ export function AiGenerate3d({
       return
     }
 
-    const blink = {
-      ry: [15, 15, 2.25, 15],
-      transition: {
-        duration: 0.24,
-        ease: "easeInOut",
-        times: [0, 0.35, 0.58, 1],
-      },
+    triggerBlink(hoverTriggered ? 0.015 : 0)
+  }, [blinkOnly, isHovered, isMenuOpen, leftEyeControls, reduceMotion, rightEyeControls])
+
+  useEffect(() => {
+    if (reduceMotion || !blinkOnly) {
+      return
     }
 
-    void leftEyeControls.start(blink)
-    void rightEyeControls.start({
-      ...blink,
-      transition: {
-        ...blink.transition,
-        delay: hoverTriggered ? 0.015 : 0,
-      },
-    })
-  }, [isHovered, isMenuOpen, leftEyeControls, reduceMotion, rightEyeControls])
+    const initialDelay = window.setTimeout(() => {
+      triggerBlink(0.012)
+    }, 900)
 
-  const idleAnimate = reduceMotion
+    const interval = window.setInterval(() => {
+      triggerBlink(0.012)
+    }, autoBlinkMs)
+
+    return () => {
+      window.clearTimeout(initialDelay)
+      window.clearInterval(interval)
+    }
+  }, [autoBlinkMs, blinkOnly, leftEyeControls, reduceMotion, rightEyeControls])
+
+  const idleAnimate = reduceMotion || blinkOnly
     ? {}
     : {
         y: [0, -1.1, 0],
         rotate: [0, -0.8, 0],
       }
 
-  const idleTransition = reduceMotion
+  const idleTransition = reduceMotion || blinkOnly
     ? undefined
     : {
         duration: 3.8,
@@ -82,14 +115,14 @@ export function AiGenerate3d({
         repeat: Infinity,
       }
 
-  const interactionAnimate = reduceMotion
+  const interactionAnimate = reduceMotion || blinkOnly
     ? {}
     : {
         scale: isMenuOpen ? 1.055 : isHovered ? 1.028 : 1,
         y: isMenuOpen ? -1 : 0,
       }
 
-  const interactionTransition = reduceMotion
+  const interactionTransition = reduceMotion || blinkOnly
     ? undefined
     : {
         type: "spring",

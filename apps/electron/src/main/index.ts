@@ -20,6 +20,7 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug, setBundledAssetsRoot } from '@agent-operator/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
+import { initTray, destroyTray } from './tray'
 import { getSkillServiceManager } from './skill-services'
 import { createIMServiceManager, getIMServiceManager } from './im-services'
 import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
@@ -199,6 +200,7 @@ app.whenReady().then(async () => {
 
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
+    initTray(windowManager)
 
     // Initialize session manager
     sessionManager = new SessionManager()
@@ -317,6 +319,7 @@ app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
   if (isQuitting) return
   isQuitting = true
+  destroyTray()
 
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)

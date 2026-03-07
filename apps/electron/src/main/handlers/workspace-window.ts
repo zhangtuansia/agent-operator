@@ -12,6 +12,7 @@ import { ipcLog, windowLog } from '../logger'
 import type { SessionManager } from '../sessions'
 import type { WindowManager } from '../window-manager'
 import { IPC_CHANNELS } from '../../shared/types'
+import { closeTrayPanel, getTrayPanelWorkspace, getTrayWindowMode, resizeTrayPanel } from '../tray'
 
 export function registerWorkspaceWindowHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
   ipcMain.handle(IPC_CHANNELS.GET_WORKSPACES, async () => {
@@ -34,7 +35,7 @@ export function registerWorkspaceWindowHandlers(sessionManager: SessionManager, 
   })
 
   ipcMain.handle(IPC_CHANNELS.GET_WINDOW_WORKSPACE, (event) => {
-    const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
+    const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id) ?? getTrayPanelWorkspace(event.sender.id)
     if (workspaceId) {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (workspace) {
@@ -61,20 +62,44 @@ export function registerWorkspaceWindowHandlers(sessionManager: SessionManager, 
     })
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_WINDOW_MODE, () => {
-    return 'main'
+  ipcMain.handle(IPC_CHANNELS.GET_WINDOW_MODE, (event) => {
+    return getTrayWindowMode(event.sender.id) ?? 'main'
   })
 
   ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, (event) => {
-    windowManager.closeWindow(event.sender.id)
+    if (closeTrayPanel(event.sender.id)) {
+      return
+    }
+    if (windowManager.getWorkspaceForWindow(event.sender.id)) {
+      windowManager.closeWindow(event.sender.id)
+      return
+    }
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && !win.isDestroyed()) {
+      win.close()
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE, (event) => {
-    windowManager.forceCloseWindow(event.sender.id)
+    if (closeTrayPanel(event.sender.id)) {
+      return
+    }
+    if (windowManager.getWorkspaceForWindow(event.sender.id)) {
+      windowManager.forceCloseWindow(event.sender.id)
+      return
+    }
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && !win.isDestroyed()) {
+      win.destroy()
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS, (event, visible: boolean) => {
     windowManager.setTrafficLightsVisible(event.sender.id, visible)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAY_PANEL_HEIGHT, (event, height: number) => {
+    return resizeTrayPanel(event.sender.id, height)
   })
 
   ipcMain.handle(IPC_CHANNELS.SWITCH_WORKSPACE, async (event, workspaceId: string) => {

@@ -44,6 +44,7 @@ export const IPC_CHANNELS = {
   WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
   // Traffic light visibility (macOS only - hide when fullscreen overlays are open)
   WINDOW_SET_TRAFFIC_LIGHTS: 'window:setTrafficLights',
+  WINDOW_SET_TRAY_PANEL_HEIGHT: 'window:setTrayPanelHeight',
 
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
