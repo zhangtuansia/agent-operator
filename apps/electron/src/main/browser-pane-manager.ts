@@ -7,6 +7,7 @@ import { mainLog } from './logger'
 import { BrowserCDP } from './browser-cdp'
 import { DEFAULT_THEME, loadAppTheme } from '@agent-operator/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
+import { findBundledResourcePath } from './resource-paths'
 import {
   BROWSER_TOOLBAR_CHANNELS,
   type BrowserAccessibilitySnapshot,
@@ -170,14 +171,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 function getBrowserIconPath(): string | undefined {
-  const resourcesDir = join(__dirname, '../resources')
   const iconPath = process.platform === 'darwin'
-    ? join(resourcesDir, 'icon.icns')
+    ? findBundledResourcePath('icon.icns')
     : process.platform === 'win32'
-      ? join(resourcesDir, 'icon.ico')
-      : join(resourcesDir, 'icon.png')
+      ? findBundledResourcePath('icon.ico')
+      : findBundledResourcePath('icon.png')
 
-  return existsSync(iconPath) ? iconPath : undefined
+  return iconPath && existsSync(iconPath) ? iconPath : undefined
 }
 
 function isLocalhostTarget(input: string): boolean {

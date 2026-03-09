@@ -1660,6 +1660,7 @@ export class OperatorAgent {
       // Track whether we received any assistant content (for empty response detection)
       // When SDK returns empty response (e.g., failed resume), we need to detect and recover
       let receivedAssistantContent = false;
+      let resumeFailureMessage: string | null = null;
       try {
         for await (const message of this.currentQuery) {
           // Track if we got any text content from assistant
@@ -1695,6 +1696,22 @@ export class OperatorAgent {
             (id) => { currentTurnId = id; }
           );
           for (const event of events) {
+            if (
+              event.type === 'error' &&
+              wasResuming &&
+              !_isRetry &&
+              /No conversation found with session ID/i.test(event.message)
+            ) {
+              debug('[SESSION_DEBUG] Detected resume failure from error event:', event.message);
+              resumeFailureMessage = event.message;
+              continue;
+            }
+
+            if (resumeFailureMessage && event.type === 'complete') {
+              debug('[SESSION_DEBUG] Suppressing complete event after resume failure to allow fresh retry');
+              continue;
+            }
+
             // Check for tool-not-found errors on inactive sources and attempt auto-activation
             const inactiveSourceError = this.detectInactiveSourceToolError(event, toolIndex);
 
@@ -1752,6 +1769,23 @@ export class OperatorAgent {
         // Detect empty response when resuming - SDK silently fails resume if session is invalid
         // In this case, we got a new session ID but no assistant content
         debug('[SESSION_DEBUG] Post-loop check: wasResuming=', wasResuming, 'receivedAssistantContent=', receivedAssistantContent, '_isRetry=', _isRetry);
+        if (resumeFailureMessage && wasResuming && !_isRetry) {
+          debug('[SESSION_DEBUG] >>> DETECTED RESUME FAILURE FROM ERROR EVENT - triggering recovery');
+          this.sessionId = null;
+          this.config.onSdkSessionIdCleared?.();
+          this.pinnedPreferencesPrompt = null;
+          this.preferencesDriftNotified = false;
+
+          const recoveryContext = this.buildRecoveryContext();
+          const messageWithContext = recoveryContext
+            ? recoveryContext + userMessage
+            : userMessage;
+
+          yield { type: 'info', message: 'Session expired, restoring context...' };
+          yield* this.chat(messageWithContext, attachments, true);
+          return;
+        }
+
         if (wasResuming && !receivedAssistantContent && !_isRetry) {
           debug('[SESSION_DEBUG] >>> DETECTED EMPTY RESPONSE - triggering recovery');
           // SDK resume failed silently - clear session and retry with context

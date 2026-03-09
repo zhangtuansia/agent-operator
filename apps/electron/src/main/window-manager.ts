@@ -6,6 +6,7 @@ import { release } from 'os'
 import { fileURLToPath } from 'url'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SavedWindow } from './window-state'
+import { findBundledResourcePath } from './resource-paths'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -94,18 +95,17 @@ export class WindowManager {
 
     // Load platform-specific app icon
     const getIconPath = () => {
-      const resourcesDir = join(__dirname, '../resources')
       if (process.platform === 'darwin') {
-        return join(resourcesDir, 'icon.icns')
+        return findBundledResourcePath('icon.icns')
       } else if (process.platform === 'win32') {
-        return join(resourcesDir, 'icon.ico')
+        return findBundledResourcePath('icon.ico')
       } else {
-        return join(resourcesDir, 'icon.png')
+        return findBundledResourcePath('icon.png')
       }
     }
 
     const iconPath = getIconPath()
-    const iconExists = existsSync(iconPath)
+    const iconExists = Boolean(iconPath && existsSync(iconPath))
 
     if (!iconExists) {
       windowLog.warn('App icon not found at:', iconPath)

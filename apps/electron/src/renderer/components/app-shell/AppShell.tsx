@@ -172,7 +172,13 @@ import {
   reconcilePanelStackAtom,
   updateFocusedPanelRouteAtom,
 } from "@/atoms/panel-stack"
-import { PANEL_EDGE_INSET, PANEL_GAP } from "./panel-constants"
+import {
+  PANEL_EDGE_INSET,
+  PANEL_GAP,
+  PANEL_SASH_HALF_HIT_WIDTH,
+  PANEL_SASH_HIT_WIDTH,
+  PANEL_STACK_VERTICAL_OVERFLOW,
+} from "./panel-constants"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -359,6 +365,7 @@ function AppShellContent({
   const { t } = useTranslation()
   const { isOnline } = useNetworkStatus()
   const { navigate, canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
+  const collapsedSidebarInset = PANEL_EDGE_INSET + PANEL_GAP
   const panelStack = useAtomValue(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
   const focusedPanelRoute = useAtomValue(focusedPanelRouteAtom)
@@ -1963,27 +1970,6 @@ function AppShellContent({
               </div>
             </div>
           ) : undefined}
-          sidebarResizeHandle={!isFocusedMode && isSidebarVisible ? (
-            <div
-              ref={resizeHandleRef}
-              onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
-              onMouseMove={(e) => {
-                if (resizeHandleRef.current) {
-                  const rect = resizeHandleRef.current.getBoundingClientRect()
-                  setSidebarHandleY(e.clientY - rect.top)
-                }
-              }}
-              onMouseLeave={() => { if (isResizing !== 'sidebar') setSidebarHandleY(null) }}
-              className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-            >
-              <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-                <div
-                  className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                  style={getResizeGradientStyle(sidebarHandleY)}
-                />
-              </div>
-            </div>
-          ) : undefined}
           navigatorWidth={showSessionListPanel ? sessionListWidth : 0}
           navigatorSlot={showSessionListPanel ? (
             <div className="h-full flex flex-col min-w-0 overflow-hidden">
@@ -2200,27 +2186,6 @@ function AppShellContent({
               )}
             </div>
           ) : undefined}
-          navigatorResizeHandle={showSessionListPanel ? (
-            <div
-              ref={sessionListHandleRef}
-              onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
-              onMouseMove={(e) => {
-                if (sessionListHandleRef.current) {
-                  const rect = sessionListHandleRef.current.getBoundingClientRect()
-                  setSessionListHandleY(e.clientY - rect.top)
-                }
-              }}
-              onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
-              className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-            >
-              <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-                <div
-                  className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                  style={getResizeGradientStyle(sessionListHandleY)}
-                />
-              </div>
-            </div>
-          ) : undefined}
           contentSlot={
             <div className={cn(
               "h-full overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
@@ -2235,6 +2200,66 @@ function AppShellContent({
           isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible}
           isResizing={!!isResizing}
         />
+
+        {!isFocusedMode && isSidebarVisible && (
+          <div
+            ref={resizeHandleRef}
+            onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
+            onMouseMove={(e) => {
+              if (resizeHandleRef.current) {
+                const rect = resizeHandleRef.current.getBoundingClientRect()
+                setSidebarHandleY(e.clientY - rect.top)
+              }
+            }}
+            onMouseLeave={() => { if (isResizing !== 'sidebar') setSidebarHandleY(null) }}
+            className="absolute cursor-col-resize z-panel flex justify-center"
+            style={{
+              width: PANEL_SASH_HIT_WIDTH,
+              top: PANEL_STACK_VERTICAL_OVERFLOW,
+              bottom: PANEL_STACK_VERTICAL_OVERFLOW,
+              left: sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH,
+              transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
+            }}
+          >
+            <div
+              className="h-full w-0.5"
+              style={getResizeGradientStyle(sidebarHandleY)}
+            />
+          </div>
+        )}
+
+        {showSessionListPanel && (
+          <div
+            ref={sessionListHandleRef}
+            onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
+            onMouseMove={(e) => {
+              if (sessionListHandleRef.current) {
+                const rect = sessionListHandleRef.current.getBoundingClientRect()
+                setSessionListHandleY(e.clientY - rect.top)
+              }
+            }}
+            onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
+            className="absolute cursor-col-resize z-panel flex justify-center"
+            style={{
+              width: PANEL_SASH_HIT_WIDTH,
+              top: PANEL_STACK_VERTICAL_OVERFLOW,
+              bottom: PANEL_STACK_VERTICAL_OVERFLOW,
+              left:
+                (isFocusedMode
+                  ? collapsedSidebarInset
+                  : (isSidebarVisible ? sidebarWidth + PANEL_GAP : collapsedSidebarInset)) +
+                sessionListWidth +
+                (PANEL_GAP / 2) -
+                PANEL_SASH_HALF_HIT_WIDTH,
+              transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
+            }}
+          >
+            <div
+              className="h-full w-0.5"
+              style={getResizeGradientStyle(sessionListHandleY)}
+            />
+          </div>
+        )}
 
           {/* Right Sidebar - Inline Mode (≥ 920px) */}
           {!isFocusedMode && shouldDockRightSidebar && (

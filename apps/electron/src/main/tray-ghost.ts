@@ -1,13 +1,14 @@
 import { nativeImage } from 'electron'
 import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
+import { getBundledResourceDir } from './resource-paths'
 
 export const GHOST_TRAY_FRAME_INTERVAL_MS = 140
 const MAC_TRAY_ICON_SIZE = 18
 
 function getGhostFramePaths(): string[] {
-  const framesDir = join(__dirname, '../resources/tray-ghost-frames')
-  if (!existsSync(framesDir)) {
+  const framesDir = getBundledResourceDir('tray-ghost-frames')
+  if (!framesDir || !existsSync(framesDir)) {
     return []
   }
 

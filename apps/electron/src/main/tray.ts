@@ -6,6 +6,7 @@ import type { WindowManager } from './window-manager'
 import { loadWindowState } from './window-state'
 import { mainLog } from './logger'
 import { createGhostTrayFrames, GHOST_TRAY_FRAME_INTERVAL_MS } from './tray-ghost'
+import { findBundledResourcePath } from './resource-paths'
 
 let tray: Tray | null = null
 let trayAnimationTimer: ReturnType<typeof setInterval> | null = null
@@ -24,11 +25,10 @@ const TRAY_PANEL_MARGIN = 14
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
 function getTrayIconPaths(): string[] {
-  const resourcesDir = join(__dirname, '../resources')
   const candidates = ['tray-icon.png', 'tray-icon.svg', 'icon.png']
   return candidates
-    .map(candidate => join(resourcesDir, candidate))
-    .filter(candidate => existsSync(candidate))
+    .map(candidate => findBundledResourcePath(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate && existsSync(candidate)))
 }
 
 function createTrayIcon() {

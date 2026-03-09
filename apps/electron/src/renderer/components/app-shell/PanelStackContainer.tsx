@@ -20,10 +20,8 @@ const PANEL_SPRING = { type: "spring" as const, stiffness: 600, damping: 49 }
 export interface PanelStackContainerProps {
   sidebarSlot?: React.ReactNode
   sidebarWidth: number
-  sidebarResizeHandle?: React.ReactNode
   navigatorSlot?: React.ReactNode
   navigatorWidth: number
-  navigatorResizeHandle?: React.ReactNode
   contentSlot?: React.ReactNode
   isSidebarAndNavigatorHidden?: boolean
   isRightSidebarVisible?: boolean
@@ -33,10 +31,8 @@ export interface PanelStackContainerProps {
 export function PanelStackContainer({
   sidebarSlot,
   sidebarWidth,
-  sidebarResizeHandle,
   navigatorSlot,
   navigatorWidth,
-  navigatorResizeHandle,
   contentSlot,
   isSidebarAndNavigatorHidden = false,
   isRightSidebarVisible = false,
@@ -105,8 +101,6 @@ export function PanelStackContainer({
         </div>
       </motion.div>
 
-      {sidebarResizeHandle}
-
       <div
         ref={scrollRef}
         className="panel-scroll relative flex min-w-0 flex-1"
@@ -148,9 +142,6 @@ export function PanelStackContainer({
               {navigatorSlot}
             </div>
           </motion.div>
-
-          {navigatorResizeHandle}
-
           {panelStack.length === 0 ? (
             <div className="flex min-w-0 flex-1">{contentSlot}</div>
           ) : (

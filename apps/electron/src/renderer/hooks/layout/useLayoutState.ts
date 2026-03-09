@@ -13,10 +13,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import * as storage from '@/lib/local-storage'
 
 // Panel width constraints (in pixels)
+const DEFAULT_SIDEBAR_WIDTH = 210
 const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 320
+const DEFAULT_SESSION_LIST_WIDTH = 280
 const SESSION_LIST_MIN_WIDTH = 240
 const SESSION_LIST_MAX_WIDTH = 480
+const DEFAULT_RIGHT_SIDEBAR_WIDTH = 300
 const RIGHT_SIDEBAR_MIN_WIDTH = 280
 const RIGHT_SIDEBAR_MAX_WIDTH = 480
 
@@ -73,12 +76,12 @@ export function useLayoutState(options: UseLayoutStateOptions = {}): [LayoutStat
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
   })
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    return storage.get(storage.KEYS.sidebarWidth, 220)
+    return storage.get(storage.KEYS.sidebarWidth, DEFAULT_SIDEBAR_WIDTH)
   })
 
   // Session list width
   const [sessionListWidth, setSessionListWidth] = useState(() => {
-    return storage.get(storage.KEYS.sessionListWidth, 300)
+    return storage.get(storage.KEYS.sessionListWidth, DEFAULT_SESSION_LIST_WIDTH)
   })
 
   // Right sidebar state
@@ -86,7 +89,7 @@ export function useLayoutState(options: UseLayoutStateOptions = {}): [LayoutStat
     return storage.get(storage.KEYS.rightSidebarVisible, false)
   })
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
-    return storage.get(storage.KEYS.rightSidebarWidth, 300)
+    return storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH)
   })
   const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = useState(false)
 

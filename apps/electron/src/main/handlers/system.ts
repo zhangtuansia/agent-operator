@@ -2,7 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { IPC_CHANNELS } from '../../shared/types'
+import { getBundledResourceDir } from '../resource-paths'
 
 export function registerSystemHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.GET_SYSTEM_THEME, () => {
@@ -98,10 +100,16 @@ export function registerSystemHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.GET_FONTS_PATH, () => {
-    if (!app.isPackaged) {
-      return './resources/fonts'
+    const fontsDir = getBundledResourceDir('fonts')
+    if (fontsDir) {
+      return pathToFileURL(fontsDir).href
     }
-    return `file://${process.resourcesPath}/fonts`
+
+    if (!app.isPackaged) {
+      return pathToFileURL(join(process.cwd(), 'apps/electron/resources/fonts')).href
+    }
+
+    return pathToFileURL(join(process.resourcesPath, 'app/dist/resources/fonts')).href
   })
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {

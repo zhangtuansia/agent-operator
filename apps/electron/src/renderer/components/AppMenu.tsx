@@ -30,9 +30,10 @@ import {
   Settings,
   HelpCircle,
   Keyboard,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
-import { PanelLeftRounded } from "./icons/PanelLeftRounded"
 import { AiGenerate3d } from "./icons/AiGenerate3d"
 import { TopBarButton } from "./ui/TopBarButton"
 import { useLanguage } from "@/context/LanguageContext"
@@ -119,7 +120,7 @@ export function AppMenu({
             onBlur={() => setIconHovered(false)}
           >
             <AiGenerate3d
-              className="h-[19px] w-[19px] text-foreground/80"
+              className="h-[20px] w-[20px] text-foreground/80"
               isHovered={iconHovered}
               isMenuOpen={menuOpen}
             />
@@ -288,7 +289,11 @@ export function AppMenu({
             onClick={onToggleSidebar}
             aria-label={isSidebarVisible ? t('appMenu.hideSidebar') : t('appMenu.showSidebar')}
           >
-            <PanelLeftRounded className="h-5 w-5 text-foreground/70" />
+            {isSidebarVisible ? (
+              <PanelLeftClose className="h-5 w-5 text-foreground/70" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5 text-foreground/70" />
+            )}
           </TopBarButton>
         </>
       )}

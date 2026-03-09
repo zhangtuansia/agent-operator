@@ -3,7 +3,8 @@
  * Provides type-safe access with consistent key prefixing.
  */
 
-const PREFIX = 'craft-'
+const PREFIX = 'dazi-'
+const LEGACY_PREFIX = 'craft-'
 
 /**
  * All localStorage keys used in the app.
@@ -47,12 +48,23 @@ export const KEYS = {
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]
 
+const NON_MIGRATED_LEGACY_KEYS = new Set<StorageKey>([
+  KEYS.sidebarWidth,
+  KEYS.sessionListWidth,
+  KEYS.rightSidebarWidth,
+])
+
 /**
  * Build the full prefixed key.
  * Supports dynamic suffixes like 'panel-layout:chat' or 'tabs-workspace123'
  */
 function buildKey(key: string, suffix?: string): string {
   const base = `${PREFIX}${key}`
+  return suffix ? `${base}:${suffix}` : base
+}
+
+function buildLegacyKey(key: string, suffix?: string): string {
+  const base = `${LEGACY_PREFIX}${key}`
   return suffix ? `${base}:${suffix}` : base
 }
 
@@ -63,8 +75,17 @@ function buildKey(key: string, suffix?: string): string {
 export function get<T>(key: StorageKey, fallback: T, suffix?: string): T {
   try {
     const item = localStorage.getItem(buildKey(key, suffix))
-    if (item === null) return fallback
-    return JSON.parse(item) as T
+    if (item !== null) return JSON.parse(item) as T
+
+    if (!NON_MIGRATED_LEGACY_KEYS.has(key)) {
+      const legacyItem = localStorage.getItem(buildLegacyKey(key, suffix))
+      if (legacyItem !== null) {
+        localStorage.setItem(buildKey(key, suffix), legacyItem)
+        return JSON.parse(legacyItem) as T
+      }
+    }
+
+    return fallback
   } catch {
     return fallback
   }
@@ -92,7 +113,18 @@ export function remove(key: StorageKey, suffix?: string): void {
  * Get raw string value (for non-JSON data like atomWithStorage compatibility).
  */
 export function getRaw(key: StorageKey, suffix?: string): string | null {
-  return localStorage.getItem(buildKey(key, suffix))
+  const item = localStorage.getItem(buildKey(key, suffix))
+  if (item !== null) return item
+
+  if (!NON_MIGRATED_LEGACY_KEYS.has(key)) {
+    const legacyItem = localStorage.getItem(buildLegacyKey(key, suffix))
+    if (legacyItem !== null) {
+      localStorage.setItem(buildKey(key, suffix), legacyItem)
+      return legacyItem
+    }
+  }
+
+  return null
 }
 
 /**

@@ -220,7 +220,7 @@ export function loadStoredConfig(): StoredConfig | null {
     // Ensure workspace folder structure exists for all workspaces
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
-        createWorkspaceAtPath(workspace.rootPath, workspace.name);
+        createWorkspaceAtPath(workspace.rootPath, workspace.name, getWorkspaceCreationDefaults(config));
       }
     }
 
@@ -232,6 +232,29 @@ export function loadStoredConfig(): StoredConfig | null {
   } catch {
     return null;
   }
+}
+
+function getWorkspaceCreationDefaults(config: StoredConfig): NonNullable<import('../workspaces/types.ts').WorkspaceConfig['defaults']> | undefined {
+  const defaultConnectionSlug = config.defaultLlmConnection ?? config.llmConnections?.[0]?.slug;
+  const defaultConnection = defaultConnectionSlug
+    ? config.llmConnections?.find(connection => connection.slug === defaultConnectionSlug)
+    : undefined;
+
+  const model = defaultConnection?.defaultModel
+    ?? config.model
+    ?? (config.providerConfig
+      ? getDefaultModelForProvider(config.providerConfig.provider, config.providerConfig.customModels)
+      : undefined)
+    ?? (defaultConnection ? getDefaultModelForConnection(defaultConnection.providerType) : undefined);
+
+  if (!model && !defaultConnectionSlug) {
+    return undefined;
+  }
+
+  return {
+    ...(model ? { model } : {}),
+    ...(defaultConnectionSlug ? { defaultLlmConnection: defaultConnectionSlug } : {}),
+  };
 }
 
 function getConnectionModelId(model: ModelDefinition | string): string {
@@ -625,6 +648,14 @@ function syncPrimaryLlmConnection(config: StoredConfig): boolean {
  * Must be called BEFORE migrateLegacyLlmConnectionsConfig.
  */
 export async function autoDetectExternalCredentials(): Promise<void> {
+  if (
+    process.env.COWORK_SKIP_AUTO_DETECT_CREDENTIALS === '1'
+    || process.env.DAZI_SKIP_AUTO_DETECT_CREDENTIALS === '1'
+  ) {
+    debug('[autoDetect] Skipping external credential detection via override');
+    return;
+  }
+
   // Only run for fresh installs (no config file yet)
   const existing = loadStoredConfig();
   if (existing) return;
@@ -1541,7 +1572,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   // Create workspace folder structure if it doesn't exist
   if (!isValidWorkspace(newWorkspace.rootPath)) {
-    createWorkspaceAtPath(newWorkspace.rootPath, newWorkspace.name);
+    createWorkspaceAtPath(newWorkspace.rootPath, newWorkspace.name, getWorkspaceCreationDefaults(config));
   }
 
   config.workspaces.push(newWorkspace);

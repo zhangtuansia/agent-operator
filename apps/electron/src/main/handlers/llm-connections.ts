@@ -138,7 +138,10 @@ export function registerLlmConnectionHandlers(sessionManager: SessionManager): v
             activeSessionId: null,
             llmConnections: [],
           })
-          createWorkspaceAtPath(rootPath, defaultWorkspaceName)
+          createWorkspaceAtPath(rootPath, defaultWorkspaceName, {
+            model: pendingConnection.defaultModel ?? getDefaultModelForConnection(pendingConnection.providerType),
+            defaultLlmConnection: pendingConnection.slug,
+          })
           ipcLog.info('Created initial config and workspace for fresh install')
         }
         const added = addLlmConnection(pendingConnection)

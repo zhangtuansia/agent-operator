@@ -89,13 +89,12 @@ export function PanelSlot({
         onPointerDown={handlePointerDown}
         className={cn(
           "relative h-full overflow-hidden bg-foreground-2",
-          !isOnly && isFocusedPanel ? "z-[1] shadow-focused" : "z-0 shadow-middle"
+          !isOnly && isFocusedPanel ? "shadow-focused z-[1]" : "shadow-middle z-0"
         )}
         style={{
           ...(!isOnly && !isFocusedPanel
             ? ({
                 "--background": "var(--background-elevated)",
-                "--shadow-minimal": "var(--shadow-minimal-flat)",
                 "--user-message-bubble": "var(--user-message-bubble-dimmed)",
               } as React.CSSProperties)
             : {}),

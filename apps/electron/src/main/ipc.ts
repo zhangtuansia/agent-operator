@@ -19,6 +19,7 @@ import {
 } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS, isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import {
+  CONFIG_DIR,
   getWorkspaceByNameOrId,
   loadStoredConfig,
   type Workspace,

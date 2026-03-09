@@ -25,6 +25,7 @@ import { getSkillServiceManager } from './skill-services'
 import { createIMServiceManager, getIMServiceManager } from './im-services'
 import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
 import { BrowserPaneManager } from './browser-pane-manager'
+import { findBundledResourcePath } from './resource-paths'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -167,13 +168,28 @@ async function createInitialWindows(): Promise<void> {
 
 app.whenReady().then(async () => {
   // Initialize bundled docs
-  initializeDocs()
+  try {
+    mainLog.info('[startup] Initializing docs')
+    initializeDocs()
+  } catch (error) {
+    mainLog.error('[startup] Failed to initialize docs:', error)
+  }
   // Initialize bundled release notes
-  initializeReleaseNotes()
+  try {
+    mainLog.info('[startup] Initializing release notes')
+    initializeReleaseNotes()
+  } catch (error) {
+    mainLog.error('[startup] Failed to initialize release notes:', error)
+  }
 
   // Ensure default permissions file exists (copies bundled default.json on first run)
-  const bundledPermissionsDir = join(__dirname, 'resources/permissions')
-  ensureDefaultPermissions(bundledPermissionsDir)
+  try {
+    mainLog.info('[startup] Ensuring default permissions')
+    const bundledPermissionsDir = join(__dirname, 'resources/permissions')
+    ensureDefaultPermissions(bundledPermissionsDir)
+  } catch (error) {
+    mainLog.error('[startup] Failed to ensure default permissions:', error)
+  }
 
   // Note: electron-updater handles pending updates via autoInstallOnAppQuit.
   // No manual pending update check needed.
@@ -182,11 +198,16 @@ app.whenReady().then(async () => {
 
   // Set dock icon on macOS (required for dev mode, bundled apps use Info.plist)
   if (process.platform === 'darwin' && app.dock) {
-    const dockIconPath = join(__dirname, '../resources/icon.png')
-    if (existsSync(dockIconPath)) {
-      app.dock.setIcon(dockIconPath)
-      // Initialize badge icon for canvas-based badge overlay
-      initBadgeIcon(dockIconPath)
+    try {
+      mainLog.info('[startup] Initializing dock icon')
+      const dockIconPath = findBundledResourcePath('icon.png')
+      if (dockIconPath && existsSync(dockIconPath)) {
+        app.dock.setIcon(dockIconPath)
+        // Initialize badge icon for canvas-based badge overlay
+        initBadgeIcon(dockIconPath)
+      }
+    } catch (error) {
+      mainLog.error('[startup] Failed to initialize dock icon:', error)
     }
 
     // Multi-instance dev: show instance number badge on dock icon
@@ -202,22 +223,34 @@ app.whenReady().then(async () => {
 
   try {
     // Initialize window manager
+    mainLog.info('[startup] Initializing WindowManager')
     windowManager = new WindowManager()
+    mainLog.info('[startup] Initializing BrowserPaneManager')
     browserPaneManager = new BrowserPaneManager()
 
     // Create the application menu (needs windowManager for New Window action)
+    mainLog.info('[startup] Creating application menu')
     createApplicationMenu(windowManager)
-    initTray(windowManager)
+    try {
+      mainLog.info('[startup] Initializing tray')
+      initTray(windowManager)
+    } catch (error) {
+      mainLog.error('[tray] Failed to initialize tray:', error)
+    }
 
     // Initialize session manager
+    mainLog.info('[startup] Initializing SessionManager')
     sessionManager = new SessionManager()
+    mainLog.info('[startup] Wiring SessionManager dependencies')
     sessionManager.setWindowManager(windowManager)
     sessionManager.setBrowserPaneManager(browserPaneManager)
 
     // Initialize notification service
+    mainLog.info('[startup] Initializing notification service')
     initNotificationService(windowManager)
 
     // Initialize model refresh service (before IPC handlers so it's available)
+    mainLog.info('[startup] Initializing model refresh service')
     const modelRefreshService = initModelRefreshService(async (slug: string) => {
       const { getCredentialManager } = await import('@agent-operator/shared/credentials')
       const manager = getCredentialManager()
@@ -236,6 +269,7 @@ app.whenReady().then(async () => {
     // Register IPC handlers BEFORE session initialization to ensure they are
     // always available to the renderer even if initialization fails.
     // This prevents "No handler registered" errors during onboarding on fresh installs.
+    mainLog.info('[startup] Registering IPC handlers')
     registerIpcHandlers(sessionManager, windowManager, browserPaneManager)
 
     // Initialize session manager (load sessions from disk BEFORE window creation)

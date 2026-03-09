@@ -76,7 +76,7 @@ export async function promptForFullDiskAccess(): Promise<boolean> {
   const result = await dialog.showMessageBox({
     type: 'warning',
     title: 'Full Disk Access Required',
-    message: 'Cowork needs Full Disk Access',
+    message: 'Dazi needs Full Disk Access',
     detail: 'Some operations (like accessing Trash or protected folders) require Full Disk Access permission.\n\nWould you like to open System Settings to grant this permission?',
     buttons: ['Open Settings', 'Later'],
     defaultId: 0,

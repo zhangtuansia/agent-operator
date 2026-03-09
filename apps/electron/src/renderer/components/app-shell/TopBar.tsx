@@ -15,7 +15,7 @@ import {
 import { TopBarButton } from "@/components/ui/TopBarButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SquarePenRounded } from "@/components/icons/SquarePenRounded"
-import { PanelLeftRounded } from "@/components/icons/PanelLeftRounded"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { isMac } from "@/lib/platform"
@@ -126,7 +126,11 @@ export function TopBar({
                   onClick={onToggleSidebar}
                   aria-label={isSidebarVisible ? t("appMenu.hideSidebar") : t("appMenu.showSidebar")}
                 >
-                  <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
+                  {isSidebarVisible ? (
+                    <PanelLeftClose className="h-[18px] w-[18px] text-foreground/70" />
+                  ) : (
+                    <PanelLeftOpen className="h-[18px] w-[18px] text-foreground/70" />
+                  )}
                 </TopBarButton>
               </TooltipTrigger>
               <TooltipContent side="bottom">{isSidebarVisible ? t("appMenu.hideSidebar") : t("appMenu.showSidebar")}</TooltipContent>
@@ -148,7 +152,7 @@ export function TopBar({
           </div>
 
           <div className="ml-1 flex w-[clamp(220px,42vw,640px)] min-w-0 items-center gap-1">
-            <div className="min-w-0 flex-1 titlebar-no-drag">
+            <div className="min-w-0 flex-1">
               <WorkspaceSwitcher
                 variant="topbar"
                 workspaces={workspaces}
@@ -163,7 +167,7 @@ export function TopBar({
 
         <div
           ref={rightSlotRef}
-          className="pointer-events-auto flex min-w-0 shrink-0 items-center justify-end gap-1 titlebar-no-drag"
+          className="pointer-events-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
           style={{ paddingRight: 12 }}
         >
           <div className="min-w-0">

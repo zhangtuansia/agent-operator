@@ -1388,6 +1388,11 @@ export class SessionManager {
       delete process.env.ANTHROPIC_AUTH_TOKEN
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
+      delete process.env.ANTHROPIC_MODEL
+      delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+      delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+      delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+      delete process.env.ANTHROPIC_SMALL_FAST_MODEL
       delete process.env.CLAUDE_CODE_USE_BEDROCK
 
       // Legacy compatibility fallback:
@@ -1627,7 +1632,9 @@ export class SessionManager {
       enabled: envBedrockEnabled || settingsBedrockEnabled || this.legacyBedrockCompatSnapshot.enabled,
       awsRegion: envAwsRegion || this.legacyBedrockCompatSnapshot.awsRegion,
       awsProfile: envAwsProfile || this.legacyBedrockCompatSnapshot.awsProfile,
-      model: envBedrockModel || this.legacyBedrockCompatSnapshot.model || claudeSettingsModel || undefined,
+      model: envBedrockModel
+        || this.legacyBedrockCompatSnapshot.model
+        || (settingsBedrockEnabled ? claudeSettingsModel : undefined),
     }
   }
 

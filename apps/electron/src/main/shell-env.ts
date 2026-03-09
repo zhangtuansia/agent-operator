@@ -31,6 +31,11 @@ export function loadShellEnv(): void {
     return
   }
 
+  if (process.env.COWORK_SKIP_SHELL_ENV === '1' || process.env.DAZI_SKIP_SHELL_ENV === '1') {
+    mainLog.info('[shell-env] Skipping shell environment load via override')
+    return
+  }
+
   // Skip in dev mode - terminal launches already have full environment
   if (process.env.VITE_DEV_SERVER_URL) {
     mainLog.info('[shell-env] Skipping in dev mode (already have shell environment)')

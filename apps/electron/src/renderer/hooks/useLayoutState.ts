@@ -1,6 +1,10 @@
 import * as React from 'react'
 import * as storage from '@/lib/local-storage'
 
+const DEFAULT_SIDEBAR_WIDTH = 210
+const DEFAULT_SESSION_LIST_WIDTH = 280
+const DEFAULT_RIGHT_SIDEBAR_WIDTH = 300
+
 export interface LayoutState {
   // Sidebar visibility and width
   isSidebarVisible: boolean
@@ -62,12 +66,12 @@ export function useLayoutState(options: UseLayoutStateOptions = {}): LayoutState
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
   })
   const [sidebarWidth, setSidebarWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sidebarWidth, 220)
+    return storage.get(storage.KEYS.sidebarWidth, DEFAULT_SIDEBAR_WIDTH)
   })
 
   // Session list width (persisted, min 240, max 480)
   const [sessionListWidth, setSessionListWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sessionListWidth, 300)
+    return storage.get(storage.KEYS.sessionListWidth, DEFAULT_SESSION_LIST_WIDTH)
   })
 
   // Right sidebar state (persisted, min 280, max 480)
@@ -75,7 +79,7 @@ export function useLayoutState(options: UseLayoutStateOptions = {}): LayoutState
     return storage.get(storage.KEYS.rightSidebarVisible, false)
   })
   const [rightSidebarWidth, setRightSidebarWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.rightSidebarWidth, 300)
+    return storage.get(storage.KEYS.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH)
   })
   const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = React.useState(false)
 
