@@ -293,6 +293,26 @@ export interface BrowserNetworkEntry {
   timestamp: number
 }
 
+export type BrowserDownloadState = 'started' | 'completed' | 'interrupted' | 'cancelled'
+
+export interface BrowserDownloadEntry {
+  id: string
+  timestamp: number
+  url: string
+  filename: string
+  state: BrowserDownloadState
+  bytesReceived: number
+  totalBytes: number
+  mimeType: string
+  savePath?: string
+}
+
+export interface BrowserDownloadOptions {
+  action?: 'list' | 'wait'
+  limit?: number
+  timeoutMs?: number
+}
+
 export interface BrowserPaneCreateOptions {
   id?: string
   show?: boolean
@@ -327,6 +347,7 @@ export interface BrowserPaneAPI {
   wait(id: string, options: BrowserWaitOptions): Promise<BrowserWaitResult>
   console(id: string, limit?: number, level?: BrowserConsoleLevel | 'all'): Promise<BrowserConsoleEntry[]>
   network(id: string, limit?: number, state?: BrowserNetworkState | 'all'): Promise<BrowserNetworkEntry[]>
+  downloads(id: string, options?: BrowserDownloadOptions): Promise<BrowserDownloadEntry[]>
   setClipboard(text: string): Promise<void>
   getClipboard(): Promise<string>
   paste(id: string, text: string): Promise<void>

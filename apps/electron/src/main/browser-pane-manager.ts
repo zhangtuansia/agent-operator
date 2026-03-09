@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto'
-import { BrowserView, BrowserWindow, clipboard, ipcMain, nativeTheme, shell, session, type Session as ElectronSession } from 'electron'
-import { existsSync, realpathSync } from 'fs'
+import { app, BrowserView, BrowserWindow, clipboard, ipcMain, nativeTheme, shell, session, type Session as ElectronSession } from 'electron'
+import { existsSync, mkdirSync, realpathSync } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { isAbsolute, join, normalize as normalizePath, resolve, sep } from 'path'
+import { isAbsolute, join, normalize as normalizePath, parse, resolve, sep } from 'path'
+import { pathToFileURL } from 'url'
 import { mainLog } from './logger'
 import { BrowserCDP } from './browser-cdp'
 import { DEFAULT_THEME, loadAppTheme } from '@agent-operator/shared/config'
@@ -14,6 +15,8 @@ import {
   type BrowserConsoleEntry,
   type BrowserConsoleLevel,
   type BrowserClickOptions,
+  type BrowserDownloadEntry,
+  type BrowserDownloadOptions,
   type BrowserElementGeometry,
   type BrowserInstanceInfo,
   type BrowserKeyOptions,
@@ -33,12 +36,17 @@ const BROWSER_PANE_PARTITION = 'persist:browser-pane'
 const DEFAULT_WINDOW_SIZE = { width: 1240, height: 860 }
 const DEFAULT_WINDOW_MIN_SIZE = { width: 920, height: 640 }
 const TOOLBAR_HEIGHT = 48
-const START_PAGE_SENTINEL = 'dazi-browser-start-page'
+const BROWSER_EMPTY_STATE_PAGE = 'browser-empty-state.html'
+const BROWSER_EMPTY_STATE_LAUNCH_SCHEME = 'dazi-browser:'
 const NETWORK_BUFFER_LIMIT = 200
 const CONSOLE_BUFFER_LIMIT = 200
+const DOWNLOAD_BUFFER_LIMIT = 100
 const DEFAULT_WAIT_TIMEOUT_MS = 10_000
 const DEFAULT_WAIT_POLL_MS = 100
 const DEFAULT_NETWORK_IDLE_MS = 700
+const SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS = 3
+const SCREENSHOT_RETRY_DELAY_MS = 120
+const SCREENSHOT_RESCUE_PAINT_DELAY_MS = 180
 const SENSITIVE_UPLOAD_PATTERNS = [
   /\.ssh\//i,
   /\.gnupg\//i,
@@ -127,8 +135,12 @@ interface BrowserPaneRecord {
   nativeOverlayReady: boolean
   consoleEntries: BrowserConsoleEntry[]
   networkEntries: BrowserNetworkEntry[]
+  downloads: BrowserDownloadEntry[]
   pendingRequestIds: Set<number>
   lastNetworkActivityAt: number
+  lastLaunchToken: string | null
+  keepAliveOnWindowClose: boolean
+  explicitDestroyRequested: boolean
 }
 
 interface BrowserNetworkRequestDetails {
@@ -208,184 +220,11 @@ function normalizeNavigationTarget(input: string): string {
 }
 
 function buildStartPageUrl(): string {
-  const html = `<!doctype html>
-<html lang="zh-CN" data-page="${START_PAGE_SENTINEL}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>新建浏览器窗口</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #f6f3ef;
-        color: #171717;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          background: #161616;
-          color: #f5f5f5;
-        }
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at top, rgba(117, 142, 255, 0.18), transparent 34%),
-          radial-gradient(circle at bottom, rgba(255, 183, 120, 0.14), transparent 30%),
-          var(--page-bg, transparent);
-      }
-      .shell {
-        width: min(720px, calc(100vw - 48px));
-        border-radius: 28px;
-        padding: 28px;
-        background: rgba(255, 255, 255, 0.84);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
-        backdrop-filter: blur(18px);
-      }
-      @media (prefers-color-scheme: dark) {
-        .shell {
-          background: rgba(32, 32, 32, 0.86);
-          border-color: rgba(255, 255, 255, 0.08);
-          box-shadow: 0 28px 72px rgba(0, 0, 0, 0.36);
-        }
-      }
-      .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.04);
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-      h1 {
-        margin: 16px 0 10px;
-        font-size: clamp(30px, 5vw, 46px);
-        line-height: 1.02;
-      }
-      p {
-        margin: 0 0 22px;
-        font-size: 15px;
-        line-height: 1.55;
-        color: rgba(0, 0, 0, 0.68);
-      }
-      @media (prefers-color-scheme: dark) {
-        p {
-          color: rgba(255, 255, 255, 0.7);
-        }
-      }
-      form {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 18px;
-      }
-      input {
-        flex: 1;
-        height: 50px;
-        border-radius: 16px;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        padding: 0 16px;
-        font-size: 15px;
-        background: rgba(255, 255, 255, 0.92);
-        color: inherit;
-      }
-      button {
-        height: 50px;
-        border: 0;
-        border-radius: 16px;
-        padding: 0 18px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        background: #18181b;
-        color: white;
-      }
-      @media (prefers-color-scheme: dark) {
-        input {
-          background: rgba(20, 20, 20, 0.92);
-          border-color: rgba(255, 255, 255, 0.08);
-        }
-        button {
-          background: #fafafa;
-          color: #111;
-        }
-      }
-      .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .chip {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        background: transparent;
-        color: inherit;
-        padding: 10px 14px;
-        border-radius: 999px;
-        font-size: 13px;
-        cursor: pointer;
-      }
-      @media (prefers-color-scheme: dark) {
-        .chip {
-          border-color: rgba(255, 255, 255, 0.12);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="shell">
-      <div class="eyebrow">Browser Workspace</div>
-      <h1>打开一个受应用管理的浏览器窗口。</h1>
-      <p>这里可以直接输入网址、搜索词，或者跳到常用站点。窗口会出现在顶部浏览器条里，后续也能接浏览器自动化动作。</p>
-      <form id="browser-form">
-        <input id="browser-target" autofocus placeholder="输入网址或搜索内容" />
-        <button type="submit">打开</button>
-      </form>
-      <div class="chips">
-        <button class="chip" data-target="https://www.github.com" type="button">GitHub</button>
-        <button class="chip" data-target="https://www.notion.so" type="button">Notion</button>
-        <button class="chip" data-target="https://news.ycombinator.com" type="button">Hacker News</button>
-        <button class="chip" data-target="https://www.google.com" type="button">Google</button>
-      </div>
-    </main>
-    <script>
-      const normalizeTarget = (value) => {
-        const trimmed = String(value || '').trim();
-        if (!trimmed) return 'about:blank';
-        if (/^[a-zA-Z][a-zA-Z\\d+.-]*:/.test(trimmed)) return trimmed;
-        if (/^(localhost|127(?:\\.\\d{1,3}){3}|0\\.0\\.0\\.0|\\d{1,3}(?:\\.\\d{1,3}){3})(:\\d+)?(?:\\/|$)/i.test(trimmed)) {
-          return 'http://' + trimmed;
-        }
-        if (trimmed.includes(' ') || (!trimmed.includes('.') && !trimmed.includes('/'))) {
-          return 'https://www.bing.com/search?q=' + encodeURIComponent(trimmed);
-        }
-        return 'https://' + trimmed;
-      };
+  if (VITE_DEV_SERVER_URL) {
+    return `${VITE_DEV_SERVER_URL}/${BROWSER_EMPTY_STATE_PAGE}`
+  }
 
-      const openTarget = (value) => {
-        window.location.href = normalizeTarget(value);
-      };
-
-      const form = document.getElementById('browser-form');
-      const input = document.getElementById('browser-target');
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        openTarget(input.value);
-      });
-
-      for (const button of document.querySelectorAll('[data-target]')) {
-        button.addEventListener('click', () => openTarget(button.getAttribute('data-target')));
-      }
-    </script>
-  </body>
-</html>`
-
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+  return pathToFileURL(join(__dirname, 'renderer', BROWSER_EMPTY_STATE_PAGE)).toString()
 }
 
 export class BrowserPaneManager {
@@ -395,6 +234,12 @@ export class BrowserPaneManager {
   private readonly interactedListeners = new Set<BrowserPaneListener<string>>()
   private toolbarIpcRegistered = false
   private networkTrackingRegistered = false
+  private downloadTrackingRegistered = false
+  private sessionPathResolver: ((sessionId: string) => string | undefined) | null = null
+
+  setSessionPathResolver(resolver: ((sessionId: string) => string | undefined) | null): void {
+    this.sessionPathResolver = resolver
+  }
 
   createInstance(input?: string | BrowserPaneCreateOptions): string {
     const options = typeof input === 'string' ? { id: input } : (input ?? {})
@@ -499,8 +344,12 @@ export class BrowserPaneManager {
       nativeOverlayReady: false,
       consoleEntries: [],
       networkEntries: [],
+      downloads: [],
       pendingRequestIds: new Set(),
       lastNetworkActivityAt: Date.now(),
+      lastLaunchToken: null,
+      keepAliveOnWindowClose: true,
+      explicitDestroyRequested: false,
       info: {
         id,
         url: 'about:blank',
@@ -603,6 +452,7 @@ export class BrowserPaneManager {
     const record = this.instances.get(id)
     if (!record) return
     this.forceCloseToolbarMenu(record, 'window-destroyed')
+    record.explicitDestroyRequested = true
     record.window.close()
   }
 
@@ -690,14 +540,14 @@ export class BrowserPaneManager {
         }
       }
 
-      const image = await record.pageView.webContents.capturePage()
-      const buffer = format === 'jpeg'
-        ? image.toJPEG(Math.max(1, Math.min(100, options?.jpegQuality ?? 90)))
-        : image.toPNG()
+      const captured = await this.capturePageWithRecovery(record, {
+        format,
+        jpegQuality: Math.max(1, Math.min(100, options?.jpegQuality ?? 90)),
+      })
 
       return {
-        dataUrl: `data:image/${format};base64,${buffer.toString('base64')}`,
-        format,
+        dataUrl: `data:image/${captured.format};base64,${captured.buffer.toString('base64')}`,
+        format: captured.format,
         metadata: annotatedRefs.length > 0 ? { annotatedRefs } : undefined,
       }
     } finally {
@@ -846,6 +696,26 @@ export class BrowserPaneManager {
     return filtered.slice(-maxEntries)
   }
 
+  async getDownloads(id: string, options?: BrowserDownloadOptions): Promise<BrowserDownloadEntry[]> {
+    const record = this.requireRecord(id)
+    const action = options?.action ?? 'list'
+    const limit = Math.max(1, Math.min(200, Number(options?.limit ?? 20)))
+
+    if (action === 'wait') {
+      const timeoutMs = Math.max(100, Number(options?.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS))
+      const started = Date.now()
+      while (Date.now() - started <= timeoutMs) {
+        const hasTerminal = record.downloads.some((entry) =>
+          entry.state === 'completed' || entry.state === 'interrupted' || entry.state === 'cancelled',
+        )
+        if (hasTerminal) break
+        await sleep(100)
+      }
+    }
+
+    return record.downloads.slice(-limit)
+  }
+
   setClipboard(text: string): void {
     clipboard.writeText(text)
   }
@@ -971,6 +841,17 @@ export class BrowserPaneManager {
     record.networkEntries = trimArray(nextEntries, NETWORK_BUFFER_LIMIT)
   }
 
+  private pushDownloadEntry(record: BrowserPaneRecord, entry: BrowserDownloadEntry): void {
+    const nextEntries = [...record.downloads]
+    const index = nextEntries.findIndex((existing) => existing.id === entry.id)
+    if (index >= 0) {
+      nextEntries[index] = { ...nextEntries[index], ...entry }
+    } else {
+      nextEntries.push(entry)
+    }
+    record.downloads = trimArray(nextEntries, DOWNLOAD_BUFFER_LIMIT)
+  }
+
   private recordNetworkEvent(webContentsId: number, details: BrowserNetworkRequestDetails, state: BrowserNetworkState): void {
     const record = this.getRecordByWebContentsId(webContentsId)
     if (!record) return
@@ -998,8 +879,6 @@ export class BrowserPaneManager {
   }
 
   private ensureNetworkTracking(browserSession: ElectronSession): void {
-    if (this.networkTrackingRegistered) return
-
     const webRequest = (browserSession as ElectronSession & {
       webRequest?: {
         onBeforeRequest?: (listener: (details: BrowserNetworkRequestDetails & { webContentsId?: number }, callback: (response: Record<string, never>) => void) => void) => void
@@ -1008,30 +887,107 @@ export class BrowserPaneManager {
       }
     }).webRequest
 
-    if (!webRequest?.onBeforeRequest || !webRequest.onCompleted || !webRequest.onErrorOccurred) {
-      return
+    if (!this.networkTrackingRegistered && webRequest?.onBeforeRequest && webRequest.onCompleted && webRequest.onErrorOccurred) {
+      this.networkTrackingRegistered = true
+
+      webRequest.onBeforeRequest((details, callback) => {
+        if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
+          this.recordNetworkEvent(details.webContentsId, details, 'pending')
+        }
+        callback({})
+      })
+
+      webRequest.onCompleted((details) => {
+        if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
+          this.recordNetworkEvent(details.webContentsId, details, 'completed')
+        }
+      })
+
+      webRequest.onErrorOccurred((details) => {
+        if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
+          this.recordNetworkEvent(details.webContentsId, details, 'failed')
+        }
+      })
     }
 
-    this.networkTrackingRegistered = true
+    if (!this.downloadTrackingRegistered) {
+      this.downloadTrackingRegistered = true
+      browserSession.on('will-download', (_event, item, webContents) => {
+        const wcId = webContents?.id
+        if (typeof wcId !== 'number') return
+        const record = this.getRecordByWebContentsId(wcId)
+        if (!record) return
 
-    webRequest.onBeforeRequest((details, callback) => {
-      if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
-        this.recordNetworkEvent(details.webContentsId, details, 'pending')
-      }
-      callback({})
-    })
+        const downloadsDir = this.resolveDownloadsDir(record)
+        const filename = this.uniqueFilename(downloadsDir, item.getFilename())
+        const savePath = join(downloadsDir, filename)
+        item.setSavePath(savePath)
 
-    webRequest.onCompleted((details) => {
-      if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
-        this.recordNetworkEvent(details.webContentsId, details, 'completed')
-      }
-    })
+        const downloadId = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        this.pushDownloadEntry(record, {
+          id: downloadId,
+          timestamp: Date.now(),
+          url: item.getURL(),
+          filename,
+          state: 'started',
+          bytesReceived: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          mimeType: item.getMimeType() || 'application/octet-stream',
+          savePath,
+        })
 
-    webRequest.onErrorOccurred((details) => {
-      if (typeof details.webContentsId === 'number' && details.webContentsId > 0) {
-        this.recordNetworkEvent(details.webContentsId, details, 'failed')
-      }
-    })
+        const onUpdated = (_evt: Electron.Event, state: string) => {
+          this.pushDownloadEntry(record, {
+            id: downloadId,
+            timestamp: Date.now(),
+            url: item.getURL(),
+            filename,
+            state: state === 'interrupted' ? 'interrupted' : 'started',
+            bytesReceived: item.getReceivedBytes(),
+            totalBytes: item.getTotalBytes(),
+            mimeType: item.getMimeType() || 'application/octet-stream',
+            savePath,
+          })
+        }
+
+        item.on('updated', onUpdated)
+        item.once('done', (_evt, state) => {
+          item.removeListener('updated', onUpdated)
+          this.pushDownloadEntry(record, {
+            id: downloadId,
+            timestamp: Date.now(),
+            url: item.getURL(),
+            filename,
+            state: state === 'completed' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'interrupted',
+            bytesReceived: item.getReceivedBytes(),
+            totalBytes: item.getTotalBytes(),
+            mimeType: item.getMimeType() || 'application/octet-stream',
+            savePath: item.getSavePath() || savePath,
+          })
+        })
+      })
+    }
+  }
+
+  private resolveDownloadsDir(record: BrowserPaneRecord): string {
+    const sessionId = record.info.boundSessionId ?? record.info.ownerSessionId
+    const sessionPath = sessionId ? this.sessionPathResolver?.(sessionId) : undefined
+    if (sessionPath) {
+      const dir = join(sessionPath, 'downloads')
+      mkdirSync(dir, { recursive: true })
+      return dir
+    }
+    return app.getPath('downloads')
+  }
+
+  private uniqueFilename(dir: string, filename: string): string {
+    if (!existsSync(join(dir, filename))) return filename
+    const { name, ext } = parse(filename)
+    let counter = 1
+    while (existsSync(join(dir, `${name}_${counter}${ext}`))) {
+      counter += 1
+    }
+    return `${name}_${counter}${ext}`
   }
 
   private async waitForToolbarReady(record: BrowserPaneRecord, timeoutMs = 2_000): Promise<void> {
@@ -1062,6 +1018,123 @@ export class BrowserPaneManager {
     record.pageView.webContents.focus()
     this.emitInteracted(record.id)
     this.emitState(record)
+  }
+
+  private async waitForScreenshotReadiness(record: BrowserPaneRecord): Promise<void> {
+    try {
+      await this.waitFor(record.id, {
+        kind: 'network-idle',
+        timeoutMs: 1_000,
+      })
+    } catch {
+      // Ignore readiness timeout and proceed after a bounded delay.
+    }
+    await sleep(SCREENSHOT_RETRY_DELAY_MS)
+  }
+
+  private isDisplaySurfaceUnavailableError(error: unknown): boolean {
+    return error instanceof Error && error.message.toLowerCase().includes('current display surface not available for capture')
+  }
+
+  private async capturePageImage(
+    record: BrowserPaneRecord,
+    options: {
+      format: 'png' | 'jpeg'
+      jpegQuality: number
+      useHiddenCaptureOptions: boolean
+    },
+  ): Promise<{ buffer: Buffer; format: 'png' | 'jpeg' } | null> {
+    const capturePage = record.pageView.webContents.capturePage as any
+    const captureOptions = options.useHiddenCaptureOptions
+      ? { stayHidden: true, stayAwake: true }
+      : undefined
+
+    let image: any
+    if (captureOptions) {
+      image = await capturePage.call(record.pageView.webContents, undefined, captureOptions)
+    } else {
+      image = await capturePage.call(record.pageView.webContents)
+    }
+
+    if (!image) return null
+    if (typeof image.isEmpty === 'function' && image.isEmpty()) {
+      return null
+    }
+
+    const buffer = options.format === 'jpeg'
+      ? image.toJPEG(options.jpegQuality)
+      : image.toPNG()
+
+    if (!buffer || buffer.length === 0) {
+      return null
+    }
+
+    return { buffer, format: options.format }
+  }
+
+  private async capturePageWithRecovery(
+    record: BrowserPaneRecord,
+    options: {
+      format: 'png' | 'jpeg'
+      jpegQuality: number
+    },
+  ): Promise<{ buffer: Buffer; format: 'png' | 'jpeg' }> {
+    let sawDisplaySurfaceUnavailable = false
+
+    for (let attempt = 1; attempt <= SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS; attempt += 1) {
+      try {
+        const captured = await this.capturePageImage(record, {
+          ...options,
+          useHiddenCaptureOptions: true,
+        })
+        if (captured) return captured
+      } catch (error) {
+        if (this.isDisplaySurfaceUnavailableError(error)) {
+          sawDisplaySurfaceUnavailable = true
+          mainLog.warn(`[browser-pane] screenshot display surface unavailable id=${record.id} attempt=${attempt}/${SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS}`)
+        } else {
+          throw error
+        }
+      }
+
+      if (attempt < SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS) {
+        await this.waitForScreenshotReadiness(record)
+      }
+    }
+
+    const wasVisible = record.window.isVisible()
+    try {
+      if (!wasVisible && !record.window.isDestroyed()) {
+        if (record.window.isMinimized()) {
+          record.window.restore()
+        }
+        ;(record.window as BrowserWindow & { showInactive?: () => void }).showInactive?.() ?? record.window.show()
+        await sleep(SCREENSHOT_RESCUE_PAINT_DELAY_MS)
+        await this.waitForScreenshotReadiness(record)
+      }
+
+      const rescue = await this.capturePageImage(record, {
+        ...options,
+        useHiddenCaptureOptions: false,
+      })
+      if (rescue) return rescue
+    } catch (error) {
+      if (this.isDisplaySurfaceUnavailableError(error)) {
+        sawDisplaySurfaceUnavailable = true
+      } else {
+        throw error
+      }
+    } finally {
+      if (!wasVisible && !record.window.isDestroyed()) {
+        record.window.hide()
+      }
+    }
+
+    if (sawDisplaySurfaceUnavailable) {
+      throw new Error(`Failed to capture screenshot: current display surface is unavailable. Try focusing the browser window and retry.`)
+    }
+
+    throw new Error('Failed to capture screenshot: empty image buffer')
   }
 
   private validateUploadFilePath(filePath: string): string {
@@ -1107,6 +1180,12 @@ export class BrowserPaneManager {
     const { id, window, toolbarView, pageView, nativeOverlayView } = record
     const emitState = () => this.emitState(record)
 
+    window.on('close', (event) => {
+      if (!record.explicitDestroyRequested && record.keepAliveOnWindowClose) {
+        event.preventDefault()
+        this.hide(id)
+      }
+    })
     window.on('show', emitState)
     window.on('hide', emitState)
     window.on('focus', () => {
@@ -1118,6 +1197,7 @@ export class BrowserPaneManager {
     window.on('enter-full-screen', () => this.layoutViews(record))
     window.on('leave-full-screen', () => this.layoutViews(record))
     window.on('closed', () => {
+      record.explicitDestroyRequested = false
       this.applyAgentControlLock(record, false)
       record.cdp.detach()
       if (!this.instances.delete(id)) return
@@ -1136,23 +1216,33 @@ export class BrowserPaneManager {
     })
 
     pageView.webContents.on('did-start-loading', emitState)
+    pageView.webContents.on('will-navigate', (event, url) => {
+      if (this.isEmptyStateBridgeUrl(url)) {
+        event.preventDefault()
+        void this.maybeHandleEmptyStateBridgeNavigation(record, url)
+        return
+      }
+      this.emitInteracted(id)
+    })
     pageView.webContents.on('did-stop-loading', () => {
       record.pendingRequestIds.clear()
       record.lastNetworkActivityAt = Date.now()
       emitState()
       void this.updateThemeColor(record)
     })
-    pageView.webContents.on('did-navigate', () => {
+    pageView.webContents.on('did-navigate', (_event, url) => {
       record.pendingRequestIds.clear()
       record.lastNetworkActivityAt = Date.now()
       emitState()
       void this.updateThemeColor(record)
+      void this.maybeHandleEmptyStateLaunch(record, url)
     })
-    pageView.webContents.on('did-navigate-in-page', () => {
+    pageView.webContents.on('did-navigate-in-page', (_event, url) => {
       record.pendingRequestIds.clear()
       record.lastNetworkActivityAt = Date.now()
       emitState()
       void this.updateThemeColor(record)
+      void this.maybeHandleEmptyStateLaunch(record, url)
     })
     pageView.webContents.on('page-title-updated', (event) => {
       event.preventDefault()
@@ -1441,7 +1531,7 @@ export class BrowserPaneManager {
 
   private syncInfo(record: BrowserPaneRecord): void {
     const currentUrl = record.pageView.webContents.getURL()
-    const isStartPage = currentUrl === record.startPageUrl || currentUrl.includes(START_PAGE_SENTINEL)
+    const isStartPage = currentUrl === record.startPageUrl || this.isBrowserEmptyStateUrl(currentUrl)
     const title = record.pageView.webContents.getTitle().trim()
 
     record.info.url = isStartPage ? 'about:blank' : (currentUrl || 'about:blank')
@@ -1492,7 +1582,7 @@ export class BrowserPaneManager {
   private async updateThemeColor(record: BrowserPaneRecord): Promise<void> {
     try {
       const currentUrl = record.pageView.webContents.getURL()
-      if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes(START_PAGE_SENTINEL)) {
+      if (!currentUrl || currentUrl === 'about:blank' || this.isBrowserEmptyStateUrl(currentUrl)) {
         if (record.info.themeColor !== null) {
           record.info.themeColor = null
           this.pushToolbarState(record)
@@ -1534,6 +1624,91 @@ export class BrowserPaneManager {
       record.pageView.webContents.once('did-navigate', onNavigate)
       record.pageView.webContents.once('did-navigate-in-page', onNavigate)
     })
+  }
+
+  private isBrowserEmptyStateUrl(url: string): boolean {
+    if (!url) return false
+    return url.includes(`/${BROWSER_EMPTY_STATE_PAGE}`) || url.includes(`\\${BROWSER_EMPTY_STATE_PAGE}`)
+  }
+
+  private buildDeepLinkFromRoute(route: string): string {
+    return `agentoperator://${route.replace(/^\/+/, '')}`
+  }
+
+  private async triggerEmptyStateRouteLaunch(
+    record: BrowserPaneRecord,
+    route: string,
+    token: string | null,
+    source: 'hash' | 'bridge',
+  ): Promise<void> {
+    if (token && record.lastLaunchToken === token) {
+      return
+    }
+    record.lastLaunchToken = token
+
+    if (source === 'hash') {
+      void record.pageView.webContents.executeJavaScript(
+        "if (window.location.hash.includes('launch=')) history.replaceState(null, '', window.location.pathname + window.location.search);",
+        true,
+      ).catch(() => {})
+    }
+
+    mainLog.info(`[browser-pane] handling empty-state launch id=${record.id} source=${source} route=${route}`)
+    await shell.openExternal(this.buildDeepLinkFromRoute(route))
+  }
+
+  private isEmptyStateBridgeUrl(url: string): boolean {
+    return url.startsWith(`${BROWSER_EMPTY_STATE_LAUNCH_SCHEME}//launch?`)
+  }
+
+  private async maybeHandleEmptyStateBridgeNavigation(record: BrowserPaneRecord, url: string): Promise<boolean> {
+    if (!this.isEmptyStateBridgeUrl(url)) {
+      return false
+    }
+
+    const currentUrl = record.pageView.webContents.getURL()
+    if (!this.isBrowserEmptyStateUrl(currentUrl)) {
+      mainLog.warn(`[browser-pane] ignoring empty-state bridge launch outside browser empty state id=${record.id} currentUrl=${currentUrl}`)
+      return true
+    }
+
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return true
+    }
+
+    const route = parsed.searchParams.get('route')?.trim()
+    const token = parsed.searchParams.get('ts')?.trim() || route || null
+    if (!route) {
+      return true
+    }
+
+    await this.triggerEmptyStateRouteLaunch(record, route, token, 'bridge')
+    return true
+  }
+
+  private async maybeHandleEmptyStateLaunch(record: BrowserPaneRecord, url: string): Promise<void> {
+    if (!this.isBrowserEmptyStateUrl(url) || !url.includes('#launch=')) {
+      return
+    }
+
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return
+    }
+
+    const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash
+    const launchPayload = hash.startsWith('launch=') ? hash.slice('launch='.length) : hash
+    const launchParams = new URLSearchParams(launchPayload)
+    const route = launchParams.get('route')?.trim()
+    const token = launchParams.get('ts')?.trim() || route || null
+    if (!route) return
+
+    await this.triggerEmptyStateRouteLaunch(record, route, token, 'hash')
   }
 
   private async waitForNetworkIdle(record: BrowserPaneRecord, timeoutMs = 8_000): Promise<void> {

@@ -30,6 +30,8 @@ import type {
 } from './types.ts';
 
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
+const PLUGIN_NAME_PREFIX = 'dazi-workspace-';
+const LEGACY_PLUGIN_NAME_PREFIX = 'craft-workspace-';
 
 // ============================================================
 // Path Utilities
@@ -344,6 +346,7 @@ export function renameWorkspaceFolder(rootPath: string, newName: string): boolea
 
   config.name = newName.trim();
   saveWorkspaceConfig(rootPath, config);
+  ensurePluginManifest(rootPath, config.name);
   return true;
 }
 
@@ -474,21 +477,48 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
 export function ensurePluginManifest(rootPath: string, workspaceName: string): void {
   const pluginDir = join(rootPath, '.claude-plugin');
   const manifestPath = join(pluginDir, 'plugin.json');
-
-  if (existsSync(manifestPath)) return;
+  const desiredName = generatePluginManifestName(workspaceName);
 
   // Create .claude-plugin directory
   if (!existsSync(pluginDir)) {
     mkdirSync(pluginDir, { recursive: true });
   }
 
-  // Create minimal plugin manifest
-  const manifest = {
-    name: `craft-workspace-${workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-    version: '1.0.0',
-  };
+  if (existsSync(manifestPath)) {
+    try {
+      const current = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<string, unknown>;
+      const currentName = typeof current.name === 'string' ? current.name : '';
+      const shouldUpdateName = !currentName
+        || currentName.startsWith(LEGACY_PLUGIN_NAME_PREFIX)
+        || currentName.startsWith(PLUGIN_NAME_PREFIX);
 
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      if (!shouldUpdateName || currentName === desiredName) {
+        return;
+      }
+
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          ...current,
+          name: desiredName,
+          version: typeof current.version === 'string' ? current.version : '1.0.0',
+        }, null, 2),
+      );
+      return;
+    } catch {
+      // Fall through and rewrite a minimal valid manifest.
+    }
+  }
+
+  // Create minimal plugin manifest
+  writeFileSync(manifestPath, JSON.stringify({
+    name: desiredName,
+    version: '1.0.0',
+  }, null, 2));
+}
+
+export function generatePluginManifestName(workspaceName: string): string {
+  return `${PLUGIN_NAME_PREFIX}${workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'}`;
 }
 
 export { CONFIG_DIR, DEFAULT_WORKSPACES_DIR };

@@ -16,6 +16,9 @@ const webRequestListeners: Record<string, Function[]> = {
   completed: [],
   errorOccurred: [],
 }
+const sessionListeners: Record<string, Function[]> = {
+  willDownload: [],
+}
 
 function createMockWebContents() {
   const listeners: Record<string, Function[]> = {}
@@ -107,16 +110,21 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
   let contentHeight = opts?.height ?? 860
   let visible = false
   let resizable = true
+  let destroyed = false
 
   const win = {
     on: mock((event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
     }),
-    isDestroyed: mock(() => false),
+    isDestroyed: mock(() => destroyed),
     isMinimized: mock(() => false),
     restore: mock(() => {}),
     show: mock(() => {
+      visible = true
+      for (const cb of listeners.show || []) cb()
+    }),
+    showInactive: mock(() => {
       visible = true
       for (const cb of listeners.show || []) cb()
     }),
@@ -129,6 +137,15 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
       for (const cb of listeners.focus || []) cb()
     }),
     close: mock(() => {
+      let prevented = false
+      const event = {
+        preventDefault: () => {
+          prevented = true
+        },
+      }
+      for (const cb of listeners.close || []) cb(event)
+      if (prevented) return
+      destroyed = true
       for (const cb of listeners.closed || []) cb()
     }),
     addBrowserView: mock((_view: any) => {}),
@@ -170,6 +187,9 @@ mock.module('electron', () => ({
   shell: {
     openExternal: mockShellOpenExternal,
   },
+  app: {
+    getPath: mock((name: string) => (name === 'downloads' ? join(tmpdir(), 'downloads') : tmpdir())),
+  },
   clipboard: {
     writeText: mock((text: string) => {
       clipboardText = text
@@ -189,6 +209,11 @@ mock.module('electron', () => ({
           webRequestListeners.errorOccurred.push(listener)
         }),
       },
+      on: mock((event: string, listener: Function) => {
+        if (event === 'will-download') {
+          sessionListeners.willDownload.push(listener)
+        }
+      }),
     })),
   },
 }))
@@ -266,6 +291,7 @@ describe('BrowserPaneManager', () => {
     webRequestListeners.beforeRequest.length = 0
     webRequestListeners.completed.length = 0
     webRequestListeners.errorOccurred.length = 0
+    sessionListeners.willDownload.length = 0
     mockShellOpenExternal.mockClear()
     mockIpcMainHandle.mockClear()
     mockIpcMainRemoveHandler.mockClear()
@@ -393,5 +419,129 @@ describe('BrowserPaneManager', () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }
+  })
+
+  it('keeps browser windows alive on close and only destroys on explicit destroy', () => {
+    const id = manager.createInstance({ id: 'pane-keepalive' })
+    const window = createdWindows[0]
+
+    window.close()
+    expect(manager.listInstances().some((entry) => entry.id === id)).toBe(true)
+    expect(window.hide).toHaveBeenCalled()
+
+    manager.destroyInstance(id)
+    expect(manager.listInstances().some((entry) => entry.id === id)).toBe(false)
+  })
+
+  it('tracks browser downloads and stores them in the session downloads folder when bound', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'browser-pane-downloads-'))
+    manager.setSessionPathResolver(() => tempDir)
+    const id = manager.createInstance({ id: 'pane-downloads', bindToSessionId: 'session-downloads', ownerType: 'session' })
+    const record = (manager as any).instances.get(id)
+
+    let receivedBytes = 0
+    let savePath = ''
+    const itemListeners: Record<string, Function[]> = { updated: [], done: [] }
+    const item = {
+      getFilename: () => 'report.pdf',
+      setSavePath: (value: string) => { savePath = value },
+      getURL: () => 'https://example.com/report.pdf',
+      getReceivedBytes: () => receivedBytes,
+      getTotalBytes: () => 2048,
+      getMimeType: () => 'application/pdf',
+      getSavePath: () => savePath,
+      on: (event: string, listener: Function) => {
+        if (!itemListeners[event]) itemListeners[event] = []
+        itemListeners[event].push(listener)
+      },
+      once: (event: string, listener: Function) => {
+        if (!itemListeners[event]) itemListeners[event] = []
+        itemListeners[event].push(listener)
+      },
+      removeListener: (event: string, listener: Function) => {
+        itemListeners[event] = (itemListeners[event] || []).filter((entry) => entry !== listener)
+      },
+    }
+
+    try {
+      for (const listener of sessionListeners.willDownload) {
+        listener({}, item, record.pageView.webContents)
+      }
+
+      receivedBytes = 1024
+      for (const listener of itemListeners.updated || []) {
+        listener({}, 'progressing')
+      }
+
+      receivedBytes = 2048
+      for (const listener of itemListeners.done || []) {
+        listener({}, 'completed')
+      }
+
+      const downloads = await manager.getDownloads(id, { action: 'list', limit: 10 })
+      expect(downloads).toHaveLength(1)
+      expect(downloads[0]).toMatchObject({
+        filename: 'report.pdf',
+        state: 'completed',
+        savePath: join(tempDir, 'downloads', 'report.pdf'),
+      })
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('handles browser empty-state launch through the dedicated bridge without exposing preload APIs', async () => {
+    const id = manager.createInstance({ id: 'pane-empty-state' })
+    const record = (manager as any).instances.get(id)
+    const preventDefault = mock(() => {})
+
+    record.pageView.webContents._emit(
+      'will-navigate',
+      { preventDefault },
+      'dazi-browser://launch?route=allChats%2Fnew%3Finput%3Dhello&ts=bridge-1',
+    )
+
+    await Promise.resolve()
+
+    expect(preventDefault).toHaveBeenCalled()
+    expect(mockShellOpenExternal).toHaveBeenCalledWith('agentoperator://allChats/new?input=hello')
+
+    record.pageView.webContents._emit(
+      'will-navigate',
+      { preventDefault },
+      'dazi-browser://launch?route=allChats%2Fnew%3Finput%3Dhello&ts=bridge-1',
+    )
+
+    await Promise.resolve()
+
+    expect(mockShellOpenExternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers screenshots after hidden empty captures by briefly revealing the window', async () => {
+    const id = manager.createInstance({ id: 'pane-recovery', show: false })
+    const record = (manager as any).instances.get(id)
+    const capturePageMock = record.pageView.webContents.capturePage
+    let attempts = 0
+
+    capturePageMock.mockImplementation(async () => {
+      attempts += 1
+      if (attempts < 4) {
+        return {
+          isEmpty: () => true,
+        }
+      }
+      return {
+        isEmpty: () => false,
+        toPNG: () => Buffer.from('png-data'),
+        toJPEG: () => Buffer.from('jpeg-data'),
+      }
+    })
+
+    const result = await manager.screenshot(id, { format: 'png' })
+
+    expect(result.format).toBe('png')
+    expect(attempts).toBe(4)
+    expect(record.window.showInactive).toHaveBeenCalled()
+    expect(record.window.hide).toHaveBeenCalled()
   })
 })

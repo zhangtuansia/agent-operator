@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   BROWSER_PANE_WAIT: 'browserPane:wait',
   BROWSER_PANE_CONSOLE: 'browserPane:console',
   BROWSER_PANE_NETWORK: 'browserPane:network',
+  BROWSER_PANE_DOWNLOADS: 'browserPane:downloads',
   BROWSER_PANE_SET_CLIPBOARD: 'browserPane:setClipboard',
   BROWSER_PANE_GET_CLIPBOARD: 'browserPane:getClipboard',
   BROWSER_PANE_PASTE: 'browserPane:paste',

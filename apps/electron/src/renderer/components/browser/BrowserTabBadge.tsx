@@ -13,7 +13,7 @@ interface BrowserTabBadgeProps extends React.ButtonHTMLAttributes<HTMLButtonElem
 }
 
 export const BrowserTabBadge = React.forwardRef<HTMLButtonElement, BrowserTabBadgeProps>(
-  function BrowserTabBadge({ instance, isActive: _isActive, className, style, ...buttonProps }, ref) {
+  function BrowserTabBadge({ instance, isActive, className, style, ...buttonProps }, ref) {
     const { t } = useTranslation()
     const hostname = getHostname(instance.url)
     const displayLabel =
@@ -40,14 +40,18 @@ export const BrowserTabBadge = React.forwardRef<HTMLButtonElement, BrowserTabBad
         ref={ref}
         type="button"
         className={[
-          "group flex h-[26px] max-w-[160px] cursor-pointer select-none items-center gap-1 rounded-lg bg-background pl-2.5 pr-1.5 text-[11px] leading-tight shadow-minimal transition-colors titlebar-no-drag",
+          "group flex h-[26px] max-w-[160px] cursor-pointer select-none items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[11px] leading-tight transition-colors titlebar-no-drag",
+          isActive
+            ? "bg-background-elevated shadow-middle ring-1 ring-foreground/8"
+            : "bg-background shadow-minimal",
           foregroundClass,
           instance.agentControlActive ? "border border-accent" : "",
           className ?? "",
         ].join(" ")}
         style={{
           backgroundColor: instance.themeColor || undefined,
-          transition: "background-color 200ms ease, border-color 200ms ease",
+          transition: "background-color 200ms ease, border-color 200ms ease, box-shadow 180ms ease, transform 180ms ease",
+          transform: isActive ? "translateY(-1px)" : undefined,
           ...style,
         }}
         aria-label={t("browserTabStrip.actionsFor", { label: displayLabel })}

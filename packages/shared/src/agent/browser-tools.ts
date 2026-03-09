@@ -42,6 +42,18 @@ export interface BrowserToolNetworkEntry {
   timestamp: number
 }
 
+export interface BrowserToolDownloadEntry {
+  id: string
+  timestamp: number
+  url: string
+  filename: string
+  state: 'started' | 'completed' | 'interrupted' | 'cancelled'
+  bytesReceived: number
+  totalBytes: number
+  mimeType: string
+  savePath?: string
+}
+
 export interface BrowserToolWaitResult {
   kind: 'selector' | 'text' | 'url' | 'network-idle'
   matched: string
@@ -85,6 +97,7 @@ export interface BrowserPaneFns {
   wait: (args: { kind: BrowserToolWaitResult['kind']; value?: string; timeoutMs?: number }) => Promise<BrowserToolWaitResult>
   getConsoleEntries: (limit?: number, level?: BrowserToolConsoleEntry['level'] | 'all') => Promise<BrowserToolConsoleEntry[]>
   getNetworkEntries: (limit?: number, state?: BrowserToolNetworkEntry['state'] | 'all') => Promise<BrowserToolNetworkEntry[]>
+  getDownloads: (options?: { action?: 'list' | 'wait'; limit?: number; timeoutMs?: number }) => Promise<BrowserToolDownloadEntry[]>
   setClipboard: (text: string) => Promise<void>
   getClipboard: () => Promise<string>
   paste: (text: string) => Promise<void>
@@ -125,6 +138,7 @@ Use this when you need Dazi's built-in browser windows. The tool can:
 - click, click at coordinates, drag, fill, type, select, upload files
 - wait for selectors/text/URLs/network idle
 - inspect console and network activity
+- inspect browser downloads and wait for completed files
 - read/write/paste clipboard text
 - scroll, go back/forward
 - run JavaScript in page context
@@ -154,6 +168,8 @@ Examples:
 - \`wait selector input[type="email"] 5000\`
 - \`console 100 warning\`
 - \`network 50 failed\`
+- \`downloads list 10\`
+- \`downloads wait 15000\`
 - \`key Enter\`
 - \`key k meta\`
 - \`evaluate document.title\`
@@ -391,6 +407,26 @@ function formatNetworkEntry(entry: BrowserToolNetworkEntry): string {
   return `[${new Date(entry.timestamp).toISOString()}] ${entry.method} ${status} ${resource} ${entry.url}${suffix}`
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
+}
+
+function formatDownloadEntry(entry: BrowserToolDownloadEntry): string {
+  const progress = entry.totalBytes > 0
+    ? `${formatBytes(entry.bytesReceived)} / ${formatBytes(entry.totalBytes)}`
+    : formatBytes(entry.bytesReceived)
+  const pathSuffix = entry.savePath ? ` -> ${entry.savePath}` : ''
+  return `[${new Date(entry.timestamp).toISOString()}] ${entry.state} ${entry.filename} (${progress}, ${entry.mimeType}) ${entry.url}${pathSuffix}`
+}
+
 function matchesNetworkFilter(entry: BrowserToolNetworkEntry, filter: string): boolean {
   switch (filter) {
     case 'all':
@@ -512,6 +548,7 @@ async function executeSingleCommand(
         '  wait <selector|text|url|network-idle> <value?> [timeoutMs]',
         '  console [limit] [level]',
         '  network [limit] [pending|completed|failed|2xx|3xx|4xx|5xx|all]',
+        '  downloads [list|wait] [limit|timeoutMs]',
         '  key <key> [modifier[+modifier] ...]',
         '  back',
         '  forward',
@@ -848,6 +885,47 @@ async function executeSingleCommand(
       output: [
         `Network entries (${entries.length}) filter=${filterRaw}: pending=${counts.pending ?? 0}, completed=${counts.completed ?? 0}, failed=${counts.failed ?? 0}`,
         ...entries.map(formatNetworkEntry),
+      ].join('\n'),
+      appendReleaseHint: true,
+    }
+  }
+
+  if (cmd === 'downloads') {
+    const actionOrValue = parts[1]?.toLowerCase()
+    const action = actionOrValue === 'wait' || actionOrValue === 'list'
+      ? actionOrValue
+      : 'list'
+    const numericToken = actionOrValue && actionOrValue !== 'wait' && actionOrValue !== 'list'
+      ? actionOrValue
+      : parts[2]
+    const numericValue = numericToken ? Number(numericToken) : undefined
+    if (numericToken && Number.isNaN(numericValue)) {
+      throw new Error(`Invalid downloads numeric value "${numericToken}".`)
+    }
+
+    const entries = await fns.getDownloads({
+      action,
+      limit: action === 'list' ? numericValue : undefined,
+      timeoutMs: action === 'wait' ? numericValue : undefined,
+    })
+
+    if (entries.length === 0) {
+      return {
+        output: action === 'wait'
+          ? 'No completed downloads detected before timeout.'
+          : 'No downloads recorded for this browser window.',
+        appendReleaseHint: true,
+      }
+    }
+
+    const terminalCount = entries.filter((entry) =>
+      entry.state === 'completed' || entry.state === 'interrupted' || entry.state === 'cancelled',
+    ).length
+
+    return {
+      output: [
+        `Downloads (${entries.length}) action=${action}: terminal=${terminalCount}`,
+        ...entries.map(formatDownloadEntry),
       ].join('\n'),
       appendReleaseHint: true,
     }

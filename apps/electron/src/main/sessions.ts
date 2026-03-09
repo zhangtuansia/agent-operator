@@ -758,6 +758,7 @@ export class SessionManager {
 
   setBrowserPaneManager(browserPaneManager: BrowserPaneManager): void {
     this.browserPaneManager = browserPaneManager
+    this.browserPaneManager.setSessionPathResolver((sessionId) => this.getSessionPath(sessionId) ?? undefined)
   }
 
   private getSessionBrowserPaneManager(): BrowserPaneManager {
@@ -918,6 +919,10 @@ export class SessionManager {
       getNetworkEntries: async (limit, state) => {
         const instanceId = resolveWindowId()
         return browserPaneManager.getNetworkEntries(instanceId, limit, state)
+      },
+      getDownloads: async (options) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.getDownloads(instanceId, options)
       },
       setClipboard: async (text) => {
         browserPaneManager.setClipboard(text)

@@ -45,6 +45,19 @@ function createMockFns(): BrowserPaneFns {
       { id: 1, method: 'GET', url: 'https://example.com', status: 200, resourceType: 'document', state: 'completed' as const, timestamp: 1_700_000_000_000 },
       { id: 2, method: 'POST', url: 'https://example.com/api', status: 500, resourceType: 'xhr', state: 'failed' as const, errorText: 'Server Error', timestamp: 1_700_000_001_000 },
     ])),
+    getDownloads: mock(async () => ([
+      {
+        id: 'dl-1',
+        timestamp: 1_700_000_002_000,
+        url: 'https://example.com/report.pdf',
+        filename: 'report.pdf',
+        state: 'completed' as const,
+        bytesReceived: 2048,
+        totalBytes: 2048,
+        mimeType: 'application/pdf',
+        savePath: '/tmp/downloads/report.pdf',
+      },
+    ])),
     setClipboard: mock(async () => undefined),
     getClipboard: mock(async () => 'clipboard content'),
     paste: mock(async () => undefined),
@@ -181,6 +194,17 @@ describe('browser_tool', () => {
     expect((consoleResult.content[0] as any).text).toContain('Console entries')
     expect((networkResult.content[0] as any).text).toContain('Network entries')
     expect((clipboard.content[0] as any).text).toContain('clipboard content')
+  })
+
+  it('supports downloads list and wait commands', async () => {
+    const listResult = await executeTool(tools, 'browser_tool', { command: 'downloads list 10' })
+    const waitResult = await executeTool(tools, 'browser_tool', { command: 'downloads wait 15000' })
+
+    expect((fns.getDownloads as any).mock.calls[0]?.[0]).toEqual({ action: 'list', limit: 10, timeoutMs: undefined })
+    expect((fns.getDownloads as any).mock.calls[1]?.[0]).toEqual({ action: 'wait', limit: undefined, timeoutMs: 15000 })
+    expect((listResult.content[0] as any).text).toContain('Downloads (1) action=list')
+    expect((listResult.content[0] as any).text).toContain('-> /tmp/downloads/report.pdf')
+    expect((waitResult.content[0] as any).text).toContain('Downloads (1) action=wait')
   })
 
   it('returns image content for screenshots', async () => {

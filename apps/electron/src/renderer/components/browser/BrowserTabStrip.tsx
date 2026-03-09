@@ -54,27 +54,74 @@ export function BrowserTabStrip({
   const effectiveInstances = instancesOverride ?? instances
   const instancesRef = React.useRef(effectiveInstances)
   const removeReconcileTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const interactionCounterRef = React.useRef(0)
+  const [interactionRanks, setInteractionRanks] = React.useState<Record<string, number>>({})
+
+  const syncInteractionRanks = React.useCallback((items: BrowserInstanceInfo[]) => {
+    setInteractionRanks((prev) => {
+      const next: Record<string, number> = {}
+      let changed = false
+
+      for (const item of items) {
+        const existingRank = prev[item.id]
+        if (existingRank != null) {
+          next[item.id] = existingRank
+          continue
+        }
+
+        interactionCounterRef.current += 1
+        next[item.id] = interactionCounterRef.current
+        changed = true
+      }
+
+      for (const key of Object.keys(prev)) {
+        if (!(key in next)) {
+          changed = true
+        }
+      }
+
+      return changed ? next : prev
+    })
+  }, [])
+
+  const bumpInteractionRank = React.useCallback((id: string) => {
+    interactionCounterRef.current += 1
+    const nextRank = interactionCounterRef.current
+    setInteractionRanks((prev) => (
+      prev[id] === nextRank
+        ? prev
+        : { ...prev, [id]: nextRank }
+    ))
+  }, [])
 
   const orderedInstances = React.useMemo(() => {
     const items = [...effectiveInstances]
+    const getRank = (id: string) => interactionRanks[id] ?? 0
 
     if (activeSessionId) {
       items.sort((a, b) => {
         const aInActiveSession = a.boundSessionId === activeSessionId ? 0 : 1
         const bInActiveSession = b.boundSessionId === activeSessionId ? 0 : 1
         if (aInActiveSession !== bInActiveSession) return aInActiveSession - bInActiveSession
+        const rankDiff = getRank(b.id) - getRank(a.id)
+        if (rankDiff !== 0) return rankDiff
         return a.id.localeCompare(b.id)
       })
     } else {
-      items.sort((a, b) => a.id.localeCompare(b.id))
+      items.sort((a, b) => {
+        const rankDiff = getRank(b.id) - getRank(a.id)
+        if (rankDiff !== 0) return rankDiff
+        return a.id.localeCompare(b.id)
+      })
     }
 
     return items
-  }, [activeSessionId, effectiveInstances])
+  }, [activeSessionId, effectiveInstances, interactionRanks])
 
   React.useEffect(() => {
     instancesRef.current = effectiveInstances
-  }, [effectiveInstances])
+    syncInteractionRanks(effectiveInstances)
+  }, [effectiveInstances, syncInteractionRanks])
 
   React.useEffect(() => {
     if (instancesOverride) return
@@ -89,6 +136,7 @@ export function BrowserTabStrip({
     void browserPaneApi
       .list()
       .then((items) => {
+        syncInteractionRanks(items)
         setInstances(items)
         setActiveInstanceId(items[0]?.id ?? null)
       })
@@ -97,7 +145,7 @@ export function BrowserTabStrip({
         setInstances([])
         setActiveInstanceId(null)
       })
-  }, [instancesOverride, setActiveInstanceId, setInstances])
+  }, [instancesOverride, setActiveInstanceId, setInstances, syncInteractionRanks])
 
   React.useEffect(() => {
     if (instancesOverride) return
@@ -106,11 +154,18 @@ export function BrowserTabStrip({
     if (!browserPaneApi) return
 
     const cleanupState = browserPaneApi.onStateChanged((info) => {
+      syncInteractionRanks([info, ...instancesRef.current.filter((item) => item.id !== info.id)])
       updateInstance(info)
     })
 
     const cleanupRemoved = browserPaneApi.onRemoved((id) => {
       removeInstance(id)
+      setInteractionRanks((prev) => {
+        if (!(id in prev)) return prev
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
       setActiveInstanceId((prev) => {
         if (prev !== id) return prev
         const remaining = instancesRef.current.filter((item) => item.id !== id)
@@ -126,6 +181,7 @@ export function BrowserTabStrip({
         void browserPaneApi
           .list()
           .then((items) => {
+            syncInteractionRanks(items)
             setInstances(items)
             setActiveInstanceId((prev) => {
               if (!prev) return items[0]?.id ?? null
@@ -139,6 +195,7 @@ export function BrowserTabStrip({
     })
 
     const cleanupInteracted = browserPaneApi.onInteracted((id) => {
+      bumpInteractionRank(id)
       setActiveInstanceId(id)
     })
 
@@ -151,7 +208,7 @@ export function BrowserTabStrip({
         removeReconcileTimerRef.current = null
       }
     }
-  }, [instancesOverride, removeInstance, setActiveInstanceId, setInstances, updateInstance])
+  }, [bumpInteractionRank, instancesOverride, removeInstance, setActiveInstanceId, setInstances, syncInteractionRanks, updateInstance])
 
   React.useEffect(() => {
     if (orderedInstances.length === 0) {
@@ -166,6 +223,7 @@ export function BrowserTabStrip({
 
   const focusBrowserWindow = React.useCallback(
     (instance: BrowserInstanceInfo) => {
+      bumpInteractionRank(instance.id)
       setActiveInstanceId(instance.id)
       if (instancesOverride) return
 
@@ -176,7 +234,7 @@ export function BrowserTabStrip({
         console.warn(`[BrowserTabStrip] Failed to focus browser window ${instance.id}:`, error)
       })
     },
-    [instancesOverride, setActiveInstanceId]
+    [bumpInteractionRank, instancesOverride, setActiveInstanceId]
   )
 
   const openSessionUsingWindow = React.useCallback((instance: BrowserInstanceInfo) => {

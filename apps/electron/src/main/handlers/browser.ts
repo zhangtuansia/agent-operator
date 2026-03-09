@@ -110,6 +110,10 @@ export function registerBrowserHandlers(browserPaneManager: BrowserPaneManager, 
     return browserPaneManager.getNetworkEntries(id, limit, state)
   })
 
+  ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_DOWNLOADS, async (_event, id: string, options?: any) => {
+    return browserPaneManager.getDownloads(id, options)
+  })
+
   ipcMain.handle(IPC_CHANNELS.BROWSER_PANE_SET_CLIPBOARD, async (_event, text: string) => {
     return browserPaneManager.setClipboard(text)
   })

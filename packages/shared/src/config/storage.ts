@@ -9,6 +9,7 @@ import {
   createWorkspaceAtPath,
   isValidWorkspace,
   saveWorkspaceConfig,
+  ensurePluginManifest,
 } from '../workspaces/storage.ts';
 import { getDefaultWorkspaceName } from '../workspaces/default-name.ts';
 import { findIconFile } from '../utils/icon.ts';
@@ -208,6 +209,8 @@ export function loadStoredConfig(): StoredConfig | null {
           });
         }
       }
+
+      ensurePluginManifest(workspace.rootPath, workspace.name);
     }
 
     // Validate active workspace exists
