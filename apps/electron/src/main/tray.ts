@@ -12,11 +12,13 @@ let trayAnimationTimer: ReturnType<typeof setInterval> | null = null
 let trayPanelWindow: BrowserWindow | null = null
 let trayPanelWorkspaceId: string | null = null
 let isDestroyingTrayWindows = false
-let trayPanelHeight = 156
+let trayPanelHeight = 136
+let trayPanelMeasured = false
+let trayPanelPendingShow = false
 
 const MAC_TRAY_ICON_SIZE = 18
 const TRAY_PANEL_WIDTH = 560
-const TRAY_PANEL_BASE_HEIGHT = 156
+const TRAY_PANEL_BASE_HEIGHT = 136
 const TRAY_PANEL_MAX_HEIGHT = 320
 const TRAY_PANEL_MARGIN = 14
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -143,7 +145,7 @@ function hideTrayPanel(): void {
 function createTrayPanelWindow(workspaceId: string): BrowserWindow {
   const window = new BrowserWindow({
     width: TRAY_PANEL_WIDTH,
-    height: trayPanelHeight,
+    height: TRAY_PANEL_BASE_HEIGHT,
     show: false,
     frame: false,
     resizable: false,
@@ -170,7 +172,10 @@ function createTrayPanelWindow(workspaceId: string): BrowserWindow {
   })
 
   trayPanelWorkspaceId = workspaceId
-  positionTrayPanel(window)
+  trayPanelHeight = TRAY_PANEL_BASE_HEIGHT
+  trayPanelMeasured = false
+  trayPanelPendingShow = false
+  positionTrayPanel(window, TRAY_PANEL_BASE_HEIGHT)
 
   if (VITE_DEV_SERVER_URL) {
     window.loadURL(getTrayPanelUrl(workspaceId))
@@ -182,6 +187,19 @@ function createTrayPanelWindow(workspaceId: string): BrowserWindow {
       },
     })
   }
+
+  window.webContents.on('did-finish-load', () => {
+    mainLog.info('[tray] Tray panel finished load', {
+      workspaceId,
+      url: window.webContents.getURL(),
+    })
+  })
+
+  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (sourceId.includes('electron-log_renderer.js')) return
+    if (level < 2) return
+    mainLog.warn('[tray] renderer', { level, message, line, sourceId })
+  })
 
   window.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -203,6 +221,8 @@ function createTrayPanelWindow(workspaceId: string): BrowserWindow {
     if (trayPanelWindow === window) {
       trayPanelWindow = null
       trayPanelWorkspaceId = null
+      trayPanelMeasured = false
+      trayPanelPendingShow = false
     }
   })
 
@@ -229,13 +249,19 @@ function showTrayPanel(windowManager: WindowManager): void {
     trayPanelWindow = createTrayPanelWindow(workspaceId)
   }
 
-  positionTrayPanel(trayPanelWindow)
-
   if (trayPanelWindow.isVisible()) {
+    trayPanelPendingShow = false
     trayPanelWindow.hide()
     return
   }
 
+  positionTrayPanel(trayPanelWindow, trayPanelMeasured ? trayPanelHeight : TRAY_PANEL_BASE_HEIGHT)
+  if (!trayPanelMeasured) {
+    trayPanelPendingShow = true
+    return
+  }
+
+  trayPanelPendingShow = false
   trayPanelWindow.show()
   trayPanelWindow.focus()
 }
@@ -327,7 +353,13 @@ export function closeTrayPanel(webContentsId: number): boolean {
 export function resizeTrayPanel(webContentsId: number, height: number): boolean {
   if (!trayPanelWindow || trayPanelWindow.isDestroyed()) return false
   if (trayPanelWindow.webContents.id !== webContentsId) return false
+  trayPanelMeasured = true
   positionTrayPanel(trayPanelWindow, height)
+  if (trayPanelPendingShow && !trayPanelWindow.isVisible()) {
+    trayPanelPendingShow = false
+    trayPanelWindow.show()
+    trayPanelWindow.focus()
+  }
   return true
 }
 
@@ -342,6 +374,8 @@ export function destroyTray(): void {
     isDestroyingTrayWindows = false
     trayPanelWindow = null
     trayPanelWorkspaceId = null
+    trayPanelMeasured = false
+    trayPanelPendingShow = false
   }
   if (!tray) return
   tray.destroy()

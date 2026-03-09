@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto'
 import { execSync, spawn, spawnSync } from 'child_process'
 import { z } from 'zod'
 import { SessionManager } from './sessions'
+import type { BrowserPaneManager } from './browser-pane-manager'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
@@ -37,7 +38,7 @@ import {
 } from '@agent-operator/shared/ipc/schemas'
 import { validateIpcArgs, IpcValidationError } from './ipc-validator'
 import { getModelRefreshService } from './model-fetchers'
-import { registerFileOpsHandlers, registerLlmConnectionHandlers, registerOauthHandlers, registerSessionFileHandlers, registerSessionHandlers, registerSettingsHandlers, registerSkillHandlers, registerSourceHandlers, registerSystemHandlers, registerThemeHandlers, registerUiPreferenceHandlers, registerWorkspaceEntityHandlers, registerWorkspaceWindowHandlers } from './handlers'
+import { registerBrowserHandlers, registerFileOpsHandlers, registerLlmConnectionHandlers, registerOauthHandlers, registerSessionFileHandlers, registerSessionHandlers, registerSettingsHandlers, registerSkillHandlers, registerSourceHandlers, registerSystemHandlers, registerThemeHandlers, registerUiPreferenceHandlers, registerWorkspaceEntityHandlers, registerWorkspaceWindowHandlers } from './handlers'
 
 /**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
@@ -68,6 +69,18 @@ interface CommandRunResult {
   error?: string
   timedOut?: boolean
 }
+
+interface GwsRuntimeCandidate {
+  command: string
+  argsPrefix?: string[]
+  env?: Record<string, string>
+  installed: boolean
+}
+
+const GWS_MCP_COMPATIBLE_VERSION = '0.7.0'
+const GWS_MCP_UNSUPPORTED_ERROR =
+  `Installed Google Workspace CLI does not support MCP. ` +
+  `The latest @googleworkspace/cli removed \`gws mcp\`; use @googleworkspace/cli@${GWS_MCP_COMPATIBLE_VERSION} or a bundled compatible build.`
 
 /**
  * Get workspace by ID or name, throwing if not found.
@@ -372,6 +385,16 @@ function buildBundledGwsResult(runScriptPath: string, installed: boolean): Ensur
   }
 }
 
+function toGwsCandidate(result: EnsureGwsInstalledResult): GwsRuntimeCandidate | null {
+  if (!result.success || !result.command) return null
+  return {
+    command: result.command,
+    argsPrefix: result.argsPrefix,
+    env: result.env,
+    installed: !!result.installed,
+  }
+}
+
 function runCommand(
   command: string,
   args: string[],
@@ -438,21 +461,53 @@ function runCommand(
 }
 
 async function ensureGwsInstalled(): Promise<EnsureGwsInstalledResult> {
-  const bundledRunScript = getBundledGwsRunScriptPath()
-  if (bundledRunScript) {
-    return buildBundledGwsResult(bundledRunScript, false)
+  const installEnv = buildGwsInstallEnv()
+  const validateCandidate = async (candidate: GwsRuntimeCandidate): Promise<boolean> => {
+    const result = await runCommand(
+      candidate.command,
+      [...(candidate.argsPrefix ?? []), 'mcp', '--help'],
+      {
+        cwd: app.getAppPath(),
+        env: {
+          ...installEnv,
+          ...candidate.env,
+        },
+        timeoutMs: 15000,
+      },
+    )
+
+    if (result.code === 0) return true
+
+    const output = `${result.stderr}\n${result.stdout}\n${result.error ?? ''}`.toLowerCase()
+    if (output.includes("unknown service 'mcp'") || output.includes('remove `mcp` command')) {
+      return false
+    }
+
+    return false
   }
 
-  const installEnv = buildGwsInstallEnv()
+  const bundledRunScript = getBundledGwsRunScriptPath()
+  if (bundledRunScript) {
+    const bundled = buildBundledGwsResult(bundledRunScript, false)
+    const bundledCandidate = toGwsCandidate(bundled)
+    if (bundledCandidate && await validateCandidate(bundledCandidate)) {
+      return bundled
+    }
+  }
+
   const systemCommand = findCommandInPath(
     process.platform === 'win32' ? ['gws.cmd', 'gws'] : ['gws'],
     installEnv,
   )
   if (systemCommand) {
-    return {
+    const systemResult: EnsureGwsInstalledResult = {
       success: true,
       command: systemCommand,
       installed: false,
+    }
+    const systemCandidate = toGwsCandidate(systemResult)
+    if (systemCandidate && await validateCandidate(systemCandidate)) {
+      return systemResult
     }
   }
 
@@ -479,7 +534,7 @@ async function ensureGwsInstalled(): Promise<EnsureGwsInstalledResult> {
       '--omit=dev',
       '--no-audit',
       '--no-fund',
-      '@googleworkspace/cli@latest',
+      `@googleworkspace/cli@${GWS_MCP_COMPATIBLE_VERSION}`,
     ],
     {
       cwd: app.getAppPath(),
@@ -519,15 +574,28 @@ async function ensureGwsInstalled(): Promise<EnsureGwsInstalledResult> {
     }
   }
 
-  return buildBundledGwsResult(runtimeRunScript, true)
+  const runtimeResult = buildBundledGwsResult(runtimeRunScript, true)
+  const runtimeCandidate = toGwsCandidate(runtimeResult)
+  if (runtimeCandidate && await validateCandidate(runtimeCandidate)) {
+    return runtimeResult
+  }
+
+  return {
+    success: false,
+    error: GWS_MCP_UNSUPPORTED_ERROR,
+  }
 }
 
 export function registerIpcHandlers(
   sessionManager: SessionManager,
   windowManager: WindowManager,
+  browserPaneManager?: BrowserPaneManager,
 ): void {
   registerSessionHandlers(sessionManager, windowManager)
   registerWorkspaceWindowHandlers(sessionManager, windowManager)
+  if (browserPaneManager) {
+    registerBrowserHandlers(browserPaneManager, windowManager)
+  }
   registerFileOpsHandlers(windowManager, {
     sanitizeFilename,
     validateFilePath,

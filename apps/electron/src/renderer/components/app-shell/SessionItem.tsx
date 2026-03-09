@@ -169,6 +169,7 @@ export function SessionItem({
             onUnarchive={() => ctx.onUnarchive?.(item.id)}
             onMarkUnread={() => ctx.onMarkUnread(item.id)}
             onSessionStatusChange={(s) => ctx.onSessionStatusChange(item.id, s)}
+            showOpenInNewPanel
             onOpenInNewWindow={() => ctx.onOpenInNewWindow(item)}
             onDelete={() => ctx.onDelete(item.id)}
           />

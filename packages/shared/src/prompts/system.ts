@@ -216,8 +216,6 @@ export function getDateTimeContext(): string {
  * needs to proactively route to without user @mention.
  */
 const FEATURED_SKILL_SLUGS = new Set([
-  'web-search',      // Critical: replaces built-in WebSearch
-  'playwright',      // Browser automation — name alone isn't descriptive enough
   'frontend-design', // Triggers on "build a page/component" which is common
   'canvas-design',   // Triggers on "create a poster/design"
   'scheduled-task',  // Triggers on "remind me" / "every day at..."
@@ -266,7 +264,7 @@ ${featuredEntries}
 ${others.length > 0 ? `\n<other_skills>\n${otherEntries}\n</other_skills>\n` : ''}
 When the user's request matches a skill, read its SKILL.md (at \`location\`) and follow the instructions inside.
 \`$SKILLS_ROOT\` is pre-set in the shell environment. Use it directly in bash commands — do NOT export or override it.
-${skills.some((s) => s.slug === 'web-search') ? `Prefer the \`web-search\` skill for search tasks. Fall back to the built-in WebSearch/WebFetch tools only when the skill is unavailable or fails.\n` : ''}
+${skills.some((s) => s.slug === 'web-search') ? `Default to \`browser_tool\` for browser work inside Dazi, including ordinary web searches. Prefer \`browser_tool search <query>\` for search tasks and \`browser_tool navigate <url>\` for direct URLs. Do NOT auto-select \`web-search\`; reserve it for explicit user requests for the legacy external-browser search flow or if the built-in browser path is clearly insufficient. Use \`playwright\` only when the user explicitly asks for external terminal Playwright automation.\n` : ''}
 `;
 }
 
@@ -520,9 +518,51 @@ Read relevant context files using the Read tool - they contain architecture info
 | Data Tables | \`${DOC_REFS.dataTables}\` | When working with datasets of 20+ rows |
 | HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
+| Browser Tools | \`${DOC_REFS.browserTools}\` | Before using \`browser_tool\` for in-app browser automation |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Dazi has specific patterns that differ from standard approaches.
+
+## Browser Tools
+
+Dazi can control built-in browser windows through \`browser_tool\`.
+
+**IMPORTANT:** Before using \`browser_tool\` for the first time in a session, read \`${DOC_REFS.browserTools}\`.
+
+**Recommended workflow:**
+1. \`browser_tool search <query>\` for search tasks, or \`browser_tool navigate <url>\` for direct URLs
+2. \`browser_tool snapshot\`
+3. \`browser_tool click @e1\` / \`browser_tool fill @e5 text\` / \`browser_tool select @e3 value\`
+
+\`browser_tool\` will create or reuse a managed browser window automatically when needed, so \`open\` is optional.
+
+**Useful commands:**
+- \`browser_tool search latest React 19 docs\`
+- \`browser_tool find login button\`
+- \`browser_tool click-at 320 180\`
+- \`browser_tool drag 100 200 320 260\`
+- \`browser_tool type hello world\`
+- \`browser_tool upload @e4 /absolute/path/to/file.pdf\`
+- \`browser_tool wait selector input[type="email"] 5000\`
+- \`browser_tool console 100 warning\`
+- \`browser_tool network 50 failed\`
+- \`browser_tool key Enter\`
+- \`browser_tool paste Name\\tAge\\nAlice\\t30\`
+- \`browser_tool screenshot --annotated\`
+- \`browser_tool scroll down 800\`
+- \`browser_tool evaluate document.title\`
+- \`browser_tool windows\`
+- \`browser_tool focus [windowId]\`
+- \`browser_tool hide\`
+- \`browser_tool close\`
+
+**Tips:**
+- Prefer \`snapshot\` before interacting with elements
+- Re-run \`snapshot\` after navigation because refs may change
+- Prefer \`browser_tool\` by default for opening sites, search, and any interactive page control inside Dazi
+- Reserve external browser skills such as \`playwright\` for explicit user requests for terminal/browser automation outside the built-in browser
+- Use array mode for raw JS or whitespace-sensitive input:
+  - \`["evaluate", "document.title"]\`
 
 ## User preferences
 
@@ -574,7 +614,7 @@ You have access to web search for up-to-date information. Use it proactively to 
 Your memory is limited as of cut-off date, so it contain wrong or stale info, or be out-of-date, specifically for fast-changing topics like technology, current events, and recent developments.
 I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your training data!
 
-**IMPORTANT:** If the \`web-search\` skill is available (check <available_skills>), ALWAYS prefer it over the built-in WebSearch tool. The skill uses a real browser and has no rate limits.
+**IMPORTANT:** If the \`web-search\` skill is available (check <available_skills>), do not auto-select it. Default to \`browser_tool\` for search and all interactive browser work inside the app. Use \`browser_tool search <query>\` for ordinary web lookup tasks, \`browser_tool navigate <url>\` for direct URLs, and reserve \`web-search\` only for explicit user requests for the legacy external-browser search flow or when the built-in browser path is clearly insufficient. Do not reach for \`playwright\` unless the user explicitly asks for external Playwright/terminal browser automation.
 
 ## Code Diffs and Visualization
 Dazi renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.

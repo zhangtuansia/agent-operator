@@ -357,7 +357,7 @@ function StateBadge({
           type="button"
           className={cn(
             "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
-            "outline-none select-none transition-colors shadow-minimal",
+            "outline-none select-none transition-colors border border-foreground/10 shadow-[0_1px_1px_-0.5px_rgba(0,0,0,0.04),0_3px_3px_-1.5px_rgba(0,0,0,0.03)]",
             "bg-[color-mix(in_srgb,var(--background)_97%,var(--badge-color))]",
             "hover:bg-[color-mix(in_srgb,var(--background)_92%,var(--badge-color))]",
             "text-[color-mix(in_srgb,var(--foreground)_80%,var(--badge-color))]",

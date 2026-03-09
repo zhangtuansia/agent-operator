@@ -56,6 +56,7 @@ export const DOC_REFS = {
   dataTables: `${APP_ROOT}/docs/data-tables.md`,
   htmlPreview: `${APP_ROOT}/docs/html-preview.md`,
   pdfPreview: `${APP_ROOT}/docs/pdf-preview.md`,
+  browserTools: `${APP_ROOT}/docs/browser-tools.md`,
   llmTool: `${APP_ROOT}/docs/llm-tool.md`,
   sourceGuides: `${APP_ROOT}/docs/source-guides/`,
   docsDir: `${APP_ROOT}/docs/`,
@@ -1665,6 +1666,66 @@ This validates:
 Invalid configs will fall back to defaults at runtime, but validation catches issues before they cause problems.
 `;
 
+const BROWSER_TOOLS_MD = `# Browser Tools Guide
+
+Use \`browser_tool\` to control Dazi's built-in browser windows from the agent.
+
+Use this as the default browser path for page automation inside Dazi. Do not reach for older external-browser or Chrome-specific flows when the built-in browser window is sufficient.
+
+## Recommended flow
+
+1. \`browser_tool search latest React 19 docs\` for search tasks, or \`browser_tool navigate https://example.com\` for a direct URL
+2. \`browser_tool snapshot\` - inspect current interactive refs
+3. \`browser_tool click @e1\`, \`fill @e2 value\`, \`select @e3 value\`
+
+\`browser_tool\` creates or reuses a managed browser window automatically when needed, so \`open\` is optional.
+
+## Supported commands
+
+- \`open [--foreground]\`
+- \`search <query>\`
+- \`navigate <url|search terms>\`
+- \`snapshot\`
+- \`find <query>\`
+- \`click <ref> [none|navigation|network-idle] [timeoutMs]\`
+- \`click-at <x> <y>\`
+- \`drag <x1> <y1> <x2> <y2>\`
+- \`fill <ref> <value>\`
+- \`type <text>\`
+- \`select <ref> <value>\`
+- \`upload <ref> <absolutePath> [absolutePath2...]\`
+- \`set-clipboard <text>\`
+- \`get-clipboard\`
+- \`paste <text>\`
+- \`screenshot [--annotated] [--png]\`
+- \`scroll <up|down|left|right> [amount]\`
+- \`wait <selector|text|url|network-idle> <value?> [timeoutMs]\`
+- \`console [limit] [level]\`
+- \`network [limit] [pending|completed|failed|2xx|3xx|4xx|5xx|all]\`
+- \`key <key> [modifier[+modifier] ...]\`
+- \`back\`
+- \`forward\`
+- \`evaluate <expression>\`
+- \`windows\`
+- \`focus [windowId]\`
+- \`hide [windowId]\`
+- \`release [windowId]\`
+- \`close [windowId]\`
+
+## Tips
+
+- Prefer \`snapshot\` over \`screenshot\` before element interaction.
+- Re-run \`snapshot\` after navigation because element refs can change.
+- Upload paths must be absolute and stay inside safe roots such as your home directory or the system temp directory.
+- Prefer \`browser_tool\` over external browser skills for search, interactive page work, authenticated sites, and session-bound browser automation.
+- Reserve \`web-search\` for explicit requests for the legacy external-browser search flow or as a fallback when the built-in browser path is insufficient.
+- Use array mode for raw JS or whitespace-sensitive input:
+  - \`["evaluate", "document.title"]\`
+- You can batch simple actions with semicolons:
+  - \`fill @e1 name; fill @e2 email@example.com; click @e3\`
+- When done, call \`close\` to destroy the browser window, or \`hide\` / \`release\` to keep state but dismiss it from view.
+`;
+
 /**
  * Map of bundled documentation files
  */
@@ -1674,6 +1735,7 @@ const BUNDLED_DOCS: Record<string, string> = {
   'skills.md': SKILLS_MD,
   'themes.md': THEMES_MD,
   'statuses.md': STATUSES_MD,
+  'browser-tools.md': BROWSER_TOOLS_MD,
 };
 
 export { BUNDLED_DOCS };

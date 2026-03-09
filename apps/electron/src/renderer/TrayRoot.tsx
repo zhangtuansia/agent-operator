@@ -2,6 +2,7 @@ import React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { windowWorkspaceIdAtom } from '@/atoms/sessions'
 import { detectSystemLanguage, type Language } from './i18n'
@@ -36,16 +37,18 @@ function TrayBootstrap() {
   }
 
   return (
-    <ErrorBoundary level="app">
-      <LanguageProvider initialLanguage={language}>
-        <ThemeProvider activeWorkspaceId={workspaceId}>
-          <EscapeInterruptProvider>
-            <TrayApp />
-            <Toaster />
-          </EscapeInterruptProvider>
-        </ThemeProvider>
-      </LanguageProvider>
-    </ErrorBoundary>
+    <LanguageProvider initialLanguage={language}>
+      <ThemeProvider activeWorkspaceId={workspaceId}>
+        <TooltipProvider delayDuration={0}>
+          <ErrorBoundary level="app">
+            <EscapeInterruptProvider>
+              <TrayApp />
+              <Toaster />
+            </EscapeInterruptProvider>
+          </ErrorBoundary>
+        </TooltipProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   )
 }
 

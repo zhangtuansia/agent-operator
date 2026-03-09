@@ -14,16 +14,11 @@ import type { LoadedSkill } from './types.ts';
 const BUILTIN_TRIGGERS: Record<string, string[]> = {
   'web-search': [
     'search', 'google', 'look up', 'find out', 'latest', 'current',
-    'what is', 'how to', 'news', 'update', 'who is', 'when did',
+    'news', 'update', 'who is', 'when did', 'documentation', 'docs',
     '搜索', '搜一下', '查找', '查一下', '查查', '新闻', '最新', '热门',
-    '了解', '是什么', '怎么',
+    '文档', '资料', '当前',
   ],
-  'playwright': [
-    'browser', 'open url', 'screenshot', 'scrape', 'crawl',
-    'open', 'website', 'login', 'sign in', 'web page',
-    '浏览器', '截图', '抓取', '爬取', '打开网页', '网页操作',
-    '打开', '访问', '登录', '推特', '网站',
-  ],
+  'playwright': [],
   'pdf': ['pdf', 'PDF'],
   'docx': ['docx', 'DOCX', 'word文档', 'Word文档'],
   'xlsx': [
@@ -60,6 +55,57 @@ const BUILTIN_TRIGGERS: Record<string, string[]> = {
 
 /** Max skills to auto-inject per message */
 const MAX_AUTO_SKILLS = 2;
+const AUTO_MATCH_DISABLED_SKILLS = new Set(['playwright', 'web-search']);
+
+const BROWSER_INTERACTION_TRIGGERS = [
+  'open url',
+  'open website',
+  'open browser',
+  'open page',
+  'visit',
+  'navigate',
+  'login',
+  'log in',
+  'sign in',
+  'click',
+  'fill',
+  'submit',
+  'upload',
+  'scroll',
+  'select',
+  'drag',
+  'screenshot',
+  'browser_tool',
+  '打开网页',
+  '打开网站',
+  '打开浏览器',
+  '访问网站',
+  '跳转到',
+  '登录',
+  '点击',
+  '填写',
+  '提交表单',
+  '上传',
+  '滚动',
+  '选择',
+  '拖拽',
+  '截图',
+  '浏览器操作',
+];
+
+function matchesTrigger(message: string, trigger: string): boolean {
+  const triggerLower = trigger.toLowerCase();
+  const isAscii = /^[a-z0-9 ]+$/i.test(trigger);
+  if (isAscii) {
+    const re = new RegExp(`\\b${triggerLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    return re.test(message);
+  }
+  return message.includes(triggerLower);
+}
+
+function isBrowserInteractionMessage(messageLower: string): boolean {
+  return BROWSER_INTERACTION_TRIGGERS.some((trigger) => matchesTrigger(messageLower, trigger));
+}
 
 /**
  * Get trigger keywords for a skill (frontmatter triggers > built-in fallback).
@@ -86,29 +132,21 @@ export function matchSkillsToMessage(
 ): string[] {
   const excluded = new Set(excludeSlugs ?? []);
   const messageLower = message.toLowerCase();
+  const browserInteraction = isBrowserInteractionMessage(messageLower);
 
   const matches: Array<{ slug: string; score: number }> = [];
 
   for (const skill of skills) {
     if (excluded.has(skill.slug)) continue;
+    if (AUTO_MATCH_DISABLED_SKILLS.has(skill.slug)) continue;
 
     const triggers = getTriggersForSkill(skill);
     if (triggers.length === 0) continue;
+    if (skill.slug === 'web-search' && browserInteraction) continue;
 
     let score = 0;
     for (const trigger of triggers) {
-      const triggerLower = trigger.toLowerCase();
-      // Use word boundary for ASCII triggers to avoid false positives
-      // (e.g., "cron" matching "acronym"). Chinese triggers use substring match
-      // since Chinese has no word boundaries.
-      const isAscii = /^[a-z0-9 ]+$/i.test(trigger);
-      let matched = false;
-      if (isAscii) {
-        const re = new RegExp(`\\b${triggerLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        matched = re.test(message);
-      } else {
-        matched = messageLower.includes(triggerLower);
-      }
+      const matched = matchesTrigger(messageLower, trigger);
       if (matched) {
         // Longer triggers = higher confidence (phrase match > single word)
         score += trigger.length;

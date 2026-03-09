@@ -20,13 +20,13 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { useState, useEffect, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
 import {
-  useNavigation,
   useNavigationState,
   isChatsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  type NavigationState,
 } from '@/contexts/NavigationContext'
 import { routes } from '@/lib/navigate'
 import { SourceInfoPage, ChatPage } from '@/pages'
@@ -42,14 +42,17 @@ export interface MainContentPanelProps {
   isFocusedMode?: boolean
   /** Optional className for the container */
   className?: string
+  /** Optional navigation state override for multi-panel layouts */
+  navStateOverride?: NavigationState
 }
 
 export function MainContentPanel({
   isFocusedMode = false,
   className,
+  navStateOverride,
 }: MainContentPanelProps) {
-  const navState = useNavigationState()
-  const { navigate } = useNavigation()
+  const globalNavState = useNavigationState()
+  const navState = navStateOverride ?? globalNavState
   const { activeWorkspaceId } = useAppShellContext()
   const { t } = useLanguage()
 

@@ -1,6 +1,6 @@
 ---
 name: "playwright"
-description: "Use when the task requires automating a real browser from the terminal (navigation, form filling, snapshots, screenshots, data extraction, UI-flow debugging) via `playwright-cli` or the bundled wrapper script."
+description: "Use only when the user explicitly asks for Playwright or external terminal browser automation. Do not use this for normal in-app browsing inside Dazi; prefer `browser_tool` there."
 ---
 
 
@@ -8,6 +8,7 @@ description: "Use when the task requires automating a real browser from the term
 
 Drive a real browser from the terminal using `playwright-cli`. Prefer the bundled wrapper script so the CLI works even when it is not globally installed.
 Treat this skill as CLI-first automation. Do not pivot to `@playwright/test` unless the user explicitly asks for test files.
+Do not use this skill for ordinary Dazi browser tasks. If the built-in browser can handle the job, use `browser_tool` instead.
 
 ## Prerequisite check (required)
 

@@ -845,7 +845,7 @@ export class OperatorAgent {
       // Block SDK tools that require UI we don't have:
       // - EnterPlanMode/ExitPlanMode: We use safe mode instead (user-controlled via UI)
       // - AskUserQuestion: Requires interactive UI to show question options to user
-      const disallowedTools: string[] = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion'];
+      const disallowedTools: string[] = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'WebSearch', 'WebFetch'];
 
       // Build MCP servers config - always use HTTP (SDK handles sources efficiently)
       // Filter out stdio servers if local MCP is disabled
@@ -2647,6 +2647,36 @@ Please continue the conversation naturally from where we left off.
     // Upgrade generic SDK "unknown" errors into actionable categories when possible.
     if (errorCode === 'unknown' && actualError) {
       const normalizedMessage = actualError.message.toLowerCase();
+      const hasSelectedSources = this.getActiveSourceSlugs().length > 0;
+      const isSourceAuthError =
+        hasSelectedSources &&
+        actualError.errorType === 'authentication_error' &&
+        (
+          normalizedMessage.includes('mcp server requires authentication') ||
+          normalizedMessage.includes('oauth token is configured')
+        );
+
+      if (isSourceAuthError) {
+        error = {
+          code: 'mcp_auth_required',
+          title: 'Source Authentication Required',
+          message: 'A selected source needs to be re-authenticated before it can be used.',
+          details: [
+            `Error: ${actualError.message}`,
+            `Type: ${actualError.errorType}`,
+            ...(actualError.requestId ? [`Request ID: ${actualError.requestId}`] : []),
+            'Re-authenticate the affected source, or disable it for this chat.',
+            'This is a source credential issue, not a temporary network problem.',
+          ],
+          actions: [],
+          canRetry: false,
+        };
+        return {
+          type: 'typed_error',
+          error,
+        };
+      }
+
       const isModelNotFound =
         actualError.errorType === 'not_found_error' &&
         normalizedMessage.startsWith('model:');

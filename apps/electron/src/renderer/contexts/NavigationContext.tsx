@@ -33,7 +33,7 @@ import {
 } from 'react'
 import { useNavigationHistory } from '@/hooks/useNavigationHistory'
 import { toast } from 'sonner'
-import { useAtomValue } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 import { useSession } from '@/hooks/useSession'
 import {
   parseRoute,
@@ -63,6 +63,12 @@ import {
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import {
+  focusedPanelIdAtom,
+  panelStackAtom,
+  parseSessionIdFromRoute,
+  pushPanelAtom,
+} from '@/atoms/panel-stack'
 import { useLanguage } from '@/context/LanguageContext'
 
 // Re-export routes for convenience
@@ -95,7 +101,7 @@ interface NavigationContextValue {
   /** Toggle right sidebar (with optional panel) */
   toggleRightSidebar: (panel?: RightSidebarPanel) => void
   /** Navigate to a session, preserving the current filter type */
-  navigateToSession: (sessionId: string) => void
+  navigateToSession: (sessionId: string, options?: { newPanel?: boolean }) => void
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null)
@@ -131,6 +137,9 @@ export function NavigationProvider({
 
   // Read skills from atom (populated by AppShell)
   const skills = useAtomValue(skillsAtom)
+  const panelStack = useAtomValue(panelStackAtom)
+  const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
+  const pushPanel = useSetAtom(pushPanelAtom)
 
   // UNIFIED NAVIGATION STATE - single source of truth for all 3 panels
   const [navigationState, setNavigationState] = useState<NavigationState>(DEFAULT_NAVIGATION_STATE)
@@ -697,31 +706,54 @@ export function NavigationProvider({
     })
   }, [])
 
-  // Navigate to a session while preserving the current filter type
-  const navigateToSession = useCallback((sessionId: string) => {
+  const buildChatRouteForSession = useCallback((sessionId: string): import('../../shared/routes').ViewRoute => {
     if (!isChatsNavigation(navigationState)) {
-      navigate(routes.view.allChats(sessionId))
-      return
+      return routes.view.allChats(sessionId)
     }
 
     const filter = navigationState.filter
     switch (filter.kind) {
       case 'allChats':
-        navigate(routes.view.allChats(sessionId))
-        break
+        return routes.view.allChats(sessionId)
       case 'flagged':
-        navigate(routes.view.flagged(sessionId))
-        break
+        return routes.view.flagged(sessionId)
+      case 'archived':
+        return routes.view.archived(sessionId)
       case 'state':
-        navigate(routes.view.state(filter.stateId, sessionId))
-        break
+        return routes.view.state(filter.stateId, sessionId)
       case 'label':
-        navigate(routes.view.label(filter.labelId, sessionId))
-        break
+        return routes.view.label(filter.labelId, sessionId)
+      case 'imported':
+        return routes.view.imported(filter.source, sessionId)
+      case 'scheduled':
+        return routes.view.scheduled(sessionId)
+      case 'scheduledTask':
+        return routes.view.scheduledTask(filter.taskId, sessionId)
       default:
-        navigate(routes.view.allChats(sessionId))
+        return routes.view.allChats(sessionId)
     }
-  }, [navigationState, navigate])
+  }, [navigationState])
+
+  const openSessionInPanel = useCallback((sessionId: string) => {
+    const existingPanel = panelStack.find((entry) => parseSessionIdFromRoute(entry.route) === sessionId)
+    if (existingPanel) {
+      setFocusedPanel(existingPanel.id)
+      return
+    }
+
+    pushPanel({ route: buildChatRouteForSession(sessionId) })
+  }, [buildChatRouteForSession, panelStack, pushPanel, setFocusedPanel])
+
+  // Navigate to a session while preserving the current filter type.
+  // When requested, open or focus that session inside the panel stack instead.
+  const navigateToSession = useCallback((sessionId: string, options?: { newPanel?: boolean }) => {
+    if (options?.newPanel) {
+      openSessionInPanel(sessionId)
+      return
+    }
+
+    navigate(buildChatRouteForSession(sessionId))
+  }, [buildChatRouteForSession, navigate, openSessionInPanel])
 
   return (
     <NavigationContext.Provider

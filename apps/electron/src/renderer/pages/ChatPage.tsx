@@ -30,7 +30,6 @@ import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom
 import { getSessionTitle } from '@/utils/session'
 import { useLanguage } from '@/context/LanguageContext'
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable, getDefaultModelsForConnection } from '@config/llm-connections'
-import { getModelDisplayName } from '@config/models'
 
 export interface ChatPageProps {
   sessionId: string
@@ -227,16 +226,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     connectionUnavailable,
     currentModel,
   ])
-
-  const headerModelBadge = React.useMemo(() => {
-    if (connectionUnavailable) return null
-    const modelLabel = getModelDisplayName(effectiveModel || currentModel)
-    return (
-      <span className="max-w-[220px] truncate text-[11px] font-medium text-muted-foreground">
-        {modelLabel}
-      </span>
-    )
-  }, [connectionUnavailable, effectiveModel, currentModel])
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
@@ -526,7 +515,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 session={skeletonSession}
@@ -595,7 +584,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} badge={headerModelBadge} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             session={session}

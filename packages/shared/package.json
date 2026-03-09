@@ -13,6 +13,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
+    "./agent/browser-tools": "./src/agent/browser-tools.ts",
     "./agent/core": "./src/agent/core/index.ts",
     "./agent/backend": "./src/agent/backend/index.ts",
     "./agent/codex": "./src/agent/codex-agent.ts",

@@ -637,6 +637,7 @@ export const en = {
     copyShareLink: 'Copy share link',
     updateShare: 'Update Share',
     stopSharing: 'Stop Sharing',
+    openInNewPanel: 'Open in New Panel',
     openInNewWindow: 'Open in New Window',
     viewInFinder: 'View in Finder',
     copyPath: 'Copy Path',
@@ -793,6 +794,36 @@ export const en = {
     // Window submenu
     minimize: 'Minimize',
     maximize: 'Maximize',
+  },
+
+  topBar: {
+    addPanel: 'Add panel',
+    newSessionInPanel: 'New Session in Panel',
+    newBrowserWindow: 'New Browser Window',
+    openDocs: 'Open docs',
+    docsSources: 'Sources',
+    docsSkills: 'Skills',
+    docsStatuses: 'Statuses',
+    docsPermissions: 'Permissions',
+    docsAutomations: 'Automations',
+    allDocumentation: 'All Documentation',
+  },
+
+  browserTabStrip: {
+    actionsFor: '{label} actions',
+    localFile: 'Local File',
+    moreWindows: '{count} more browser windows',
+    newTab: 'New Tab',
+    openSessionUsingThisWindow: 'Open Session Using this Window',
+    openSessionWhichUsedThisWindow: 'Open Session Which Used this Window',
+    showBrowserWindow: 'Show Browser Window',
+    terminateBrowser: 'Terminate Browser',
+  },
+
+  browserToolbar: {
+    windowOptions: 'Browser window options',
+    hideWindow: 'Hide Window',
+    closeWindowEntirely: 'Close Window Entirely',
   },
 
   // Onboarding
@@ -1194,7 +1225,7 @@ export const en = {
     installingGoogleWorkspaceCli: 'Preparing Google Workspace CLI...',
     googleWorkspaceCliInstalled: 'Google Workspace CLI installed',
     failedToInstallGoogleWorkspaceCli: 'Failed to install Google Workspace CLI automatically',
-    googleWorkspaceInstallHint: 'The app uses bundled gws first. If setup still fails, restart the app; if it still fails, try `npm i -g @googleworkspace/cli`.',
+    googleWorkspaceInstallHint: 'The app requires a gws build that still supports MCP. Restart the app first; if it still fails, install `npm i -g @googleworkspace/cli@0.7.0` instead of `latest`.',
     failedToShowInFinder: 'Failed to show in Finder',
     patternCopied: 'Pattern copied to clipboard',
     failedToCopyPattern: 'Failed to copy pattern',

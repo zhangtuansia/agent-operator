@@ -24,6 +24,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),
+        browserToolbar: resolve(__dirname, 'src/renderer/browser-toolbar.html'),
         playground: resolve(__dirname, 'src/renderer/playground.html'),
       }
     }

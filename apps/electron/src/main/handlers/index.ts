@@ -1,4 +1,5 @@
 export { registerSettingsHandlers } from './settings'
+export { registerBrowserHandlers } from './browser'
 export { registerFileOpsHandlers } from './file-ops'
 export { registerLlmConnectionHandlers } from './llm-connections'
 export { registerOauthHandlers } from './oauth'

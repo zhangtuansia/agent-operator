@@ -171,6 +171,184 @@ export interface ToolIconMapping {
   commands: string[]
 }
 
+export interface BrowserInstanceInfo {
+  id: string
+  url: string
+  title: string
+  favicon: string | null
+  isLoading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  boundSessionId: string | null
+  ownerType: 'session' | 'manual'
+  ownerSessionId: string | null
+  isVisible: boolean
+  agentControlActive: boolean
+  themeColor: string | null
+}
+
+export interface BrowserAccessibilityNode {
+  ref: string
+  role: string
+  name: string
+  value?: string
+  description?: string
+  focused?: boolean
+  checked?: boolean
+  disabled?: boolean
+}
+
+export interface BrowserAccessibilitySnapshot {
+  url: string
+  title: string
+  nodes: BrowserAccessibilityNode[]
+}
+
+export interface BrowserElementBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface BrowserElementGeometry {
+  ref: string
+  role?: string
+  name?: string
+  box: BrowserElementBox
+  clickPoint: { x: number; y: number }
+}
+
+export interface BrowserClickOptions {
+  waitFor?: 'none' | 'navigation' | 'network-idle'
+  timeoutMs?: number
+}
+
+export interface BrowserScreenshotOptions {
+  annotate?: boolean
+  refs?: string[]
+  format?: 'png' | 'jpeg'
+  jpegQuality?: number
+}
+
+export interface BrowserScreenshotResult {
+  dataUrl: string
+  format: 'png' | 'jpeg'
+  metadata?: {
+    annotatedRefs?: string[]
+  }
+}
+
+export interface BrowserScrollOptions {
+  direction?: 'up' | 'down' | 'left' | 'right'
+  amount?: number
+  deltaX?: number
+  deltaY?: number
+}
+
+export interface BrowserScrollResult {
+  x: number
+  y: number
+}
+
+export type BrowserModifierKey = 'meta' | 'control' | 'shift' | 'alt'
+
+export interface BrowserKeyOptions {
+  modifiers?: BrowserModifierKey[]
+}
+
+export interface BrowserWaitOptions {
+  kind: 'network-idle' | 'selector' | 'text' | 'url'
+  value?: string
+  timeoutMs?: number
+}
+
+export interface BrowserWaitResult {
+  kind: BrowserWaitOptions['kind']
+  matched: string
+  timeoutMs: number
+  elapsedMs: number
+}
+
+export type BrowserConsoleLevel = 'log' | 'warning' | 'error' | 'debug' | 'info'
+
+export interface BrowserConsoleEntry {
+  level: BrowserConsoleLevel
+  message: string
+  sourceId?: string
+  line?: number
+  timestamp: number
+}
+
+export type BrowserNetworkState = 'pending' | 'completed' | 'failed'
+
+export interface BrowserNetworkEntry {
+  id: number | string
+  method: string
+  url: string
+  status?: number
+  resourceType?: string
+  errorText?: string
+  state: BrowserNetworkState
+  timestamp: number
+}
+
+export interface BrowserPaneCreateOptions {
+  id?: string
+  show?: boolean
+  url?: string
+  bindToSessionId?: string
+  ownerType?: 'session' | 'manual'
+  ownerSessionId?: string | null
+}
+
+export interface BrowserPaneAPI {
+  create(input?: string | BrowserPaneCreateOptions): Promise<string>
+  navigate(id: string, url: string): Promise<{ url: string; title: string }>
+  goBack(id: string): Promise<void>
+  goForward(id: string): Promise<void>
+  reload(id: string): Promise<void>
+  stop(id: string): Promise<void>
+  list(): Promise<BrowserInstanceInfo[]>
+  focus(id: string): Promise<void>
+  destroy(id: string): Promise<void>
+  snapshot(id: string): Promise<BrowserAccessibilitySnapshot>
+  click(id: string, ref: string, options?: BrowserClickOptions): Promise<BrowserElementGeometry>
+  clickAt(id: string, x: number, y: number): Promise<void>
+  drag(id: string, x1: number, y1: number, x2: number, y2: number): Promise<void>
+  fill(id: string, ref: string, value: string): Promise<BrowserElementGeometry>
+  select(id: string, ref: string, value: string): Promise<BrowserElementGeometry>
+  upload(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry>
+  type(id: string, text: string): Promise<void>
+  key(id: string, key: string, options?: BrowserKeyOptions): Promise<void>
+  screenshot(id: string, options?: BrowserScreenshotOptions): Promise<BrowserScreenshotResult>
+  evaluate(id: string, expression: string): Promise<unknown>
+  scroll(id: string, options?: BrowserScrollOptions): Promise<BrowserScrollResult>
+  wait(id: string, options: BrowserWaitOptions): Promise<BrowserWaitResult>
+  console(id: string, limit?: number, level?: BrowserConsoleLevel | 'all'): Promise<BrowserConsoleEntry[]>
+  network(id: string, limit?: number, state?: BrowserNetworkState | 'all'): Promise<BrowserNetworkEntry[]>
+  setClipboard(text: string): Promise<void>
+  getClipboard(): Promise<string>
+  paste(id: string, text: string): Promise<void>
+  onStateChanged(callback: (info: BrowserInstanceInfo) => void): () => void
+  onRemoved(callback: (id: string) => void): () => void
+  onInteracted(callback: (id: string) => void): () => void
+}
+
+export const BROWSER_TOOLBAR_CHANNELS = {
+  NAVIGATE: 'browser-toolbar:navigate',
+  GO_BACK: 'browser-toolbar:go-back',
+  GO_FORWARD: 'browser-toolbar:go-forward',
+  RELOAD: 'browser-toolbar:reload',
+  STOP: 'browser-toolbar:stop',
+  MENU_GEOMETRY: 'browser-toolbar:menu-geometry',
+  FORCE_CLOSE_MENU: 'browser-toolbar:force-close-menu',
+  HIDE: 'browser-toolbar:hide',
+  DESTROY: 'browser-toolbar:destroy',
+  STATE_UPDATE: 'browser-toolbar:state-update',
+  THEME_COLOR: 'browser-toolbar:theme-color',
+} as const
+
 /**
  * Git Bash detection status (Windows-only concern)
  */
@@ -361,6 +539,7 @@ export interface ElectronAPI {
   menuMinimize(): Promise<void>
   menuMaximize(): Promise<void>
   newWindow(): Promise<void>
+  browserPane?: BrowserPaneAPI
 
   // Deep link navigation listener (for external agentoperator:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void

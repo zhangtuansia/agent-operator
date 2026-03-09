@@ -33,6 +33,7 @@ import {
   FolderOpen,
   Copy,
   AppWindow,
+  Columns2,
   RefreshCw,
   Tag,
 } from 'lucide-react'
@@ -47,6 +48,7 @@ import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { useLanguage } from '@/context/LanguageContext'
+import { useNavigation } from '@/contexts/NavigationContext'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -65,6 +67,7 @@ export interface SessionMenuProps {
   onUnarchive: () => void
   onMarkUnread: () => void
   onSessionStatusChange: (state: SessionStatusId) => void
+  showOpenInNewPanel?: boolean
   onOpenInNewWindow: () => void
   onDelete: () => void
 }
@@ -85,10 +88,12 @@ export function SessionMenu({
   onUnarchive,
   onMarkUnread,
   onSessionStatusChange,
+  showOpenInNewPanel = false,
   onOpenInNewWindow,
   onDelete,
 }: SessionMenuProps) {
   const { t } = useLanguage()
+  const { navigateToSession } = useNavigation()
 
   // Derive display state from item
   const sessionId = item.id
@@ -102,6 +107,10 @@ export function SessionMenu({
   const handleShowInFinder = () => {
     window.electronAPI.sessionCommand(sessionId, { type: 'showInFinder' })
   }
+
+  const handleOpenInNewPanel = React.useCallback(() => {
+    navigateToSession(sessionId, { newPanel: true })
+  }, [navigateToSession, sessionId])
 
   const handleCopyPath = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'copyPath' }) as { success: boolean; path?: string } | undefined
@@ -240,6 +249,13 @@ export function SessionMenu({
       </MenuItem>
 
       <Separator />
+
+      {showOpenInNewPanel && (
+        <MenuItem onClick={handleOpenInNewPanel}>
+          <Columns2 className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('sessionMenu.openInNewPanel')}</span>
+        </MenuItem>
+      )}
 
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>

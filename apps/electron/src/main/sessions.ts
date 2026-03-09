@@ -2,12 +2,14 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { rm, readFile, mkdir, writeFile, rename, open, appendFile } from 'fs/promises'
-import { OperatorAgent, CodexAgent, CopilotAgent, PiAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { OperatorAgent, CodexAgent, CopilotAgent, PiAgent, type AgentEvent, setPermissionMode, type PermissionMode, registerSessionScopedToolCallbacks, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import type { BrowserPaneFns, BrowserLifecycleActionResult } from '@agent-operator/shared/agent/browser-tools'
 import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
+import type { BrowserPaneManager } from './browser-pane-manager'
 import { InitGate } from './lib/init-gate'
 import {
   loadStoredConfig,
@@ -393,6 +395,23 @@ async function buildServersFromSources(
   return result
 }
 
+interface SessionSourceSnapshot {
+  allSources: LoadedSource[]
+  selectedSources: LoadedSource[]
+  usableSelectedSources: LoadedSource[]
+}
+
+function getSessionSourceSnapshot(
+  workspaceRootPath: string,
+  selectedSlugs?: string[],
+): SessionSourceSnapshot {
+  const allSources = loadWorkspaceSources(workspaceRootPath)
+  const selectedSlugSet = new Set(selectedSlugs ?? [])
+  const selectedSources = allSources.filter((source) => selectedSlugSet.has(source.config.slug))
+  const usableSelectedSources = selectedSources.filter(isSourceUsable)
+  return { allSources, selectedSources, usableSelectedSources }
+}
+
 interface McpTokenRefreshResult {
   tokensRefreshed: boolean
   failedSources: Array<{ slug: string; reason: string }>
@@ -702,6 +721,7 @@ interface LegacyBedrockCompatState {
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private windowManager: WindowManager | null = null
+  private browserPaneManager: BrowserPaneManager | null = null
   private copilotCliPath: string | undefined
   private copilotInterceptorPath: string | undefined
   private piServerPath: string | undefined
@@ -734,6 +754,226 @@ export class SessionManager {
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
+  }
+
+  setBrowserPaneManager(browserPaneManager: BrowserPaneManager): void {
+    this.browserPaneManager = browserPaneManager
+  }
+
+  private getSessionBrowserPaneManager(): BrowserPaneManager {
+    if (!this.browserPaneManager) {
+      throw new Error('Browser pane manager is not initialized')
+    }
+    return this.browserPaneManager
+  }
+
+  private findSessionBrowserWindow(sessionId: string) {
+    const browserPaneManager = this.getSessionBrowserPaneManager()
+    return browserPaneManager.listInstances().find((instance) =>
+      instance.boundSessionId === sessionId || instance.ownerSessionId === sessionId,
+    )
+  }
+
+  private ensureSessionBrowserWindow(sessionId: string, options?: { show?: boolean }): string {
+    const browserPaneManager = this.getSessionBrowserPaneManager()
+    const existing = this.findSessionBrowserWindow(sessionId)
+    if (existing) {
+      if (options?.show) {
+        void browserPaneManager.focus(existing.id)
+      }
+      return existing.id
+    }
+
+    return browserPaneManager.createInstance({
+      show: options?.show ?? false,
+      bindToSessionId: sessionId,
+      ownerType: 'session',
+      ownerSessionId: sessionId,
+    })
+  }
+
+  private decodeBrowserDataUrl(dataUrl: string): Buffer {
+    const match = /^data:([^;,]+);base64,(.+)$/.exec(dataUrl)
+    if (!match) {
+      throw new Error('Invalid browser screenshot data URL')
+    }
+    return Buffer.from(match[2], 'base64')
+  }
+
+  private createBrowserLifecycleResult(
+    action: BrowserLifecycleActionResult['action'],
+    requestedInstanceId: string | undefined,
+    resolvedInstanceId: string | undefined,
+    reason?: string,
+  ): BrowserLifecycleActionResult {
+    return {
+      action,
+      requestedInstanceId,
+      resolvedInstanceId,
+      affectedIds: resolvedInstanceId ? [resolvedInstanceId] : [],
+      reason,
+    }
+  }
+
+  private createSessionBrowserPaneFns(sessionId: string): BrowserPaneFns {
+    const browserPaneManager = this.getSessionBrowserPaneManager()
+
+    const resolveWindowId = (requestedInstanceId?: string): string => {
+      if (requestedInstanceId) {
+        return requestedInstanceId
+      }
+
+      const existing = this.findSessionBrowserWindow(sessionId)
+      if (existing) {
+        return existing.id
+      }
+
+      return this.ensureSessionBrowserWindow(sessionId, { show: false })
+    }
+
+    return {
+      openPanel: async (options) => {
+        const instanceId = this.ensureSessionBrowserWindow(sessionId, { show: !(options?.background ?? false) })
+        if (!(options?.background ?? false)) {
+          await browserPaneManager.focus(instanceId)
+        }
+        return { instanceId }
+      },
+      navigate: async (url) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.navigate(instanceId, url)
+      },
+      snapshot: async () => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.getAccessibilitySnapshot(instanceId)
+      },
+      click: async (ref, options) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.clickElement(instanceId, ref, options)
+      },
+      clickAt: async (x, y) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.clickAt(instanceId, x, y)
+      },
+      drag: async (x1, y1, x2, y2) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.drag(instanceId, x1, y1, x2, y2)
+      },
+      fill: async (ref, value) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.fillElement(instanceId, ref, value)
+      },
+      upload: async (ref, filePaths) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.uploadFiles(instanceId, ref, filePaths)
+      },
+      typeText: async (text) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.typeText(instanceId, text)
+      },
+      pressKey: async (key, options) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.pressKey(instanceId, key, options)
+      },
+      select: async (ref, value) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.selectOption(instanceId, ref, value)
+      },
+      screenshot: async (args) => {
+        const instanceId = resolveWindowId()
+        const result = await browserPaneManager.screenshot(instanceId, {
+          annotate: args?.annotate,
+          format: args?.format,
+        })
+        return {
+          imageBuffer: this.decodeBrowserDataUrl(result.dataUrl),
+          imageFormat: result.format,
+          metadata: result.metadata,
+        }
+      },
+      scroll: async (direction, amount) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.scroll(instanceId, { direction, amount })
+      },
+      goBack: async () => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.goBack(instanceId)
+      },
+      goForward: async () => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.goForward(instanceId)
+      },
+      evaluate: async (expression) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.evaluate(instanceId, expression)
+      },
+      wait: async (args) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.waitFor(instanceId, args)
+      },
+      getConsoleEntries: async (limit, level) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.getConsoleEntries(instanceId, limit, level)
+      },
+      getNetworkEntries: async (limit, state) => {
+        const instanceId = resolveWindowId()
+        return browserPaneManager.getNetworkEntries(instanceId, limit, state)
+      },
+      setClipboard: async (text) => {
+        browserPaneManager.setClipboard(text)
+      },
+      getClipboard: async () => {
+        return browserPaneManager.getClipboard()
+      },
+      paste: async (text) => {
+        const instanceId = resolveWindowId()
+        await browserPaneManager.paste(instanceId, text)
+      },
+      focusWindow: async (requestedInstanceId) => {
+        const instanceId = resolveWindowId(requestedInstanceId)
+        await browserPaneManager.focus(instanceId)
+        const info = browserPaneManager.listInstances().find((instance) => instance.id === instanceId)
+        if (!info) {
+          throw new Error(`Browser window not found: ${instanceId}`)
+        }
+        return {
+          instanceId,
+          title: info.title,
+          url: info.url,
+        }
+      },
+      closeWindow: async (requestedInstanceId) => {
+        const existing = requestedInstanceId
+          ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
+          : this.findSessionBrowserWindow(sessionId)
+        if (!existing) {
+          return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
+        }
+        browserPaneManager.destroyInstance(existing.id)
+        return this.createBrowserLifecycleResult('closed', requestedInstanceId, existing.id)
+      },
+      hideWindow: async (requestedInstanceId) => {
+        const existing = requestedInstanceId
+          ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
+          : this.findSessionBrowserWindow(sessionId)
+        if (!existing) {
+          return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
+        }
+        browserPaneManager.hide(existing.id)
+        return this.createBrowserLifecycleResult('hidden', requestedInstanceId, existing.id)
+      },
+      releaseControl: async (requestedInstanceId) => {
+        const existing = requestedInstanceId
+          ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
+          : this.findSessionBrowserWindow(sessionId)
+        if (!existing) {
+          return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
+        }
+        browserPaneManager.hide(existing.id)
+        return this.createBrowserLifecycleResult('released', requestedInstanceId, existing.id)
+      },
+      listWindows: async () => browserPaneManager.listInstances(),
+    }
   }
 
   /**
@@ -1109,22 +1349,17 @@ export class SessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk
-    const allSources = loadWorkspaceSources(workspaceRootPath)
-    managed.agent.setAllSources(allSources)
-
-    // Rebuild MCP and API servers for session's enabled sources
     const enabledSlugs = managed.enabledSourceSlugs || []
-    const enabledSources = allSources.filter(s =>
-      enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
-    )
+    const initialSnapshot = getSessionSourceSnapshot(workspaceRootPath, enabledSlugs)
     const { mcpServers, apiServers } = await buildServersFromSources(
-      enabledSources,
+      initialSnapshot.usableSelectedSources,
       getSessionStoragePath(workspaceRootPath, managed.id),
       managed.tokenRefreshManager
     )
-    await this.syncProviderSourceConfig(managed, enabledSources, mcpServers, 'source reload')
-    const intendedSlugs = enabledSources.map(s => s.config.slug)
+    const refreshedSnapshot = getSessionSourceSnapshot(workspaceRootPath, enabledSlugs)
+    managed.agent.setAllSources(refreshedSnapshot.allSources)
+    await this.syncProviderSourceConfig(managed, refreshedSnapshot.selectedSources, mcpServers, 'source reload')
+    const intendedSlugs = refreshedSnapshot.usableSelectedSources.map(s => s.config.slug)
     managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
     sessionLog.info(`Sources reloaded for session ${managed.id}: ${Object.keys(mcpServers).length} MCP, ${Object.keys(apiServers).length} API`)
@@ -2925,9 +3160,22 @@ export class SessionManager {
         // Persist session state
         this.persistSession(managed)
 
-        // OAuth flow is now user-initiated via startSessionOAuth()
-        // The UI will call sessionCommand({ type: 'startOAuth' }) when user clicks "Sign in"
+      // OAuth flow is now user-initiated via startSessionOAuth()
+      // The UI will call sessionCommand({ type: 'startOAuth' }) when user clicks "Sign in"
       }
+
+      registerSessionScopedToolCallbacks(managed.id, {
+        onPlanSubmitted: (planPath) => {
+          managed.agent?.onPlanSubmitted?.(planPath)
+        },
+        onAuthRequest: (request) => {
+          managed.agent?.onAuthRequest?.(request)
+        },
+        getBrowserPaneFns: () => {
+          if (!this.browserPaneManager) return undefined
+          return this.createSessionBrowserPaneFns(managed.id)
+        },
+      })
 
       // Wire up onScheduledTaskCreated to tag session + broadcast changes
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
@@ -2975,7 +3223,8 @@ export class SessionManager {
         }
 
         // Build server configs for all enabled sources
-        const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
+        const enabledSourceSlugs = managed.enabledSourceSlugs || []
+        const allEnabledSources = getSourcesBySlugs(workspaceRootPath, enabledSourceSlugs)
         const { mcpServers, apiServers, errors } = await buildServersFromSources(
           allEnabledSources,
           getSessionStoragePath(workspaceRootPath, managed.id),
@@ -3000,10 +3249,10 @@ export class SessionManager {
         }
 
         // Apply source servers to the agent
-        const intendedSlugs = allEnabledSources
-          .filter(s => isSourceUsable(s))
-          .map(s => s.config.slug)
-        await this.syncProviderSourceConfig(managed, allEnabledSources, mcpServers, 'source auto-activation')
+        const refreshedSnapshot = getSessionSourceSnapshot(workspaceRootPath, enabledSourceSlugs)
+        managed.agent!.setAllSources(refreshedSnapshot.allSources)
+        const intendedSlugs = refreshedSnapshot.usableSelectedSources.map(s => s.config.slug)
+        await this.syncProviderSourceConfig(managed, refreshedSnapshot.selectedSources, mcpServers, 'source auto-activation')
         managed.agent!.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
         sessionLog.info(`Auto-enabled source ${sourceSlug} for session ${managed.id}`)
@@ -3351,15 +3600,14 @@ export class SessionManager {
         sessionLog.warn(`Source build errors:`, errors)
       }
 
-      // Set all sources for context (agent sees full list with descriptions)
-      const allSources = loadWorkspaceSources(workspaceRootPath)
-      managed.agent.setAllSources(allSources)
+      const refreshedSnapshot = getSessionSourceSnapshot(workspaceRootPath, sourceSlugs)
+      managed.agent.setAllSources(refreshedSnapshot.allSources)
 
       // Set active source servers (tools are only available from these)
-      const intendedSlugs = sources.filter(s => isSourceUsable(s)).map(s => s.config.slug)
-      await this.syncProviderSourceConfig(managed, sources, mcpServers, 'source config change')
+      const intendedSlugs = refreshedSnapshot.usableSelectedSources.map(s => s.config.slug)
+      await this.syncProviderSourceConfig(managed, refreshedSnapshot.selectedSources, mcpServers, 'source config change')
       managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-      sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${allSources.length} total)`)
+      sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${refreshedSnapshot.allSources.length} total)`)
     }
 
     // Persist the session with updated sources
@@ -4042,11 +4290,12 @@ export class SessionManager {
     await this.flushPendingCodexReconnect(managed, 'before send-message')
     recordPreChatStep('flush_pending_codex_reconnect', reconnectStartAt)
 
+    const workspaceRootPath = managed.workspace.rootPath
+
     // Always set all sources for context (even if none are enabled)
     const loadSourcesStartAt = Date.now()
-    const workspaceRootPath = managed.workspace.rootPath
-    const allSources = loadWorkspaceSources(workspaceRootPath)
-    agent.setAllSources(allSources)
+    const initialSnapshot = getSessionSourceSnapshot(workspaceRootPath, managed.enabledSourceSlugs)
+    agent.setAllSources(initialSnapshot.allSources)
     recordPreChatStep('load_workspace_sources', loadSourcesStartAt)
     sendSpan.mark('sources.loaded')
 
@@ -4058,7 +4307,7 @@ export class SessionManager {
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
 
       // Always build server configs fresh (no caching - single source of truth)
-      const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+      const sources = initialSnapshot.selectedSources
       const buildServersStartAt = Date.now()
       const { mcpServers, apiServers, errors } = await buildServersFromSources(
         sources,
@@ -4075,15 +4324,17 @@ export class SessionManager {
       const mcpCount = Object.keys(mcpServers).length
       const apiCount = Object.keys(apiServers).length
       if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
-        const usableSources = sources.filter(isSourceUsable)
+        const refreshedSnapshot = getSessionSourceSnapshot(workspaceRootPath, managed.enabledSourceSlugs)
+        agent.setAllSources(refreshedSnapshot.allSources)
+        const usableSources = refreshedSnapshot.usableSelectedSources
         if (agent instanceof CopilotAgent) {
           const copilotConfigDir = join(sessionPath, '.copilot-config')
           await setupCopilotBridgeConfig(copilotConfigDir, usableSources)
         }
-        // Pass intended slugs so agent shows sources as active even if build failed
+        // Only pass sources that still have working tools after auth/status refresh.
         const intendedSlugs = usableSources.map(s => s.config.slug)
         agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
+        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${refreshedSnapshot.allSources.length} total)`)
       }
       sendSpan.mark('servers.applied')
 
@@ -4092,7 +4343,7 @@ export class SessionManager {
       const refreshTokensStartAt = Date.now()
       const refreshResult = await refreshMcpOAuthTokensIfNeeded(
         agent,
-        sources,
+        getSessionSourceSnapshot(workspaceRootPath, managed.enabledSourceSlugs).selectedSources,
         managed.tokenRefreshManager,
         sessionPath,
       )
@@ -4929,6 +5180,17 @@ To view this task's output:
             parentToolUseId,
           }, workspaceId)
         }
+
+        if (event.toolName === 'browser_tool') {
+          try {
+            this.getSessionBrowserPaneManager().setAgentControl(sessionId, {
+              displayName: event.displayName ?? 'Browser',
+              intent: event.intent,
+            })
+          } catch {
+            // Browser window may not exist yet for this session.
+          }
+        }
         break
       }
 
@@ -4936,6 +5198,14 @@ To view this task's output:
         // AgentEvent tool_result only has toolUseId, look up the toolName
         const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
+
+        if (toolName === 'browser_tool') {
+          try {
+            this.getSessionBrowserPaneManager().clearAgentControl(sessionId)
+          } catch {
+            // Browser window may not exist yet for this session.
+          }
+        }
 
         // Parent tool names for defensive cleanup
         const PARENT_TOOLS = ['Task', 'TaskOutput']
@@ -5124,12 +5394,39 @@ To view this task's output:
           sessionLog.info('Skipping typed abort error event (expected during interrupt)')
           break
         }
+        const errorText = [
+          event.error.message || '',
+          ...(event.error.details || []),
+        ].join('\n').toLowerCase()
+        const hasSelectedSources = (managed.enabledSourceSlugs?.length ?? 0) > 0
+        const isMcpAuthWithoutSelectedSource =
+          !hasSelectedSources &&
+          (
+            errorText.includes('mcp server requires authentication') ||
+            errorText.includes('oauth token is configured')
+          )
+        const displayError = isMcpAuthWithoutSelectedSource
+          ? {
+              ...event.error,
+              code: 'provider_tool_auth_error',
+              title: 'Model Connection Compatibility Issue',
+              message: 'The current model connection rejected an MCP tool request. No chat source is selected, so this is not a source re-authentication problem.',
+              details: [
+                ...(event.error.details || []),
+                'No source is enabled for this chat, so re-authenticating sources will not fix this request.',
+                'This usually happens on Anthropic-compatible endpoints when an SDK web or MCP tool is invoked.',
+                'Retry with browser_tool or the web-search skill, or switch to an official Anthropic connection.',
+              ],
+              actions: [],
+              canRetry: false,
+            }
+          : event.error
         // Typed errors have structured information - send both formats for compatibility
-        sessionLog.info('typed_error:', JSON.stringify(event.error, null, 2))
+        sessionLog.info('typed_error:', JSON.stringify(displayError, null, 2))
         const typedErrorMessage: Message = {
           id: generateMessageId(),
           role: 'error',
-          content: event.error.message || event.error.title || 'An error occurred',
+          content: displayError.message || displayError.title || 'An error occurred',
           timestamp: Date.now()
         }
         managed.messages.push(typedErrorMessage)
@@ -5138,13 +5435,13 @@ To view this task's output:
           type: 'typed_error',
           sessionId,
           error: {
-            code: event.error.code,
-            title: event.error.title,
-            message: event.error.message,
-            actions: event.error.actions,
-            canRetry: event.error.canRetry,
-            details: event.error.details,
-            originalError: event.error.originalError,
+            code: displayError.code,
+            title: displayError.title,
+            message: displayError.message,
+            actions: displayError.actions,
+            canRetry: displayError.canRetry,
+            details: displayError.details,
+            originalError: displayError.originalError,
           }
         }, workspaceId)
         break

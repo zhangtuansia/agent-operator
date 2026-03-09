@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -40,6 +41,7 @@ import { SETTINGS_ITEMS } from "../../shared/menu-schema"
 import type { SettingsSubpage } from "../../shared/types"
 
 interface AppMenuProps {
+  className?: string
   onNewChat: () => void
   onOpenSettings: () => void
   onOpenSettingsSubpage?: (subpage: SettingsSubpage) => void
@@ -67,6 +69,7 @@ interface AppMenuProps {
  * - Reset
  */
 export function AppMenu({
+  className,
   onNewChat,
   onOpenSettings,
   onOpenSettingsSubpage,
@@ -103,7 +106,7 @@ export function AppMenu({
   const api = window.electronAPI
 
   return (
-    <div className="flex items-center gap-[5px] w-full">
+    <div className={cn("flex items-center gap-[5px]", onToggleSidebar ? "w-full" : "w-auto", className)}>
       {/* App Logo Menu */}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
@@ -278,17 +281,16 @@ export function AppMenu({
         </StyledDropdownMenuContent>
       </DropdownMenu>
 
-      {/* Spacer to push sidebar toggle right */}
-      <div className="flex-1" />
-
-      {/* Sidebar Toggle */}
       {onToggleSidebar && (
-        <TopBarButton
-          onClick={onToggleSidebar}
-          aria-label={isSidebarVisible ? t('appMenu.hideSidebar') : t('appMenu.showSidebar')}
-        >
-          <PanelLeftRounded className="h-5 w-5 text-foreground/70" />
-        </TopBarButton>
+        <>
+          <div className="flex-1" />
+          <TopBarButton
+            onClick={onToggleSidebar}
+            aria-label={isSidebarVisible ? t('appMenu.hideSidebar') : t('appMenu.showSidebar')}
+          >
+            <PanelLeftRounded className="h-5 w-5 text-foreground/70" />
+          </TopBarButton>
+        </>
       )}
     </div>
   )

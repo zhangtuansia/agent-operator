@@ -28,3 +28,4 @@ export {
   StyledDropdownMenuSubTrigger,
   StyledDropdownMenuSubContent,
 } from './StyledDropdown'
+export { BrowserControls, type BrowserControlsProps } from './BrowserControls'

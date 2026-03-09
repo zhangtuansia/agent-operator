@@ -65,6 +65,7 @@ import { createLLMTool } from './llm-tool.ts';
 import { FEATURE_FLAGS } from '../config/feature-flags.ts';
 import { loadTemplate, validateTemplateData } from '../utils/template-loader.ts';
 import { renderMustache } from '../utils/mustache.ts';
+import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -183,6 +184,8 @@ export interface SessionScopedToolCallbacks {
    * 5. Agent resumes and processes the result
    */
   onAuthRequest?: (request: AuthRequest) => void;
+  /** Called lazily to resolve browser pane actions for browser_tool. */
+  getBrowserPaneFns?: () => BrowserPaneFns | undefined;
 }
 
 /**
@@ -2228,6 +2231,10 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createCredentialPromptTool(sessionId, workspaceRootPath),
         createTransformDataTool(sessionId, workspaceRootPath),
         ...(FEATURE_FLAGS.sourceTemplates ? [createRenderTemplateTool(sessionId, workspaceRootPath)] : []),
+        ...createBrowserTools({
+          sessionId,
+          getBrowserPaneFns: () => getSessionScopedToolCallbacks(sessionId)?.getBrowserPaneFns?.(),
+        }),
         // LLM tool - invoke secondary Claude calls for subtasks
         createLLMTool({ sessionId }),
       ],

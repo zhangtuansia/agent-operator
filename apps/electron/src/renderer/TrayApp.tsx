@@ -10,8 +10,9 @@ import { DEFAULT_MODEL } from '@config/models'
 import { getDefaultModelsForConnection, resolveEffectiveConnectionSlug } from '@config/llm-connections'
 import type { LlmConnectionWithStatus } from '../shared/types'
 
-const TRAY_PANEL_BASE_HEIGHT = 156
+const TRAY_PANEL_BASE_HEIGHT = 136
 const TRAY_PANEL_MAX_HEIGHT = 320
+const TRAY_PANEL_VERTICAL_CHROME = 16
 
 function buildMiniWindowParams({
   message,
@@ -58,8 +59,7 @@ export default function TrayApp() {
   const [workspaceDefaultConnection, setWorkspaceDefaultConnection] = React.useState<string | undefined>()
   const [llmConnections, setLlmConnections] = React.useState<LlmConnectionWithStatus[]>([])
   const inputRef = React.useRef<RichTextInputHandle>(null)
-  const launcherRef = React.useRef<HTMLDivElement>(null)
-  const baselineHeightRef = React.useRef<number | null>(null)
+  const surfaceRef = React.useRef<HTMLDivElement>(null)
   const lastPanelHeightRef = React.useRef(TRAY_PANEL_BASE_HEIGHT)
 
   const focusInput = React.useCallback(() => {
@@ -110,19 +110,15 @@ export default function TrayApp() {
   }, [workspaceId])
 
   React.useEffect(() => {
-    const launcher = launcherRef.current
-    if (!launcher) return
+    const surface = surfaceRef.current
+    if (!surface) return
 
     const updateTrayHeight = (contentHeight: number) => {
-      if (baselineHeightRef.current == null) {
-        baselineHeightRef.current = contentHeight
-      }
-
       const desiredHeight = Math.min(
         TRAY_PANEL_MAX_HEIGHT,
         Math.max(
           TRAY_PANEL_BASE_HEIGHT,
-          TRAY_PANEL_BASE_HEIGHT + Math.round(contentHeight - baselineHeightRef.current)
+          Math.round(contentHeight + TRAY_PANEL_VERTICAL_CHROME)
         )
       )
 
@@ -135,15 +131,16 @@ export default function TrayApp() {
     }
 
     const observer = new ResizeObserver(() => {
-      updateTrayHeight(Math.ceil(launcher.getBoundingClientRect().height))
+      updateTrayHeight(Math.ceil(surface.getBoundingClientRect().height))
     })
 
-    observer.observe(launcher)
-    void window.electronAPI.setTrayPanelHeight(TRAY_PANEL_BASE_HEIGHT)
+    observer.observe(surface)
+    requestAnimationFrame(() => {
+      updateTrayHeight(Math.ceil(surface.getBoundingClientRect().height))
+    })
 
     return () => {
       observer.disconnect()
-      baselineHeightRef.current = null
       lastPanelHeightRef.current = TRAY_PANEL_BASE_HEIGHT
     }
   }, [workspaceId])
@@ -209,33 +206,38 @@ export default function TrayApp() {
   return (
     <div className="h-screen overflow-hidden bg-transparent text-foreground">
       <div className="flex h-full items-end justify-center px-3 pb-3 pt-2">
-        <div ref={launcherRef} className="w-full max-w-[560px]">
+        <div className="w-full max-w-[560px]">
           {workspaceId ? (
-            <div className="relative">
-              <AiGenerate3d
-                aria-hidden="true"
-                blinkOnly
-                className="pointer-events-none absolute left-3 top-[-28px] z-10 h-6 w-6 text-foreground/85"
-              />
+            <div ref={surfaceRef} className="relative pt-5">
+              <div className="pointer-events-none absolute left-4 top-0 z-20">
+                <AiGenerate3d
+                  aria-hidden="true"
+                  blinkOnly
+                  className="h-6 w-6 drop-shadow-[0_4px_10px_rgba(0,0,0,0.1)]"
+                />
+              </div>
 
-              <FreeFormInput
-                launcherMode
-                launcherShowModelSelector
-                inputRef={inputRef}
-                placeholder={t('trayPanel.quickAskPlaceholder')}
-                disabled={isSubmitting}
-                inputValue={quickAsk}
-                onInputChange={setQuickAsk}
-                currentModel={currentModel}
-                currentConnection={currentConnection}
-                availableLlmConnections={llmConnections}
-                workspaceDefaultLlmConnection={workspaceDefaultConnection}
-                onModelChange={handleModelChange}
-                isEmptySession
-                onSubmit={(message) => {
-                  void handleSubmit(message)
-                }}
-              />
+              <div className="rounded-[22px] bg-background/94 px-2.5 pb-2.5 pt-3 shadow-middle backdrop-blur-2xl">
+                <FreeFormInput
+                  inputRef={inputRef}
+                  unstyled
+                  launcherMode
+                  launcherShowModelSelector
+                  placeholder={t('trayPanel.quickAskPlaceholder')}
+                  disabled={isSubmitting}
+                  inputValue={quickAsk}
+                  onInputChange={setQuickAsk}
+                  currentModel={currentModel}
+                  currentConnection={currentConnection}
+                  availableLlmConnections={llmConnections}
+                  workspaceDefaultLlmConnection={workspaceDefaultConnection}
+                  onModelChange={handleModelChange}
+                  isEmptySession
+                  onSubmit={(message) => {
+                    void handleSubmit(message)
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <div className="rounded-[16px] bg-background/96 p-4 shadow-middle backdrop-blur-2xl">

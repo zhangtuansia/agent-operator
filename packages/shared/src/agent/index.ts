@@ -3,6 +3,7 @@ export { ClaudeAgent, type ClaudeAgentConfig } from './claude-agent.ts';
 export { CodexAgent } from './codex-agent.ts';
 export { CopilotAgent, CopilotBackend, resolveCopilotModelId } from './copilot-agent.ts';
 export { PiAgent, PiBackend } from './pi-agent.ts';
+export * from './browser-tools.ts';
 export * from './errors.ts';
 export * from './options.ts';
 

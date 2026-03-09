@@ -639,6 +639,7 @@ export const zh: TranslationKeys = {
     copyShareLink: '复制分享链接',
     updateShare: '更新分享',
     stopSharing: '停止分享',
+    openInNewPanel: '在新面板中打开',
     openInNewWindow: '在新窗口中打开',
     viewInFinder: '在访达中查看',
     copyPath: '复制路径',
@@ -795,6 +796,36 @@ export const zh: TranslationKeys = {
     // Window submenu
     minimize: '最小化',
     maximize: '最大化',
+  },
+
+  topBar: {
+    addPanel: '添加面板',
+    newSessionInPanel: '在面板中新建会话',
+    newBrowserWindow: '新建浏览器窗口',
+    openDocs: '打开文档',
+    docsSources: '数据源',
+    docsSkills: '技能',
+    docsStatuses: '状态',
+    docsPermissions: '权限',
+    docsAutomations: '自动化',
+    allDocumentation: '全部文档',
+  },
+
+  browserTabStrip: {
+    actionsFor: '{label} 操作',
+    localFile: '本地文件',
+    moreWindows: '还有 {count} 个浏览器窗口',
+    newTab: '新标签页',
+    openSessionUsingThisWindow: '打开使用此窗口的会话',
+    openSessionWhichUsedThisWindow: '打开曾使用此窗口的会话',
+    showBrowserWindow: '显示浏览器窗口',
+    terminateBrowser: '关闭浏览器',
+  },
+
+  browserToolbar: {
+    windowOptions: '浏览器窗口选项',
+    hideWindow: '隐藏窗口',
+    closeWindowEntirely: '彻底关闭窗口',
   },
 
   // Onboarding
@@ -1196,7 +1227,7 @@ export const zh: TranslationKeys = {
     installingGoogleWorkspaceCli: '正在准备 Google Workspace CLI...',
     googleWorkspaceCliInstalled: 'Google Workspace CLI 已安装',
     failedToInstallGoogleWorkspaceCli: '自动安装 Google Workspace CLI 失败',
-    googleWorkspaceInstallHint: '应用会优先使用内置 gws。若仍失败，请先重启应用；若仍有问题，再尝试执行 `npm i -g @googleworkspace/cli`。',
+    googleWorkspaceInstallHint: '应用需要仍然支持 MCP 的 gws 版本。若仍失败，请先重启应用；若还不行，请执行 `npm i -g @googleworkspace/cli@0.7.0`，不要装 `latest`。',
     failedToShowInFinder: '在访达中显示失败',
     patternCopied: '模式已复制到剪贴板',
     failedToCopyPattern: '复制模式失败',

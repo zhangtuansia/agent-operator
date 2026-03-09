@@ -1,13 +1,15 @@
 ---
 name: web-search
-description: Real-time web search using Playwright-controlled browser. Use this skill when you need current information, latest documentation, recent news, or any data beyond your knowledge cutoff (January 2025).
+description: Legacy external-browser search flow for current information, latest documentation, recent news, and verification. Prefer `browser_tool search` inside Dazi; use this skill only when the user explicitly asks for web-search or the built-in browser path is insufficient.
 ---
 
 # Web Search Skill
 
 ## When to Use This Skill
 
-Use the web-search skill when you need:
+Use the web-search skill only when the user explicitly wants the legacy external-browser search flow, or when built-in browser search is clearly insufficient for the task.
+
+Typical cases:
 
 - **Current information** - Events, news, or data after January 2025
 - **Latest documentation** - Up-to-date framework/library docs (React 19, Next.js 15, etc.)
@@ -16,6 +18,8 @@ Use the web-search skill when you need:
 - **Recent discussions** - Community opinions, GitHub issues, Stack Overflow answers
 - **Product comparisons** - Latest reviews and comparisons
 - **Troubleshooting** - Search for specific error messages or solutions
+
+Do not use this skill when the built-in browser can handle the job. For ordinary searches, direct URLs, login flows, clicking, filling forms, uploads, screenshots, scrolling, or other session-bound browsing inside Dazi, use `browser_tool` instead.
 
 **Examples of when to use:**
 - User: "What are the new features in React 19?"

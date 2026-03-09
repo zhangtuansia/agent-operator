@@ -24,6 +24,7 @@ import { initTray, destroyTray } from './tray'
 import { getSkillServiceManager } from './skill-services'
 import { createIMServiceManager, getIMServiceManager } from './im-services'
 import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
+import { BrowserPaneManager } from './browser-pane-manager'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -51,6 +52,7 @@ const DEEPLINK_SCHEME =
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let browserPaneManager: BrowserPaneManager | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -58,6 +60,10 @@ let pendingDeepLink: string | null = null
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: COWORK_APP_NAME env var (e.g., "Dazi [1]")
 app.setName(process.env.COWORK_APP_NAME || process.env.OPERATOR_APP_NAME || 'Dazi')
+
+// Prevent Chromium's macOS history swipe from hijacking horizontal panel scrolling.
+// We manage left/right movement inside the app via the panel stack.
+app.commandLine.appendSwitch('overscroll-history-navigation', '0')
 
 // Register as default protocol client for agentoperator:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -197,6 +203,7 @@ app.whenReady().then(async () => {
   try {
     // Initialize window manager
     windowManager = new WindowManager()
+    browserPaneManager = new BrowserPaneManager()
 
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
@@ -205,6 +212,7 @@ app.whenReady().then(async () => {
     // Initialize session manager
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
+    sessionManager.setBrowserPaneManager(browserPaneManager)
 
     // Initialize notification service
     initNotificationService(windowManager)
@@ -228,7 +236,7 @@ app.whenReady().then(async () => {
     // Register IPC handlers BEFORE session initialization to ensure they are
     // always available to the renderer even if initialization fails.
     // This prevents "No handler registered" errors during onboarding on fresh installs.
-    registerIpcHandlers(sessionManager, windowManager, () => taskScheduler)
+    registerIpcHandlers(sessionManager, windowManager, browserPaneManager)
 
     // Initialize session manager (load sessions from disk BEFORE window creation)
     // Non-fatal: if initialization fails (e.g. corrupted config, missing files),
