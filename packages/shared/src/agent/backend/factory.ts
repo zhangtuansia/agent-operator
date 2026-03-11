@@ -14,11 +14,26 @@
  * - authType determines how credentials are retrieved
  */
 
-import type { AgentBackend, BackendConfig, AgentProvider, LlmProviderType, LlmAuthType } from './types.ts';
+import type {
+  AgentBackend,
+  BackendSelection,
+  BackendConfig,
+  AgentProvider,
+  BackendHostRuntimeContext,
+  LlmProviderType,
+  LlmAuthType,
+} from './types.ts';
 import { ClaudeAgent } from '../claude-agent.ts';
 import { CodexAgent } from '../codex-agent.ts';
 import { CopilotAgent } from '../copilot-agent.ts';
 import { PiAgent } from '../pi-agent.ts';
+import { OperatorAgent } from '../operator-agent.ts';
+import {
+  initializeBackendHostRuntime as initializeBackendHostRuntimeBootstrap,
+  resolveBackendHostTooling as resolveBackendHostToolingPaths,
+  type ResolvedBackendHostTooling,
+  type ResolvedBackendRuntimePaths,
+} from './internal/runtime-resolver.ts';
 import {
   getLlmConnection,
   getDefaultLlmConnection,
@@ -79,6 +94,24 @@ export function detectProvider(authType: string): AgentProvider {
 export function createBackend(config: BackendConfig): AgentBackend {
   switch (config.provider) {
     case 'anthropic':
+      if (config.anthropicRuntime === 'operator') {
+        return new OperatorAgent({
+          workspace: config.workspace,
+          session: config.session,
+          model: config.model,
+          providerType: config.providerType,
+          connectionSlug: config.connectionSlug,
+          thinkingLevel: config.thinkingLevel,
+          onSdkSessionIdUpdate: config.onSdkSessionIdUpdate,
+          onSdkSessionIdCleared: config.onSdkSessionIdCleared,
+          getRecoveryMessages: config.getRecoveryMessages,
+          isHeadless: config.isHeadless,
+          debugMode: config.debugMode,
+          systemPromptPreset: config.systemPromptPreset,
+          automationSystem: config.automationSystem,
+        });
+      }
+
       // ClaudeAgent implements AgentBackend directly
       return new ClaudeAgent(config);
 
@@ -127,9 +160,70 @@ export function isProviderAvailable(provider: AgentProvider): boolean {
   return getAvailableProviders().includes(provider);
 }
 
+export function initializeBackendHostRuntime(args: {
+  hostRuntime: BackendHostRuntimeContext;
+  strict?: boolean;
+}): ResolvedBackendRuntimePaths {
+  return initializeBackendHostRuntimeBootstrap(args);
+}
+
+export function resolveBackendHostTooling(args: {
+  hostRuntime: BackendHostRuntimeContext;
+}): ResolvedBackendHostTooling {
+  return resolveBackendHostToolingPaths(args.hostRuntime);
+}
+
 // ============================================================
 // LLM Connection Support
 // ============================================================
+
+/**
+ * Resolve the backend provider to instantiate for a connection.
+ *
+ * Allows callers to override the SDK/backend choice while still preserving
+ * the connection's providerType/authType for credential routing.
+ */
+export function resolveBackendProvider(args: {
+  connection?: Pick<LlmConnection, 'providerType'> | null;
+  preferredProvider?: AgentProvider;
+  fallbackProvider?: AgentProvider;
+}): AgentProvider {
+  const { connection, preferredProvider, fallbackProvider = 'anthropic' } = args;
+  if (preferredProvider) return preferredProvider;
+  if (!connection?.providerType) return fallbackProvider;
+  return providerTypeToAgentProvider(connection.providerType);
+}
+
+export function resolveBackendSelection(args: {
+  connection?: Pick<LlmConnection, 'providerType'> | null;
+  agentType?: string | null;
+  runtime?: 'default' | 'electron-session' | 'headless';
+  fallbackProvider?: AgentProvider;
+}): BackendSelection {
+  const { connection, agentType, runtime = 'default', fallbackProvider = 'anthropic' } = args;
+  const preferredProvider: AgentProvider | undefined =
+    agentType === 'codex'
+      ? 'openai'
+      : agentType === 'pi'
+        ? 'pi'
+        : connection?.providerType === 'bedrock'
+          ? 'pi'
+        : undefined;
+
+  const provider = resolveBackendProvider({
+    connection,
+    preferredProvider,
+    fallbackProvider,
+  });
+
+  return {
+    provider,
+    anthropicRuntime:
+      provider === 'anthropic' && runtime !== 'default'
+        ? 'operator'
+        : undefined,
+  };
+}
 
 /**
  * Map LlmProviderType to AgentProvider (SDK selection).
@@ -254,11 +348,15 @@ export function resolveSessionConnection(
  */
 export function createConfigFromConnection(
   connection: LlmConnection,
-  baseConfig: Omit<BackendConfig, 'provider' | 'authType' | 'providerType'>
+  baseConfig: Omit<BackendConfig, 'provider' | 'authType' | 'providerType'>,
+  preferredProvider?: AgentProvider,
 ): BackendConfig {
   // Use new providerType if available, fall back to legacy type
   const providerType = connection.providerType || (connection.type ? connectionTypeToProvider(connection.type) as unknown as LlmProviderType : 'anthropic');
-  const provider = providerTypeToAgentProvider(providerType);
+  const provider = resolveBackendProvider({
+    connection: { providerType },
+    preferredProvider,
+  });
 
   return {
     ...baseConfig,
@@ -281,7 +379,8 @@ export function createConfigFromConnection(
  */
 export function createBackendFromConnection(
   connectionSlug: string,
-  baseConfig: Omit<BackendConfig, 'provider' | 'authType'>
+  baseConfig: Omit<BackendConfig, 'provider' | 'authType'>,
+  preferredProvider?: AgentProvider,
 ): AgentBackend {
   const connection = getLlmConnection(connectionSlug);
   if (!connection) {
@@ -304,6 +403,6 @@ export function createBackendFromConnection(
     throw new Error(codexValidation.error);
   }
 
-  const config = createConfigFromConnection(connection, baseConfig);
+  const config = createConfigFromConnection(connection, baseConfig, preferredProvider);
   return createBackend(config);
 }

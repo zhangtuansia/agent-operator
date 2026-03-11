@@ -20,6 +20,19 @@ let customInterceptorPath: string | null = null;
 let customExecutable: string | null = null;
 let claudeConfigChecked = false;
 
+function resolveFallbackClaudeCodeExecutable(): string | null {
+    const candidates = [
+        join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
+        join(process.cwd(), '..', '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
+    ];
+    for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
 // UTF-8 BOM character — Windows editors/processes sometimes prepend this to files.
 // JSON parsers reject BOM, but the file content after BOM may be valid JSON.
 const UTF8_BOM = '\uFEFF';
@@ -200,15 +213,20 @@ export function getDefaultOptions(): Partial<Options> {
     const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
     const envFileFlag = `--env-file=${nullDevice}`;
 
+    const resolvedClaudeCodeExecutable = customPathToClaudeCodeExecutable || resolveFallbackClaudeCodeExecutable();
+
     // If custom path is set (e.g., for Electron), use it with minimal options
-    if (customPathToClaudeCodeExecutable) {
+    if (resolvedClaudeCodeExecutable) {
         const executableArgs = [envFileFlag];
         // Add interceptor preload if path is set (needed for cache TTL patching)
         if (customInterceptorPath) {
             executableArgs.push('--preload', customInterceptorPath);
         }
+        if (!customPathToClaudeCodeExecutable) {
+            debug(`[options] Using fallback Claude Code executable path: ${resolvedClaudeCodeExecutable}`);
+        }
         return {
-            pathToClaudeCodeExecutable: customPathToClaudeCodeExecutable,
+            pathToClaudeCodeExecutable: resolvedClaudeCodeExecutable,
             // Use custom executable if set, otherwise default to 'bun'
             executable: (customExecutable || 'bun') as 'bun',
             executableArgs,

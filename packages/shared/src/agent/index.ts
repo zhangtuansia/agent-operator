@@ -4,6 +4,7 @@ export { CodexAgent } from './codex-agent.ts';
 export { CopilotAgent, CopilotBackend, resolveCopilotModelId } from './copilot-agent.ts';
 export { PiAgent, PiBackend } from './pi-agent.ts';
 export * from './browser-tools.ts';
+export * from './browser-tool-names.ts';
 export * from './errors.ts';
 export * from './options.ts';
 
@@ -125,10 +126,19 @@ export {
   createAgent,
   detectProvider,
   getAvailableProviders,
+  initializeBackendHostRuntime,
+  resolveBackendHostTooling,
+  resolveBackendProvider,
+  resolveBackendSelection,
   // Types
   type AgentBackend,
   type AgentProvider,
+  type AnthropicRuntime,
+  type BackendSelection,
   type BackendConfig,
+  type BackendHostRuntimeContext,
+  type ResolvedBackendRuntimePaths,
+  type ResolvedBackendHostTooling,
   type PermissionCallback,
   type PlanCallback,
   type AuthCallback,

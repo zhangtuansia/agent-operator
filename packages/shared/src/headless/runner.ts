@@ -1,4 +1,4 @@
-import { OperatorAgent, type OperatorAgentConfig, type PermissionMode, type SdkMcpServerConfig } from '../agent/operator-agent.ts';
+import { OperatorAgent, createBackend, type BackendConfig, type PermissionMode, type SdkMcpServerConfig } from '../agent/index.ts';
 import { createApiServer } from '../sources/api-tools.ts';
 import { listSessions, getOrCreateSessionById, updateSessionSdkId } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
@@ -192,11 +192,12 @@ ${this.config.prompt}
     const permissionMode = policyToPermissionMode(this.config.permissionPolicy);
     debug('[HeadlessRunner] Using permission mode:', permissionMode, 'from policy:', this.config.permissionPolicy || 'deny-all');
 
-    const agentConfig: OperatorAgentConfig = {
+    const agentConfig = {
+      provider: 'anthropic',
+      anthropicRuntime: 'operator',
       workspace: this.config.workspace,
       model: this.config.model,
       isHeadless: true,
-      // Create a minimal session config with the permission mode
       session: {
         id: `headless-${Date.now()}`,
         workspaceRootPath: this.config.workspace.rootPath,
@@ -204,12 +205,12 @@ ${this.config.prompt}
         lastUsedAt: Date.now(),
         permissionMode,
       },
-    };
+    } satisfies BackendConfig;
 
-    this.agent = new OperatorAgent(agentConfig);
+    this.agent = createBackend(agentConfig) as OperatorAgent;
 
     // Wire up permission handler based on policy
-    this.agent.onPermissionRequest = (request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' }) => {
+    this.agent.onPermissionRequest = (request) => {
       const policy = this.config.permissionPolicy || 'deny-all';
       debug('[HeadlessRunner] Permission request:', request.command, 'policy:', policy);
 
@@ -220,7 +221,7 @@ ${this.config.prompt}
 
       if (policy === 'allow-safe') {
         // Extract base command (first word)
-        const baseCommand = request.command.trim().split(/\s+/)[0] || '';
+        const baseCommand = request.command?.trim().split(/\s+/)[0] || '';
         const allowed = SAFE_COMMANDS.has(baseCommand);
         debug('[HeadlessRunner] Safe check:', baseCommand, 'allowed:', allowed);
         this.agent!.respondToPermission(request.requestId, allowed, false);

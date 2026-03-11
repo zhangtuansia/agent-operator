@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import { EyeOff, X, XCircle } from 'lucide-react'
-import { BrowserControls } from '@agent-operator/ui'
-import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
-import { detectSystemLanguage, getNestedValue, getTranslations, type Language } from './i18n'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
-} from '@/components/ui/styled-dropdown'
+} from '@agent-operator/ui'
+import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
+import { BrowserToolbar } from '@/components/browser/BrowserToolbar'
+import { detectSystemLanguage, getNestedValue, getTranslations, type Language } from './i18n'
 import './index.css'
 
 interface ToolbarState {
@@ -168,9 +168,9 @@ function BrowserToolbarApp() {
         />
       )}
 
-      <BrowserControls
+      <BrowserToolbar
         url={state.url}
-        loading={state.isLoading}
+        isLoading={state.isLoading}
         canGoBack={state.canGoBack}
         canGoForward={state.canGoForward}
         onNavigate={handleNavigate}

@@ -169,7 +169,6 @@ const QUICK_TEMPLATES: QuickTemplate[] = [
   { slug: 'codex', name: 'Codex (ChatGPT Plus)', provider: 'openai', providerType: 'openai', authType: 'oauth' },
   { slug: 'codex-api', name: 'Codex (OpenAI API)', provider: 'openai', providerType: 'openai', authType: 'api_key' },
   { slug: 'copilot', name: 'GitHub Copilot', provider: 'openai', providerType: 'copilot', authType: 'oauth' },
-  { slug: 'pi-api', name: 'PI (API Key)', provider: 'pi', providerType: 'pi', authType: 'api_key' },
   { slug: 'deepseek-api', name: 'DeepSeek', provider: 'deepseek', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.deepseek.com/anthropic' },
   { slug: 'glm-api', name: '智谱 GLM', provider: 'glm', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic' },
   { slug: 'minimax-api', name: 'MiniMax', provider: 'minimax', providerType: 'anthropic_compat', authType: 'api_key_with_endpoint', baseUrl: 'https://api.minimaxi.com/anthropic' },
@@ -181,7 +180,6 @@ const PROVIDER_TYPES: LlmProviderType[] = [
   'anthropic',
   'openai',
   'copilot',
-  'pi',
   'anthropic_compat',
   'openai_compat',
   'bedrock',
@@ -716,6 +714,10 @@ function createConnectionForm(connection?: LlmConnectionWithStatus): ConnectionF
 export default function AiSettingsPage() {
   const { t } = useLanguage()
   const { llmConnections, refreshLlmConnections } = useAppShellContext()
+  const visibleLlmConnections = useMemo(
+    () => llmConnections.filter((connection) => connection.providerType !== 'pi'),
+    [llmConnections],
+  )
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
@@ -931,19 +933,19 @@ export default function AiSettingsPage() {
   ])
 
   const handleReauthenticate = useCallback(() => {
-    const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
+    const defaultConn = visibleLlmConnections.find(c => c.isDefault) || visibleLlmConnections[0]
     if (defaultConn) {
       openEditConnectionDialog(defaultConn)
     } else {
       openCreateConnectionDialog()
     }
-  }, [llmConnections, openCreateConnectionDialog, openEditConnectionDialog])
+  }, [visibleLlmConnections, openCreateConnectionDialog, openEditConnectionDialog])
 
   const handleEditConnection = useCallback((slug: string) => {
-    const connection = llmConnections.find(c => c.slug === slug)
+    const connection = visibleLlmConnections.find(c => c.slug === slug)
     if (!connection) return
     openEditConnectionDialog(connection)
-  }, [llmConnections, openEditConnectionDialog])
+  }, [visibleLlmConnections, openEditConnectionDialog])
 
   const handleReauthenticateConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     if (!window.electronAPI) return
@@ -1033,8 +1035,8 @@ export default function AiSettingsPage() {
   }, [refreshLlmConnections])
 
   const defaultConnection = useMemo(() => {
-    return llmConnections.find(c => c.isDefault)
-  }, [llmConnections])
+    return visibleLlmConnections.find(c => c.isDefault)
+  }, [visibleLlmConnections])
 
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
@@ -1096,9 +1098,9 @@ export default function AiSettingsPage() {
   }, [])
 
   const availableTemplates = useMemo(() => {
-    const existingSlugs = new Set(llmConnections.map(c => c.slug))
+    const existingSlugs = new Set(visibleLlmConnections.map(c => c.slug))
     return QUICK_TEMPLATES.filter(t => !existingSlugs.has(t.slug))
-  }, [llmConnections])
+  }, [visibleLlmConnections])
 
   return (
     <div className="h-full flex flex-col">
@@ -1113,7 +1115,7 @@ export default function AiSettingsPage() {
             />
 
             <div className="space-y-8">
-              {llmConnections.length > 0 && (
+              {visibleLlmConnections.length > 0 && (
                 <SettingsSection
                   title={t('apiSettings.aiPage.sectionDefaultTitle')}
                   description={t('apiSettings.aiPage.sectionDefaultDescription')}
@@ -1124,7 +1126,7 @@ export default function AiSettingsPage() {
                       description={t('apiSettings.aiPage.connectionDescription')}
                       value={defaultConnection?.slug || ''}
                       onValueChange={handleSetDefaultConnection}
-                      options={llmConnections.map((conn) => ({
+                      options={visibleLlmConnections.map((conn) => ({
                         value: conn.slug,
                         label: conn.name,
                         description: getProviderDescription(conn.providerType, t),
@@ -1152,7 +1154,7 @@ export default function AiSettingsPage() {
                 </SettingsSection>
               )}
 
-              {workspaces.length > 0 && llmConnections.length > 0 && (
+              {workspaces.length > 0 && visibleLlmConnections.length > 0 && (
                 <SettingsSection
                   title={t('apiSettings.aiPage.sectionWorkspaceOverridesTitle')}
                   description={t('apiSettings.aiPage.sectionWorkspaceOverridesDescription')}
@@ -1162,7 +1164,7 @@ export default function AiSettingsPage() {
                       <WorkspaceOverrideCard
                         key={workspace.id}
                         workspace={workspace}
-                        llmConnections={llmConnections}
+                        llmConnections={visibleLlmConnections}
                         onSettingsChange={handleWorkspaceSettingsChange}
                         t={t}
                       />
@@ -1176,12 +1178,12 @@ export default function AiSettingsPage() {
                 description={t('apiSettings.aiPage.sectionConnectionsDescription')}
               >
                 <SettingsCard>
-                  {llmConnections.length === 0 ? (
+                  {visibleLlmConnections.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                       {t('apiSettings.aiPage.noConnectionsConfigured')}
                     </div>
                   ) : (
-                    [...llmConnections]
+                    [...visibleLlmConnections]
                       .sort((a, b) => {
                         if (a.isDefault && !b.isDefault) return -1
                         if (!a.isDefault && b.isDefault) return 1
@@ -1191,7 +1193,7 @@ export default function AiSettingsPage() {
                         <ConnectionRow
                           key={conn.slug}
                           connection={conn}
-                          isLastConnection={llmConnections.length === 1}
+                          isLastConnection={visibleLlmConnections.length === 1}
                           onEdit={() => handleEditConnection(conn.slug)}
                           onDelete={() => handleDeleteConnection(conn.slug)}
                           onSetDefault={() => handleSetDefaultConnection(conn.slug)}

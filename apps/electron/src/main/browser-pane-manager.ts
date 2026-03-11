@@ -7,7 +7,11 @@ import { pathToFileURL } from 'url'
 import { mainLog } from './logger'
 import { BrowserCDP } from './browser-cdp'
 import { DEFAULT_THEME, loadAppTheme } from '@agent-operator/shared/config'
-import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
+import {
+  BROWSER_LIVE_FX_BORDER,
+  getBrowserLiveFxCornerRadii,
+  resolveBrowserLiveFxBorder,
+} from '../shared/browser-live-fx'
 import { findBundledResourcePath } from './resource-paths'
 import {
   BROWSER_TOOLBAR_CHANNELS,
@@ -17,6 +21,8 @@ import {
   type BrowserClickOptions,
   type BrowserDownloadEntry,
   type BrowserDownloadOptions,
+  type BrowserEmptyStateLaunchPayload,
+  type BrowserEmptyStateLaunchResult,
   type BrowserElementGeometry,
   type BrowserInstanceInfo,
   type BrowserKeyOptions,
@@ -47,6 +53,8 @@ const DEFAULT_NETWORK_IDLE_MS = 700
 const SCREENSHOT_HIDDEN_CAPTURE_ATTEMPTS = 3
 const SCREENSHOT_RETRY_DELAY_MS = 120
 const SCREENSHOT_RESCUE_PAINT_DELAY_MS = 180
+const TOOLBAR_LOAD_MAX_RETRIES = 2
+const TOOLBAR_LOAD_RETRY_DELAY_MS = 150
 const SENSITIVE_UPLOAD_PATTERNS = [
   /\.ssh\//i,
   /\.gnupg\//i,
@@ -119,9 +127,18 @@ interface BrowserPaneRecord {
   startPageUrl: string
   toolbarReady: boolean
   showWhenReady: boolean
+  pendingShowOnReady: boolean
+  pendingShowToken: number
   toolbarMenuOpen: boolean
   toolbarMenuHeight: number
   toolbarMenuOverlayActive: boolean
+  lastAction: {
+    tool: string
+    ref?: string
+    status: 'succeeded' | 'failed'
+    geometry?: BrowserElementGeometry
+    timestamp: number
+  } | null
   agentControl: {
     active: boolean
     sessionId: string
@@ -241,6 +258,92 @@ export class BrowserPaneManager {
     this.sessionPathResolver = resolver
   }
 
+  private getBoundInstanceId(sessionId: string): string | null {
+    for (const [id, record] of this.instances) {
+      if (record.info.boundSessionId === sessionId) return id
+    }
+    return null
+  }
+
+  private findReusableUnboundInstance(): BrowserPaneRecord | null {
+    const unbound = Array.from(this.instances.values()).filter(
+      (record) => record.info.boundSessionId === null && record.info.ownerType === 'manual',
+    )
+    if (unbound.length === 0) return null
+    return unbound.find((record) => record.info.isVisible) ?? unbound[0]
+  }
+
+  createForSession(sessionId: string, options?: { show?: boolean }): string {
+    const existingId = this.getBoundInstanceId(sessionId)
+    if (existingId) {
+      if (options?.show) {
+        void this.focus(existingId)
+      }
+      return existingId
+    }
+
+    const reusable = this.findReusableUnboundInstance()
+    if (reusable) {
+      reusable.info.boundSessionId = sessionId
+      reusable.info.ownerType = 'session'
+      reusable.info.ownerSessionId = sessionId
+      this.emitState(reusable)
+      if (options?.show) {
+        void this.focus(reusable.id)
+      }
+      mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId}`)
+      return reusable.id
+    }
+
+    return this.createInstance({
+      show: options?.show ?? false,
+      ownerType: 'session',
+      ownerSessionId: sessionId,
+      bindToSessionId: sessionId,
+    })
+  }
+
+  focusBoundForSession(sessionId: string): string {
+    const id = this.createForSession(sessionId, { show: true })
+    void this.focus(id)
+    return id
+  }
+
+  getOrCreateForSession(sessionId: string): string {
+    return this.createForSession(sessionId, { show: false })
+  }
+
+  destroyForSession(sessionId: string): void {
+    for (const [id, record] of this.instances) {
+      if (record.info.boundSessionId === sessionId) {
+        this.destroyInstance(id)
+      }
+    }
+  }
+
+  async clearVisualsForSession(sessionId: string): Promise<void> {
+    for (const record of this.instances.values()) {
+      if (record.info.boundSessionId !== sessionId) continue
+      record.agentControl = null
+      this.applyAgentControlLock(record, false)
+      this.updateNativeOverlayState(record)
+      this.emitState(record)
+    }
+  }
+
+  unbindAllForSession(sessionId: string): void {
+    for (const record of this.instances.values()) {
+      if (record.info.boundSessionId !== sessionId) continue
+      record.info.boundSessionId = null
+      record.info.ownerType = 'manual'
+      record.info.ownerSessionId = record.info.ownerSessionId ?? sessionId
+      this.emitState(record)
+      mainLog.info(
+        `[browser-pane] Unbound instance ${record.id} from session ${sessionId} (owner retained: ${record.info.ownerSessionId ?? 'none'})`,
+      )
+    }
+  }
+
   createInstance(input?: string | BrowserPaneCreateOptions): string {
     const options = typeof input === 'string' ? { id: input } : (input ?? {})
     const id = options.id ?? randomUUID()
@@ -333,9 +436,12 @@ export class BrowserPaneManager {
       startPageUrl,
       toolbarReady: false,
       showWhenReady: shouldShow,
+      pendingShowOnReady: false,
+      pendingShowToken: 0,
       toolbarMenuOpen: false,
       toolbarMenuHeight: 0,
       toolbarMenuOverlayActive: false,
+      lastAction: null,
       agentControl: null,
       lockState: {
         active: false,
@@ -429,6 +535,10 @@ export class BrowserPaneManager {
     }
 
     if (!record.toolbarReady) {
+      if (!record.pendingShowOnReady) {
+        record.pendingShowOnReady = true
+        record.pendingShowToken += 1
+      }
       record.showWhenReady = true
       return
     }
@@ -443,6 +553,10 @@ export class BrowserPaneManager {
   hide(id: string): void {
     const record = this.instances.get(id)
     if (!record) return
+    if (record.pendingShowOnReady) {
+      record.pendingShowOnReady = false
+      record.pendingShowToken += 1
+    }
     this.forceCloseToolbarMenu(record, 'window-hidden')
     record.window.hide()
     this.emitState(record)
@@ -491,41 +605,101 @@ export class BrowserPaneManager {
   async clickElement(id: string, ref: string, options?: BrowserClickOptions): Promise<BrowserElementGeometry> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    const geometry = await record.cdp.clickElement(ref)
+    try {
+      const geometry = await record.cdp.clickElement(ref)
 
-    if (options?.waitFor === 'navigation') {
-      await this.waitForNavigation(record, options.timeoutMs)
-    } else if (options?.waitFor === 'network-idle') {
-      await this.waitForNetworkIdle(record, options.timeoutMs)
+      record.lastAction = {
+        tool: 'browser_click',
+        ref,
+        status: 'succeeded',
+        geometry,
+        timestamp: Date.now(),
+      }
+
+      if (options?.waitFor === 'navigation') {
+        await this.waitForNavigation(record, options.timeoutMs)
+      } else if (options?.waitFor === 'network-idle') {
+        await this.waitForNetworkIdle(record, options.timeoutMs)
+      }
+
+      return geometry
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_click',
+        ref,
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
     }
-
-    return geometry
   }
 
   async fillElement(id: string, ref: string, value: string): Promise<BrowserElementGeometry> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    return record.cdp.fillElement(ref, value)
+    try {
+      const geometry = await record.cdp.fillElement(ref, value)
+      record.lastAction = {
+        tool: 'browser_fill',
+        ref,
+        status: 'succeeded',
+        geometry,
+        timestamp: Date.now(),
+      }
+      return geometry
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_fill',
+        ref,
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
+    }
   }
 
   async selectOption(id: string, ref: string, value: string): Promise<BrowserElementGeometry> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    return record.cdp.selectOption(ref, value)
+    try {
+      const geometry = await record.cdp.selectOption(ref, value)
+      record.lastAction = {
+        tool: 'browser_select',
+        ref,
+        status: 'succeeded',
+        geometry,
+        timestamp: Date.now(),
+      }
+      return geometry
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_select',
+        ref,
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
+    }
   }
 
   async screenshot(id: string, options?: BrowserScreenshotOptions): Promise<BrowserScreenshotResult> {
     const record = this.requireRecord(id)
     const format = options?.format === 'jpeg' ? 'jpeg' : 'png'
-    let annotatedRefs: string[] = []
     let overlayApplied = false
+    const mode = (options?.annotate || options?.mode === 'agent') ? 'agent' : 'raw'
 
     try {
-      if (options?.annotate || (options?.refs && options.refs.length > 0)) {
+      if (mode === 'agent') {
+        const warnings: string[] = []
         let refs = options?.refs ?? []
         if (refs.length === 0) {
-          const snapshot = await record.cdp.getAccessibilitySnapshot()
-          refs = snapshot.nodes.slice(0, 60).map((node) => node.ref)
+          try {
+            const snapshot = await record.cdp.getAccessibilitySnapshot()
+            refs = snapshot.nodes.slice(0, 60).map((node) => node.ref)
+          } catch (error) {
+            warnings.push(`Accessibility snapshot for annotation failed: ${error instanceof Error ? error.message : String(error)}`)
+            refs = []
+          }
         }
 
         const settled = await Promise.allSettled(refs.map((ref) => record.cdp.getElementGeometry(ref)))
@@ -533,22 +707,79 @@ export class BrowserPaneManager {
           .filter((result): result is PromiseFulfilledResult<BrowserElementGeometry> => result.status === 'fulfilled')
           .map((result) => result.value)
 
-        if (geometries.length > 0) {
-          annotatedRefs = geometries.map((geometry) => geometry.ref)
-          await record.cdp.renderTemporaryOverlay(geometries)
-          overlayApplied = true
+        if (options?.includeLastAction && record.lastAction?.geometry) {
+          geometries.push(record.lastAction.geometry)
+        }
+
+        const metadataText = record.lastAction
+          ? `${record.lastAction.tool} • ${record.lastAction.status} • ${new Date(record.lastAction.timestamp).toISOString()}`
+          : `browser_screenshot • ${new Date().toISOString()}`
+
+        let annotationPartial = false
+
+        try {
+          if (geometries.length > 0 || options?.includeMetadata) {
+            await record.cdp.renderTemporaryOverlay({
+              geometries,
+              includeMetadata: !!options?.includeMetadata,
+              metadataText,
+              includeClickPoints: true,
+            })
+            overlayApplied = true
+          }
+        } catch (error) {
+          annotationPartial = true
+          warnings.push(`Annotation overlay failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+
+        const viewport = await record.cdp.getViewportMetrics()
+        const captured = await this.capturePageWithRecovery(record, {
+          format,
+          jpegQuality: Math.max(1, Math.min(100, options?.jpegQuality ?? 90)),
+          dpr: viewport.dpr,
+          mode,
+          errorPrefix: 'screenshot',
+        })
+
+        return {
+          dataUrl: `data:image/${captured.format};base64,${captured.buffer.toString('base64')}`,
+          format: captured.format,
+          metadata: {
+            mode,
+            annotatedRefs: geometries.map((geometry) => geometry.ref),
+            viewport,
+            targets: geometries.map((geometry) => ({
+              ref: geometry.ref,
+              role: geometry.role,
+              name: geometry.name,
+              box: geometry.box,
+              clickPoint: geometry.clickPoint,
+            })),
+            action: record.lastAction
+              ? {
+                tool: record.lastAction.tool,
+                ref: record.lastAction.ref,
+                status: record.lastAction.status,
+                timestamp: record.lastAction.timestamp,
+              }
+              : undefined,
+            annotationPartial,
+            warnings: warnings.length > 0 ? warnings : undefined,
+          },
         }
       }
 
       const captured = await this.capturePageWithRecovery(record, {
         format,
         jpegQuality: Math.max(1, Math.min(100, options?.jpegQuality ?? 90)),
+        mode: 'raw',
+        errorPrefix: 'screenshot',
       })
 
       return {
         dataUrl: `data:image/${captured.format};base64,${captured.buffer.toString('base64')}`,
         format: captured.format,
-        metadata: annotatedRefs.length > 0 ? { annotatedRefs } : undefined,
+        metadata: options?.includeMetadata ? { mode: 'raw' } : undefined,
       }
     } finally {
       if (overlayApplied) {
@@ -585,13 +816,41 @@ export class BrowserPaneManager {
   async clickAt(id: string, x: number, y: number): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    await record.cdp.clickAtCoordinates(x, y)
+    try {
+      await record.cdp.clickAtCoordinates(x, y)
+      record.lastAction = {
+        tool: 'browser_click_at',
+        status: 'succeeded',
+        timestamp: Date.now(),
+      }
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_click_at',
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
+    }
   }
 
   async drag(id: string, x1: number, y1: number, x2: number, y2: number): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    await record.cdp.drag(x1, y1, x2, y2)
+    try {
+      await record.cdp.drag(x1, y1, x2, y2)
+      record.lastAction = {
+        tool: 'browser_drag',
+        status: 'succeeded',
+        timestamp: Date.now(),
+      }
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_drag',
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
+    }
   }
 
   async uploadFiles(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry> {
@@ -603,7 +862,21 @@ export class BrowserPaneManager {
   async typeText(id: string, text: string): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
-    await record.cdp.typeText(text)
+    try {
+      await record.cdp.typeText(text)
+      record.lastAction = {
+        tool: 'browser_type',
+        status: 'succeeded',
+        timestamp: Date.now(),
+      }
+    } catch (error) {
+      record.lastAction = {
+        tool: 'browser_type',
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      throw error
+    }
   }
 
   async pressKey(id: string, key: string, options?: BrowserKeyOptions): Promise<void> {
@@ -1205,14 +1478,7 @@ export class BrowserPaneManager {
     })
 
     toolbarView.webContents.on('did-finish-load', () => {
-      record.toolbarReady = true
-      this.pushToolbarState(record)
-      if (!record.showWhenReady) return
-      record.showWhenReady = false
-      record.window.show()
-      record.window.focus()
-      record.pageView.webContents.focus()
-      emitState()
+      this.markToolbarReady(record, 'toolbar-load-finalized')
     })
 
     pageView.webContents.on('did-start-loading', emitState)
@@ -1331,30 +1597,84 @@ export class BrowserPaneManager {
   }
 
   private async loadToolbarPage(record: BrowserPaneRecord): Promise<void> {
-    try {
-      if (VITE_DEV_SERVER_URL) {
-        await record.toolbarView.webContents.loadURL(`${VITE_DEV_SERVER_URL}/browser-toolbar.html?instanceId=${encodeURIComponent(record.id)}`)
-      } else {
-        await record.toolbarView.webContents.loadFile(
-          join(__dirname, 'renderer/browser-toolbar.html'),
-          { query: { instanceId: record.id } },
-        )
-      }
-    } catch (error) {
-      mainLog.warn(`[browser-pane] Browser toolbar failed to load for ${record.id}: ${error instanceof Error ? error.message : String(error)}`)
-      const safeReason = String(error instanceof Error ? error.message : error).replace(/[<>&]/g, (character) => ({
-        '<': '&lt;',
-        '>': '&gt;',
-        '&': '&amp;',
-      }[character] || character))
+    const query = `instanceId=${encodeURIComponent(record.id)}`
+    let lastError: unknown = null
 
-      await record.toolbarView.webContents.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!doctype html>
+    for (let attempt = 0; attempt <= TOOLBAR_LOAD_MAX_RETRIES; attempt += 1) {
+      try {
+        if (VITE_DEV_SERVER_URL) {
+          await record.toolbarView.webContents.loadURL(`${VITE_DEV_SERVER_URL}/browser-toolbar.html?${query}`)
+        } else {
+          await record.toolbarView.webContents.loadFile(
+            join(__dirname, 'renderer/browser-toolbar.html'),
+            { query: { instanceId: record.id } },
+          )
+        }
+
+        if (attempt > 0) {
+          mainLog.info(`[browser-pane] toolbar load recovered id=${record.id} attempt=${attempt + 1}`)
+        }
+        return
+      } catch (error) {
+        lastError = error
+        const retrying = attempt < TOOLBAR_LOAD_MAX_RETRIES
+        mainLog.warn(
+          `[browser-pane] toolbar load failed id=${record.id} attempt=${attempt + 1}/${TOOLBAR_LOAD_MAX_RETRIES + 1}: ${error instanceof Error ? error.message : String(error)}${retrying ? ' (retrying)' : ''}`,
+        )
+        if (retrying) {
+          await sleep(TOOLBAR_LOAD_RETRY_DELAY_MS)
+        }
+      }
+    }
+
+    const safeReason = String(lastError instanceof Error ? lastError.message : lastError ?? 'unknown error').replace(/[<>&]/g, (character) => ({
+      '<': '&lt;',
+      '>': '&gt;',
+      '&': '&amp;',
+    }[character] || character))
+
+    await record.toolbarView.webContents.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!doctype html>
 <html>
-  <body style="margin:0;font:12px -apple-system, BlinkMacSystemFont, sans-serif;background:${nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#f6f3ef'};color:${nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717'};display:flex;align-items:center;justify-content:center;min-height:${TOOLBAR_HEIGHT}px;">
-    <div>Browser toolbar failed to load: ${safeReason}</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser Toolbar Error</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafb; color: #1f2937; }
+      @media (prefers-color-scheme: dark) { html, body { background: #2b292e; color: #e5e7eb; } }
+      .wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+      .card { max-width: 640px; margin: 0 20px; padding: 14px 16px; border-radius: 10px; background: rgba(127,127,127,0.12); font-size: 12px; line-height: 1.45; }
+      .title { font-weight: 600; margin-bottom: 6px; }
+      .muted { opacity: 0.8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="title">Browser toolbar failed to load</div>
+        <div class="muted">The page area still works, but toolbar UI is unavailable. Try reopening the browser window.</div>
+        <div class="muted" style="margin-top: 8px; word-break: break-word;">Reason: ${safeReason}</div>
+      </div>
+    </div>
   </body>
 </html>`)}`)
-    }
+  }
+
+  private markToolbarReady(record: BrowserPaneRecord, reason: string): void {
+    if (record.toolbarReady || record.window.isDestroyed()) return
+
+    record.toolbarReady = true
+    this.pushToolbarState(record)
+    mainLog.info(`[browser-pane] toolbar ready id=${record.id} reason=${reason}`)
+
+    if (!record.showWhenReady && !record.pendingShowOnReady) return
+
+    record.showWhenReady = false
+    record.pendingShowOnReady = false
+    record.window.show()
+    record.window.focus()
+    record.pageView.webContents.focus()
+    this.emitState(record)
   }
 
   private getResolvedAccentColor(): string {
@@ -1396,19 +1716,23 @@ export class BrowserPaneManager {
       #overlay {
         position: fixed;
         inset: 0;
-        border: 2px solid transparent;
+        border: ${BROWSER_LIVE_FX_BORDER.width} ${BROWSER_LIVE_FX_BORDER.style} transparent;
         border-top-left-radius: ${cornerRadii.topLeft};
         border-top-right-radius: ${cornerRadii.topRight};
         border-bottom-left-radius: ${cornerRadii.bottomLeft};
         border-bottom-right-radius: ${cornerRadii.bottomRight};
         box-sizing: border-box;
         pointer-events: none;
+        transition:
+          border-color 180ms ease,
+          box-shadow 220ms ease;
       }
       #chip {
         position: fixed;
         top: 8px;
         right: 8px;
-        display: none;
+        display: inline-flex;
+        align-items: center;
         padding: 4px 8px;
         border-radius: 7px;
         background: rgba(2, 6, 23, 0.82);
@@ -1420,12 +1744,21 @@ export class BrowserPaneManager {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-4px) scale(0.98);
+        transition:
+          opacity 140ms ease,
+          transform 180ms ease,
+          visibility 0ms linear 180ms;
       }
       #shield {
         position: fixed;
         inset: 0;
         pointer-events: none;
         cursor: default;
+        background: rgba(0, 0, 0, 0);
+        transition: background 160ms ease;
       }
     </style>
   </head>
@@ -1469,16 +1802,20 @@ export class BrowserPaneManager {
     if (agentActive) {
       const label = this.getAgentControlLabel(record.agentControl)
       const accent = this.getResolvedAccentColor()
+      const borderFx = resolveBrowserLiveFxBorder(accent)
       void record.nativeOverlayView.webContents.executeJavaScript(`(() => {
         const overlay = document.getElementById('overlay');
         const chip = document.getElementById('chip');
         const shield = document.getElementById('shield');
         if (!overlay || !chip || !shield) return;
 
-        overlay.style.borderColor = ${JSON.stringify(accent)};
-        overlay.style.boxShadow = 'inset 0 0 0 1px color-mix(in oklab, ' + ${JSON.stringify(accent)} + ' 45%, transparent), inset 0 0 24px color-mix(in oklab, ' + ${JSON.stringify(accent)} + ' 28%, transparent)';
+        overlay.style.borderColor = ${JSON.stringify(borderFx.color)};
+        overlay.style.boxShadow = ${JSON.stringify(borderFx.boxShadow)};
         chip.textContent = ${JSON.stringify(label)};
-        chip.style.display = 'inline-flex';
+        chip.style.opacity = '1';
+        chip.style.visibility = 'visible';
+        chip.style.transform = 'translateY(0) scale(1)';
+        chip.style.transitionDelay = '0ms, 0ms, 0ms';
         shield.style.pointerEvents = 'auto';
         shield.style.cursor = 'not-allowed';
         shield.style.background = 'rgba(2, 6, 23, 0.03)';
@@ -1494,7 +1831,10 @@ export class BrowserPaneManager {
 
       overlay.style.borderColor = 'transparent';
       overlay.style.boxShadow = 'none';
-      chip.style.display = 'none';
+      chip.style.opacity = '0';
+      chip.style.visibility = 'hidden';
+      chip.style.transform = 'translateY(-4px) scale(0.98)';
+      chip.style.transitionDelay = '0ms, 0ms, 180ms';
       shield.style.pointerEvents = 'auto';
       shield.style.cursor = 'default';
       shield.style.background = 'rgba(0, 0, 0, 0.001)';
@@ -1631,6 +1971,40 @@ export class BrowserPaneManager {
     return url.includes(`/${BROWSER_EMPTY_STATE_PAGE}`) || url.includes(`\\${BROWSER_EMPTY_STATE_PAGE}`)
   }
 
+  private findInstanceByPageWebContentsId(senderWebContentsId: number): BrowserPaneRecord | undefined {
+    for (const record of this.instances.values()) {
+      if (record.pageView.webContents.id === senderWebContentsId) {
+        return record
+      }
+    }
+    return undefined
+  }
+
+  async handleEmptyStateLaunchFromRenderer(
+    senderWebContentsId: number,
+    payload: BrowserEmptyStateLaunchPayload,
+  ): Promise<BrowserEmptyStateLaunchResult> {
+    const record = this.findInstanceByPageWebContentsId(senderWebContentsId)
+    if (!record) {
+      mainLog.warn(`[browser-pane] empty-state launch ignored: sender not mapped senderWebContentsId=${senderWebContentsId}`)
+      return { ok: false, handled: false, reason: 'instance_not_found' }
+    }
+
+    const route = payload.route?.trim()
+    if (!route) {
+      mainLog.warn(`[browser-pane] empty-state launch missing route id=${record.id}`)
+      return { ok: false, handled: false, reason: 'missing_route' }
+    }
+
+    const token = payload.token ?? null
+    const handled = await this.triggerEmptyStateRouteLaunch(record, route, token, 'ipc')
+    return {
+      ok: true,
+      handled,
+      reason: handled ? undefined : 'duplicate',
+    }
+  }
+
   private buildDeepLinkFromRoute(route: string): string {
     return `agentoperator://${route.replace(/^\/+/, '')}`
   }
@@ -1639,12 +2013,14 @@ export class BrowserPaneManager {
     record: BrowserPaneRecord,
     route: string,
     token: string | null,
-    source: 'hash' | 'bridge',
-  ): Promise<void> {
-    if (token && record.lastLaunchToken === token) {
-      return
+    source: 'hash' | 'bridge' | 'ipc',
+  ): Promise<boolean> {
+    const dedupeToken = token ?? route
+    if (dedupeToken && record.lastLaunchToken === dedupeToken) {
+      mainLog.info(`[browser-pane] ignoring duplicate empty-state launch id=${record.id} source=${source} token=${dedupeToken}`)
+      return false
     }
-    record.lastLaunchToken = token
+    record.lastLaunchToken = dedupeToken
 
     if (source === 'hash') {
       void record.pageView.webContents.executeJavaScript(
@@ -1655,6 +2031,7 @@ export class BrowserPaneManager {
 
     mainLog.info(`[browser-pane] handling empty-state launch id=${record.id} source=${source} route=${route}`)
     await shell.openExternal(this.buildDeepLinkFromRoute(route))
+    return true
   }
 
   private isEmptyStateBridgeUrl(url: string): boolean {

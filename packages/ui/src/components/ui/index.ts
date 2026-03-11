@@ -29,3 +29,8 @@ export {
   StyledDropdownMenuSubContent,
 } from './StyledDropdown'
 export { BrowserControls, type BrowserControlsProps } from './BrowserControls'
+export {
+  BrowserEmptyStateCard,
+  type BrowserEmptyPromptSample,
+  type BrowserEmptyStateCardProps,
+} from './BrowserEmptyStateCard'

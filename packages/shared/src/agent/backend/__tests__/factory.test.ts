@@ -18,12 +18,15 @@ import {
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
   createBackendFromConnection,
+  resolveBackendProvider,
+  resolveBackendSelection,
 } from '../factory.ts';
 import type { BackendConfig } from '../types.ts';
 import type { Workspace, LlmConnection } from '../../../config/storage.ts';
 import type { SessionConfig as Session } from '../../../sessions/storage.ts';
 import { ClaudeAgent } from '../../claude-agent.ts';
 import { CodexAgent } from '../../codex-agent.ts';
+import { OperatorAgent } from '../../operator-agent.ts';
 import { isValidProviderAuthCombination, validateCodexPath } from '../../../config/llm-connections.ts';
 
 // Test helpers
@@ -83,6 +86,16 @@ describe('createBackend / createAgent', () => {
       const agent = createBackend(config);
 
       expect(agent).toBeInstanceOf(ClaudeAgent);
+    });
+
+    it('should create OperatorAgent when anthropicRuntime is operator', () => {
+      const config = createTestConfig({
+        provider: 'anthropic',
+        anthropicRuntime: 'operator',
+      });
+      const agent = createBackend(config);
+
+      expect(agent).toBeInstanceOf(OperatorAgent);
     });
   });
 
@@ -194,6 +207,66 @@ describe('providerTypeToAgentProvider', () => {
 
     it('should map openai_compat to openai', () => {
       expect(providerTypeToAgentProvider('openai_compat')).toBe('openai');
+    });
+  });
+});
+
+describe('resolveBackendProvider', () => {
+  it('should prefer explicit provider override', () => {
+    expect(resolveBackendProvider({
+      connection: { providerType: 'bedrock' } as LlmConnection,
+      preferredProvider: 'pi',
+    })).toBe('pi');
+  });
+
+  it('should derive provider from connection when no override is given', () => {
+    expect(resolveBackendProvider({
+      connection: { providerType: 'copilot' } as LlmConnection,
+    })).toBe('copilot');
+  });
+
+  it('should fall back to anthropic when no connection is resolved', () => {
+    expect(resolveBackendProvider({ connection: null })).toBe('anthropic');
+  });
+});
+
+describe('resolveBackendSelection', () => {
+  it('should resolve codex agentType to openai provider', () => {
+    expect(resolveBackendSelection({
+      connection: { providerType: 'bedrock' } as LlmConnection,
+      agentType: 'codex',
+      runtime: 'electron-session',
+    })).toEqual({
+      provider: 'openai',
+    });
+  });
+
+  it('should resolve pi compatibility override when agentType is pi', () => {
+    expect(resolveBackendSelection({
+      connection: { providerType: 'anthropic' } as LlmConnection,
+      agentType: 'pi',
+      runtime: 'electron-session',
+    })).toEqual({
+      provider: 'pi',
+    });
+  });
+
+  it('should assign operator runtime for anthropic app sessions', () => {
+    expect(resolveBackendSelection({
+      connection: { providerType: 'bedrock' } as LlmConnection,
+      runtime: 'electron-session',
+    })).toEqual({
+      provider: 'pi',
+    });
+  });
+
+  it('should keep anthropic operator runtime for non-bedrock app sessions', () => {
+    expect(resolveBackendSelection({
+      connection: { providerType: 'anthropic' } as LlmConnection,
+      runtime: 'electron-session',
+    })).toEqual({
+      provider: 'anthropic',
+      anthropicRuntime: 'operator',
     });
   });
 });

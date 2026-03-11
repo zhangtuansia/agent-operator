@@ -12,7 +12,7 @@ function getCallExpressionChannel(callExpression: ts.CallExpression): string | n
   const expression = callExpression.expression
   if (!ts.isPropertyAccessExpression(expression)) return null
   if (expression.name.text !== 'handle') return null
-  if (!ts.isIdentifier(expression.expression) || expression.expression.text !== 'ipcMain') return null
+  if (!ts.isIdentifier(expression.expression) || !['ipcMain', 'server'].includes(expression.expression.text)) return null
 
   const firstArgument = callExpression.arguments[0]
   if (!firstArgument || !ts.isPropertyAccessExpression(firstArgument)) return null
@@ -132,6 +132,7 @@ describe('main handler registration parity', () => {
     expect(channels.has('BROWSER_PANE_RELOAD')).toBe(true)
     expect(channels.has('BROWSER_PANE_STOP')).toBe(true)
     expect(channels.has('BROWSER_PANE_FOCUS')).toBe(true)
+    expect(channels.has('BROWSER_PANE_LAUNCH')).toBe(true)
     expect(channels.has('BROWSER_PANE_SNAPSHOT')).toBe(true)
     expect(channels.has('BROWSER_PANE_CLICK')).toBe(true)
     expect(channels.has('BROWSER_PANE_CLICK_AT')).toBe(true)

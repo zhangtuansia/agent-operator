@@ -28,6 +28,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
+import type { ChatOptions, PermissionCallback } from './backend/types.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -438,7 +439,7 @@ export class OperatorAgent {
   }
 
   // Callback for permission requests - set by application to receive permission prompts
-  public onPermissionRequest: ((request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' }) => void) | null = null;
+  public onPermissionRequest: PermissionCallback | null = null;
 
   // Debug callback for status messages
   public onDebug: ((message: string) => void) | null = null;
@@ -633,6 +634,18 @@ export class OperatorAgent {
     this.onDebug?.(`[OperatorAgent] Ultrathink override: ${enabled ? 'ENABLED' : 'disabled'}`);
   }
 
+  getPermissionMode(): PermissionMode {
+    return getPermissionMode(this.modeSessionId);
+  }
+
+  setPermissionMode(mode: PermissionMode): void {
+    setPermissionMode(this.modeSessionId, mode);
+  }
+
+  cyclePermissionMode(): PermissionMode {
+    return cyclePermissionMode(this.modeSessionId);
+  }
+
   /**
    * Extract the base command from a bash command string
    * e.g., "ls -la /tmp" -> "ls", "git push origin main" -> "git push"
@@ -798,9 +811,10 @@ export class OperatorAgent {
   async *chat(
     userMessage: string,
     attachments?: FileAttachment[],
-    _isRetry: boolean = false // Internal flag for session expiry retry
+    chatOptions?: ChatOptions | boolean,
   ): AsyncGenerator<AgentEvent> {
     try {
+      const isRetry = typeof chatOptions === 'boolean' ? chatOptions : !!chatOptions?.isRetry;
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
 
       // Clear intent and display name maps for new turn
@@ -1551,7 +1565,7 @@ export class OperatorAgent {
         })(),
         // Continue from previous session if we have one (enables conversation history & auto compaction)
         // Skip resume on retry (after session expiry) to start fresh
-        ...(!_isRetry && this.sessionId ? { resume: this.sessionId } : {}),
+        ...(!isRetry && this.sessionId ? { resume: this.sessionId } : {}),
         mcpServers,
         // Custom permission handler for Bash commands
         canUseTool: async (toolName, input, toolOptions) => {
@@ -1580,7 +1594,7 @@ export class OperatorAgent {
       };
 
       // Track whether we're trying to resume a session (for error handling)
-      const wasResuming = !_isRetry && !!this.sessionId;
+      const wasResuming = !isRetry && !!this.sessionId;
 
       // Log resume attempt for debugging session failures
       if (wasResuming) {
@@ -1699,7 +1713,7 @@ export class OperatorAgent {
             if (
               event.type === 'error' &&
               wasResuming &&
-              !_isRetry &&
+              !isRetry &&
               /No conversation found with session ID/i.test(event.message)
             ) {
               debug('[SESSION_DEBUG] Detected resume failure from error event:', event.message);
@@ -1768,8 +1782,8 @@ export class OperatorAgent {
 
         // Detect empty response when resuming - SDK silently fails resume if session is invalid
         // In this case, we got a new session ID but no assistant content
-        debug('[SESSION_DEBUG] Post-loop check: wasResuming=', wasResuming, 'receivedAssistantContent=', receivedAssistantContent, '_isRetry=', _isRetry);
-        if (resumeFailureMessage && wasResuming && !_isRetry) {
+        debug('[SESSION_DEBUG] Post-loop check: wasResuming=', wasResuming, 'receivedAssistantContent=', receivedAssistantContent, 'isRetry=', isRetry);
+        if (resumeFailureMessage && wasResuming && !isRetry) {
           debug('[SESSION_DEBUG] >>> DETECTED RESUME FAILURE FROM ERROR EVENT - triggering recovery');
           this.sessionId = null;
           this.config.onSdkSessionIdCleared?.();
@@ -1786,7 +1800,7 @@ export class OperatorAgent {
           return;
         }
 
-        if (wasResuming && !receivedAssistantContent && !_isRetry) {
+        if (wasResuming && !receivedAssistantContent && !isRetry) {
           debug('[SESSION_DEBUG] >>> DETECTED EMPTY RESPONSE - triggering recovery');
           // SDK resume failed silently - clear session and retry with context
           this.sessionId = null;
@@ -1867,7 +1881,7 @@ export class OperatorAgent {
 
         // Debug logging - always log the actual error and context
         this.onDebug?.(`Error in chat: ${rawErrorMsg}`);
-        this.onDebug?.(`Context: wasResuming=${wasResuming}, isRetry=${_isRetry}`);
+        this.onDebug?.(`Context: wasResuming=${wasResuming}, isRetry=${isRetry}`);
 
         // Check for auth errors - these won't be fixed by clearing session
         const isAuthError =
@@ -1925,7 +1939,7 @@ export class OperatorAgent {
         debug('[SESSION_DEBUG] rawErrorMsg:', rawErrorMsg);
         debug('[SESSION_DEBUG] isProcessError:', isProcessError);
         debug('[SESSION_DEBUG] wasResuming:', wasResuming);
-        debug('[SESSION_DEBUG] _isRetry:', _isRetry);
+        debug('[SESSION_DEBUG] isRetry:', isRetry);
         debug('[SESSION_DEBUG] this.sessionId:', this.sessionId);
         debug('[SESSION_DEBUG] lastStderrOutput length:', this.lastStderrOutput.length);
         debug('[SESSION_DEBUG] lastStderrOutput:', this.lastStderrOutput.join('\n'));
@@ -1944,7 +1958,7 @@ export class OperatorAgent {
           const isSessionExpired = stderrContext?.includes('No conversation found with session ID');
           debug('[SESSION_DEBUG] isSessionExpired:', isSessionExpired);
 
-          if (isSessionExpired && wasResuming && !_isRetry) {
+          if (isSessionExpired && wasResuming && !isRetry) {
             debug('[SESSION_DEBUG] >>> TAKING PATH: Session expired recovery');
             console.error('[OperatorAgent] SDK session expired server-side, clearing and retrying fresh');
             debug('[OperatorAgent] SDK session expired server-side, clearing and retrying fresh');
@@ -2010,7 +2024,7 @@ export class OperatorAgent {
 
         // Session-related retry: only if we were resuming and haven't retried yet
         debug('[SESSION_DEBUG] isProcessError=false, checking wasResuming fallback');
-        if (wasResuming && !_isRetry) {
+        if (wasResuming && !isRetry) {
           debug('[SESSION_DEBUG] >>> TAKING PATH: wasResuming fallback retry');
           this.sessionId = null;
           // Clear pinned state so retry captures fresh values
@@ -3313,6 +3327,7 @@ Please continue the conversation naturally from where we left off.
    *
    * @param reason - Why the abort is happening (affects UI feedback)
    */
+  forceAbort(reason: AbortReason): void;
   forceAbort(reason: AbortReason = AbortReason.UserStop): void {
     this.lastAbortReason = reason;
     if (this.currentQueryAbortController) {
@@ -3565,7 +3580,27 @@ Please continue the conversation naturally from where we left off.
   }
 
   async close(): Promise<void> {
-    this.forceAbort();
+    this.forceAbort(AbortReason.UserStop);
+  }
+
+  async abort(_reason?: string): Promise<void> {
+    this.forceAbort(AbortReason.UserStop);
+  }
+
+  isProcessing(): boolean {
+    return this.currentQuery !== null;
+  }
+
+  getActiveSourceSlugs(): string[] {
+    return [...this.intendedActiveSlugs];
+  }
+
+  getSummarizeCallback(): (prompt: string) => Promise<string | null> {
+    return async () => null;
+  }
+
+  destroy(): void {
+    this.dispose();
   }
 
   /**
@@ -3575,7 +3610,7 @@ Please continue the conversation naturally from where we left off.
    */
   dispose(): void {
     // Stop any running query
-    this.forceAbort();
+    this.forceAbort(AbortReason.UserStop);
 
     // Clear pending operations
     this.pendingPermissions.clear();

@@ -16,6 +16,10 @@
 import { getProviders, getModels } from '@mariozechner/pi-ai';
 import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
 import type { ModelDefinition } from './models.ts';
+import { getBedrockModel } from './models.ts';
+import type { LlmAuthType, LlmProviderType } from './llm-connections.ts';
+
+const PI_MODEL_PROVIDER_CACHE = new Map<string, string>();
 
 // ============================================
 // PI MODEL DISCOVERY
@@ -170,4 +174,90 @@ export function getPiProviderBaseUrl(provider: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Infer the backing Pi provider from a model ID.
+ * Accepts both raw SDK IDs and app-level `pi/...` IDs.
+ */
+export function inferPiAuthProviderForModel(modelId: string): string | null {
+  const normalized = modelId.replace(/^pi\//, '').trim();
+  if (!normalized) return null;
+
+  const cached = PI_MODEL_PROVIDER_CACHE.get(normalized);
+  if (cached) return cached;
+
+  for (const provider of getProviders()) {
+    try {
+      const models = getModels(provider);
+      if (models.some(model => model.id === normalized)) {
+        PI_MODEL_PROVIDER_CACHE.set(normalized, provider);
+        return provider;
+      }
+    } catch {
+      // Ignore provider discovery errors and continue scanning
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Map the app's LLM connection provider type to a Pi auth provider.
+ * Prefer this over model inference when a concrete connection type is known.
+ */
+export function getPiAuthProviderForConnectionProvider(
+  providerType?: LlmProviderType,
+  authType?: LlmAuthType,
+): string | null {
+  switch (providerType) {
+    case 'anthropic':
+    case 'anthropic_compat':
+      return 'anthropic';
+    case 'openai':
+    case 'openai_compat':
+      return authType === 'oauth' ? 'openai-codex' : 'openai';
+    case 'bedrock':
+      return 'amazon-bedrock';
+    case 'vertex':
+      return 'google';
+    case 'copilot':
+      return 'github-copilot';
+    case 'pi':
+    default:
+      return null;
+  }
+}
+
+export interface PiRuntimeModelResolution {
+  model: string;
+  bedrockTemplateModel?: string;
+}
+
+/**
+ * Resolve the effective runtime model for Pi.
+ *
+ * Bedrock is special: the app may expose a native Bedrock model ID in UI/state,
+ * while the actual working runtime model is an Application Inference Profile ARN
+ * carried via ANTHROPIC_MODEL. Pi needs that effective model ID, but also needs
+ * the original model ID so the subprocess can clone a compatible Bedrock model
+ * template.
+ */
+export function resolvePiRuntimeModel(
+  modelId: string,
+  providerType?: LlmProviderType,
+): PiRuntimeModelResolution {
+  if (providerType !== 'bedrock') {
+    return { model: modelId };
+  }
+
+  const bareModel = modelId.replace(/^pi\//, '').trim();
+  if (!bareModel) {
+    return { model: modelId };
+  }
+
+  return {
+    model: getBedrockModel(bareModel),
+    bedrockTemplateModel: bareModel,
+  };
 }

@@ -3,9 +3,10 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
@@ -26,6 +27,7 @@ import { createIMServiceManager, getIMServiceManager } from './im-services'
 import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { findBundledResourcePath } from './resource-paths'
+import { WsRpcServer } from '../transport/server'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -54,9 +56,29 @@ const DEEPLINK_SCHEME =
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
+let rpcServer: WsRpcServer | null = null
+let rpcToken: string | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
+
+function registerTransportBootstrapHandlers(): void {
+  ipcMain.on('__get-ws-port', (event) => {
+    event.returnValue = rpcServer?.port ?? 0
+  })
+
+  ipcMain.on('__get-ws-token', (event) => {
+    event.returnValue = rpcToken ?? ''
+  })
+
+  ipcMain.on('__get-web-contents-id', (event) => {
+    event.returnValue = event.sender.id
+  })
+
+  ipcMain.on('__get-workspace-id', (event) => {
+    event.returnValue = windowManager?.getWorkspaceForWindow(event.sender.id) ?? ''
+  })
+}
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: COWORK_APP_NAME env var (e.g., "Dazi [1]")
@@ -227,6 +249,17 @@ app.whenReady().then(async () => {
     windowManager = new WindowManager()
     mainLog.info('[startup] Initializing BrowserPaneManager')
     browserPaneManager = new BrowserPaneManager()
+    mainLog.info('[startup] Initializing WS RPC server')
+    rpcToken = randomUUID()
+    rpcServer = new WsRpcServer({
+      requireAuth: true,
+      validateToken: async (token) => token === rpcToken,
+    })
+    mainLog.info('[startup] Starting WS RPC server')
+    await rpcServer.listen()
+    mainLog.info(`[startup] WS RPC server listening on 127.0.0.1:${rpcServer.port}`)
+    mainLog.info('[startup] Registering WS bootstrap IPC')
+    registerTransportBootstrapHandlers()
 
     // Create the application menu (needs windowManager for New Window action)
     mainLog.info('[startup] Creating application menu')
@@ -270,7 +303,7 @@ app.whenReady().then(async () => {
     // always available to the renderer even if initialization fails.
     // This prevents "No handler registered" errors during onboarding on fresh installs.
     mainLog.info('[startup] Registering IPC handlers')
-    registerIpcHandlers(sessionManager, windowManager, browserPaneManager)
+    registerIpcHandlers(sessionManager, windowManager, browserPaneManager, rpcServer)
 
     // Initialize session manager (load sessions from disk BEFORE window creation)
     // Non-fatal: if initialization fails (e.g. corrupted config, missing files),
@@ -396,6 +429,14 @@ app.on('before-quit', async (event) => {
   getIMServiceManager()?.shutdown().catch(error => {
     mainLog.error('Failed to stop IM services:', error)
   })
+
+  if (rpcServer) {
+    try {
+      await rpcServer.close()
+    } catch (error) {
+      mainLog.error('Failed to close WS RPC server:', error)
+    }
+  }
 
   // Flush all pending session writes before quitting
   if (sessionManager) {

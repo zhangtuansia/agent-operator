@@ -21,18 +21,35 @@ export type ChannelMap = Record<string, ChannelMapEntry>
 
 export function buildClientApi(client: IpcClient, channelMap: ChannelMap): ElectronAPI {
   const api: Record<string, any> = {}
+  const nested: Record<string, Record<string, any>> = {}
 
   for (const [key, entry] of Object.entries(channelMap)) {
+    let fn: (...args: any[]) => any
+
     if (entry.type === 'listener') {
-      api[key] = (callback: (...args: unknown[]) => void) => client.on(entry.channel, (...args) => callback(...args))
+      fn = (callback: (...args: unknown[]) => void) => client.on(entry.channel, (...args) => callback(...args))
+    } else {
+      fn = async (...args: unknown[]) => {
+        const mappedArgs = entry.mapArgs ? entry.mapArgs(...args) : args
+        const result = await client.invoke(entry.channel, ...mappedArgs)
+        return entry.transform ? entry.transform(result) : result
+      }
+    }
+
+    const dotIndex = key.indexOf('.')
+    if (dotIndex !== -1) {
+      const namespace = key.slice(0, dotIndex)
+      const method = key.slice(dotIndex + 1)
+      if (!nested[namespace]) nested[namespace] = {}
+      nested[namespace][method] = fn
       continue
     }
 
-    api[key] = async (...args: unknown[]) => {
-      const mappedArgs = entry.mapArgs ? entry.mapArgs(...args) : args
-      const result = await client.invoke(entry.channel, ...mappedArgs)
-      return entry.transform ? entry.transform(result) : result
-    }
+    api[key] = fn
+  }
+
+  for (const [namespace, methods] of Object.entries(nested)) {
+    api[namespace] = methods
   }
 
   return api as ElectronAPI

@@ -30,7 +30,10 @@
 export type {
   AgentBackend,
   AgentProvider,
+  AnthropicRuntime,
+  BackendSelection,
   BackendConfig,
+  BackendHostRuntimeContext,
   PermissionCallback,
   PlanCallback,
   AuthCallback,
@@ -59,8 +62,17 @@ export {
   resolveSessionConnection,
   createConfigFromConnection,
   createBackendFromConnection,
+  initializeBackendHostRuntime,
+  resolveBackendHostTooling,
   providerTypeToAgentProvider,
+  resolveBackendProvider,
+  resolveBackendSelection,
 } from './factory.ts';
+
+export type {
+  ResolvedBackendHostTooling,
+  ResolvedBackendRuntimePaths,
+} from './internal/runtime-resolver.ts';
 
 // Agent implementations
 // Both agents implement AgentBackend directly

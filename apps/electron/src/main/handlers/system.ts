@@ -1,25 +1,33 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, webContents } from 'electron'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { IPC_CHANNELS } from '../../shared/types'
 import { getBundledResourceDir } from '../resource-paths'
+import type { RpcServer } from '../../transport/server'
 
-export function registerSystemHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.GET_SYSTEM_THEME, () => {
+function getWindowFromWebContentsId(id: number | undefined): BrowserWindow | null {
+  if (!id) return null
+  const contents = webContents.fromId(id)
+  if (!contents || contents.isDestroyed()) return null
+  return BrowserWindow.fromWebContents(contents)
+}
+
+export function registerSystemHandlers(server: RpcServer): void {
+  server.handle(IPC_CHANNELS.GET_SYSTEM_THEME, () => {
     return nativeTheme.shouldUseDarkColors
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_HOME_DIR, () => {
+  server.handle(IPC_CHANNELS.GET_HOME_DIR, () => {
     return homedir()
   })
 
-  ipcMain.handle(IPC_CHANNELS.IS_DEBUG_MODE, () => {
+  server.handle(IPC_CHANNELS.IS_DEBUG_MODE, () => {
     return !app.isPackaged
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITBASH_CHECK, async () => {
+  server.handle(IPC_CHANNELS.GITBASH_CHECK, async () => {
     const platform = process.platform as 'win32' | 'darwin' | 'linux'
     if (platform !== 'win32') {
       return { found: true, path: null, platform }
@@ -41,8 +49,8 @@ export function registerSystemHandlers(): void {
     return { found: false, path: null, platform }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITBASH_BROWSE, async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
+  server.handle(IPC_CHANNELS.GITBASH_BROWSE, async (ctx) => {
+    const window = getWindowFromWebContentsId(ctx.webContentsId)
     if (!window) return null
 
     const result = await dialog.showOpenDialog(window, {
@@ -58,7 +66,7 @@ export function registerSystemHandlers(): void {
     return result.filePaths[0]
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITBASH_SET_PATH, async (_event, bashPath: string) => {
+  server.handle(IPC_CHANNELS.GITBASH_SET_PATH, async (_ctx, bashPath: string) => {
     try {
       if (!existsSync(bashPath)) {
         return { success: false, error: 'File does not exist at the specified path' }
@@ -72,7 +80,7 @@ export function registerSystemHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
+  server.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     return {
       app: app.getVersion(),
       os: process.platform,
@@ -81,7 +89,7 @@ export function registerSystemHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_VERSIONS, () => {
+  server.handle(IPC_CHANNELS.GET_VERSIONS, () => {
     return {
       node: process.versions.node,
       chrome: process.versions.chrome,
@@ -89,17 +97,17 @@ export function registerSystemHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_RELEASE_NOTES, async () => {
+  server.handle(IPC_CHANNELS.GET_RELEASE_NOTES, async () => {
     const { getCombinedReleaseNotes } = await import('@agent-operator/shared/release-notes')
     return getCombinedReleaseNotes()
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION, async () => {
+  server.handle(IPC_CHANNELS.GET_LATEST_RELEASE_VERSION, async () => {
     const { getLatestReleaseVersion } = await import('@agent-operator/shared/release-notes')
     return getLatestReleaseVersion()
   })
 
-  ipcMain.handle(IPC_CHANNELS.GET_FONTS_PATH, () => {
+  server.handle(IPC_CHANNELS.GET_FONTS_PATH, () => {
     const fontsDir = getBundledResourceDir('fonts')
     if (fontsDir) {
       return pathToFileURL(fontsDir).href
@@ -112,28 +120,28 @@ export function registerSystemHandlers(): void {
     return pathToFileURL(join(process.resourcesPath, 'app/dist/resources/fonts')).href
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
+  server.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
     const { openReleaseDownloadsPage, getUpdateInfo } = await import('../auto-update')
     await openReleaseDownloadsPage()
     return getUpdateInfo()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_INFO, async () => {
+  server.handle(IPC_CHANNELS.UPDATE_GET_INFO, async () => {
     const { getUpdateInfo } = await import('../auto-update')
     return getUpdateInfo()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async () => {
+  server.handle(IPC_CHANNELS.UPDATE_INSTALL, async () => {
     const { openReleaseDownloadsPage } = await import('../auto-update')
     return openReleaseDownloadsPage()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_DISMISS, async (_event, version: string) => {
+  server.handle(IPC_CHANNELS.UPDATE_DISMISS, async (_ctx, version: string) => {
     const { setDismissedUpdateVersion } = await import('@agent-operator/shared/config')
     setDismissedUpdateVersion(version)
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_DISMISSED, async () => {
+  server.handle(IPC_CHANNELS.UPDATE_GET_DISMISSED, async () => {
     const { getDismissedUpdateVersion } = await import('@agent-operator/shared/config')
     return getDismissedUpdateVersion()
   })

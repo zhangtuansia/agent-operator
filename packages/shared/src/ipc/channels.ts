@@ -56,6 +56,7 @@ export const IPC_CHANNELS = {
   BROWSER_PANE_RELOAD: 'browserPane:reload',
   BROWSER_PANE_STOP: 'browserPane:stop',
   BROWSER_PANE_FOCUS: 'browserPane:focus',
+  BROWSER_PANE_LAUNCH: 'browserPane:launch',
   BROWSER_PANE_SNAPSHOT: 'browserPane:snapshot',
   BROWSER_PANE_CLICK: 'browserPane:click',
   BROWSER_PANE_CLICK_AT: 'browserPane:clickAt',

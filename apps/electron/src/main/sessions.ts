@@ -1,12 +1,18 @@
-import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { rm, readFile, mkdir, writeFile, rename, open, appendFile } from 'fs/promises'
-import { OperatorAgent, CodexAgent, CopilotAgent, PiAgent, type AgentEvent, setPermissionMode, type PermissionMode, registerSessionScopedToolCallbacks, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
+import { rm, readFile, mkdir, writeFile, appendFile } from 'fs/promises'
+import { app } from 'electron'
+import { OperatorAgent, BaseAgent, CodexAgent, createBackend, resolveBackendSelection, initializeBackendHostRuntime, type BackendHostRuntimeContext, type ResolvedBackendRuntimePaths, type BackendConfig, type AgentEvent, setPermissionMode, type PermissionMode, registerSessionScopedToolCallbacks, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@agent-operator/shared/agent'
 import type { BrowserPaneFns, BrowserLifecycleActionResult } from '@agent-operator/shared/agent/browser-tools'
 import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { sanitizeForTitle } from './title-sanitizer'
+import {
+  normalizeBrowserToolName,
+  shouldActivateBrowserOverlay,
+  shouldClearBrowserOverlayOnToolResult,
+  releaseBrowserOwnershipOnForcedStop,
+} from './browser-domain'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
 import type { BrowserPaneManager } from './browser-pane-manager'
@@ -69,7 +75,7 @@ import {
 } from '@agent-operator/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@agent-operator/shared/config'
 import { getAuthState, isBedrockMode } from '@agent-operator/shared/auth'
-import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@agent-operator/shared/agent'
+import { setAnthropicOptionsEnv } from '@agent-operator/shared/agent'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { OperatorMcpClient } from '@agent-operator/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
@@ -79,14 +85,17 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shar
 import { evaluateAutoLabels } from '@agent-operator/shared/labels/auto'
 import { listLabels } from '@agent-operator/shared/labels/storage'
 import {
-  generateCodexConfig,
   generateBridgeConfig,
   getCredentialCachePath,
-  type CredentialCacheEntry,
 } from '@agent-operator/shared/codex'
 import type { SdkMcpServerConfig } from '@agent-operator/shared/agent/backend'
 import { AutomationSystem, AUTOMATIONS_HISTORY_FILE } from '@agent-operator/shared/automations'
 import { rollbackFailedBranchCreation } from './session-branch-cleanup'
+import {
+  createSessionBackendConfig,
+  syncSessionBackendSourceConfig,
+  reconcileSessionBackendRuntime,
+} from './backend-runtime-config'
 
 /**
  * Feature flags for agent behavior
@@ -95,25 +104,6 @@ export const AGENT_FLAGS = {
   /** Default modes enabled for new sessions */
   defaultModesEnabled: true,
 } as const
-
-/**
- * Get bundled Bun path in packaged app.
- * Falls back to system bun in development.
- */
-function getBundledBunPath(): string | undefined {
-  if (!app.isPackaged) {
-    return undefined
-  }
-
-  const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun'
-  const bunBasePath = process.platform === 'win32' ? process.resourcesPath : app.getAppPath()
-  const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary)
-  if (existsSync(bunPath)) {
-    return bunPath
-  }
-  sessionLog.warn(`Bundled Bun not found at ${bunPath}; falling back to system bun`)
-  return undefined
-}
 
 /**
  * IM sessions may be created with placeholder names like "IM-feishu-1730000000000".
@@ -157,125 +147,6 @@ function shouldUseFastResponseThinkingOverride(
   return trimmed.length <= FAST_RESPONSE_MAX_CHARS
 }
 
-/**
- * Write sensitive files atomically with restricted permissions.
- */
-async function writeFileSecure(targetPath: string, content: string, mode: number = 0o600): Promise<void> {
-  const tempPath = `${targetPath}.tmp.${process.pid}.${Date.now()}`
-  const file = await open(tempPath, 'wx', mode)
-  try {
-    await file.writeFile(content, 'utf-8')
-  } finally {
-    await file.close()
-  }
-  await rename(tempPath, targetPath)
-}
-
-type McpServerDir = 'bridge-mcp-server' | 'session-mcp-server' | 'pi-agent-server'
-
-function resolveMcpServerPath(serverDir: McpServerDir): { path: string; exists: boolean } {
-  const candidates = app.isPackaged
-    ? [
-        join(app.getAppPath(), 'resources', serverDir, 'index.js'),
-        join(process.resourcesPath, serverDir, 'index.js'),
-      ]
-    : [
-        join(process.cwd(), 'packages', serverDir, 'dist', 'index.js'),
-        join(process.cwd(), 'apps', 'electron', 'resources', serverDir, 'index.js'),
-      ]
-
-  const resolved = candidates.find(candidate => existsSync(candidate))
-  return {
-    path: resolved ?? candidates[0],
-    exists: !!resolved,
-  }
-}
-
-async function writeBridgeCredentialCaches(sources: LoadedSource[]): Promise<void> {
-  const credentialManager = getSourceCredentialManager()
-  for (const source of sources) {
-    const credential = await credentialManager.load(source)
-    if (!credential?.value) continue
-
-    const sourceDir = join(source.workspaceRootPath, 'sources', source.config.slug)
-    await mkdir(sourceDir, { recursive: true })
-
-    const cacheEntry: CredentialCacheEntry = {
-      value: credential.value,
-      expiresAt: credential.expiresAt,
-    }
-    const cachePath = getCredentialCachePath(source.workspaceRootPath, source.config.slug)
-    await writeFileSecure(cachePath, JSON.stringify(cacheEntry), 0o600)
-  }
-}
-
-async function setupCodexSessionConfig(
-  sessionPath: string,
-  sources: LoadedSource[],
-  mcpServerConfigs: Record<string, SdkMcpServerConfig>,
-  sessionId?: string,
-  workspaceRootPath?: string,
-): Promise<string> {
-  const codexHome = join(sessionPath, '.codex-home')
-  await mkdir(codexHome, { recursive: true })
-
-  const bridgeServer = resolveMcpServerPath('bridge-mcp-server')
-  if (!bridgeServer.exists) {
-    sessionLog.warn(
-      `Bridge MCP server not found at ${bridgeServer.path}. API sources will be unavailable in Codex sessions.`,
-    )
-  }
-
-  const sessionServer = resolveMcpServerPath('session-mcp-server')
-  if (!sessionServer.exists) {
-    sessionLog.warn(
-      `Session MCP server not found at ${sessionServer.path}. Session-scoped tools may be unavailable in Codex sessions.`,
-    )
-  }
-
-  const workspaceId = sources[0]?.workspaceId
-  const bridgeConfigPath = join(codexHome, 'bridge-config.json')
-  const plansFolderPath = sessionId && workspaceRootPath
-    ? join(workspaceRootPath, 'sessions', sessionId, 'plans')
-    : undefined
-
-  const configResult = generateCodexConfig({
-    sources,
-    mcpServerConfigs,
-    sessionPath,
-    bridgeServerPath: bridgeServer.exists ? bridgeServer.path : undefined,
-    bridgeConfigPath: bridgeServer.exists ? bridgeConfigPath : undefined,
-    workspaceId,
-    sessionServerPath: sessionServer.exists && sessionId && workspaceRootPath ? sessionServer.path : undefined,
-    sessionId,
-    workspaceRootPath,
-    plansFolderPath,
-    nodePath: getBundledBunPath() ?? 'bun',
-  })
-
-  await writeFile(join(codexHome, 'config.toml'), configResult.toml, 'utf-8')
-  for (const warning of configResult.warnings) {
-    sessionLog.warn(`Source config warning [${warning.sourceSlug}]: ${warning.message}`)
-  }
-
-  if (configResult.needsBridge) {
-    await writeFile(bridgeConfigPath, generateBridgeConfig(sources), 'utf-8')
-    const apiSources = sources.filter(source => source.config.type === 'api' && source.config.enabled)
-    await writeBridgeCredentialCaches(apiSources)
-  }
-
-  return codexHome
-}
-
-async function setupCopilotBridgeConfig(copilotConfigDir: string, sources: LoadedSource[]): Promise<void> {
-  const apiSources = sources.filter(source => source.config.type === 'api' && source.config.enabled)
-  if (apiSources.length === 0) return
-
-  await mkdir(copilotConfigDir, { recursive: true })
-  await writeFile(join(copilotConfigDir, 'bridge-config.json'), generateBridgeConfig(sources), 'utf-8')
-  await writeBridgeCredentialCaches(apiSources)
-}
-
 function createSessionTokenRefreshManager(): TokenRefreshManager {
   return new TokenRefreshManager(getSourceCredentialManager(), {
     log: (message) => sessionLog.debug(message),
@@ -300,18 +171,6 @@ function resolveSessionConnection(
 ) {
   const slug = resolveSessionConnectionSlug(sessionConnection, workspaceDefaultConnection)
   return slug ? getLlmConnection(slug) : null
-}
-
-function resolveSessionProvider(
-  connection: ReturnType<typeof resolveSessionConnection>,
-  agentType: AgentType,
-): 'anthropic' | 'openai' | 'copilot' | 'pi' {
-  const providerType = connection?.providerType
-  if (!providerType) return agentType === 'codex' ? 'openai' : 'anthropic'
-  if (providerType === 'openai' || providerType === 'openai_compat') return 'openai'
-  if (providerType === 'copilot') return 'copilot'
-  if (providerType === 'pi') return 'pi'
-  return 'anthropic'
 }
 
 /**
@@ -464,8 +323,9 @@ async function refreshMcpOAuthTokensIfNeeded(
   return { tokensRefreshed: false, failedSources }
 }
 
-// Agent type union for supported backends
-type Agent = OperatorAgent | CodexAgent | CopilotAgent | PiAgent
+// Legacy Claude path still uses OperatorAgent; the other backends already share
+// the common BaseAgent shape.
+type Agent = OperatorAgent | BaseAgent
 
 interface ManagedSession {
   id: string
@@ -722,10 +582,7 @@ export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private windowManager: WindowManager | null = null
   private browserPaneManager: BrowserPaneManager | null = null
-  private copilotCliPath: string | undefined
-  private copilotInterceptorPath: string | undefined
-  private piServerPath: string | undefined
-  private piInterceptorPath: string | undefined
+  private backendRuntimePaths: ResolvedBackendRuntimePaths | null = null
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
@@ -768,28 +625,20 @@ export class SessionManager {
     return this.browserPaneManager
   }
 
-  private findSessionBrowserWindow(sessionId: string) {
-    const browserPaneManager = this.getSessionBrowserPaneManager()
-    return browserPaneManager.listInstances().find((instance) =>
-      instance.boundSessionId === sessionId || instance.ownerSessionId === sessionId,
-    )
+  private buildBackendHostRuntimeContext(): BackendHostRuntimeContext {
+    return {
+      appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
+      resourcesPath: process.resourcesPath,
+      isPackaged: app.isPackaged,
+    }
   }
 
-  private ensureSessionBrowserWindow(sessionId: string, options?: { show?: boolean }): string {
-    const browserPaneManager = this.getSessionBrowserPaneManager()
-    const existing = this.findSessionBrowserWindow(sessionId)
-    if (existing) {
-      if (options?.show) {
-        void browserPaneManager.focus(existing.id)
-      }
-      return existing.id
-    }
+  private ensureBackendRuntimeGlobalsConfigured(): void {
+    if (this.backendRuntimePaths) return
 
-    return browserPaneManager.createInstance({
-      show: options?.show ?? false,
-      bindToSessionId: sessionId,
-      ownerType: 'session',
-      ownerSessionId: sessionId,
+    this.backendRuntimePaths = initializeBackendHostRuntime({
+      hostRuntime: this.buildBackendHostRuntimeContext(),
+      strict: true,
     })
   }
 
@@ -824,20 +673,14 @@ export class SessionManager {
         return requestedInstanceId
       }
 
-      const existing = this.findSessionBrowserWindow(sessionId)
-      if (existing) {
-        return existing.id
-      }
-
-      return this.ensureSessionBrowserWindow(sessionId, { show: false })
+      return browserPaneManager.createForSession(sessionId, { show: false })
     }
 
     return {
       openPanel: async (options) => {
-        const instanceId = this.ensureSessionBrowserWindow(sessionId, { show: !(options?.background ?? false) })
-        if (!(options?.background ?? false)) {
-          await browserPaneManager.focus(instanceId)
-        }
+        const instanceId = options?.background
+          ? browserPaneManager.createForSession(sessionId, { show: false })
+          : browserPaneManager.focusBoundForSession(sessionId)
         return { instanceId }
       },
       navigate: async (url) => {
@@ -883,8 +726,13 @@ export class SessionManager {
       screenshot: async (args) => {
         const instanceId = resolveWindowId()
         const result = await browserPaneManager.screenshot(instanceId, {
+          mode: args?.mode,
           annotate: args?.annotate,
+          refs: args?.refs,
+          includeLastAction: args?.includeLastAction,
+          includeMetadata: args?.includeMetadata,
           format: args?.format,
+          jpegQuality: args?.jpegQuality,
         })
         return {
           imageBuffer: this.decodeBrowserDataUrl(result.dataUrl),
@@ -950,7 +798,7 @@ export class SessionManager {
       closeWindow: async (requestedInstanceId) => {
         const existing = requestedInstanceId
           ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
-          : this.findSessionBrowserWindow(sessionId)
+          : browserPaneManager.listInstances().find((instance) => instance.boundSessionId === sessionId)
         if (!existing) {
           return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
         }
@@ -960,7 +808,7 @@ export class SessionManager {
       hideWindow: async (requestedInstanceId) => {
         const existing = requestedInstanceId
           ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
-          : this.findSessionBrowserWindow(sessionId)
+          : browserPaneManager.listInstances().find((instance) => instance.boundSessionId === sessionId)
         if (!existing) {
           return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
         }
@@ -970,7 +818,7 @@ export class SessionManager {
       releaseControl: async (requestedInstanceId) => {
         const existing = requestedInstanceId
           ? browserPaneManager.listInstances().find((instance) => instance.id === requestedInstanceId)
-          : this.findSessionBrowserWindow(sessionId)
+          : browserPaneManager.listInstances().find((instance) => instance.boundSessionId === sessionId)
         if (!existing) {
           return this.createBrowserLifecycleResult('noop', requestedInstanceId, undefined, 'No browser window found.')
         }
@@ -1271,28 +1119,6 @@ export class SessionManager {
     this.windowManager.broadcastToAll(IPC_CHANNELS.AUTOMATIONS_CHANGED, workspaceId)
   }
 
-  private async reconnectCodexIfPossible(managed: ManagedSession, context: string): Promise<void> {
-    if (!(managed.agent instanceof CodexAgent)) return
-
-    if (managed.agent.isProcessing()) {
-      managed.pendingCodexReconnect = true
-      sessionLog.info(`Deferring Codex reconnect for session ${managed.id} (${context})`)
-      return
-    }
-
-    try {
-      await managed.agent.reconnect()
-      managed.pendingCodexReconnect = false
-      sessionLog.info(`Codex reconnected for session ${managed.id} (${context})`)
-    } catch (error) {
-      managed.pendingCodexReconnect = true
-      sessionLog.warn(
-        `Failed to reconnect Codex for session ${managed.id} (${context}):`,
-        error instanceof Error ? error.message : error,
-      )
-    }
-  }
-
   private async syncProviderSourceConfig(
     managed: ManagedSession,
     sources: LoadedSource[],
@@ -1300,47 +1126,43 @@ export class SessionManager {
     context: string,
   ): Promise<void> {
     if (!managed.agent) return
+    const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const resolvedConnection = resolveSessionConnection(
+      managed.llmConnection,
+      workspaceConfig?.defaults?.defaultLlmConnection,
+    )
+    const backendSelection = resolveBackendSelection({
+      connection: resolvedConnection,
+      agentType: managed.agentType,
+      runtime: 'electron-session',
+    })
 
-    const usableSources = sources.filter(isSourceUsable)
-    const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
+    try {
+      const { shouldReconnectCodex } = await syncSessionBackendSourceConfig({
+        provider: backendSelection.provider,
+        sessionId: managed.id,
+        workspaceRootPath: managed.workspace.rootPath,
+        sources,
+        mcpServers,
+      })
 
-    if (managed.agent instanceof CopilotAgent) {
-      try {
-        const copilotConfigDir = join(sessionPath, '.copilot-config')
-        await setupCopilotBridgeConfig(copilotConfigDir, usableSources)
-      } catch (error) {
-        sessionLog.warn(
-          `Failed to write Copilot bridge config for session ${managed.id} (${context}):`,
-          error instanceof Error ? error.message : error,
-        )
-      }
-    }
-
-    if (managed.agent instanceof CodexAgent) {
-      try {
-        await setupCodexSessionConfig(
-          sessionPath,
-          usableSources,
-          mcpServers,
-          managed.id,
-          managed.workspace.rootPath,
-        )
-      } catch (error) {
+      managed.pendingCodexReconnect = await reconcileSessionBackendRuntime({
+        provider: backendSelection.provider,
+        agent: managed.agent,
+        sessionId: managed.id,
+        context,
+        reconnectRequested: shouldReconnectCodex,
+        pendingReconnect: managed.pendingCodexReconnect,
+      })
+    } catch (error) {
+      if (backendSelection.provider === 'openai') {
         managed.pendingCodexReconnect = true
-        sessionLog.warn(
-          `Failed to regenerate Codex config for session ${managed.id} (${context}):`,
-          error instanceof Error ? error.message : error,
-        )
-        return
       }
-
-      await this.reconnectCodexIfPossible(managed, context)
+      sessionLog.warn(
+        `Failed to sync ${backendSelection.provider} source config for session ${managed.id} (${context}):`,
+        error instanceof Error ? error.message : error,
+      )
     }
-  }
-
-  private async flushPendingCodexReconnect(managed: ManagedSession, context: string): Promise<void> {
-    if (!managed.pendingCodexReconnect || !(managed.agent instanceof CodexAgent)) return
-    await this.reconnectCodexIfPossible(managed, context)
   }
 
   /**
@@ -1677,137 +1499,7 @@ export class SessionManager {
   }
 
   async initialize(): Promise<void> {
-    // Set path to Claude Code executable (cli.js from SDK)
-    // In packaged app: use app.getAppPath() (points to app folder, ASAR is disabled)
-    // In development: use process.cwd()
-    const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
-
-    // Try local node_modules first, then monorepo root (for workspace hoisting)
-    let cliPath = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-    if (!existsSync(cliPath) && !app.isPackaged) {
-      // In monorepo development, dependencies may be hoisted to root
-      const monorepoRoot = join(basePath, '..', '..')
-      cliPath = join(monorepoRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-    }
-    if (!existsSync(cliPath)) {
-      const error = `Claude Code SDK not found at ${cliPath}. The app package may be corrupted.`
-      sessionLog.error(error)
-      throw new Error(error)
-    }
-    sessionLog.info('Setting pathToClaudeCodeExecutable:', cliPath)
-    setPathToClaudeCodeExecutable(cliPath)
-
-    // Resolve Copilot CLI path for CopilotAgent.
-    const copilotRelativePath = join('node_modules', '@github', 'copilot', 'index.js')
-    let copilotPath = join(basePath, copilotRelativePath)
-    if (!existsSync(copilotPath) && !app.isPackaged) {
-      const monorepoRoot = join(basePath, '..', '..')
-      copilotPath = join(monorepoRoot, copilotRelativePath)
-    }
-    if (existsSync(copilotPath)) {
-      this.copilotCliPath = copilotPath
-      sessionLog.info('Resolved Copilot CLI path:', copilotPath)
-    } else {
-      sessionLog.warn('Copilot CLI not found; Copilot sessions will use SDK default resolution')
-    }
-
-    // Set path to fetch interceptor for SDK subprocess.
-    // This interceptor captures API errors and adds metadata to MCP tool schemas.
-    // Packaged app should resolve from bundled node_modules; dev resolves from monorepo paths.
-    const interceptorCandidates: string[] = []
-    if (app.isPackaged) {
-      interceptorCandidates.push(
-        // Prefer direct implementation to avoid shim dependency issues.
-        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network', 'interceptor.ts'),
-        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
-        join(basePath, 'packages', 'shared', 'src', 'network', 'interceptor.ts'),
-        // Backward-compatible fallback for older package layouts.
-        join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts'),
-      )
-    } else {
-      // In dev, detect monorepo root whether running from repo root or apps/electron.
-      let monorepoRoot = basePath
-      if (!existsSync(join(basePath, 'packages', 'shared', 'src', 'config', 'paths.ts'))) {
-        monorepoRoot = join(basePath, '..', '..')
-      }
-      interceptorCandidates.push(
-        join(monorepoRoot, 'packages', 'shared', 'src', 'network', 'interceptor.ts'),
-        join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts'),
-        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network', 'interceptor.ts'),
-        // Fallback for non-monorepo installs.
-        join(basePath, 'node_modules', '@agent-operator', 'shared', 'src', 'network-interceptor.ts'),
-      )
-    }
-
-    const interceptorPath = interceptorCandidates.find(p => existsSync(p))
-    if (!interceptorPath) {
-      const error = `Network interceptor not found. Tried: ${interceptorCandidates.join(', ')}. The app package may be corrupted.`
-      sessionLog.error(error)
-      throw new Error(error)
-    }
-    // Skip interceptor on Windows development (--preload is bun-specific, not supported by node)
-    if (process.platform !== 'win32' || app.isPackaged) {
-      sessionLog.info('Setting interceptorPath:', interceptorPath)
-      setInterceptorPath(interceptorPath)
-    } else {
-      sessionLog.info('Skipping interceptor on Windows dev (node does not support --preload)')
-    }
-
-    // Resolve Copilot network interceptor (CJS required by NODE_OPTIONS --require).
-    let copilotInterceptorPath = join(basePath, 'dist', 'copilot-interceptor.cjs')
-    if (!existsSync(copilotInterceptorPath) && !app.isPackaged) {
-      copilotInterceptorPath = join(basePath, 'apps', 'electron', 'dist', 'copilot-interceptor.cjs')
-    }
-    if (existsSync(copilotInterceptorPath)) {
-      this.copilotInterceptorPath = copilotInterceptorPath
-      sessionLog.info('Resolved Copilot interceptor path:', copilotInterceptorPath)
-    } else {
-      sessionLog.warn('Copilot interceptor not found; run `bun run electron:build` to build it')
-    }
-
-    // Resolve generic interceptor bundle for Pi subprocess (--require).
-    const piInterceptorCandidates = [
-      join(basePath, 'dist', 'interceptor.cjs'),
-      join(basePath, 'apps', 'electron', 'dist', 'interceptor.cjs'),
-    ]
-    const resolvedPiInterceptor = piInterceptorCandidates.find(p => existsSync(p))
-    if (resolvedPiInterceptor) {
-      this.piInterceptorPath = resolvedPiInterceptor
-      sessionLog.info('Resolved Pi interceptor path:', resolvedPiInterceptor)
-    } else {
-      sessionLog.warn('Pi interceptor bundle not found; Pi will run without interceptor preload')
-    }
-
-    const piServer = resolveMcpServerPath('pi-agent-server')
-    if (piServer.exists) {
-      this.piServerPath = piServer.path
-      sessionLog.info('Resolved Pi agent server path:', piServer.path)
-    } else {
-      sessionLog.warn(`Pi agent server not found at ${piServer.path}. PI provider will be unavailable.`)
-    }
-
-    // In packaged app: use bundled Bun binary
-    // In development: use system 'bun' command (or 'node' on Windows where bun may crash)
-    if (app.isPackaged) {
-      // Use platform-specific binary name (bun.exe on Windows, bun on macOS/Linux)
-      const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun'
-      // On Windows, bun.exe is in extraResources (process.resourcesPath) to avoid EBUSY errors.
-      // On macOS/Linux, bun is in the app files (basePath). See electron-builder.yml for details.
-      const bunBasePath = process.platform === 'win32' ? process.resourcesPath : basePath
-      const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary)
-      if (!existsSync(bunPath)) {
-        const error = `Bundled Bun runtime not found at ${bunPath}. The app package may be corrupted.`
-        sessionLog.error(error)
-        throw new Error(error)
-      }
-      sessionLog.info('Setting executable:', bunPath)
-      setExecutable(bunPath)
-    } else if (process.platform === 'win32') {
-      // On Windows in development, use 'node' instead of 'bun' as bun may crash
-      // due to architecture emulation issues (e.g., x64 bun on ARM64 Windows)
-      sessionLog.info('Using node executable for Windows development')
-      setExecutable('node')
-    }
+    this.ensureBackendRuntimeGlobalsConfigured()
 
     // Auto-detect external credentials (Claude Code/CLI, ANTHROPIC_API_KEY, Bedrock)
     // This creates a config with appropriate connection for fresh installs.
@@ -2505,7 +2197,12 @@ export class SessionManager {
       options?.llmConnection,
       wsConfig?.defaults?.defaultLlmConnection,
     )
-    const targetProvider = resolveSessionProvider(resolvedConnection, targetAgentType)
+    const targetBackend = resolveBackendSelection({
+      connection: resolvedConnection,
+      agentType: targetAgentType,
+      runtime: 'electron-session',
+    })
+    const targetProvider = targetBackend.provider
     const targetProviderType = resolvedConnection?.providerType ?? null
     // Model resolution priority:
     // 1. explicit session option
@@ -2564,7 +2261,11 @@ export class SessionManager {
         sourceManaged?.llmConnection ?? sourceSession.llmConnection,
         wsConfig?.defaults?.defaultLlmConnection,
       )
-      const sourceProvider = resolveSessionProvider(sourceConnection, sourceAgentType)
+      const sourceProvider = resolveBackendSelection({
+        connection: sourceConnection,
+        agentType: sourceAgentType,
+        runtime: 'electron-session',
+      }).provider
       const sourceProviderType = sourceConnection?.providerType ?? null
 
       if (sourceProvider !== targetProvider || sourceProviderType !== targetProviderType) {
@@ -2762,6 +2463,8 @@ export class SessionManager {
    */
   private async getOrCreateAgent(managed: ManagedSession): Promise<Agent> {
     if (!managed.agent) {
+      this.ensureBackendRuntimeGlobalsConfigured()
+
       const end = perf.start('agent.create', { sessionId: managed.id, agentType: managed.agentType })
       const config = loadStoredConfig()
       const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
@@ -2804,7 +2507,11 @@ export class SessionManager {
         ? (resolvedConnection?.defaultModel ?? allowedModelIds[0] ?? preferredModel)
         : preferredModel
 
-      const provider = resolveSessionProvider(resolvedConnection, managed.agentType)
+      const backendSelection = resolveBackendSelection({
+        connection: resolvedConnection,
+        agentType: managed.agentType,
+        runtime: 'electron-session',
+      })
 
       const sessionConfig = {
         id: managed.id,
@@ -2833,199 +2540,87 @@ export class SessionManager {
         }))
       }
 
-      if (provider === 'openai') {
-        const codexModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
-        const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-        const enabledSlugs = managed.enabledSourceSlugs || []
-        const allSources = loadWorkspaceSources(managed.workspace.rootPath)
-        const enabledSources = allSources.filter(source =>
-          enabledSlugs.includes(source.config.slug) && isSourceUsable(source)
-        )
-        const { mcpServers } = await buildServersFromSources(
-          enabledSources,
-          sessionPath,
-          managed.tokenRefreshManager,
-        )
-        const codexHome = await setupCodexSessionConfig(
-          sessionPath,
-          enabledSources,
-          mcpServers,
-          managed.id,
-          managed.workspace.rootPath,
-        )
+      const sharedBackendConfig = {
+        providerType: resolvedConnection?.providerType,
+        authType: resolvedConnection?.authType,
+        workspace: managed.workspace,
+        thinkingLevel: managed.thinkingLevel,
+        isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+        connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
+        session: sessionConfig,
+        onSdkSessionIdUpdate: (sdkSessionId: string) => {
+          managed.sdkSessionId = sdkSessionId
+          sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
+          this.persistSession(managed)
+          sessionPersistenceQueue.flush(managed.id)
+        },
+        onSdkSessionIdCleared: () => {
+          managed.sdkSessionId = undefined
+          sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
+          this.persistSession(managed)
+          sessionPersistenceQueue.flush(managed.id)
+        },
+        getRecoveryMessages,
+        debugMode: isDebugMode ? {
+          enabled: true,
+          logFilePath: getLogFilePath(),
+        } : undefined,
+      } satisfies Omit<BackendConfig, 'provider' | 'model'>
 
-        managed.agent = new CodexAgent({
-          provider: 'openai',
-          providerType: resolvedConnection?.providerType,
-          authType: resolvedConnection?.authType,
-          baseUrl: resolvedConnection?.baseUrl,
-          workspace: managed.workspace,
-          model: codexModel,
-          thinkingLevel: managed.thinkingLevel,
-          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
-          codexHome,
-          session: sessionConfig,
-          onSdkSessionIdUpdate: (sdkSessionId: string) => {
-            managed.sdkSessionId = sdkSessionId
-            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          onSdkSessionIdCleared: () => {
-            managed.sdkSessionId = undefined
-            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          getRecoveryMessages,
-          debugMode: isDebugMode ? {
-            enabled: true,
-            logFilePath: getLogFilePath(),
-          } : undefined,
-        })
-        sessionLog.info(`Created Codex agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
-      } else if (provider === 'copilot') {
-        const copilotModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
-        const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-        const copilotConfigDir = join(sessionPath, '.copilot-config')
-        await mkdir(copilotConfigDir, { recursive: true })
-
-        const sessionServer = resolveMcpServerPath('session-mcp-server')
-        if (!sessionServer.exists) {
-          sessionLog.warn(
-            `Session MCP server not found at ${sessionServer.path}. Session-scoped tools may be unavailable in Copilot sessions.`,
-          )
-        }
-
-        const bridgeServer = resolveMcpServerPath('bridge-mcp-server')
-        if (!bridgeServer.exists) {
-          sessionLog.warn(
-            `Bridge MCP server not found at ${bridgeServer.path}. API sources may be unavailable in Copilot sessions.`,
-          )
-        }
-
-        managed.agent = new CopilotAgent({
-          provider: 'copilot',
-          providerType: resolvedConnection?.providerType,
-          authType: resolvedConnection?.authType,
-          workspace: managed.workspace,
-          model: copilotModel,
-          thinkingLevel: managed.thinkingLevel,
-          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
-          copilotCliPath: this.copilotCliPath,
-          copilotInterceptorPath: this.copilotInterceptorPath,
-          copilotConfigDir,
-          sessionServerPath: sessionServer.exists ? sessionServer.path : undefined,
-          bridgeServerPath: bridgeServer.exists ? bridgeServer.path : undefined,
-          nodePath: getBundledBunPath() ?? 'bun',
-          session: sessionConfig,
-          onSdkSessionIdUpdate: (sdkSessionId: string) => {
-            managed.sdkSessionId = sdkSessionId
-            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          onSdkSessionIdCleared: () => {
-            managed.sdkSessionId = undefined
-            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          getRecoveryMessages,
-          debugMode: isDebugMode ? {
-            enabled: true,
-            logFilePath: getLogFilePath(),
-          } : undefined,
-        })
-        sessionLog.info(`Created Copilot agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
-      } else if (provider === 'pi') {
-        const piModel = managed.model ?? resolvedConnection?.defaultModel ?? resolvedModel
-        if (!this.piServerPath) {
-          throw new Error('PI provider selected, but pi-agent-server is not available. Please run `bun --cwd packages/pi-agent-server run build`.')
-        }
-
-        managed.agent = new PiAgent({
-          provider: 'pi',
-          providerType: resolvedConnection?.providerType,
-          authType: resolvedConnection?.authType,
-          workspace: managed.workspace,
-          model: piModel,
-          thinkingLevel: managed.thinkingLevel,
-          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
-          nodePath: getBundledBunPath() ?? 'bun',
-          piServerPath: this.piServerPath,
-          piInterceptorPath: this.piInterceptorPath,
-          session: sessionConfig,
-          onSdkSessionIdUpdate: (sdkSessionId: string) => {
-            managed.sdkSessionId = sdkSessionId
-            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          onSdkSessionIdCleared: () => {
-            managed.sdkSessionId = undefined
-            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          getRecoveryMessages,
-          debugMode: isDebugMode ? {
-            enabled: true,
-            logFilePath: getLogFilePath(),
-          } : undefined,
-        })
-        sessionLog.info(`Created Pi agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
-      } else {
-        // Create Claude agent (Anthropic) - default
-
-        managed.agent = new OperatorAgent({
-          workspace: managed.workspace,
-          // Session model takes priority, then workspace/connection defaults.
-          model: resolvedModel,
-          providerType: resolvedConnection?.providerType,
-          connectionSlug: resolvedConnection?.slug ?? managed.llmConnection,
-          // System prompt preset for mini agents (focused prompts for quick edits)
+      const automationSystem = this.automationSystems.get(managed.workspace.rootPath)
+      const instantiateBackend = async (selection = backendSelection): Promise<{
+        agent: Agent
+        providerLabel: string
+      }> => {
+        const { config: backendConfig, providerLabel } = await createSessionBackendConfig({
+          backendSelection: selection,
+          sharedBackendConfig,
+          resolvedConnection,
+          resolvedModel,
+          sessionId: managed.id,
+          workspaceRootPath: managed.workspace.rootPath,
+          enabledSourceSlugs: managed.enabledSourceSlugs,
+          tokenRefreshManager: managed.tokenRefreshManager,
           systemPromptPreset: managed.systemPromptPreset,
-          // Initialize thinking level at construction to avoid race conditions
-          thinkingLevel: managed.thinkingLevel,
-          isHeadless: !AGENT_FLAGS.defaultModesEnabled,
-          // Workspace-level AutomationSystem for agent lifecycle hook events
-          automationSystem: this.automationSystems.get(managed.workspace.rootPath),
-          // Always pass session object - id is required for plan mode callbacks
-          // sdkSessionId is optional and used for conversation resumption
-          session: sessionConfig,
-          // Critical: Immediately persist SDK session ID when captured to prevent loss on crash.
-          // Without this, the ID is only saved via debounced persistSession() which may not
-          // complete before app crash/quit, causing session resumption to fail.
-          onSdkSessionIdUpdate: (sdkSessionId: string) => {
-            managed.sdkSessionId = sdkSessionId
-            sessionLog.info(`SDK session ID captured for ${managed.id}: ${sdkSessionId}`)
-            // Persist immediately and flush - critical for resumption reliability
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          // Called when SDK session ID is cleared after failed resume (empty response recovery)
-          onSdkSessionIdCleared: () => {
-            managed.sdkSessionId = undefined
-            sessionLog.info(`SDK session ID cleared for ${managed.id} (resume recovery)`)
-            // Persist immediately to prevent repeated resume attempts
-            this.persistSession(managed)
-            sessionPersistenceQueue.flush(managed.id)
-          },
-          // Called to get recent messages for recovery context when resume fails.
-          // Returns last 6 messages (3 exchanges) of user/assistant content.
-          getRecoveryMessages,
-          // Debug mode - enables log file path injection into system prompt
-          debugMode: isDebugMode ? {
-            enabled: true,
-            logFilePath: getLogFilePath(),
-          } : undefined,
+          automationSystem,
+          copilotCliPath: this.backendRuntimePaths?.copilotCliPath,
+          copilotInterceptorPath: this.backendRuntimePaths?.copilotInterceptorPath,
+          piServerPath: this.backendRuntimePaths?.piServerPath,
+          piInterceptorPath: this.backendRuntimePaths?.piInterceptorPath,
+          buildServersFromSources,
         })
-        sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+
+        return {
+          agent: createBackend(backendConfig) as Agent,
+          providerLabel,
+        }
       }
+
+      const shouldFallbackFromPiToOperator =
+        resolvedConnection?.providerType === 'bedrock'
+        && backendSelection.provider === 'pi'
+
+      let instantiatedBackend: { agent: Agent; providerLabel: string }
+      try {
+        instantiatedBackend = await instantiateBackend()
+      } catch (error) {
+        if (!shouldFallbackFromPiToOperator) {
+          throw error
+        }
+
+        sessionLog.warn(
+          `Failed to initialize Pi backend for bedrock session ${managed.id}; falling back to Claude runtime:`,
+          error instanceof Error ? error.message : error,
+        )
+
+        instantiatedBackend = await instantiateBackend({
+          provider: 'anthropic',
+          anthropicRuntime: 'operator',
+        })
+      }
+
+      managed.agent = instantiatedBackend.agent
+      sessionLog.info(`Created ${instantiatedBackend.providerLabel} agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
       if (resolvedConnection && !managed.connectionLocked) {
         managed.llmConnection = resolvedConnection.slug
@@ -3102,6 +2697,8 @@ export class SessionManager {
             managed.toolToParentMap.clear()
             managed.pendingTextParent = undefined
 
+            await releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, managed.id)
+
             // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
             this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
 
@@ -3156,6 +2753,8 @@ export class SessionManager {
           managed.parentToolStack = []
           managed.toolToParentMap.clear()
           managed.pendingTextParent = undefined
+
+          void releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, managed.id)
 
           // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
           this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
@@ -4291,7 +3890,11 @@ export class SessionManager {
 
     // Keep Anthropic-style env auth in sync per turn.
     // OpenAI/Copilot backends handle credentials via their own clients.
-    const activeProvider = resolveSessionProvider(resolvedConnection, managed.agentType)
+    const activeProvider = resolveBackendSelection({
+      connection: resolvedConnection,
+      agentType: managed.agentType,
+      runtime: 'electron-session',
+    }).provider
     if (activeProvider === 'anthropic') {
       const authStartAt = Date.now()
       await this.reinitializeAuth(resolvedConnection?.slug)
@@ -4299,7 +3902,13 @@ export class SessionManager {
       sendSpan.mark('auth.ready')
     }
     const reconnectStartAt = Date.now()
-    await this.flushPendingCodexReconnect(managed, 'before send-message')
+    managed.pendingCodexReconnect = await reconcileSessionBackendRuntime({
+      provider: activeProvider,
+      agent: managed.agent,
+      sessionId: managed.id,
+      context: 'before send-message',
+      pendingReconnect: managed.pendingCodexReconnect,
+    })
     recordPreChatStep('flush_pending_codex_reconnect', reconnectStartAt)
 
     const workspaceRootPath = managed.workspace.rootPath
@@ -4339,10 +3948,12 @@ export class SessionManager {
         const refreshedSnapshot = getSessionSourceSnapshot(workspaceRootPath, managed.enabledSourceSlugs)
         agent.setAllSources(refreshedSnapshot.allSources)
         const usableSources = refreshedSnapshot.usableSelectedSources
-        if (agent instanceof CopilotAgent) {
-          const copilotConfigDir = join(sessionPath, '.copilot-config')
-          await setupCopilotBridgeConfig(copilotConfigDir, usableSources)
-        }
+        await this.syncProviderSourceConfig(
+          managed,
+          refreshedSnapshot.selectedSources,
+          mcpServers,
+          'pre-chat source sync',
+        )
         // Only pass sources that still have working tools after auth/status refresh.
         const intendedSlugs = usableSources.map(s => s.config.slug)
         agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
@@ -4646,6 +4257,8 @@ ${skillContents.join('\n\n')}
     managed.parentToolStack = []
     managed.toolToParentMap.clear()
     managed.pendingTextParent = undefined
+
+    await releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, sessionId)
 
     // Only show "Response interrupted" message when user explicitly clicked Stop
     // Silent mode is used when redirecting (sending new message while processing)
@@ -5193,8 +4806,14 @@ To view this task's output:
           }, workspaceId)
         }
 
-        if (event.toolName === 'browser_tool') {
+        const shouldActivateOverlay = shouldActivateBrowserOverlay(
+          event.toolName,
+          formattedToolInput,
+        )
+
+        if (shouldActivateOverlay) {
           try {
+            this.getSessionBrowserPaneManager().getOrCreateForSession(sessionId)
             this.getSessionBrowserPaneManager().setAgentControl(sessionId, {
               displayName: event.displayName ?? 'Browser',
               intent: event.intent,
@@ -5210,14 +4829,6 @@ To view this task's output:
         // AgentEvent tool_result only has toolUseId, look up the toolName
         const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
-
-        if (toolName === 'browser_tool') {
-          try {
-            this.getSessionBrowserPaneManager().clearAgentControl(sessionId)
-          } catch {
-            // Browser window may not exist yet for this session.
-          }
-        }
 
         // Parent tool names for defensive cleanup
         const PARENT_TOOLS = ['Task', 'TaskOutput']
@@ -5284,6 +4895,14 @@ To view this task's output:
             isError: event.isError,
           }
           managed.messages.push(toolMessage)
+        }
+
+        if (shouldClearBrowserOverlayOnToolResult(toolName, existingToolMsg?.toolInput)) {
+          try {
+            this.getSessionBrowserPaneManager().clearAgentControl(sessionId)
+          } catch {
+            // Browser window may not exist yet for this session.
+          }
         }
 
         // Use stored parent mapping or existing message's parent

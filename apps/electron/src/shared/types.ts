@@ -225,8 +225,11 @@ export interface BrowserClickOptions {
 }
 
 export interface BrowserScreenshotOptions {
+  mode?: 'raw' | 'agent'
   annotate?: boolean
   refs?: string[]
+  includeLastAction?: boolean
+  includeMetadata?: boolean
   format?: 'png' | 'jpeg'
   jpegQuality?: number
 }
@@ -235,7 +238,30 @@ export interface BrowserScreenshotResult {
   dataUrl: string
   format: 'png' | 'jpeg'
   metadata?: {
+    mode?: 'raw' | 'agent'
     annotatedRefs?: string[]
+    viewport?: {
+      width: number
+      height: number
+      dpr: number
+      scrollX: number
+      scrollY: number
+    }
+    targets?: Array<{
+      ref: string
+      role?: string
+      name?: string
+      box: BrowserElementBox
+      clickPoint: { x: number; y: number }
+    }>
+    action?: {
+      tool: string
+      ref?: string
+      status: 'succeeded' | 'failed'
+      timestamp: number
+    }
+    annotationPartial?: boolean
+    warnings?: string[]
   }
 }
 
@@ -322,6 +348,17 @@ export interface BrowserPaneCreateOptions {
   ownerSessionId?: string | null
 }
 
+export interface BrowserEmptyStateLaunchPayload {
+  route: string
+  token?: string
+}
+
+export interface BrowserEmptyStateLaunchResult {
+  ok: boolean
+  handled: boolean
+  reason?: string
+}
+
 export interface BrowserPaneAPI {
   create(input?: string | BrowserPaneCreateOptions): Promise<string>
   navigate(id: string, url: string): Promise<{ url: string; title: string }>
@@ -332,6 +369,7 @@ export interface BrowserPaneAPI {
   list(): Promise<BrowserInstanceInfo[]>
   focus(id: string): Promise<void>
   destroy(id: string): Promise<void>
+  emptyStateLaunch(payload: BrowserEmptyStateLaunchPayload): Promise<BrowserEmptyStateLaunchResult>
   snapshot(id: string): Promise<BrowserAccessibilitySnapshot>
   click(id: string, ref: string, options?: BrowserClickOptions): Promise<BrowserElementGeometry>
   clickAt(id: string, x: number, y: number): Promise<void>

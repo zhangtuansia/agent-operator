@@ -85,7 +85,15 @@ export interface BrowserPaneFns {
   typeText: (text: string) => Promise<void>
   pressKey: (key: string, options?: BrowserToolKeyOptions) => Promise<void>
   select: (ref: string, value: string) => Promise<void>
-  screenshot: (args?: { annotate?: boolean; format?: 'png' | 'jpeg' }) => Promise<{
+  screenshot: (args?: {
+    mode?: 'raw' | 'agent'
+    refs?: string[]
+    includeLastAction?: boolean
+    includeMetadata?: boolean
+    annotate?: boolean
+    format?: 'png' | 'jpeg'
+    jpegQuality?: number
+  }) => Promise<{
     imageBuffer: Buffer
     imageFormat: 'png' | 'jpeg'
     metadata?: Record<string, unknown>

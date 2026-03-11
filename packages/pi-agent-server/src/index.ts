@@ -43,7 +43,7 @@ import type {
 } from '@mariozechner/pi-agent-core';
 
 // Pi AI types
-import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
+import type { TextContent as PiTextContent, Model as PiModel, Api as PiApi } from '@mariozechner/pi-ai';
 
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
@@ -53,6 +53,7 @@ import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend
 import { webSearchTool } from './tools/web-search.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
 import { createGoogleSearchTool } from './tools/google-search.ts';
+import { createBedrockInferenceProfileModel, isBedrockArnModelId } from './bedrock-model.ts';
 
 // ============================================================
 // LLM Tool Compatibility (shared llm-tool exports differ in this repo)
@@ -213,15 +214,16 @@ async function buildCallLlmRequest(
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; bedrockTemplateModel?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
+  | { type: 'sync_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
   | { type: 'pre_tool_use_response'; requestId: string; action: 'allow' | 'block' | 'modify'; input?: Record<string, unknown>; reason?: string }
   | { type: 'abort' }
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'ensure_session_ready'; id: string }
-  | { type: 'set_model'; model: string }
+  | { type: 'set_model'; model: string; bedrockTemplateModel?: string }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | { type: 'steer'; message: string }
@@ -413,16 +415,26 @@ function resolvePiModel(
   modelRegistry: PiModelRegistry,
   modelId: string,
   piAuthProvider?: string,
-): PiModel<any> | undefined {
+  providerType?: string,
+  bedrockTemplateModel?: string,
+): PiModel<PiApi> | undefined {
   // Strip Craft's pi/ prefix — Pi SDK uses bare model IDs (e.g. "claude-sonnet-4-6")
   const bareId = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
+
+  const effectiveProvider = piAuthProvider ?? (providerType === 'bedrock' ? 'amazon-bedrock' : undefined);
+
+  if (effectiveProvider === 'amazon-bedrock' && isBedrockArnModelId(bareId)) {
+    const bedrockModels = modelRegistry.getAll().filter((model) => model.provider === 'amazon-bedrock') as PiModel<PiApi>[];
+    const inferredModel = createBedrockInferenceProfileModel(bareId, bedrockModels, bedrockTemplateModel);
+    if (inferredModel) return inferredModel;
+  }
 
   // If we know the auth provider, do an exact provider+model lookup first.
   // This avoids the getAll() ambiguity where the same model ID exists under
   // multiple providers (e.g., "gpt-5.2" under both "openai" and
   // "azure-openai-responses") and the wrong one matches first.
-  if (piAuthProvider) {
-    const exact = modelRegistry.find(piAuthProvider, bareId);
+  if (effectiveProvider) {
+    const exact = modelRegistry.find(effectiveProvider, bareId);
     if (exact) return exact;
   }
 
@@ -559,7 +571,13 @@ async function ensureSession(): Promise<AgentSession> {
   // Set model if specified
   if (initConfig.model) {
     try {
-      const piModel = resolvePiModel(modelRegistry, initConfig.model, initConfig.piAuth?.provider);
+      const piModel = resolvePiModel(
+        modelRegistry,
+        initConfig.model,
+        initConfig.piAuth?.provider,
+        initConfig.providerType,
+        initConfig.bedrockTemplateModel,
+      );
       if (piModel) {
         sessionOptions.model = piModel;
         setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
@@ -813,7 +831,13 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   if (initConfig.piAuth) {
     const authProvider = initConfig.piAuth.provider;
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
-    const resolved = resolvePiModel(modelRegistry, bareModel, authProvider);
+    const resolved = resolvePiModel(
+      modelRegistry,
+      bareModel,
+      authProvider,
+      authProvider === 'amazon-bedrock' ? 'bedrock' : undefined,
+      authProvider === 'amazon-bedrock' ? initConfig?.bedrockTemplateModel : undefined,
+    );
     if (!resolved || (resolved as any).provider !== authProvider) {
       const fallback = SUMMARIZATION_MODEL;
       debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider}, falling back to ${fallback}`);
@@ -835,7 +859,13 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   // Resolve model
   let piModel: ReturnType<typeof resolvePiModel>;
   try {
-    piModel = resolvePiModel(modelRegistry, model, initConfig.piAuth?.provider);
+    piModel = resolvePiModel(
+      modelRegistry,
+      model,
+      initConfig.piAuth?.provider,
+      initConfig.providerType,
+      initConfig.bedrockTemplateModel,
+    );
     if (piModel) {
       ephemeralOptions.model = piModel;
     }
@@ -1140,6 +1170,16 @@ function handleRegisterTools(msg: Extract<InboundMessage, { type: 'register_tool
   }
 }
 
+function handleSyncTools(msg: Extract<InboundMessage, { type: 'sync_tools' }>): void {
+  proxyToolDefs = [...msg.tools];
+  debugLog(`Synced ${proxyToolDefs.length} proxy tools: ${proxyToolDefs.map(t => t.name).join(', ')}`);
+
+  if (piSession) {
+    toolsChanged = true;
+    debugLog('Proxy tools synced — session will be recreated on next prompt');
+  }
+}
+
 function handleToolExecuteResponse(msg: Extract<InboundMessage, { type: 'tool_execute_response' }>): void {
   const pending = pendingToolExecutions.get(msg.requestId);
   if (pending) {
@@ -1254,7 +1294,13 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
     debugLog(`[set_model] No active session or model registry, ignoring`);
     return;
   }
-  const piModel = resolvePiModel(piModelRegistry, msg.model, initConfig?.piAuth?.provider);
+  const piModel = resolvePiModel(
+    piModelRegistry,
+    msg.model,
+    initConfig?.piAuth?.provider,
+    initConfig?.providerType,
+    msg.bedrockTemplateModel ?? initConfig?.bedrockTemplateModel,
+  );
   if (!piModel) {
     debugLog(`[set_model] Could not resolve model: ${msg.model}`);
     setInterceptorApiHints(undefined);
@@ -1262,6 +1308,10 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   }
   try {
     await piSession.setModel(piModel);
+    if (initConfig) {
+      initConfig.model = msg.model;
+      initConfig.bedrockTemplateModel = msg.bedrockTemplateModel;
+    }
     setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
     debugLog(`[set_model] Model changed to: ${msg.model} (resolved: ${piModel.provider}/${piModel.id})`);
   } catch (error) {
@@ -1318,6 +1368,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'register_tools':
       handleRegisterTools(msg);
+      break;
+
+    case 'sync_tools':
+      handleSyncTools(msg);
       break;
 
     case 'tool_execute_response':

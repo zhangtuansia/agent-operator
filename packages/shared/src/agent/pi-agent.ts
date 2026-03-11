@@ -7,6 +7,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -23,6 +24,11 @@ import { AbortReason } from './backend/types.ts';
 import { shouldAllowToolInMode, type PermissionMode } from './mode-manager.ts';
 
 import { getModelById } from '../config/models.ts';
+import {
+  getPiAuthProviderForConnectionProvider,
+  inferPiAuthProviderForModel,
+  resolvePiRuntimeModel,
+} from '../config/models-pi.ts';
 import type { Workspace } from '../config/storage.ts';
 
 import { BaseAgent } from './base-agent.ts';
@@ -32,12 +38,25 @@ import { EventQueue } from './backend/event-queue.ts';
 
 import { getSystemPrompt } from '../prompts/system.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
+import { refreshClaudeToken } from '../auth/claude-token.ts';
 import { getSessionPath, getSessionPlansPath, getSessionDataPath } from '../sessions/storage.ts';
 import { parseError, type AgentError } from './errors.ts';
 import { expandToolPaths, stripToolMetadata } from './core/pre-tool-use.ts';
+import { OperatorMcpClient } from '../mcp/index.ts';
+import {
+  getPiRegisteredSessionTool,
+  getPiSessionToolProxyDefs,
+} from './backend/pi/session-tool-defs.ts';
+import {
+  getPiApiSourceToolProxyDefs,
+  getPiRegisteredApiSourceTool,
+  type SourceToolProxyDef,
+} from './backend/pi/source-tool-defs.ts';
 
 const MINI_COMPLETION_TIMEOUT_MS = 120_000;
 const DEFAULT_PI_MODEL = 'pi/claude-sonnet-4-5-20250929';
+const PI_TOKEN_REFRESH_BUFFER_MS = 5 * 60_000;
 
 type PendingPermission = {
   resolve: (allowed: boolean) => void;
@@ -58,7 +77,33 @@ type PendingEnsureSessionReady = {
   reject: (error: Error) => void;
 };
 
+type ProxyToolDef = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+type SourceProxyRoute =
+  | {
+      kind: 'api';
+      sourceSlug: string;
+      handler: (args: Record<string, unknown>) => Promise<unknown>;
+    }
+  | {
+      kind: 'mcp';
+      sourceSlug: string;
+      mcpToolName: string;
+    };
+
+type CachedMcpSourceProxy = {
+  signature: string;
+  client: OperatorMcpClient;
+  defs: SourceToolProxyDef[];
+};
+
 export class PiAgent extends BaseAgent {
+  private static globalRefreshMutex = new Map<string, Promise<void>>();
+
   private subprocess: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private subprocessReady: Promise<void> | null = null;
@@ -76,8 +121,15 @@ export class PiAgent extends BaseAgent {
   private pendingMiniCompletions = new Map<string, PendingMiniCompletion>();
   private pendingCompactions = new Map<string, PendingCompaction>();
   private pendingEnsureSessionReadies = new Map<string, PendingEnsureSessionReady>();
+  private sourceMcpServers: Record<string, SdkMcpServerConfig> = {};
+  private sourceApiServers: Record<string, unknown> = {};
+  private sourceProxyDefs: ProxyToolDef[] = [];
+  private sourceProxyRoutes = new Map<string, SourceProxyRoute>();
+  private sourceMcpClients = new Map<string, CachedMcpSourceProxy>();
 
   private rpcIdCounter = 0;
+
+  onPiAuthRequired: ((reason: string) => void) | null = null;
 
   constructor(config: BackendConfig) {
     const model = config.model || DEFAULT_PI_MODEL;
@@ -148,6 +200,196 @@ export class PiAgent extends BaseAgent {
     }
   }
 
+  private getConnectionSlug(): string | null {
+    return this.config.connectionSlug ?? this.config.session?.llmConnection ?? null;
+  }
+
+  private getPiAuthProvider(): string | null {
+    return (
+      getPiAuthProviderForConnectionProvider(this.config.providerType, this.config.authType)
+      || inferPiAuthProviderForModel(this._model)
+      || inferPiAuthProviderForModel(this.config.miniModel || '')
+    );
+  }
+
+  private getRuntimeModelPayload(model: string): { model: string; bedrockTemplateModel?: string } {
+    return resolvePiRuntimeModel(model, this.config.providerType);
+  }
+
+  private async getPiAuth(): Promise<{
+    provider: string;
+    credential:
+      | { type: 'api_key'; key: string }
+      | { type: 'oauth'; access: string; refresh: string; expires: number };
+  } | null> {
+    const provider = this.getPiAuthProvider();
+    if (!provider) return null;
+
+    try {
+      const cm = getCredentialManager();
+      const slug = this.config.connectionSlug ?? this.config.session?.llmConnection;
+      if (!slug) return null;
+
+      if (this.config.authType === 'oauth') {
+        const oauth = await cm.getLlmOAuth(slug);
+        if (oauth?.accessToken) {
+          if (oauth.refreshToken) {
+            return {
+              provider,
+              credential: {
+                type: 'oauth',
+                access: oauth.accessToken,
+                refresh: oauth.refreshToken,
+                expires: oauth.expiresAt ?? 0,
+              },
+            };
+          }
+          return {
+            provider,
+            credential: { type: 'api_key', key: oauth.accessToken },
+          };
+        }
+      }
+
+      const apiKey = await cm.getLlmApiKey(slug);
+      if (apiKey) {
+        return {
+          provider,
+          credential: { type: 'api_key', key: apiKey },
+        };
+      }
+    } catch {
+      // Fall through to null
+    }
+
+    return null;
+  }
+
+  private shouldRefreshOAuthBeforeStart(expiresAt?: number, provider?: string | null): boolean {
+    if (provider === 'github-copilot') {
+      return !expiresAt || expiresAt < Date.now() + PI_TOKEN_REFRESH_BUFFER_MS;
+    }
+    return expiresAt !== undefined && expiresAt < Date.now() + PI_TOKEN_REFRESH_BUFFER_MS;
+  }
+
+  private shouldAttemptTokenRefresh(message: string): boolean {
+    if (this.config.authType !== 'oauth') return false;
+
+    return (
+      message.includes('401')
+      || message.includes('421')
+      || message.includes('unauthorized')
+      || message.includes('misdirected')
+      || message.includes('authentication')
+      || (message.includes('token') && message.includes('expired'))
+    );
+  }
+
+  private async maybeRefreshTokensBeforeStart(): Promise<void> {
+    if (this.config.authType !== 'oauth') return;
+
+    const slug = this.getConnectionSlug();
+    if (!slug) return;
+
+    const provider = this.getPiAuthProvider();
+    const stored = await getCredentialManager().getLlmOAuth(slug);
+    if (!stored?.refreshToken) return;
+
+    if (this.shouldRefreshOAuthBeforeStart(stored.expiresAt, provider)) {
+      this.debug(`OAuth token for ${provider || slug} is expired or expiring soon — refreshing before Pi session start`);
+      await this.refreshAndPushTokens();
+    }
+  }
+
+  private async refreshAndPushTokens(): Promise<void> {
+    if (this.config.authType !== 'oauth') return;
+
+    const slug = this.getConnectionSlug();
+    if (!slug) return;
+
+    const existing = PiAgent.globalRefreshMutex.get(slug);
+    if (existing) {
+      this.debug(`Waiting on existing Pi token refresh for slug "${slug}"`);
+      await existing;
+      if (this.subprocess) {
+        const piAuth = await this.getPiAuth();
+        if (piAuth) {
+          this.send({ type: 'token_update', piAuth });
+          this.debug('Pushed Pi auth refreshed by sibling instance');
+        }
+      }
+      return;
+    }
+
+    const refreshPromise = (async () => {
+      const provider = this.getPiAuthProvider();
+      const manager = getCredentialManager();
+      const stored = await manager.getLlmOAuth(slug);
+
+      if (!stored?.refreshToken) {
+        this.debug('No refresh token available for Pi OAuth connection');
+        this.onPiAuthRequired?.('No refresh token — please sign in again');
+        return;
+      }
+
+      try {
+        if (provider === 'anthropic') {
+          const refreshed = await refreshClaudeToken(stored.refreshToken);
+          await manager.setLlmOAuth(slug, {
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken,
+            expiresAt: refreshed.expiresAt,
+            idToken: stored.idToken,
+          });
+        } else if (provider === 'openai') {
+          const refreshed = await refreshChatGptTokens(stored.refreshToken);
+          await manager.setLlmOAuth(slug, {
+            accessToken: refreshed.accessToken,
+            idToken: refreshed.idToken,
+            refreshToken: refreshed.refreshToken,
+            expiresAt: refreshed.expiresAt,
+          });
+        } else if (provider === 'github-copilot') {
+          const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/dist/utils/oauth/github-copilot.js');
+          const refreshed = await refreshGitHubCopilotToken(stored.refreshToken);
+          await manager.setLlmOAuth(slug, {
+            accessToken: refreshed.access,
+            refreshToken: refreshed.refresh,
+            expiresAt: refreshed.expires,
+            idToken: stored.idToken,
+          });
+        } else {
+          this.debug(`Pi token refresh not supported for provider: ${provider || '(unknown)'}`);
+          return;
+        }
+
+        this.debug(`Pi OAuth token refresh successful for provider: ${provider}`);
+
+        if (this.subprocess) {
+          const piAuth = await this.getPiAuth();
+          if (piAuth) {
+            this.send({ type: 'token_update', piAuth });
+            this.debug('Pushed refreshed Pi auth to subprocess');
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.debug(`Pi token refresh failed: ${message}`);
+        this.onPiAuthRequired?.(`Token refresh failed: ${message}`);
+      }
+    })();
+
+    PiAgent.globalRefreshMutex.set(slug, refreshPromise);
+
+    try {
+      await refreshPromise;
+    } finally {
+      if (PiAgent.globalRefreshMutex.get(slug) === refreshPromise) {
+        PiAgent.globalRefreshMutex.delete(slug);
+      }
+    }
+  }
+
   private send(cmd: Record<string, unknown>): void {
     if (!this.subprocess?.stdin?.writable) return;
     this.subprocess.stdin.write(`${JSON.stringify(cmd)}\n`);
@@ -203,14 +445,22 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.complete();
     });
 
-    const apiKey = await this.getCredential();
+    await this.maybeRefreshTokensBeforeStart();
+
+    const [apiKey, piAuth] = await Promise.all([
+      this.getCredential(),
+      this.getPiAuth(),
+    ]);
     const workingDirectory = this.config.session?.workingDirectory || cwd;
     const sessionPath = getSessionPath(this.config.workspace.rootPath, sessionId);
+
+    const runtimeModel = this.getRuntimeModelPayload(this._model);
 
     this.send({
       type: 'init',
       apiKey: apiKey || '',
-      model: this._model,
+      model: runtimeModel.model,
+      bedrockTemplateModel: runtimeModel.bedrockTemplateModel,
       cwd,
       thinkingLevel: this._thinkingLevel,
       workspaceRootPath: this.config.workspace.rootPath,
@@ -222,11 +472,13 @@ export class PiAgent extends BaseAgent {
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
+      piAuth: piAuth || undefined,
       branchFromSdkSessionId: this.config.session?.branchFromSdkSessionId,
       branchFromSessionPath: this.config.session?.branchFromSessionPath,
     });
 
     await this.subprocessReady;
+    await this.syncProxyToolsWithSubprocess();
   }
 
   private handleLine(line: string): void {
@@ -274,14 +526,10 @@ export class PiAgent extends BaseAgent {
       }
 
       case 'tool_execute_request': {
-        // Minimal integration: we currently do not register proxy tools.
-        this.send({
-          type: 'tool_execute_response',
+        void this.handleToolExecuteRequest({
           requestId: String(msg.requestId || ''),
-          result: {
-            content: `Proxy tool execution is not enabled (tool: ${String(msg.toolName || 'unknown')})`,
-            isError: true,
-          },
+          toolName: String(msg.toolName || ''),
+          args: (msg.args as Record<string, unknown>) || {},
         });
         break;
       }
@@ -316,6 +564,12 @@ export class PiAgent extends BaseAgent {
 
       case 'error': {
         const errorMessage = String(msg.message || 'Unknown Pi subprocess error');
+        if (this.shouldAttemptTokenRefresh(errorMessage.toLowerCase())) {
+          this.debug('Pi subprocess reported an auth error — attempting OAuth token refresh');
+          this.refreshAndPushTokens().catch((error) => {
+            this.debug(`Pi token refresh after subprocess auth error failed: ${error instanceof Error ? error.message : String(error)}`);
+          });
+        }
         for (const [, pending] of this.pendingMiniCompletions) {
           pending.reject(new Error(errorMessage));
         }
@@ -347,6 +601,255 @@ export class PiAgent extends BaseAgent {
 
     if (event.type === 'agent_end') {
       this.eventQueue.complete();
+    }
+  }
+
+  private getSessionProxyDefs(): ProxyToolDef[] {
+    return getPiSessionToolProxyDefs(this._sessionId, this.config.workspace.rootPath);
+  }
+
+  private async syncProxyToolsWithSubprocess(): Promise<void> {
+    if (!this.subprocess) return;
+
+    const defs = [
+      ...this.getSessionProxyDefs(),
+      ...this.sourceProxyDefs,
+    ];
+
+    this.send({
+      type: 'sync_tools',
+      tools: defs,
+    });
+    this.debug(`Synced ${defs.length} Pi proxy tools (${this.sourceProxyDefs.length} source tools)`);
+  }
+
+  private getMcpSourceSignature(config: SdkMcpServerConfig): string {
+    return JSON.stringify(config);
+  }
+
+  private async getOrCreateMcpSourceProxy(
+    sourceSlug: string,
+    config: SdkMcpServerConfig,
+  ): Promise<CachedMcpSourceProxy> {
+    const signature = this.getMcpSourceSignature(config);
+    const cached = this.sourceMcpClients.get(sourceSlug);
+    if (cached && cached.signature === signature) {
+      return cached;
+    }
+
+    if (cached) {
+      await cached.client.close().catch(() => undefined);
+    }
+
+    const client = config.type === 'stdio'
+      ? new OperatorMcpClient({
+          transport: 'stdio',
+          command: config.command,
+          args: config.args,
+          env: config.env,
+        })
+      : new OperatorMcpClient({
+          transport: 'http',
+          url: config.url,
+          headers: config.headers,
+        });
+
+    const tools = await client.listTools();
+    const defs = tools.map((tool) => ({
+      name: `mcp__${sourceSlug}__${tool.name}`,
+      description: tool.description || tool.name,
+      inputSchema: (
+        tool.inputSchema
+        && typeof tool.inputSchema === 'object'
+        ? tool.inputSchema as Record<string, unknown>
+        : { type: 'object', properties: {}, additionalProperties: true }
+      ),
+    }));
+
+    const next = {
+      signature,
+      client,
+      defs,
+    };
+    this.sourceMcpClients.set(sourceSlug, next);
+    return next;
+  }
+
+  private async rebuildSourceProxyRegistry(): Promise<void> {
+    const nextDefs: ProxyToolDef[] = [];
+    const nextRoutes = new Map<string, SourceProxyRoute>();
+    const activeMcpSlugs = new Set(Object.keys(this.sourceMcpServers));
+
+    for (const [sourceSlug, cached] of this.sourceMcpClients.entries()) {
+      if (!activeMcpSlugs.has(sourceSlug)) {
+        await cached.client.close().catch(() => undefined);
+        this.sourceMcpClients.delete(sourceSlug);
+      }
+    }
+
+    for (const [sourceSlug, apiServer] of Object.entries(this.sourceApiServers)) {
+      const defs = getPiApiSourceToolProxyDefs(sourceSlug, apiServer);
+      for (const def of defs) {
+        const tool = getPiRegisteredApiSourceTool(sourceSlug, apiServer, def.name);
+        if (!tool?.handler) continue;
+        nextDefs.push(def);
+        nextRoutes.set(def.name, {
+          kind: 'api',
+          sourceSlug,
+          handler: tool.handler,
+        });
+      }
+    }
+
+    for (const [sourceSlug, config] of Object.entries(this.sourceMcpServers)) {
+      try {
+        const cached = await this.getOrCreateMcpSourceProxy(sourceSlug, config);
+        nextDefs.push(...cached.defs);
+        for (const def of cached.defs) {
+          const prefix = `mcp__${sourceSlug}__`;
+          const mcpToolName = def.name.startsWith(prefix)
+            ? def.name.slice(prefix.length)
+            : def.name;
+          nextRoutes.set(def.name, {
+            kind: 'mcp',
+            sourceSlug,
+            mcpToolName,
+          });
+        }
+      } catch (error) {
+        this.debug(
+          `Failed to register Pi MCP source tools for ${sourceSlug}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    this.sourceProxyDefs = nextDefs;
+    this.sourceProxyRoutes = nextRoutes;
+  }
+
+  private async handleToolExecuteRequest(request: {
+    requestId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      const result = await this.routeToolCall(request.toolName, request.args);
+      this.send({
+        type: 'tool_execute_response',
+        requestId: request.requestId,
+        result,
+      });
+    } catch (error) {
+      this.send({
+        type: 'tool_execute_response',
+        requestId: request.requestId,
+        result: {
+          content: error instanceof Error ? error.message : String(error),
+          isError: true,
+        },
+      });
+    }
+  }
+
+  private async routeToolCall(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ content: string; isError: boolean }> {
+    const tool = getPiRegisteredSessionTool(this._sessionId, this.config.workspace.rootPath, toolName);
+    if (tool?.handler) {
+      const result = await tool.handler(args);
+      return this.serializeToolResult(toolName, result);
+    }
+
+    const sourceRoute = this.sourceProxyRoutes.get(toolName);
+    if (!sourceRoute) {
+      return {
+        content: `Unknown proxy tool: ${toolName}`,
+        isError: true,
+      };
+    }
+
+    if (sourceRoute.kind === 'api') {
+      const result = await sourceRoute.handler(args);
+      return this.serializeToolResult(toolName, result);
+    }
+
+    const cached = this.sourceMcpClients.get(sourceRoute.sourceSlug);
+    if (!cached) {
+      return {
+        content: `MCP source client unavailable: ${sourceRoute.sourceSlug}`,
+        isError: true,
+      };
+    }
+
+    const result = await cached.client.callTool(sourceRoute.mcpToolName, args);
+    return this.serializeToolResult(toolName, result);
+  }
+
+  private async serializeToolResult(
+    toolName: string,
+    result: unknown,
+  ): Promise<{ content: string; isError: boolean }> {
+    const payload = result as {
+      content?: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image'; data: string; mimeType: string }
+      >;
+      isError?: boolean;
+    } | null;
+
+    const lines: string[] = [];
+    for (const block of payload?.content || []) {
+      if (!block || typeof block !== 'object') continue;
+      if (block.type === 'text' && typeof block.text === 'string') {
+        lines.push(block.text);
+        continue;
+      }
+      if (
+        block.type === 'image'
+        && typeof block.data === 'string'
+        && typeof block.mimeType === 'string'
+      ) {
+        const savedPath = this.saveToolImage(toolName, block.data, block.mimeType);
+        if (savedPath) {
+          lines.push(
+            `Saved screenshot: ${savedPath}`,
+            '',
+            '```image-preview',
+            JSON.stringify({
+              src: savedPath,
+              title: 'Browser Screenshot',
+            }, null, 2),
+            '```',
+          );
+        } else {
+          lines.push(`Captured image output for ${toolName}, but failed to save it locally.`);
+        }
+      }
+    }
+
+    return {
+      content: lines.join('\n'),
+      isError: !!payload?.isError,
+    };
+  }
+
+  private saveToolImage(toolName: string, base64Data: string, mimeType: string): string | null {
+    try {
+      const dataDir = getSessionDataPath(this.config.workspace.rootPath, this._sessionId);
+      mkdirSync(dataDir, { recursive: true });
+
+      const ext = mimeType === 'image/jpeg' ? 'jpg' : 'png';
+      const safeToolName = toolName.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'tool';
+      const filename = `${safeToolName}-${Date.now()}.${ext}`;
+      const filePath = join(dataDir, filename);
+
+      writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+      return filePath;
+    } catch {
+      return null;
     }
   }
 
@@ -699,8 +1202,13 @@ export class PiAgent extends BaseAgent {
     super.setModel(model);
 
     if (this.subprocess) {
-      this.debug(`Forwarding model change: ${previous} -> ${model}`);
-      this.send({ type: 'set_model', model });
+      const runtimeModel = this.getRuntimeModelPayload(model);
+      this.debug(`Forwarding model change: ${previous} -> ${model} (runtime=${runtimeModel.model})`);
+      this.send({
+        type: 'set_model',
+        model: runtimeModel.model,
+        bedrockTemplateModel: runtimeModel.bedrockTemplateModel,
+      });
     }
   }
 
@@ -709,7 +1217,11 @@ export class PiAgent extends BaseAgent {
     apiServers: Record<string, unknown>,
     intendedSlugs?: string[],
   ): Promise<void> {
+    this.sourceMcpServers = mcpServers;
+    this.sourceApiServers = apiServers;
     await super.setSourceServers(mcpServers, apiServers, intendedSlugs);
+    await this.rebuildSourceProxyRegistry();
+    await this.syncProxyToolsWithSubprocess();
   }
 
   isProcessing(): boolean {
@@ -773,6 +1285,14 @@ export class PiAgent extends BaseAgent {
   override setWorkspace(workspace: Workspace): void {
     super.setWorkspace(workspace);
     this.piSessionId = null;
+    for (const cached of this.sourceMcpClients.values()) {
+      void cached.client.close().catch(() => undefined);
+    }
+    this.sourceMcpClients.clear();
+    this.sourceMcpServers = {};
+    this.sourceApiServers = {};
+    this.sourceProxyDefs = [];
+    this.sourceProxyRoutes.clear();
     this.killSubprocess();
   }
 
@@ -787,6 +1307,10 @@ export class PiAgent extends BaseAgent {
   }
 
   override destroy(): void {
+    for (const cached of this.sourceMcpClients.values()) {
+      void cached.client.close().catch(() => undefined);
+    }
+    this.sourceMcpClients.clear();
     this.killSubprocess();
     super.destroy();
   }

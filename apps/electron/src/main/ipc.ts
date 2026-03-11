@@ -11,6 +11,7 @@ import type { BrowserPaneManager } from './browser-pane-manager'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
+import type { RpcServer } from '../transport/server'
 import {
   IPC_CHANNELS,
   type FileAttachment,
@@ -591,11 +592,16 @@ export function registerIpcHandlers(
   sessionManager: SessionManager,
   windowManager: WindowManager,
   browserPaneManager?: BrowserPaneManager,
+  rpcServer?: RpcServer,
 ): void {
+  if (!rpcServer) {
+    throw new Error('RpcServer is required to register IPC handlers')
+  }
+
   registerSessionHandlers(sessionManager, windowManager)
-  registerWorkspaceWindowHandlers(sessionManager, windowManager)
+  registerWorkspaceWindowHandlers(rpcServer, sessionManager, windowManager)
   if (browserPaneManager) {
-    registerBrowserHandlers(browserPaneManager, windowManager)
+    registerBrowserHandlers(rpcServer, { browserPaneManager, windowManager })
   }
   registerFileOpsHandlers(windowManager, {
     sanitizeFilename,
@@ -606,7 +612,7 @@ export function registerIpcHandlers(
       }
     },
   })
-  registerSystemHandlers()
+  registerSystemHandlers(rpcServer)
 
   // Show logout confirmation dialog
   ipcMain.handle(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION, async () => {
@@ -721,7 +727,7 @@ export function registerIpcHandlers(
   // Register onboarding handlers
   registerOnboardingHandlers(sessionManager)
   registerThemeHandlers(sessionManager, windowManager)
-  registerUiPreferenceHandlers()
+  registerUiPreferenceHandlers(rpcServer)
 
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels

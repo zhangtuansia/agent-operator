@@ -3,12 +3,9 @@ import { readFileSync } from 'node:fs'
 import * as ts from 'typescript'
 import { CHANNEL_MAP } from '../channel-map'
 
-function getElectronApiMethodNames(): string[] {
-  const source = readFileSync(new URL('../../shared/types.ts', import.meta.url), 'utf8')
-  const sourceFile = ts.createSourceFile('types.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-
+function getInterfaceMethodNames(sourceFile: ts.SourceFile, interfaceName: string): string[] {
   for (const statement of sourceFile.statements) {
-    if (!ts.isInterfaceDeclaration(statement) || statement.name.text !== 'ElectronAPI') continue
+    if (!ts.isInterfaceDeclaration(statement) || statement.name.text !== interfaceName) continue
 
     return statement.members
       .filter((member): member is ts.MethodSignature => ts.isMethodSignature(member))
@@ -17,12 +14,21 @@ function getElectronApiMethodNames(): string[] {
       .map((name) => name.text)
   }
 
-  throw new Error('ElectronAPI interface not found')
+  throw new Error(`${interfaceName} interface not found`)
+}
+
+function getChannelMapMethodNames(): string[] {
+  const source = readFileSync(new URL('../../shared/types.ts', import.meta.url), 'utf8')
+  const sourceFile = ts.createSourceFile('types.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const electronApiMethods = getInterfaceMethodNames(sourceFile, 'ElectronAPI')
+  const browserPaneMethods = getInterfaceMethodNames(sourceFile, 'BrowserPaneAPI').map((name) => `browserPane.${name}`)
+
+  return [...electronApiMethods, ...browserPaneMethods]
 }
 
 describe('CHANNEL_MAP parity', () => {
   it('covers every ElectronAPI method exactly once', () => {
-    const apiMethods = new Set(getElectronApiMethodNames())
+    const apiMethods = new Set(getChannelMapMethodNames())
     const channelMapKeys = new Set(Object.keys(CHANNEL_MAP))
 
     const missing = [...apiMethods].filter((name) => !channelMapKeys.has(name))

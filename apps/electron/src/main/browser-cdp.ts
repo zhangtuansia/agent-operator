@@ -413,7 +413,19 @@ export class BrowserCDP {
     }
   }
 
-  async renderTemporaryOverlay(geometries: BrowserElementGeometry[]): Promise<void> {
+  async renderTemporaryOverlay(params: {
+    geometries: BrowserElementGeometry[]
+    includeMetadata?: boolean
+    metadataText?: string
+    includeClickPoints?: boolean
+  }): Promise<void> {
+    const payload = {
+      geometries: params.geometries,
+      includeMetadata: !!params.includeMetadata,
+      metadataText: params.metadataText || '',
+      includeClickPoints: params.includeClickPoints !== false,
+    }
+
     await this.send('Runtime.evaluate', {
       expression: `(() => {
         const existing = document.getElementById('__dazi_browser_overlay__');
@@ -426,9 +438,9 @@ export class BrowserCDP {
         root.style.pointerEvents = 'none';
         root.style.zIndex = '2147483647';
 
-        const geometries = ${JSON.stringify(geometries)};
+        const payload = ${JSON.stringify(payload)};
 
-        for (const geometry of geometries) {
+        for (const geometry of payload.geometries || []) {
           const box = document.createElement('div');
           box.style.position = 'fixed';
           box.style.left = geometry.box.x + 'px';
@@ -454,6 +466,32 @@ export class BrowserCDP {
           label.style.textOverflow = 'ellipsis';
           label.textContent = [geometry.ref, geometry.role, geometry.name].filter(Boolean).join(' • ');
           root.appendChild(label);
+
+          if (payload.includeClickPoints && geometry.clickPoint) {
+            const point = document.createElement('div');
+            point.style.position = 'fixed';
+            point.style.left = (geometry.clickPoint.x - 4) + 'px';
+            point.style.top = (geometry.clickPoint.y - 4) + 'px';
+            point.style.width = '8px';
+            point.style.height = '8px';
+            point.style.borderRadius = '999px';
+            point.style.background = 'rgba(239, 68, 68, 0.98)';
+            root.appendChild(point);
+          }
+        }
+
+        if (payload.includeMetadata && payload.metadataText) {
+          const meta = document.createElement('div');
+          meta.style.position = 'fixed';
+          meta.style.right = '8px';
+          meta.style.bottom = '8px';
+          meta.style.padding = '4px 8px';
+          meta.style.borderRadius = '6px';
+          meta.style.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+          meta.style.background = 'rgba(15, 23, 42, 0.92)';
+          meta.style.color = 'white';
+          meta.textContent = payload.metadataText;
+          root.appendChild(meta);
         }
 
         document.documentElement.appendChild(root);

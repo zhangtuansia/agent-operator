@@ -20,6 +20,7 @@ import type { LoadedSource } from '../../sources/types.ts';
 import type { AuthRequest } from '../session-scoped-tools.ts';
 import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
+import type { AutomationSystem } from '../../automations/index.ts';
 
 // Import AbortReason and RecoveryMessage from core module (single source of truth)
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
@@ -33,6 +34,20 @@ export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.
  * Provider identifier for backend selection.
  */
 export type AgentProvider = 'anthropic' | 'openai' | 'copilot' | 'pi';
+export type AnthropicRuntime = 'claude' | 'operator';
+
+export interface BackendSelection {
+  provider: AgentProvider;
+  anthropicRuntime?: AnthropicRuntime;
+}
+
+export interface BackendHostRuntimeContext {
+  appRootPath: string;
+  resourcesPath?: string;
+  isPackaged: boolean;
+  interceptorBundlePath?: string;
+  nodeRuntimePath?: string;
+}
 
 
 // ============================================================
@@ -302,6 +317,13 @@ export interface BackendConfig {
   provider: AgentProvider;
 
   /**
+   * Anthropic runtime implementation to instantiate.
+   * - `claude`: shared ClaudeAgent backend
+   * - `operator`: app runtime used by Electron sessions today
+   */
+  anthropicRuntime?: AnthropicRuntime;
+
+  /**
    * Full provider type from LLM connection.
    * Includes compat variants and cloud providers.
    * Used for routing validation, credential lookup, etc.
@@ -345,6 +367,9 @@ export interface BackendConfig {
 
   /** System prompt preset ('default' | 'mini' | custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+
+  /** Workspace-level automation system (Operator runtime only) */
+  automationSystem?: AutomationSystem;
 
   /**
    * Custom CODEX_HOME directory for per-session configuration (Codex backend only).

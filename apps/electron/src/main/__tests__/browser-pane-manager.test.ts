@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { BROWSER_TOOLBAR_CHANNELS } from '../../shared/types'
+import { resolveBrowserLiveFxBorder } from '../../shared/browser-live-fx'
 
 const createdWindows: any[] = []
 const createdViews: any[] = []
@@ -248,6 +250,13 @@ mock.module('../browser-cdp', () => ({
         box: { x: 10, y: 20, width: 100, height: 40 },
         clickPoint: { x: 60, y: 40 },
       }))
+      this.getViewportMetrics = mock(async () => ({
+        width: 1280,
+        height: 720,
+        dpr: 2,
+        scrollX: 0,
+        scrollY: 0,
+      }))
       this.clickElement = mock(async (ref: string) => this.getElementGeometry(ref))
       this.clickAtCoordinates = mock(async () => {})
       this.drag = mock(async () => {})
@@ -264,6 +273,7 @@ mock.module('../browser-cdp', () => ({
     detach: any
     getAccessibilitySnapshot: any
     getElementGeometry: any
+    getViewportMetrics: any
     clickElement: any
     clickAtCoordinates: any
     drag: any
@@ -278,6 +288,10 @@ mock.module('../browser-cdp', () => ({
 }))
 
 const { BrowserPaneManager } = await import('../browser-pane-manager')
+
+function getToolbarHandler(channel: string): ((...args: any[]) => Promise<unknown>) | undefined {
+  return (mockIpcMainHandle as any).mock.calls.find((call: any[]) => call[0] === channel)?.[1]
+}
 
 describe('BrowserPaneManager', () => {
   let manager: InstanceType<typeof BrowserPaneManager>
@@ -332,9 +346,63 @@ describe('BrowserPaneManager', () => {
 
     expect(result.format).toBe('png')
     expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-    expect(result.metadata).toEqual({ annotatedRefs: ['@e1'] })
+    expect(result.metadata).toMatchObject({
+      mode: 'agent',
+      annotatedRefs: ['@e1'],
+      viewport: { width: 1280, height: 720, dpr: 2, scrollX: 0, scrollY: 0 },
+      targets: [
+        {
+          ref: '@e1',
+          role: 'button',
+          name: 'Continue',
+        },
+      ],
+    })
     expect(cdp.renderTemporaryOverlay).toHaveBeenCalledTimes(1)
     expect(cdp.clearTemporaryOverlay).toHaveBeenCalledTimes(1)
+  })
+
+  it('includes last action geometry in annotated screenshots when requested', async () => {
+    const id = manager.createInstance({ id: 'pane-last-action' })
+    const record = (manager as any).instances.get(id)
+    record.lastAction = {
+      tool: 'browser_click',
+      ref: '@e-last',
+      status: 'succeeded',
+      timestamp: Date.now(),
+      geometry: {
+        ref: '@e-last',
+        role: 'button',
+        name: 'Last Action',
+        box: { x: 40, y: 60, width: 90, height: 32 },
+        clickPoint: { x: 85, y: 76 },
+      },
+    }
+
+    const result = await manager.screenshot(id, { annotate: true, includeLastAction: true, includeMetadata: true })
+
+    expect(result.metadata?.annotatedRefs).toEqual(['@e1', '@e-last'])
+    expect((record.cdp.renderTemporaryOverlay as any).mock.calls[0]?.[0]).toMatchObject({
+      includeMetadata: true,
+      includeClickPoints: true,
+    })
+  })
+
+  it('records failed lastAction on browser interactions', async () => {
+    manager.createInstance({ id: 'pane-last-action-fail' })
+    const record = (manager as any).instances.get('pane-last-action-fail')
+    record.cdp.clickElement = mock(async () => { throw new Error('click failed') })
+    record.cdp.fillElement = mock(async () => { throw new Error('fill failed') })
+    record.cdp.selectOption = mock(async () => { throw new Error('select failed') })
+
+    await expect(manager.clickElement('pane-last-action-fail', '@e1')).rejects.toThrow('click failed')
+    expect(record.lastAction).toMatchObject({ tool: 'browser_click', ref: '@e1', status: 'failed' })
+
+    await expect(manager.fillElement('pane-last-action-fail', '@e2', 'hello')).rejects.toThrow('fill failed')
+    expect(record.lastAction).toMatchObject({ tool: 'browser_fill', ref: '@e2', status: 'failed' })
+
+    await expect(manager.selectOption('pane-last-action-fail', '@e3', 'opt-1')).rejects.toThrow('select failed')
+    expect(record.lastAction).toMatchObject({ tool: 'browser_select', ref: '@e3', status: 'failed' })
   })
 
   it('registers toolbar IPC handlers once', () => {
@@ -362,6 +430,111 @@ describe('BrowserPaneManager', () => {
 
     expect(manager.listInstances()[0]?.agentControlActive).toBe(false)
     expect(record.lockState.active).toBe(false)
+  })
+
+  it('applies shared live FX border styling to the native overlay', async () => {
+    const id = manager.createInstance({ id: 'pane-overlay-style', bindToSessionId: 'session-overlay-style', ownerType: 'session' })
+    const record = (manager as any).instances.get(id)
+    record.nativeOverlayReady = true
+
+    manager.setAgentControl('session-overlay-style', { displayName: 'Browser', intent: 'Click Continue' })
+    await Promise.resolve()
+
+    const calls = record.nativeOverlayView.webContents.executeJavaScript.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const script = String(calls[calls.length - 1][0])
+    const expectedBorder = resolveBrowserLiveFxBorder((manager as any).getResolvedAccentColor())
+    expect(script).toContain(expectedBorder.color)
+    expect(script).toContain(expectedBorder.boxShadow)
+    expect(script).toContain("shield.style.cursor = 'not-allowed'")
+  })
+
+  it('resets native overlay styling back to idle when menu overlay stays active after agent control clears', async () => {
+    const id = manager.createInstance({ id: 'pane-overlay-reset', bindToSessionId: 'session-overlay-reset', ownerType: 'session' })
+    const record = (manager as any).instances.get(id)
+    record.nativeOverlayReady = true
+    manager.registerToolbarIpc()
+
+    const menuGeometryHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.MENU_GEOMETRY)
+    await menuGeometryHandler?.({}, id, true, 120)
+
+    manager.setAgentControl('session-overlay-reset', { displayName: 'Browser', intent: 'Click Continue' })
+    manager.clearAgentControl('session-overlay-reset')
+    await Promise.resolve()
+
+    const calls = record.nativeOverlayView.webContents.executeJavaScript.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const script = String(calls[calls.length - 1][0])
+    expect(script).toContain("overlay.style.borderColor = 'transparent'")
+    expect(script).toContain("overlay.style.boxShadow = 'none'")
+    expect(script).toContain("shield.style.cursor = 'default'")
+  })
+
+  it('expands toolbar menu overlay and hides it through toolbar IPC', async () => {
+    const id = manager.createInstance({ id: 'pane-toolbar-menu' })
+    const record = (manager as any).instances.get(id)
+    manager.registerToolbarIpc()
+
+    const menuGeometryHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.MENU_GEOMETRY)
+    const hideHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.HIDE)
+
+    expect(menuGeometryHandler).toBeDefined()
+    expect(hideHandler).toBeDefined()
+
+    await menuGeometryHandler?.({}, id, true, 120)
+
+    expect(record.toolbarMenuOpen).toBe(true)
+    expect(record.toolbarMenuOverlayActive).toBe(true)
+    expect(record.toolbarView.setBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 1240, height: 860 })
+
+    await hideHandler?.({}, id)
+
+    expect(record.toolbarMenuOpen).toBe(false)
+    expect(record.toolbarMenuOverlayActive).toBe(false)
+    expect(record.toolbarView.webContents.send).toHaveBeenCalledWith(
+      BROWSER_TOOLBAR_CHANNELS.FORCE_CLOSE_MENU,
+      { reason: 'window-hidden' },
+    )
+  })
+
+  it('closes the toolbar menu when the native overlay is tapped', async () => {
+    const id = manager.createInstance({ id: 'pane-overlay-tap' })
+    const record = (manager as any).instances.get(id)
+    manager.registerToolbarIpc()
+
+    const menuGeometryHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.MENU_GEOMETRY)
+    await menuGeometryHandler?.({}, id, true, 120)
+
+    const preventDefault = mock(() => {})
+    record.nativeOverlayView.webContents._emit('before-input-event', { preventDefault }, { type: 'mouseDown' })
+
+    expect(preventDefault).toHaveBeenCalled()
+    expect(record.toolbarMenuOpen).toBe(false)
+    expect(record.toolbarMenuOverlayActive).toBe(false)
+    expect(record.toolbarView.webContents.send).toHaveBeenCalledWith(
+      BROWSER_TOOLBAR_CHANNELS.FORCE_CLOSE_MENU,
+      { reason: 'overlay-tap' },
+    )
+  })
+
+  it('pushes toolbar theme color updates when page theme changes', async () => {
+    const id = manager.createInstance({ id: 'pane-theme-color' })
+    const record = (manager as any).instances.get(id)
+    record.toolbarReady = true
+    record.pageView.webContents.getURL = mock(() => 'https://example.com/app')
+    record.pageView.webContents.executeJavaScript = mock(async () => '#112233')
+
+    await (manager as any).updateThemeColor(record)
+
+    expect(record.info.themeColor).toBe('#112233')
+    expect(record.toolbarView.webContents.send).toHaveBeenCalledWith(
+      BROWSER_TOOLBAR_CHANNELS.THEME_COLOR,
+      '#112233',
+    )
+    expect(record.toolbarView.webContents.send).toHaveBeenCalledWith(
+      BROWSER_TOOLBAR_CHANNELS.STATE_UPDATE,
+      expect.objectContaining({ themeColor: '#112233' }),
+    )
   })
 
   it('supports advanced input actions, wait, clipboard, console, and network logs', async () => {
@@ -514,6 +687,27 @@ describe('BrowserPaneManager', () => {
 
     await Promise.resolve()
 
+    expect(mockShellOpenExternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('handles browser empty-state launch through the IPC bridge', async () => {
+    const id = manager.createInstance({ id: 'pane-empty-state-ipc' })
+    const record = (manager as any).instances.get(id)
+
+    const first = await manager.handleEmptyStateLaunchFromRenderer(record.pageView.webContents.id, {
+      route: 'allChats/new?input=hello',
+      token: 'ipc-1',
+    })
+
+    expect(first).toEqual({ ok: true, handled: true, reason: undefined })
+    expect(mockShellOpenExternal).toHaveBeenCalledWith('agentoperator://allChats/new?input=hello')
+
+    const second = await manager.handleEmptyStateLaunchFromRenderer(record.pageView.webContents.id, {
+      route: 'allChats/new?input=hello',
+      token: 'ipc-1',
+    })
+
+    expect(second).toEqual({ ok: true, handled: false, reason: 'duplicate' })
     expect(mockShellOpenExternal).toHaveBeenCalledTimes(1)
   })
 
