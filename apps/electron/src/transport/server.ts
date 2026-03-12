@@ -1,6 +1,6 @@
 import { createServer, type Server as HttpServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { Server as WebSocketServer, type WebSocket as WsSocket } from 'ws'
+import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 
 export interface RequestContext {
   clientId?: string

@@ -50,6 +50,22 @@ export function registerFileOpsHandlers(
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.READ_FILE_OPTIONAL, async (_event, path: string) => {
+    options.applyFileOpsRateLimit('READ_FILE_OPTIONAL')
+
+    try {
+      const safePath = await options.validateFilePath(path)
+      return await readFile(safePath, 'utf-8')
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('readFileOptional error:', message)
+      throw new Error(`Failed to read file: ${message}`)
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.OPEN_FILE_DIALOG, async (_event, dialogOptions?: { filters?: { name: string; extensions: string[] }[] }) => {
     const defaultFilters = [
       { name: 'All Supported', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'txt', 'md', 'json', 'js', 'ts', 'tsx', 'jsx', 'py', 'css', 'html', 'xml', 'yaml', 'yml'] },

@@ -548,6 +548,7 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
+  readFileOptional(path: string): Promise<string | null>
   openFileDialog(options?: { filters?: { name: string; extensions: string[] }[] }): Promise<string[]>
   readFileAttachment(path: string): Promise<FileAttachment | null>
   storeAttachment(sessionId: string, attachment: FileAttachment): Promise<CoreStoredAttachment>

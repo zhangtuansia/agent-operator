@@ -60,6 +60,7 @@ export const CHANNEL_MAP = {
 
   // File operations
   readFile: invoke(IPC_CHANNELS.READ_FILE),
+  readFileOptional: invoke(IPC_CHANNELS.READ_FILE_OPTIONAL),
   openFileDialog: invoke(IPC_CHANNELS.OPEN_FILE_DIALOG),
   readFileAttachment: invoke(IPC_CHANNELS.READ_FILE_ATTACHMENT),
   storeAttachment: invoke(IPC_CHANNELS.STORE_ATTACHMENT),

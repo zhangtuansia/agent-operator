@@ -18,7 +18,8 @@ import { parseAutomationsConfig, type AutomationListItem, type TestResult, type 
 
 async function loadAutomationsFromDisk(rootPath: string): Promise<AutomationListItem[]> {
   const automationsPath = `${rootPath}/automations.json`
-  const content = await window.electronAPI.readFile(automationsPath)
+  const content = await window.electronAPI.readFileOptional(automationsPath)
+  if (!content) return []
   return parseAutomationsConfig(JSON.parse(content))
 }
 
