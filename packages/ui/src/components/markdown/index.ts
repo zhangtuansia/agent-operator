@@ -15,3 +15,4 @@ export { MarkdownMermaidBlock, type MarkdownMermaidBlockProps } from './Markdown
 export { MarkdownExcalidrawBlock, type MarkdownExcalidrawBlockProps } from './MarkdownExcalidrawBlock'
 export { MarkdownDiffBlock, type MarkdownDiffBlockProps } from './MarkdownDiffBlock'
 export { MarkdownJsonBlock, type MarkdownJsonBlockProps } from './MarkdownJsonBlock'
+export { MarkdownLatexBlock } from './MarkdownLatexBlock'

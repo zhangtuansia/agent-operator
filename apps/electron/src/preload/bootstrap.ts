@@ -1,3 +1,4 @@
+import '@sentry/electron/preload'
 import { contextBridge, ipcRenderer } from 'electron'
 import { buildClientApi } from '../transport/build-api'
 import { WsRpcClient } from '../transport/client'

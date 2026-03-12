@@ -1,7 +1,10 @@
 import * as React from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
 import { cn } from '../../lib/utils'
 import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
@@ -12,11 +15,13 @@ import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { MarkdownExcalidrawBlock } from './MarkdownExcalidrawBlock'
 import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
 import { MarkdownPdfBlock } from './MarkdownPdfBlock'
+import { MarkdownLatexBlock } from './MarkdownLatexBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
 import { wrapWithSafeProxy } from './safe-components'
+import { MARKDOWN_MATH_OPTIONS } from './math-options'
 
 /**
  * Render modes for markdown content:
@@ -358,6 +363,10 @@ function createComponents(
           if (lower === 'pdf-preview') {
             return <MarkdownPdfBlock code={code} className="my-1" />
           }
+          // LaTeX/math code blocks → KaTeX rendered display math
+          if (lower === 'latex' || lower === 'math') {
+            return <MarkdownLatexBlock code={code} className="my-1" />
+          }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
           // content in the message — TurnCard's own fullscreen button occupies
@@ -643,7 +652,15 @@ export function Markdown({
 
   // Conditionally include the collapsible sections plugin
   const remarkPlugins = React.useMemo(
-    () => collapsible ? [remarkGfm, remarkCollapsibleSections] : [remarkGfm],
+    () => {
+      const mathPlugin: [typeof remarkMath, typeof MARKDOWN_MATH_OPTIONS] = [
+        remarkMath,
+        MARKDOWN_MATH_OPTIONS,
+      ]
+      return collapsible
+        ? [remarkGfm, mathPlugin, remarkCollapsibleSections]
+        : [remarkGfm, mathPlugin]
+    },
     [collapsible]
   )
 
@@ -651,7 +668,7 @@ export function Markdown({
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeKatex, rehypeRaw]}
         components={components}
       >
         {processedContent}

@@ -12,9 +12,9 @@
     "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.55.0",
+    "@mariozechner/pi-coding-agent": "^0.56.3",
     "@mariozechner/pi-agent-core": "0.55.0",
-    "@mariozechner/pi-ai": "0.55.0",
+    "@mariozechner/pi-ai": "^0.57.0",
     "@sinclair/typebox": "^0.34.41",
     "duck-duck-scrape": "^2.2.7"
     ,

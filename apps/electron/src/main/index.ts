@@ -6,7 +6,52 @@ loadShellEnv()
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
+import { hostname, homedir } from 'os'
+import * as Sentry from '@sentry/electron/main'
+
+// Initialize Sentry error tracking as early as possible after app import.
+// Only enabled when SENTRY_ELECTRON_INGEST_URL is set (baked in at build time or via .env).
+Sentry.init({
+  dsn: process.env.SENTRY_ELECTRON_INGEST_URL,
+  environment: app.isPackaged ? 'production' : 'development',
+  release: app.getVersion(),
+  enabled: !!process.env.SENTRY_ELECTRON_INGEST_URL,
+
+  beforeSend(event) {
+    // Scrub request headers (authorization, cookies)
+    if (event.request?.headers) {
+      const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key']
+      for (const header of sensitiveHeaders) {
+        if (event.request.headers[header]) {
+          event.request.headers[header] = '[REDACTED]'
+        }
+      }
+    }
+
+    // Scrub breadcrumb data that may contain sensitive values
+    if (event.breadcrumbs) {
+      for (const breadcrumb of event.breadcrumbs) {
+        if (breadcrumb.data) {
+          for (const key of Object.keys(breadcrumb.data)) {
+            const lowerKey = key.toLowerCase()
+            if (lowerKey.includes('token') || lowerKey.includes('key') ||
+                lowerKey.includes('secret') || lowerKey.includes('password') ||
+                lowerKey.includes('credential') || lowerKey.includes('auth')) {
+              breadcrumb.data[key] = '[REDACTED]'
+            }
+          }
+        }
+      }
+    }
+
+    return event
+  },
+})
+
+// Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
+const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
+Sentry.setUser({ id: machineId })
 import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
