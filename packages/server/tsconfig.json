@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node", "bun"],
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "baseUrl": ".",
+    "paths": {
+      "@agent-operator/shared": ["../shared/src/index.ts"],
+      "@agent-operator/shared/*": ["../shared/src/*"],
+      "@agent-operator/server-core": ["../server-core/src/index.ts"],
+      "@agent-operator/server-core/*": ["../server-core/src/*"],
+      "@agent-operator/core": ["../core/src/index.ts"],
+      "@agent-operator/core/*": ["../core/src/*"]
+    }
+  },
+  "include": ["src/**/*", "../shared/src/agent/bash-parser.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

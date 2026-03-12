@@ -63,6 +63,7 @@
     "./views/storage": "./src/views/storage.ts",
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
+    "./protocol": "./src/protocol/index.ts",
     "./permissions": "./src/permissions/index.ts",
     "./ipc": "./src/ipc/index.ts",
     "./ipc/schemas": "./src/ipc/schemas.ts",

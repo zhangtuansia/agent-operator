@@ -16,3 +16,21 @@ export { MarkdownExcalidrawBlock, type MarkdownExcalidrawBlockProps } from './Ma
 export { MarkdownDiffBlock, type MarkdownDiffBlockProps } from './MarkdownDiffBlock'
 export { MarkdownJsonBlock, type MarkdownJsonBlockProps } from './MarkdownJsonBlock'
 export { MarkdownLatexBlock } from './MarkdownLatexBlock'
+export {
+  TiptapMarkdownEditor,
+  type TiptapMarkdownEditorProps,
+  type MarkdownEngine,
+  preprocessMarkdownForOfficial,
+  postprocessMarkdownFromOfficial,
+  isMermaidFilename,
+  extractMermaidSource,
+} from './TiptapMarkdownEditor'
+export { TiptapBubbleMenus } from './TiptapBubbleMenus'
+export { TiptapHoverActionsHost, TiptapHoverActions, TiptapHoverActionButton } from './TiptapHoverActions'
+export { tiptapCodeBlock } from './TiptapCodeBlockView'
+export {
+  type SlashCommandItem,
+  createSlashCommandItems,
+  filterSlashCommandItems,
+  isSlashSuggestionActive,
+} from './TiptapSlashMenu'

@@ -1,0 +1,24 @@
+{
+  "name": "@agent-operator/cli",
+  "version": "0.7.1",
+  "description": "Terminal client for Dazi server",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "cowork-cli": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/"
+  },
+  "dependencies": {
+    "@agent-operator/shared": "workspace:*",
+    "@agent-operator/server-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^22.0.0",
+    "@types/bun": "latest"
+  }
+}
