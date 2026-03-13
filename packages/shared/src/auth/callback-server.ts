@@ -40,6 +40,10 @@ export interface CreateCallbackServerOptions {
   appType?: AppType;
   /** Deep link URL to redirect to after successful auth (e.g., craftagents://auth-complete) */
   deeplinkUrl?: string;
+  /** Optional fixed callback port. When omitted, the server probes the default range. */
+  port?: number;
+  /** Allowed callback paths. Defaults to ['/callback']. */
+  callbackPaths?: string[];
 }
 
 /**
@@ -53,6 +57,7 @@ export interface CreateCallbackServerOptions {
 export async function createCallbackServer(options?: CreateCallbackServerOptions): Promise<CallbackServer> {
   const appType = options?.appType ?? 'terminal';
   const deeplinkUrl = options?.deeplinkUrl;
+  const callbackPaths = new Set(options?.callbackPaths?.length ? options.callbackPaths : ['/callback']);
 
   let server: Server | null = null;
   let boundPort: number | null = null;
@@ -70,7 +75,7 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     try {
       const url = new URL(req.url || '/', `http://localhost:${boundPort}`);
 
-      if (url.pathname !== '/callback') {
+      if (!callbackPaths.has(url.pathname)) {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('Not found');
         return;
@@ -131,11 +136,14 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     }
   };
 
+  const candidatePorts = options?.port != null
+    ? [options.port]
+    : Array.from({ length: MAX_PORT_ATTEMPTS }, (_, i) => START_PORT + i);
+
   // Try binding the real server directly on each candidate port.
   // This eliminates the TOCTOU race: the port we return is the port we're
   // actually listening on — no gap between check and bind.
-  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
-    const port = START_PORT + i;
+  for (const port of candidatePorts) {
     const candidate = createHttpServer(requestHandler);
 
     try {
@@ -161,6 +169,9 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
   }
 
   if (server === null || boundPort === null) {
+    if (options?.port != null) {
+      throw new Error(`Callback port ${options.port} is already in use`);
+    }
     throw new Error(`No available port found in range ${START_PORT}-${START_PORT + MAX_PORT_ATTEMPTS - 1}`);
   }
 

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SavedWindow } from './window-state'
 import { findBundledResourcePath } from './resource-paths'
+import type { IWindowManager } from '@agent-operator/server-core/handlers'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -81,7 +82,7 @@ export interface CreateWindowOptions {
   restoreUrl?: string
 }
 
-export class WindowManager {
+export class WindowManager implements IWindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
   private pendingDeepLinks: Map<number, { view?: string; action?: string; actionParams?: Record<string, string> }> = new Map()  // webContents.id → pending deep link

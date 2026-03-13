@@ -6,7 +6,15 @@
  */
 
 import type { BaseEventPayload } from './event-bus.ts';
-import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
+import type {
+  AutomationEvent,
+  AutomationMatcher,
+  PromptReferences,
+  AgentEvent,
+  SdkAutomationInput,
+  PromptAction,
+  PendingPrompt,
+} from './types.ts';
 import { matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
 
@@ -71,6 +79,45 @@ export function parsePromptReferences(prompt: string): PromptReferences {
   }
 
   return { mentions };
+}
+
+// ============================================================================
+// Prompt Expansion Utilities
+// ============================================================================
+
+/**
+ * Expand prompt actions for a matcher into PendingPrompt entries.
+ * Shared by app-event handlers and SDK hook execution so both paths stay aligned.
+ */
+export function buildPendingPromptsForMatcher(
+  matcher: AutomationMatcher,
+  env: Record<string, string>,
+  sessionId?: string
+): PendingPrompt[] {
+  const pendingPrompts: PendingPrompt[] = [];
+
+  for (const action of matcher.actions) {
+    if (action.type !== 'prompt') continue;
+
+    const prompt = action as PromptAction;
+    const expandedPrompt = expandEnvVars(prompt.prompt, env);
+    const references = parsePromptReferences(expandedPrompt);
+    const expandedLabels = matcher.labels?.map(label => expandEnvVars(label, env));
+
+    pendingPrompts.push({
+      sessionId,
+      matcherId: matcher.id,
+      automationName: matcher.name,
+      prompt: expandedPrompt,
+      mentions: references.mentions,
+      labels: expandedLabels,
+      permissionMode: matcher.permissionMode,
+      llmConnection: prompt.llmConnection,
+      model: prompt.model,
+    });
+  }
+
+  return pendingPrompts;
 }
 
 // ============================================================================

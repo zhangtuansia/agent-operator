@@ -82,6 +82,10 @@ export function encodeIconToDataUrl(iconPath: string | undefined): string | unde
   }
 }
 
+export async function encodeIconToDataUrlAsync(iconPath: string | undefined): Promise<string | undefined> {
+  return encodeIconToDataUrl(iconPath);
+}
+
 /**
  * Get the emoji value if the input is an emoji, otherwise undefined.
  * Used for ToolDisplayMeta where we might want to display emoji as icon.

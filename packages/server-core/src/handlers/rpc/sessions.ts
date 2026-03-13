@@ -1,17 +1,24 @@
-import { readFile, writeFile, stat } from 'fs/promises'
+import { readFile, writeFile, stat, readdir } from 'fs/promises'
 import { join } from 'path'
-import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@agent-operator/shared/protocol'
+import { RPC_CHANNELS, type CreateSessionOptions, type FileAttachment, type SendMessageOptions, type SessionEvent, type SessionFile, type SessionFilesChangedEvent, type SessionFilesResult, type SessionFileScope } from '@agent-operator/shared/protocol'
 import type { StoredAttachment } from '@agent-operator/core/types'
 import { getWorkspaceByNameOrId } from '@agent-operator/shared/config'
+import { ImportSessionsArgsSchema, CreateSessionOptionsSchema } from '@agent-operator/shared/ipc/schemas'
+import { parseAnthropicExport, parseOpenAIExport } from '@agent-operator/shared/importers'
+import { createImportedSession, createSubSession } from '@agent-operator/shared/sessions'
 import { perf } from '@agent-operator/shared/utils'
 import { isValidThinkingLevel } from '@agent-operator/shared/agent/thinking-levels'
 import { pushTyped, type RpcServer } from '@agent-operator/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 interface ClientSessionWatchState {
-  watcher: import('fs').FSWatcher
+  sessionWatcher: import('fs').FSWatcher | null
+  workspaceWatcher: import('fs').FSWatcher | null
   sessionId: string
+  sessionPath: string
+  workspacePath: string | null
   debounceTimer: ReturnType<typeof setTimeout> | null
+  pendingChanges: Map<SessionFileScope, string | undefined>
 }
 
 // Per-client session file watcher state (supports concurrent windows/clients safely)
@@ -30,21 +37,24 @@ export function cleanupSessionFileWatchForClient(clientId: string): void {
     state.debounceTimer = null
   }
 
-  state.watcher.close()
+  state.sessionWatcher?.close()
+  state.workspaceWatcher?.close()
   clientSessionWatches.delete(clientId)
 }
 
 // Recursive directory scanner for session files
 // Filters out internal files (session.jsonl) and hidden files (. prefix)
 // Returns only non-empty directories
-async function scanSessionDirectory(dirPath: string): Promise<import('@agent-operator/shared/protocol').SessionFile[]> {
-  const { readdir, stat } = await import('fs/promises')
+const WORKSPACE_EXCLUDED_DIRS = ['sessions', 'sources', 'skills', 'statuses', 'labels']
+
+async function scanSessionDirectory(dirPath: string, excludeDirs: string[] = []): Promise<SessionFile[]> {
   const entries = await readdir(dirPath, { withFileTypes: true })
-  const files: import('@agent-operator/shared/protocol').SessionFile[] = []
+  const files: SessionFile[] = []
 
   for (const entry of entries) {
     // Skip internal and hidden files
     if (entry.name === 'session.jsonl' || entry.name.startsWith('.')) continue
+    if (excludeDirs.includes(entry.name)) continue
 
     const fullPath = join(dirPath, entry.name)
 
@@ -83,7 +93,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY,
   RPC_CHANNELS.sessions.MARK_ALL_READ,
   RPC_CHANNELS.sessions.CREATE,
+  RPC_CHANNELS.sessions.CREATE_SUB_SESSION,
   RPC_CHANNELS.sessions.DELETE,
+  RPC_CHANNELS.sessions.IMPORT,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
   RPC_CHANNELS.sessions.CANCEL,
@@ -96,6 +108,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE,
   RPC_CHANNELS.sessions.SEARCH_CONTENT,
   RPC_CHANNELS.sessions.GET_FILES,
+  RPC_CHANNELS.sessions.GET_FILES_BY_SCOPE,
   RPC_CHANNELS.sessions.GET_NOTES,
   RPC_CHANNELS.sessions.SET_NOTES,
   RPC_CHANNELS.sessions.WATCH_FILES,
@@ -105,6 +118,83 @@ export const HANDLED_CHANNELS = [
 export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager, platform } = deps
   const log = platform.logger
+
+  async function getWorkspacePathForSession(sessionId: string): Promise<string | null> {
+    const session = await sessionManager.getSession(sessionId)
+    if (!session?.workspaceId) return null
+    const workspace = getWorkspaceByNameOrId(session.workspaceId)
+    return workspace?.rootPath ?? null
+  }
+
+  function isInternalPath(scope: SessionFileScope, relativePath: string | null): boolean {
+    if (!relativePath) return false
+    const normalized = relativePath.replace(/\\/g, '/')
+    const basename = normalized.split('/').pop() || ''
+    if (basename.startsWith('.')) return true
+    if (basename === 'session.jsonl' || normalized.includes('/session.jsonl')) return true
+
+    if (scope === 'workspace') {
+      for (const excluded of WORKSPACE_EXCLUDED_DIRS) {
+        if (normalized === excluded || normalized.startsWith(`${excluded}/`)) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  function flushPendingChanges(clientId: string, state: ClientSessionWatchState): void {
+    if (state.pendingChanges.size === 0) return
+
+    const events: SessionFilesChangedEvent[] = [...state.pendingChanges.entries()].map(
+      ([scope, changedPath]) => ({
+        sessionId: state.sessionId,
+        scope,
+        changedPath,
+      }),
+    )
+    state.pendingChanges.clear()
+
+    for (const payload of events) {
+      pushTyped(server, RPC_CHANNELS.sessions.FILES_CHANGED, { to: 'client', clientId }, payload)
+    }
+  }
+
+  function queueFileChange(
+    clientId: string,
+    state: ClientSessionWatchState,
+    scope: SessionFileScope,
+    rootPath: string,
+    filename: string | Buffer | null,
+  ): void {
+    const relativePath = filename ? filename.toString() : null
+    if (isInternalPath(scope, relativePath)) return
+
+    const changedPath = relativePath ? join(rootPath, relativePath) : undefined
+    state.pendingChanges.set(scope, changedPath)
+
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer)
+    }
+
+    state.debounceTimer = setTimeout(() => flushPendingChanges(clientId, state), 120)
+  }
+
+  async function createWatcher(
+    pathToWatch: string,
+    onChange: (filename: string | Buffer | null) => void,
+  ): Promise<import('fs').FSWatcher | null> {
+    const { existsSync, watch } = await import('fs')
+    if (!existsSync(pathToWatch)) return null
+
+    try {
+      return watch(pathToWatch, { recursive: true }, (_eventType, filename) => onChange(filename))
+    } catch (error) {
+      log.warn(`Recursive watch unavailable for ${pathToWatch}, falling back to non-recursive`, error)
+      return watch(pathToWatch, { recursive: false }, (_eventType, filename) => onChange(filename))
+    }
+  }
 
   // Get all sessions for the calling window's workspace
   // Waits for initialization to complete so sessions are never returned empty during startup
@@ -151,9 +241,81 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     return session
   })
 
+  server.handle(RPC_CHANNELS.sessions.CREATE_SUB_SESSION, async (_ctx, workspaceId: string, parentSessionId: string, options?: unknown) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`)
+    }
+
+    const validatedOptions = options
+      ? CreateSessionOptionsSchema.parse(options) as CreateSessionOptions
+      : undefined
+
+    const session = await createSubSession(workspace.rootPath, parentSessionId, validatedOptions)
+    sessionManager.reloadSessions?.()
+    return session
+  })
+
   // Delete a session
   server.handle(RPC_CHANNELS.sessions.DELETE, async (_ctx, sessionId: string) => {
     return sessionManager.deleteSession(sessionId)
+  })
+
+  server.handle(RPC_CHANNELS.sessions.IMPORT, async (_ctx, args: unknown) => {
+    const validated = ImportSessionsArgsSchema.parse(args)
+    const workspace = getWorkspaceByNameOrId(validated.workspaceId)
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${validated.workspaceId}`)
+    }
+
+    let fileContent: string
+    if (validated.filePath.toLowerCase().endsWith('.zip')) {
+      const AdmZip = (await import('adm-zip')).default
+      const zip = new AdmZip(validated.filePath)
+      const entries = zip.getEntries()
+
+      let jsonEntry = null
+      if (validated.source === 'openai') {
+        jsonEntry = entries.find((entry) => entry.entryName === 'conversations.json' || entry.entryName.endsWith('/conversations.json'))
+      } else {
+        jsonEntry = entries.find((entry) =>
+          entry.entryName.endsWith('.json')
+          && !entry.entryName.startsWith('__MACOSX')
+          && !entry.entryName.includes('/.'),
+        )
+      }
+
+      if (!jsonEntry) {
+        throw new Error(`No valid JSON file found in zip archive. Expected ${validated.source === 'openai' ? 'conversations.json' : 'a JSON file'}.`)
+      }
+
+      fileContent = jsonEntry.getData().toString('utf-8')
+    } else {
+      fileContent = await readFile(validated.filePath, 'utf-8')
+    }
+
+    const parseResult = validated.source === 'openai'
+      ? parseOpenAIExport(fileContent)
+      : parseAnthropicExport(fileContent)
+
+    const label = `imported:${validated.source}`
+    for (const conversation of parseResult.conversations) {
+      createImportedSession(workspace.rootPath, {
+        name: conversation.title,
+        labels: [label],
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+        messages: conversation.messages,
+      })
+    }
+
+    sessionManager.reloadSessions?.()
+
+    return {
+      imported: parseResult.imported,
+      failed: parseResult.failed,
+      errors: parseResult.errors,
+    }
   })
 
   // Send a message to a session (with optional file attachments)
@@ -359,14 +521,46 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // ============================================================
 
   // Get files in session directory (recursive tree structure)
-  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (_ctx, sessionId: string) => {
+  server.handle(RPC_CHANNELS.sessions.GET_FILES, async (_ctx, sessionId: string): Promise<SessionFilesResult> => {
     const sessionPath = sessionManager.getSessionPath(sessionId)
-    if (!sessionPath) return []
+    const workspacePath = await getWorkspacePathForSession(sessionId)
+
+    const result: SessionFilesResult = {
+      sessionFiles: [],
+      workspaceFiles: [],
+    }
+
+    if (!sessionPath) return result
 
     try {
-      return await scanSessionDirectory(sessionPath)
+      result.sessionFiles = await scanSessionDirectory(sessionPath)
     } catch (error) {
       log.error('Failed to get session files:', error)
+    }
+
+    if (workspacePath) {
+      try {
+        result.workspaceFiles = await scanSessionDirectory(workspacePath, WORKSPACE_EXCLUDED_DIRS)
+      } catch (error) {
+        log.error('Failed to get workspace files:', error)
+      }
+    }
+
+    return result
+  })
+
+  server.handle(RPC_CHANNELS.sessions.GET_FILES_BY_SCOPE, async (_ctx, sessionId: string, scope: SessionFileScope): Promise<SessionFile[]> => {
+    const path =
+      scope === 'session'
+        ? sessionManager.getSessionPath(sessionId)
+        : await getWorkspacePathForSession(sessionId)
+
+    if (!path) return []
+
+    try {
+      return await scanSessionDirectory(path, scope === 'workspace' ? WORKSPACE_EXCLUDED_DIRS : [])
+    } catch (error) {
+      log.error(`Failed to get ${scope} files:`, error)
       return []
     }
   })
@@ -378,31 +572,28 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
 
     const sessionPath = sessionManager.getSessionPath(sessionId)
     if (!sessionPath) return
+    const workspacePath = await getWorkspacePathForSession(sessionId)
 
     try {
-      const { watch } = await import('fs')
-
       const state: ClientSessionWatchState = {
-        watcher: null as unknown as import('fs').FSWatcher,
+        sessionWatcher: null,
+        workspaceWatcher: null,
         sessionId,
+        sessionPath,
+        workspacePath,
         debounceTimer: null,
+        pendingChanges: new Map(),
       }
 
-      state.watcher = watch(sessionPath, { recursive: true }, (_eventType, filename) => {
-        // Ignore internal files and hidden files
-        if (filename && (filename.includes('session.jsonl') || filename.startsWith('.'))) {
-          return
-        }
+      state.sessionWatcher = await createWatcher(sessionPath, (filename) =>
+        queueFileChange(clientId, state, 'session', sessionPath, filename),
+      )
 
-        // Debounce: wait 100ms before notifying to batch rapid changes
-        if (state.debounceTimer) {
-          clearTimeout(state.debounceTimer)
-        }
-
-        state.debounceTimer = setTimeout(() => {
-          pushTyped(server, RPC_CHANNELS.sessions.FILES_CHANGED, { to: 'client', clientId }, state.sessionId)
-        }, 100)
-      })
+      if (workspacePath) {
+        state.workspaceWatcher = await createWatcher(workspacePath, (filename) =>
+          queueFileChange(clientId, state, 'workspace', workspacePath, filename),
+        )
+      }
 
       clientSessionWatches.set(clientId, state)
     } catch (error) {

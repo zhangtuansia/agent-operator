@@ -73,9 +73,21 @@ export interface ModeState {
   sessionId: string;
   /** Current permission mode */
   permissionMode: PermissionMode;
+  /** Previous mode for transition diagnostics */
+  previousPermissionMode?: PermissionMode;
+  /** Monotonic mode version */
+  modeVersion: number;
+  /** ISO timestamp for last change */
+  lastChangedAt: string;
+  /** Origin of last change */
+  lastChangedBy: PermissionModeChangedBy;
+  /** Whether a user mode change was already consumed by UI/session */
+  lastUserSignalConsumedModeVersion?: number;
   /** Callback when mode state changes */
   onStateChange?: (state: ModeState) => void;
 }
+
+export type PermissionModeChangedBy = 'user' | 'system' | 'restore' | 'automation' | 'unknown';
 
 /**
  * Callbacks for mode changes
@@ -171,6 +183,9 @@ class ModeManager {
       state = {
         sessionId,
         permissionMode: 'ask', // Default to 'ask' until initialized
+        modeVersion: 0,
+        lastChangedAt: new Date().toISOString(),
+        lastChangedBy: 'unknown',
       };
       this.states.set(sessionId, state);
     }
@@ -180,9 +195,23 @@ class ModeManager {
   /**
    * Set permission mode for a session
    */
-  setPermissionMode(sessionId: string, mode: PermissionMode): void {
+  setPermissionMode(
+    sessionId: string,
+    mode: PermissionMode,
+    metadata?: { changedBy?: PermissionModeChangedBy; changedAt?: string }
+  ): void {
     const existing = this.getState(sessionId);
-    const newState = { ...existing, permissionMode: mode };
+    const changedAt = metadata?.changedAt ?? new Date().toISOString();
+    const changedBy = metadata?.changedBy ?? 'system';
+    const isChanged = existing.permissionMode !== mode;
+    const newState: ModeState = {
+      ...existing,
+      permissionMode: mode,
+      previousPermissionMode: isChanged ? existing.permissionMode : existing.previousPermissionMode,
+      modeVersion: isChanged ? existing.modeVersion + 1 : existing.modeVersion,
+      lastChangedAt: changedAt,
+      lastChangedBy: changedBy,
+    };
     this.states.set(sessionId, newState);
 
     debug(`[Mode] Set permission mode to ${mode} for session ${sessionId}`);
@@ -209,6 +238,25 @@ class ModeManager {
    */
   unregisterCallbacks(sessionId: string): void {
     this.callbacks.delete(sessionId);
+  }
+
+  setPreviousPermissionMode(sessionId: string, previousPermissionMode?: PermissionMode): void {
+    const existing = this.getState(sessionId);
+    this.states.set(sessionId, {
+      ...existing,
+      previousPermissionMode,
+    });
+  }
+
+  consumeUserModeSignal(sessionId: string): void {
+    const existing = this.getState(sessionId);
+    if (existing.lastUserSignalConsumedModeVersion === existing.modeVersion) {
+      return;
+    }
+    this.states.set(sessionId, {
+      ...existing,
+      lastUserSignalConsumedModeVersion: existing.modeVersion,
+    });
   }
 
   /**
@@ -256,6 +304,39 @@ export function getPermissionMode(sessionId: string): PermissionMode {
  */
 export function setPermissionMode(sessionId: string, mode: PermissionMode): void {
   modeManager.setPermissionMode(sessionId, mode);
+}
+
+export function hydratePreviousPermissionMode(sessionId: string, previousPermissionMode?: PermissionMode): void {
+  modeManager.setPreviousPermissionMode(sessionId, previousPermissionMode);
+}
+
+export function getPermissionModeDiagnostics(sessionId: string): {
+  permissionMode: PermissionMode;
+  previousPermissionMode?: PermissionMode;
+  transitionDisplay?: string;
+  modeVersion: number;
+  lastChangedAt: string;
+  lastChangedBy: PermissionModeChangedBy;
+  userModeSignalPending: boolean;
+} {
+  const state = modeManager.getState(sessionId);
+  const transitionDisplay = state.previousPermissionMode
+    ? `${PERMISSION_MODE_CONFIG[state.previousPermissionMode].displayName} -> ${PERMISSION_MODE_CONFIG[state.permissionMode].displayName}`
+    : undefined;
+  const userModeSignalPending =
+    state.lastChangedBy === 'user'
+      && state.modeVersion > 0
+      && state.lastUserSignalConsumedModeVersion !== state.modeVersion;
+
+  return {
+    permissionMode: state.permissionMode,
+    previousPermissionMode: state.previousPermissionMode,
+    transitionDisplay,
+    modeVersion: state.modeVersion,
+    lastChangedAt: state.lastChangedAt,
+    lastChangedBy: state.lastChangedBy,
+    userModeSignalPending,
+  };
 }
 
 /**

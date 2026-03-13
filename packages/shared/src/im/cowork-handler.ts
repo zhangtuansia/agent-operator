@@ -38,10 +38,10 @@ export interface IMSessionManager {
   sendMessage(sessionId: string, content: string): Promise<void>;
 
   /** Check if a session is currently active/running */
-  isSessionActive(sessionId: string): boolean;
+  isSessionActive(sessionId: string): Promise<boolean>;
 
   /** Check if a session exists */
-  sessionExists(sessionId: string): boolean;
+  sessionExists(sessionId: string): Promise<boolean>;
 
   /** Stop/cancel a session */
   stopSession(sessionId: string): void;
@@ -187,7 +187,7 @@ export class IMCoworkHandler extends EventEmitter {
     const responsePromise = this.createAccumulatorPromise(sessionId);
 
     // Send message to agent
-    const isActive = this.sessionManager.isSessionActive(sessionId);
+    const isActive = await this.sessionManager.isSessionActive(sessionId);
     try {
       if (isActive) {
         await this.sessionManager.sendMessage(sessionId, formattedContent);
@@ -226,7 +226,7 @@ export class IMCoworkHandler extends EventEmitter {
     if (!forceNew) {
       const existing = imStorage.getSessionMapping(conversationId, platform);
       if (existing) {
-        if (existing.workspaceId === this.workspaceId && this.sessionManager.sessionExists(existing.sessionId)) {
+        if (existing.workspaceId === this.workspaceId && await this.sessionManager.sessionExists(existing.sessionId)) {
           imStorage.updateSessionLastActive(conversationId, platform);
           this.imSessionIds.add(existing.sessionId);
           return existing.sessionId;

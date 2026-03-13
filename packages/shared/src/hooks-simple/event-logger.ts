@@ -9,6 +9,7 @@ import { appendFile } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import type { HookExecutionResult } from './types.ts';
+import { expandPath } from '../utils/paths.ts';
 
 // ============================================================================
 // Types
@@ -55,7 +56,7 @@ export class HookEventLogger {
   onEventLost?: (events: string[], error: Error) => void;
 
   constructor(workspaceRootPath: string) {
-    this.logPath = join(workspaceRootPath, 'events.jsonl');
+    this.logPath = join(expandPath(workspaceRootPath), 'events.jsonl');
   }
 
   /**

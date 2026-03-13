@@ -2,7 +2,7 @@ import { join } from 'path'
 import { readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@agent-operator/shared/protocol'
 import { getWorkspaceByNameOrId } from '@agent-operator/shared/config'
-import type { RpcServer } from '@agent-operator/server-core/transport'
+import { pushTyped, type RpcServer } from '@agent-operator/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -11,6 +11,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
+  RPC_CHANNELS.skills.IMPORT_URL,
+  RPC_CHANNELS.skills.IMPORT_CONTENT,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -109,5 +111,47 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
     await deps.platform.showItemInFolder?.(skillDir)
+  })
+
+  server.handle(RPC_CHANNELS.skills.IMPORT_URL, async (_ctx, workspaceId: string, url: string, customSlug?: string) => {
+    deps.platform.logger?.info(`SKILLS_IMPORT_URL: Importing skill from ${url} for workspace ${workspaceId}`)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      deps.platform.logger?.error(`SKILLS_IMPORT_URL: Workspace not found: ${workspaceId}`)
+      return { success: false, error: 'Workspace not found' }
+    }
+
+    const { importSkillFromUrl, loadAllSkills } = await import('@agent-operator/shared/skills')
+    const result = await importSkillFromUrl(workspace.rootPath, url, customSlug)
+
+    if (result.success) {
+      deps.platform.logger?.info(`SKILLS_IMPORT_URL: Successfully imported skill: ${result.skill?.slug}`)
+      pushTyped(server, RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadAllSkills(workspace.rootPath))
+    } else {
+      deps.platform.logger?.error(`SKILLS_IMPORT_URL: Failed to import skill: ${result.error}`)
+    }
+
+    return result
+  })
+
+  server.handle(RPC_CHANNELS.skills.IMPORT_CONTENT, async (_ctx, workspaceId: string, content: string, customSlug?: string) => {
+    deps.platform.logger?.info(`SKILLS_IMPORT_CONTENT: Importing skill from content for workspace ${workspaceId}`)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      deps.platform.logger?.error(`SKILLS_IMPORT_CONTENT: Workspace not found: ${workspaceId}`)
+      return { success: false, error: 'Workspace not found' }
+    }
+
+    const { importSkillFromContent, loadAllSkills } = await import('@agent-operator/shared/skills')
+    const result = await importSkillFromContent(workspace.rootPath, content, customSlug)
+
+    if (result.success) {
+      deps.platform.logger?.info(`SKILLS_IMPORT_CONTENT: Successfully imported skill: ${result.skill?.slug}`)
+      pushTyped(server, RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadAllSkills(workspace.rootPath))
+    } else {
+      deps.platform.logger?.error(`SKILLS_IMPORT_CONTENT: Failed to import skill: ${result.error}`)
+    }
+
+    return result
   })
 }

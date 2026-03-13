@@ -33,8 +33,33 @@ export const CORE_HANDLED_CHANNELS = [
 ] as const
 
 export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDeps): void {
+  registerWorkspaceCatalogHandlers(server, deps)
+  registerWorkspaceWindowCoreHandlers(server, deps)
+  registerWorkspaceAssetHandlers(server, deps)
+  registerWorkspaceThemeStateHandlers(server, deps)
+  registerWorkspaceThemeBroadcastHandlers(server, deps)
+  registerWorkspaceViewsHandlers(server, deps)
+  registerWorkspaceUiAssetHandlers(server, deps)
+}
+
+export function resolveBundledThemesDir(platform: HandlerDeps['platform']): string | undefined {
+  const candidates = platform.isPackaged
+    ? [
+        join(platform.appRootPath, 'dist/resources/themes'),
+        join(platform.resourcesPath, 'app/dist/resources/themes'),
+        join(platform.resourcesPath, 'themes'),
+      ]
+    : [
+        join(platform.appRootPath, 'apps/electron/resources/themes'),
+        join(platform.appRootPath, 'apps/electron/dist/resources/themes'),
+        join(platform.appRootPath, 'dist/resources/themes'),
+      ]
+
+  return candidates.find((candidate) => existsSync(candidate))
+}
+
+export function registerWorkspaceCatalogHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
-  const windowManager = deps.windowManager
 
   // Get workspaces
   server.handle(RPC_CHANNELS.workspaces.GET, async () => {
@@ -58,6 +83,11 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
   })
+}
+
+export function registerWorkspaceWindowCoreHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const { sessionManager } = deps
+  const windowManager = deps.windowManager
 
   // Get workspace ID for the calling window
   server.handle(RPC_CHANNELS.window.GET_WORKSPACE, (ctx) => {
@@ -120,7 +150,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
     end()
   })
+}
 
+export function registerWorkspaceAssetHandlers(server: RpcServer, deps: HandlerDeps): void {
   // ============================================================
   // Workspace Image Read/Write
   // ============================================================
@@ -251,6 +283,10 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       writeFileSync(absolutePath, buffer)
     }
   })
+}
+
+export function registerWorkspaceThemeStateHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const bundledThemesDir = resolveBundledThemesDir(deps.platform)
 
   // ============================================================
   // Theme (app-level only)
@@ -264,11 +300,12 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   // Preset themes (app-level)
   server.handle(RPC_CHANNELS.theme.GET_PRESETS, async () => {
     const { loadPresetThemes } = await import('@agent-operator/shared/config/storage')
-    return loadPresetThemes()
+    return loadPresetThemes(bundledThemesDir)
   })
 
   server.handle(RPC_CHANNELS.theme.LOAD_PRESET, async (_ctx, themeId: string) => {
-    const { loadPresetTheme } = await import('@agent-operator/shared/config/storage')
+    const { ensurePresetThemes, loadPresetTheme } = await import('@agent-operator/shared/config/storage')
+    ensurePresetThemes(bundledThemesDir)
     return loadPresetTheme(themeId)
   })
 
@@ -280,11 +317,6 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   server.handle(RPC_CHANNELS.theme.SET_COLOR_THEME, async (_ctx, themeId: string) => {
     const { setColorTheme } = await import('@agent-operator/shared/config/storage')
     setColorTheme(themeId)
-  })
-
-  // Broadcast theme preferences to all other windows (for cross-window sync)
-  server.handle(RPC_CHANNELS.theme.BROADCAST_PREFERENCES, async (ctx, preferences: { mode: string; colorTheme: string; font: string }) => {
-    pushTyped(server, RPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
   })
 
   // Workspace-level theme overrides
@@ -316,11 +348,21 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
     return themes
   })
+}
 
+export function registerWorkspaceThemeBroadcastHandlers(server: RpcServer, _deps: HandlerDeps): void {
   // Broadcast workspace theme change to all other windows (for cross-window sync)
   server.handle(RPC_CHANNELS.theme.BROADCAST_WORKSPACE_THEME, async (ctx, workspaceId: string, themeId: string | null) => {
     pushTyped(server, RPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED, { to: 'all' }, { workspaceId, themeId })
   })
+
+  // Broadcast theme preferences to all other windows (for cross-window sync)
+  server.handle(RPC_CHANNELS.theme.BROADCAST_PREFERENCES, async (_ctx, preferences: { mode: string; colorTheme: string; font: string }) => {
+    pushTyped(server, RPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
+  })
+}
+
+export function registerWorkspaceViewsHandlers(server: RpcServer, _deps: HandlerDeps): void {
 
   // ============================================================
   // Views
@@ -345,6 +387,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     // Broadcast labels changed since views are used alongside labels in sidebar
     pushTyped(server, RPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   })
+}
+
+export function registerWorkspaceUiAssetHandlers(server: RpcServer, _deps: HandlerDeps): void {
 
   // ============================================================
   // Tool Icons and Logo

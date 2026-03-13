@@ -36,6 +36,7 @@ import {
   type BrowserWaitOptions,
   type BrowserWaitResult,
 } from '../shared/types'
+import type { IBrowserPaneManager } from '@agent-operator/server-core/handlers'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 const BROWSER_PANE_PARTITION = 'persist:browser-pane'
@@ -244,7 +245,7 @@ function buildStartPageUrl(): string {
   return pathToFileURL(join(__dirname, 'renderer', BROWSER_EMPTY_STATE_PAGE)).toString()
 }
 
-export class BrowserPaneManager {
+export class BrowserPaneManager implements IBrowserPaneManager {
   private readonly instances = new Map<string, BrowserPaneRecord>()
   private readonly stateListeners = new Set<BrowserPaneListener<BrowserInstanceInfo>>()
   private readonly removedListeners = new Set<BrowserPaneListener<string>>()
@@ -490,6 +491,61 @@ export class BrowserPaneManager {
 
   listInstances(): BrowserInstanceInfo[] {
     return Array.from(this.instances.values()).map((record) => ({ ...record.info }))
+  }
+
+  getInstance(id: string): {
+    ownerType: 'session' | 'manual'
+    ownerSessionId: string | null
+    isVisible: boolean
+    title: string
+    currentUrl: string
+  } | undefined {
+    const record = this.instances.get(id)
+    if (!record) return undefined
+    return {
+      ownerType: record.info.ownerType,
+      ownerSessionId: record.info.ownerSessionId,
+      isVisible: record.info.isVisible,
+      title: record.info.title,
+      currentUrl: record.info.url,
+    }
+  }
+
+  bindSession(id: string, sessionId: string): void {
+    const record = this.instances.get(id)
+    if (!record) return
+    record.info.boundSessionId = sessionId
+    record.info.ownerType = 'session'
+    record.info.ownerSessionId = sessionId
+    this.emitState(record)
+  }
+
+  clearAgentControlForInstance(instanceId: string, sessionId?: string): { released: boolean; reason?: string } {
+    const record = this.instances.get(instanceId)
+    if (!record) {
+      return { released: false, reason: `Browser window "${instanceId}" not found.` }
+    }
+
+    if (sessionId) {
+      if (record.info.boundSessionId && record.info.boundSessionId !== sessionId) {
+        return { released: false, reason: `Browser window "${instanceId}" is locked to session ${record.info.boundSessionId}.` }
+      }
+
+      if (!record.info.boundSessionId && record.info.ownerSessionId && record.info.ownerSessionId !== sessionId) {
+        return { released: false, reason: `Browser window "${instanceId}" is currently owned by session ${record.info.ownerSessionId}.` }
+      }
+    }
+
+    if (!record.agentControl?.active) {
+      return { released: false, reason: 'No active agent overlay on the target window.' }
+    }
+
+    record.agentControl = null
+    this.applyAgentControlLock(record, false)
+    this.updateNativeOverlayState(record)
+    this.emitState(record)
+    mainLog.info(`[browser-pane] agent control released instance=${instanceId}${sessionId ? ` session=${sessionId}` : ''}`)
+    return { released: true }
   }
 
   async navigate(id: string, url: string): Promise<{ url: string; title: string }> {
@@ -744,6 +800,8 @@ export class BrowserPaneManager {
         return {
           dataUrl: `data:image/${captured.format};base64,${captured.buffer.toString('base64')}`,
           format: captured.format,
+          imageBuffer: captured.buffer,
+          imageFormat: captured.format,
           metadata: {
             mode,
             annotatedRefs: geometries.map((geometry) => geometry.ref),
@@ -779,6 +837,8 @@ export class BrowserPaneManager {
       return {
         dataUrl: `data:image/${captured.format};base64,${captured.buffer.toString('base64')}`,
         format: captured.format,
+        imageBuffer: captured.buffer,
+        imageFormat: captured.format,
         metadata: options?.includeMetadata ? { mode: 'raw' } : undefined,
       }
     } finally {
@@ -788,29 +848,241 @@ export class BrowserPaneManager {
     }
   }
 
+  async screenshotRegion(
+    id: string,
+    target: {
+      x?: number
+      y?: number
+      width?: number
+      height?: number
+      ref?: string
+      selector?: string
+      padding?: number
+      format?: 'png' | 'jpeg'
+      jpegQuality?: number
+    },
+  ): Promise<BrowserScreenshotResult> {
+    const record = this.requireRecord(id)
+
+    const hasCoords = [target.x, target.y, target.width, target.height].every((value) => typeof value === 'number')
+    const hasRef = typeof target.ref === 'string' && target.ref.length > 0
+    const hasSelector = typeof target.selector === 'string' && target.selector.length > 0
+    const modeCount = [hasCoords, hasRef, hasSelector].filter(Boolean).length
+
+    if (modeCount === 0) {
+      throw new Error('Region screenshot requires either coordinates, ref, or selector')
+    }
+    if (modeCount > 1) {
+      throw new Error('Region screenshot target is ambiguous. Provide only one of coordinates, ref, or selector')
+    }
+
+    let box: { x: number; y: number; width: number; height: number }
+    if (hasRef) {
+      const geometry = await record.cdp.getElementGeometry(String(target.ref))
+      box = { ...geometry.box }
+    } else if (hasSelector) {
+      const selector = String(target.selector)
+      const geometry = await record.pageView.webContents.executeJavaScript(
+        `(() => {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return null;
+          const rect = el.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        })()`,
+        true,
+      ) as { x: number; y: number; width: number; height: number } | null
+
+      if (!geometry) {
+        throw new Error(`Selector not found: ${selector}`)
+      }
+      box = geometry
+    } else {
+      box = {
+        x: Number(target.x),
+        y: Number(target.y),
+        width: Number(target.width),
+        height: Number(target.height),
+      }
+    }
+
+    const padding = Math.max(0, Number(target.padding ?? 0))
+    box = {
+      x: box.x - padding,
+      y: box.y - padding,
+      width: box.width + padding * 2,
+      height: box.height + padding * 2,
+    }
+
+    const viewport = await record.cdp.getViewportMetrics()
+    const clippedX = Math.max(0, Math.floor(box.x))
+    const clippedY = Math.max(0, Math.floor(box.y))
+    const maxWidth = Math.max(0, Math.floor(viewport.width - clippedX))
+    const maxHeight = Math.max(0, Math.floor(viewport.height - clippedY))
+    const clippedWidth = Math.min(Math.max(1, Math.floor(box.width)), maxWidth)
+    const clippedHeight = Math.min(Math.max(1, Math.floor(box.height)), maxHeight)
+
+    if (maxWidth <= 0 || maxHeight <= 0 || clippedWidth <= 0 || clippedHeight <= 0) {
+      throw new Error('Resolved screenshot region is outside the current viewport')
+    }
+
+    const image = await record.pageView.webContents.capturePage({
+      x: clippedX,
+      y: clippedY,
+      width: clippedWidth,
+      height: clippedHeight,
+    })
+
+    if (image.isEmpty()) {
+      throw new Error('Failed to capture screenshot region: empty image buffer')
+    }
+
+    const format = target.format === 'jpeg' ? 'jpeg' : 'png'
+    const imageBuffer = format === 'jpeg'
+      ? image.toJPEG(Math.max(1, Math.min(100, target.jpegQuality ?? 90)))
+      : image.toPNG()
+
+    return {
+      dataUrl: `data:image/${format};base64,${imageBuffer.toString('base64')}`,
+      format,
+      imageBuffer,
+      imageFormat: format,
+      metadata: {
+        mode: 'raw',
+        viewport,
+        region: {
+          x: clippedX,
+          y: clippedY,
+          width: clippedWidth,
+          height: clippedHeight,
+        },
+      },
+    }
+  }
+
   async evaluate(id: string, expression: string): Promise<unknown> {
     const record = this.requireRecord(id)
     return record.pageView.webContents.executeJavaScript(expression, true)
   }
 
-  async scroll(id: string, options?: BrowserScrollOptions): Promise<BrowserScrollResult> {
+  async scroll(id: string, options?: BrowserScrollOptions): Promise<BrowserScrollResult>
+  async scroll(id: string, direction: 'up' | 'down' | 'left' | 'right', amount?: number): Promise<void>
+  async scroll(
+    id: string,
+    optionsOrDirection?: BrowserScrollOptions | 'up' | 'down' | 'left' | 'right',
+    amount?: number,
+  ): Promise<BrowserScrollResult | void> {
     const record = this.requireRecord(id)
-    const amount = options?.amount ?? 500
-    const deltaX = options?.deltaX ?? (
-      options?.direction === 'left' ? -amount
-        : options?.direction === 'right' ? amount
+    await this.prepareInput(record)
+    const options = typeof optionsOrDirection === 'string'
+      ? { direction: optionsOrDirection, amount }
+      : (optionsOrDirection ?? {})
+    const scrollAmount = options.amount ?? 500
+    const deltaX = options.deltaX ?? (
+      options.direction === 'left' ? -scrollAmount
+        : options.direction === 'right' ? scrollAmount
           : 0
     )
-    const deltaY = options?.deltaY ?? (
-      options?.direction === 'up' ? -amount
-        : options?.direction === 'down' ? amount
+    const deltaY = options.deltaY ?? (
+      options.direction === 'up' ? -scrollAmount
+        : options.direction === 'down' ? scrollAmount
           : 0
     )
 
-    return record.pageView.webContents.executeJavaScript(
-      `(() => { window.scrollBy(${deltaX}, ${deltaY}); return { x: window.scrollX || 0, y: window.scrollY || 0 }; })()`,
+    const result = await record.pageView.webContents.executeJavaScript(
+      `(() => {
+        const dx = ${deltaX};
+        const dy = ${deltaY};
+        const canScrollAxis = (el, axis) => {
+          if (!(el instanceof Element)) return false;
+          const style = getComputedStyle(el);
+          const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+          const scrollSize = axis === 'x' ? el.scrollWidth : el.scrollHeight;
+          const clientSize = axis === 'x' ? el.clientWidth : el.clientHeight;
+          return /(auto|scroll|overlay)/.test(overflow) && scrollSize > clientSize + 1;
+        };
+
+        const tryScrollElement = (el) => {
+          if (!(el instanceof Element)) return false;
+          const beforeLeft = el.scrollLeft;
+          const beforeTop = el.scrollTop;
+          if (dx) el.scrollLeft += dx;
+          if (dy) el.scrollTop += dy;
+          return el.scrollLeft !== beforeLeft || el.scrollTop !== beforeTop;
+        };
+
+        const candidates = [];
+        if (document.activeElement instanceof Element) candidates.push(document.activeElement);
+        const center = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        if (center instanceof Element) candidates.push(center);
+        if (document.scrollingElement instanceof Element) candidates.push(document.scrollingElement);
+        if (document.documentElement instanceof Element) candidates.push(document.documentElement);
+        if (document.body instanceof Element) candidates.push(document.body);
+
+        let scrolled = false;
+        for (const start of candidates) {
+          let el = start;
+          while (el && el instanceof Element) {
+            if ((dx && canScrollAxis(el, 'x')) || (dy && canScrollAxis(el, 'y'))) {
+              if (tryScrollElement(el)) {
+                scrolled = true;
+                break;
+              }
+            }
+            el = el.parentElement;
+          }
+          if (scrolled) break;
+        }
+
+        const root = document.scrollingElement || document.documentElement || document.body;
+        if (!scrolled && root) {
+          const beforeX = window.scrollX || root.scrollLeft || 0;
+          const beforeY = window.scrollY || root.scrollTop || 0;
+          window.scrollBy(dx, dy);
+          const afterX = window.scrollX || root.scrollLeft || 0;
+          const afterY = window.scrollY || root.scrollTop || 0;
+          scrolled = afterX !== beforeX || afterY !== beforeY;
+        }
+
+        return {
+          x: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+          y: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
+          scrolled,
+        };
+      })()`,
       true,
-    ) as Promise<BrowserScrollResult>
+    ) as (BrowserScrollResult & { scrolled?: boolean })
+
+    if (!result.scrolled) {
+      const [contentWidth, contentHeight] = record.window.getContentSize()
+      const viewportHeight = Math.max(100, contentHeight - TOOLBAR_HEIGHT)
+      const wheelX = Math.round(contentWidth / 2)
+      const wheelY = Math.round(viewportHeight / 2)
+
+      try {
+        await record.cdp.dispatchMouseWheel(wheelX, wheelY, deltaX, deltaY)
+      } catch (error) {
+        mainLog.warn(
+          `[browser-pane] CDP mouseWheel failed for ${id}, falling back to native sendInputEvent: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        const webContents = record.pageView.webContents as typeof record.pageView.webContents & {
+          sendInputEvent?: (event: Record<string, unknown>) => void
+        }
+        webContents.sendInputEvent?.({
+          type: 'mouseWheel',
+          x: wheelX,
+          y: wheelY,
+          deltaX,
+          deltaY,
+          canScroll: true,
+        })
+      }
+    }
+
+    if (typeof optionsOrDirection === 'string') {
+      return
+    }
+
+    return { x: result.x, y: result.y }
   }
 
   async clickAt(id: string, x: number, y: number): Promise<void> {
@@ -831,6 +1103,10 @@ export class BrowserPaneManager {
       }
       throw error
     }
+  }
+
+  async clickAtCoordinates(id: string, x: number, y: number): Promise<void> {
+    return this.clickAt(id, x, y)
   }
 
   async drag(id: string, x1: number, y1: number, x2: number, y2: number): Promise<void> {
@@ -859,6 +1135,10 @@ export class BrowserPaneManager {
     return record.cdp.setFileInputFiles(ref, safePaths)
   }
 
+  async uploadFile(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry> {
+    return this.uploadFiles(id, ref, filePaths)
+  }
+
   async typeText(id: string, text: string): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
@@ -883,6 +1163,13 @@ export class BrowserPaneManager {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
     await record.cdp.pressKey(key, options)
+  }
+
+  async sendKey(
+    id: string,
+    args: { key: string; modifiers?: Array<'shift' | 'control' | 'alt' | 'meta'> },
+  ): Promise<void> {
+    return this.pressKey(id, args.key, { modifiers: args.modifiers })
   }
 
   async waitFor(id: string, options: BrowserWaitOptions): Promise<BrowserWaitResult> {
@@ -960,12 +1247,45 @@ export class BrowserPaneManager {
     return filtered.slice(-maxEntries)
   }
 
+  getConsoleLogs(
+    id: string,
+    options?: { level?: 'all' | 'log' | 'info' | 'warn' | 'error'; limit?: number },
+  ): BrowserConsoleEntry[] {
+    const level = options?.level === 'warn' ? 'warning' : (options?.level ?? 'all')
+    return this.getConsoleEntries(id, options?.limit, level as BrowserConsoleLevel | 'all')
+  }
+
   getNetworkEntries(id: string, limit?: number, state: BrowserNetworkState | 'all' = 'all'): BrowserNetworkEntry[] {
     const record = this.requireRecord(id)
     const maxEntries = clampPositiveInt(limit, 50)
     const filtered = state === 'all'
       ? record.networkEntries
       : record.networkEntries.filter((entry) => entry.state === state)
+    return filtered.slice(-maxEntries)
+  }
+
+  getNetworkLogs(
+    id: string,
+    options?: { limit?: number; status?: 'all' | 'failed' | '2xx' | '3xx' | '4xx' | '5xx'; method?: string; resourceType?: string },
+  ): BrowserNetworkEntry[] {
+    const record = this.requireRecord(id)
+    const maxEntries = Math.max(1, Math.min(500, Number(options?.limit ?? 50)))
+    const method = options?.method?.toUpperCase()
+    const resourceType = options?.resourceType?.toLowerCase()
+    const statusFilter = options?.status ?? 'all'
+
+    const filtered = record.networkEntries.filter((entry) => {
+      if (method && entry.method !== method) return false
+      if (resourceType && (entry.resourceType ?? '').toLowerCase() !== resourceType) return false
+      if (statusFilter === 'all') return true
+      if (statusFilter === 'failed') return !entry.status || entry.state === 'failed'
+      if (statusFilter === '2xx') return typeof entry.status === 'number' && entry.status >= 200 && entry.status < 300
+      if (statusFilter === '3xx') return typeof entry.status === 'number' && entry.status >= 300 && entry.status < 400
+      if (statusFilter === '4xx') return typeof entry.status === 'number' && entry.status >= 400 && entry.status < 500
+      if (statusFilter === '5xx') return typeof entry.status === 'number' && entry.status >= 500 && entry.status < 600
+      return true
+    })
+
     return filtered.slice(-maxEntries)
   }
 
@@ -989,12 +1309,23 @@ export class BrowserPaneManager {
     return record.downloads.slice(-limit)
   }
 
-  setClipboard(text: string): void {
-    clipboard.writeText(text)
+  setClipboard(text: string): void
+  setClipboard(id: string, text: string): Promise<void>
+  setClipboard(targetOrText: string, maybeText?: string): void | Promise<void> {
+    clipboard.writeText(maybeText ?? targetOrText)
+    if (maybeText !== undefined) {
+      return Promise.resolve()
+    }
   }
 
-  getClipboard(): string {
-    return clipboard.readText()
+  getClipboard(): string
+  getClipboard(id: string): Promise<string>
+  getClipboard(_id?: string): string | Promise<string> {
+    const text = clipboard.readText()
+    if (_id !== undefined) {
+      return Promise.resolve(text)
+    }
+    return text
   }
 
   async paste(id: string, text: string): Promise<void> {
@@ -1004,6 +1335,86 @@ export class BrowserPaneManager {
     await record.cdp.pressKey('v', {
       modifiers: [process.platform === 'darwin' ? 'meta' : 'control'],
     })
+  }
+
+  windowResize(id: string, width: number, height: number): { width: number; height: number } {
+    const record = this.requireRecord(id)
+    const requestedWidth = Math.max(320, Math.floor(width))
+    const requestedHeight = Math.max(240, Math.floor(height))
+    record.window.setContentSize(requestedWidth, requestedHeight + TOOLBAR_HEIGHT)
+    this.layoutViews(record)
+    const [appliedWidth, appliedHeight] = record.window.getContentSize()
+    return {
+      width: Math.max(0, Math.floor(appliedWidth)),
+      height: Math.max(0, Math.floor(appliedHeight - TOOLBAR_HEIGHT)),
+    }
+  }
+
+  async detectSecurityChallenge(id: string): Promise<{ detected: boolean; provider: string; signals: string[] }> {
+    const record = this.instances.get(id)
+    if (!record) return { detected: false, provider: 'none', signals: [] }
+
+    const signals: string[] = []
+    const title = record.info.title || ''
+    const url = record.info.url || ''
+
+    if (/^Just a moment/i.test(title)) {
+      signals.push('title:just-a-moment')
+    }
+    if (url.includes('/cdn-cgi/challenge-platform/')) {
+      signals.push('url:cdn-cgi-challenge')
+    }
+
+    try {
+      const domSignals = await record.pageView.webContents.executeJavaScript(`(() => {
+        const signals = [];
+        const bodyText = (document.body?.innerText || '').slice(0, 2000);
+        if (/Verify you are human/i.test(bodyText)) signals.push('text:verify-human');
+        if (/Checking (if the site connection is secure|your browser)/i.test(bodyText)) signals.push('text:checking-browser');
+        if (/Performing security verification/i.test(bodyText)) signals.push('text:security-verification');
+        if (document.querySelector('#challenge-form')) signals.push('dom:challenge-form');
+        if (document.querySelector('#turnstile-wrapper')) signals.push('dom:turnstile-wrapper');
+        if (document.querySelector('.cf-turnstile')) signals.push('dom:cf-turnstile');
+        if (document.querySelector('iframe[src*="challenges.cloudflare.com"]')) signals.push('dom:cf-challenge-iframe');
+        return signals;
+      })()`) as string[]
+
+      if (Array.isArray(domSignals)) {
+        signals.push(...domSignals)
+      }
+    } catch {
+      // Ignore DOM probe failures on transient states.
+    }
+
+    try {
+      const snapshot = await record.cdp.getAccessibilitySnapshot()
+      const actionableRoles = new Set([
+        'button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio', 'switch',
+        'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'slider', 'spinbutton', 'listbox',
+      ])
+      const actionableCount = snapshot.nodes.filter((node) => {
+        const role = (node.role || '').toLowerCase()
+        return actionableRoles.has(role) && !node.disabled
+      }).length
+
+      if (snapshot.nodes.length > 0 && actionableCount <= 2) {
+        signals.push(`ax:near-empty(${actionableCount}/${snapshot.nodes.length})`)
+      }
+    } catch {
+      // Ignore AX probe failures on transient states.
+    }
+
+    const detected = signals.length > 0
+    const isCloudflare = signals.some((signal) =>
+      signal.includes('cf-') || signal.includes('challenge') || signal.includes('turnstile') || signal === 'title:just-a-moment',
+    )
+    const provider = detected ? (isCloudflare ? 'cloudflare' : 'unknown') : 'none'
+
+    if (detected) {
+      mainLog.info(`[browser-pane] security challenge detected id=${id} provider=${provider} signals=[${signals.join(', ')}]`)
+    }
+
+    return { detected, provider, signals }
   }
 
   onStateChange(listener: BrowserPaneListener<BrowserInstanceInfo>): () => void {
@@ -1025,33 +1436,53 @@ export class BrowserPaneManager {
     if (this.toolbarIpcRegistered) return
     this.toolbarIpcRegistered = true
 
+    const findRecord = (instanceId: string): BrowserPaneRecord | undefined => {
+      return this.instances.get(instanceId)
+    }
+
     const register = (channel: string, handler: (...args: any[]) => Promise<unknown>) => {
       ipcMain.removeHandler(channel)
       ipcMain.handle(channel, handler)
     }
 
     register(BROWSER_TOOLBAR_CHANNELS.NAVIGATE, async (_event, instanceId: string, url: string) => {
-      await this.navigate(instanceId, url)
+      const record = findRecord(instanceId)
+      if (record) {
+        await this.navigate(record.id, url)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.GO_BACK, async (_event, instanceId: string) => {
-      await this.goBack(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        await this.goBack(record.id)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.GO_FORWARD, async (_event, instanceId: string) => {
-      await this.goForward(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        await this.goForward(record.id)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.RELOAD, async (_event, instanceId: string) => {
-      await this.reload(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        await this.reload(record.id)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.STOP, async (_event, instanceId: string) => {
-      await this.stop(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        await this.stop(record.id)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.MENU_GEOMETRY, async (_event, instanceId: string, open: boolean, height?: number) => {
-      const record = this.requireRecord(instanceId)
+      const record = findRecord(instanceId)
+      if (!record) return undefined
 
       if (!open) {
         this.forceCloseToolbarMenu(record, 'renderer-close')
@@ -1073,11 +1504,17 @@ export class BrowserPaneManager {
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.HIDE, async (_event, instanceId: string) => {
-      this.hide(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        this.hide(record.id)
+      }
       return undefined
     })
     register(BROWSER_TOOLBAR_CHANNELS.DESTROY, async (_event, instanceId: string) => {
-      this.destroyInstance(instanceId)
+      const record = findRecord(instanceId)
+      if (record) {
+        this.destroyInstance(record.id)
+      }
       return undefined
     })
   }

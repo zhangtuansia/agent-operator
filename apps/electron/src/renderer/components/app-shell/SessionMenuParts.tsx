@@ -31,6 +31,12 @@ export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsPro
   const { MenuItem, Separator } = menu
   const { t } = useTranslation()
 
+  const runMenuAction = (action: () => void | Promise<void>) => async (e: Event) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await action()
+  }
+
   const handleOpenInBrowser = () => {
     window.electronAPI.openUrl(sharedUrl)
   }
@@ -62,20 +68,20 @@ export function ShareMenuItems({ sessionId, sharedUrl, menu }: ShareMenuItemsPro
 
   return (
     <>
-      <MenuItem onClick={handleOpenInBrowser}>
+      <MenuItem onSelect={runMenuAction(handleOpenInBrowser)}>
         <Globe className="h-3.5 w-3.5" />
         <span className="flex-1">{t('sessionMenu.openInBrowser')}</span>
       </MenuItem>
-      <MenuItem onClick={handleCopyLink}>
+      <MenuItem onSelect={runMenuAction(handleCopyLink)}>
         <Copy className="h-3.5 w-3.5" />
         <span className="flex-1">{t('sessionMenu.copyLink')}</span>
       </MenuItem>
-      <MenuItem onClick={handleUpdateShare}>
+      <MenuItem onSelect={runMenuAction(handleUpdateShare)}>
         <RefreshCw className="h-3.5 w-3.5" />
         <span className="flex-1">{t('sessionMenu.updateShare')}</span>
       </MenuItem>
       <Separator />
-      <MenuItem onClick={handleRevokeShare} variant="destructive">
+      <MenuItem onSelect={runMenuAction(handleRevokeShare)} variant="destructive">
         <Link2Off className="h-3.5 w-3.5" />
         <span className="flex-1">{t('sessionMenu.stopSharing')}</span>
       </MenuItem>

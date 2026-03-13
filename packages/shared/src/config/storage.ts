@@ -309,6 +309,14 @@ function hasModelInConnectionModels(
   return models.some(model => getConnectionModelId(model) === modelId);
 }
 
+function haveSameConnectionModelIds(
+  left: Array<ModelDefinition | string> | undefined,
+  right: Array<ModelDefinition | string>,
+): boolean {
+  if (!left || left.length !== right.length) return false;
+  return left.every((model, index) => getConnectionModelId(model) === getConnectionModelId(right[index]));
+}
+
 function normalizeProviderConfig(providerConfig: ProviderConfig): ProviderConfig {
   const providerId = providerConfig.provider.toLowerCase();
   if (providerId !== DEEPSEEK_PROVIDER_ID) {
@@ -432,6 +440,25 @@ function backfillConnectionModels(config: StoredConfig): boolean {
 
   let changed = false;
   for (const connection of config.llmConnections) {
+    if (connection.providerType === 'bedrock' && connection.authType === 'environment') {
+      const preferredModels = getDefaultModelsForConnection('bedrock');
+      if (!haveSameConnectionModelIds(connection.models, preferredModels)) {
+        connection.models = preferredModels;
+        changed = true;
+      }
+
+      const preferredDefaultModel = hasModelInConnectionModels(connection.defaultModel, preferredModels)
+        ? connection.defaultModel
+        : getDefaultModelForConnection('bedrock');
+
+      if (connection.defaultModel !== preferredDefaultModel) {
+        connection.defaultModel = preferredDefaultModel;
+        changed = true;
+      }
+
+      continue;
+    }
+
     let models = connection.models;
     if (!models || models.length === 0) {
       models = getDefaultModelsForConnection(connection.providerType);
@@ -530,16 +557,19 @@ function ensureLegacyBedrockConnection(config: StoredConfig): boolean {
   const existing = config.llmConnections.find(connection => connection.providerType === 'bedrock');
   if (existing) {
     let changed = false;
+    const preferredModels = getDefaultModelsForConnection('bedrock');
 
-    if (!existing.models || existing.models.length === 0) {
-      existing.models = bedrockDefaults;
+    if (!haveSameConnectionModelIds(existing.models, preferredModels)) {
+      existing.models = preferredModels;
       changed = true;
     }
 
-    const existingModelPool = existing.models ?? bedrockDefaults;
-    const preferredDefaultModel = preferredSignalModel && hasModelInConnectionModels(preferredSignalModel, existingModelPool)
-      ? preferredSignalModel
-      : bedrockDefaultModel;
+    const existingModelPool = existing.models ?? preferredModels;
+    const preferredDefaultModel = hasModelInConnectionModels(existing.defaultModel, existingModelPool)
+      ? existing.defaultModel
+      : preferredSignalModel && hasModelInConnectionModels(preferredSignalModel, existingModelPool)
+        ? preferredSignalModel
+        : bedrockDefaultModel;
     if (!existing.defaultModel || !hasModelInConnectionModels(existing.defaultModel, existingModelPool)) {
       existing.defaultModel = preferredDefaultModel;
       changed = true;
@@ -861,6 +891,75 @@ export async function migrateLegacyLlmConnectionCredentials(): Promise<void> {
           refreshToken: legacyClaudeOAuth.refreshToken,
           expiresAt: legacyClaudeOAuth.expiresAt,
         });
+      }
+    }
+  }
+}
+
+export function migrateOrphanedDefaultConnections(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  if (!config.llmConnections || config.llmConnections.length === 0) return;
+
+  let changed = false;
+  if (ensureDefaultLlmConnection(config)) {
+    changed = true;
+  }
+
+  try {
+    const workspaces = getWorkspaces();
+    for (const ws of workspaces) {
+      const wsConfig = loadWorkspaceConfig(ws.rootPath);
+      if (wsConfig?.defaults?.defaultLlmConnection) {
+        const exists = config.llmConnections.some(
+          connection => connection.slug === wsConfig.defaults!.defaultLlmConnection
+        );
+        if (!exists) {
+          delete wsConfig.defaults.defaultLlmConnection;
+          saveWorkspaceConfig(ws.rootPath, wsConfig);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to clean up workspace default connection references:', error);
+  }
+
+  if (changed) {
+    saveConfig(config);
+  }
+}
+
+export async function migrateLegacyCredentials(): Promise<void> {
+  const manager = getCredentialManager();
+
+  const legacyClaudeOAuth = await manager.getClaudeOAuthCredentials();
+  if (legacyClaudeOAuth?.accessToken) {
+    const existingLlmOAuth = await manager.getLlmOAuth('claude-max');
+    if (!existingLlmOAuth) {
+      await manager.setLlmOAuth('claude-max', {
+        accessToken: legacyClaudeOAuth.accessToken,
+        refreshToken: legacyClaudeOAuth.refreshToken,
+        expiresAt: legacyClaudeOAuth.expiresAt,
+      });
+      debug('[storage] Migrated legacy Claude OAuth to llm_oauth::claude-max');
+      try {
+        await manager.delete({ type: 'claude_oauth' });
+      } catch (error) {
+        debug('[storage] Failed to delete legacy claude_oauth::global:', error);
+      }
+    }
+  }
+
+  const legacyApiKey = await manager.getApiKey();
+  if (legacyApiKey) {
+    const existingLlmApiKey = await manager.getLlmApiKey('anthropic-api');
+    if (!existingLlmApiKey) {
+      await manager.setLlmApiKey('anthropic-api', legacyApiKey);
+      debug('[storage] Migrated legacy Anthropic API key to llm_api_key::anthropic-api');
+      try {
+        await manager.delete({ type: 'anthropic_api_key' });
+      } catch (error) {
+        debug('[storage] Failed to delete legacy anthropic_api_key::global:', error);
       }
     }
   }

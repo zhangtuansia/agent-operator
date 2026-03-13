@@ -62,7 +62,7 @@ export function useSessionEvents({
   // Also includes todo_state_changed so status updates immediately reflect in sidebar
   // async_operation included so shimmer effect on session titles updates in real-time
   const handoffEventTypesRef = useRef(new Set([
-    'complete', 'error', 'interrupted', 'typed_error', 'todo_state_changed', 'title_generated', 'async_operation', 'labels_changed'
+    'complete', 'error', 'interrupted', 'typed_error', 'todo_state_changed', 'session_status_changed', 'title_generated', 'async_operation', 'labels_changed'
   ]))
 
   // Helper to handle side effects (same logic for both paths)
@@ -154,7 +154,7 @@ export function useSessionEvents({
       // These are sent by ConfigWatcher's onSessionMetadataChange when external edits
       // (other instances, scripts) modify session.jsonl headers. They just update fields
       // and refresh the metadata map — no need for the full processor pipeline.
-      if (event.type === 'todo_state_changed' || event.type === 'name_changed' ||
+      if (event.type === 'todo_state_changed' || event.type === 'session_status_changed' || event.type === 'name_changed' ||
           event.type === 'session_flagged' || event.type === 'session_unflagged') {
         const currentSession = store.get(sessionAtomFamily(sessionId))
         if (!currentSession) return
@@ -164,6 +164,10 @@ export function useSessionEvents({
           case 'todo_state_changed':
             if (currentSession.todoState === (event as { todoState?: string }).todoState) return
             updated = { ...currentSession, todoState: (event as { todoState?: string }).todoState }
+            break
+          case 'session_status_changed':
+            if (currentSession.todoState === (event as { sessionStatus?: string }).sessionStatus) return
+            updated = { ...currentSession, todoState: (event as { sessionStatus?: string }).sessionStatus }
             break
           case 'name_changed':
             if (currentSession.name === (event as { name?: string }).name) return

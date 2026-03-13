@@ -15,11 +15,16 @@ export type ChannelMapEntry =
   | {
       type: 'listener'
       channel: string
+      transformArgs?: (...args: any[]) => unknown[]
     }
 
 export type ChannelMap = Record<string, ChannelMapEntry>
 
-export function buildClientApi(client: IpcClient, channelMap: ChannelMap): ElectronAPI {
+export function buildClientApi(
+  client: IpcClient,
+  channelMap: ChannelMap,
+  isChannelAvailable?: (channel: string) => boolean,
+): ElectronAPI {
   const api: Record<string, any> = {}
   const nested: Record<string, Record<string, any>> = {}
 
@@ -27,7 +32,11 @@ export function buildClientApi(client: IpcClient, channelMap: ChannelMap): Elect
     let fn: (...args: any[]) => any
 
     if (entry.type === 'listener') {
-      fn = (callback: (...args: unknown[]) => void) => client.on(entry.channel, (...args) => callback(...args))
+      fn = (callback: (...args: unknown[]) => void) =>
+        client.on(entry.channel, (...args) => {
+          const transformedArgs = entry.transformArgs ? entry.transformArgs(...args) : args
+          callback(...transformedArgs)
+        })
     } else {
       fn = async (...args: unknown[]) => {
         const mappedArgs = entry.mapArgs ? entry.mapArgs(...args) : args
@@ -51,6 +60,8 @@ export function buildClientApi(client: IpcClient, channelMap: ChannelMap): Elect
   for (const [namespace, methods] of Object.entries(nested)) {
     api[namespace] = methods
   }
+
+  api.isChannelAvailable = (channel: string) => isChannelAvailable ? isChannelAvailable(channel) : true
 
   return api as ElectronAPI
 }

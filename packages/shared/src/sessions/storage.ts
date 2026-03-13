@@ -46,6 +46,10 @@ import { sessionPersistenceQueue } from './persistence-queue.ts';
 // Re-export types for convenience
 export type { SessionConfig } from './types.ts';
 
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
+
 // ============================================================
 // Directory Utilities
 // ============================================================
@@ -54,7 +58,7 @@ export type { SessionConfig } from './types.ts';
  * Ensure sessions directory exists for a workspace
  */
 export function ensureSessionsDir(workspaceRootPath: string): string {
-  const dir = getWorkspaceSessionsPath(workspaceRootPath);
+  const dir = getWorkspaceSessionsPath(normalizeWorkspaceRootPath(workspaceRootPath));
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -70,7 +74,7 @@ export function ensureSessionsDir(workspaceRootPath: string): string {
 export function getSessionPath(workspaceRootPath: string, sessionId: string): string {
   // Defense-in-depth: strip any path components from sessionId
   const safeSessionId = sanitizeSessionId(sessionId);
-  return join(getWorkspaceSessionsPath(workspaceRootPath), safeSessionId);
+  return join(getWorkspaceSessionsPath(normalizeWorkspaceRootPath(workspaceRootPath)), safeSessionId);
 }
 
 /**
@@ -150,7 +154,7 @@ export function getSessionDownloadsPath(workspaceRootPath: string, sessionId: st
  * Get existing session IDs for collision detection
  */
 function getExistingSessionIds(workspaceRootPath: string): Set<string> {
-  const sessionsDir = getWorkspaceSessionsPath(workspaceRootPath);
+  const sessionsDir = getWorkspaceSessionsPath(normalizeWorkspaceRootPath(workspaceRootPath));
   if (!existsSync(sessionsDir)) {
     return new Set();
   }
@@ -188,22 +192,23 @@ export async function createSession(
     isFlagged?: boolean;
   }
 ): Promise<SessionConfig> {
-  ensureSessionsDir(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  ensureSessionsDir(normalizedWorkspaceRootPath);
 
   const now = Date.now();
-  const sessionId = generateSessionId(workspaceRootPath);
+  const sessionId = generateSessionId(normalizedWorkspaceRootPath);
 
   // Create session directory with all subdirectories (plans, attachments)
-  ensureSessionDir(workspaceRootPath, sessionId);
+  ensureSessionDir(normalizedWorkspaceRootPath, sessionId);
 
   // Set sdkCwd to initial working directory or session path - this never changes
   // The SDK stores session transcripts at ~/.claude/projects/{cwd-slugified}/
   // If workingDirectory changes later, sdkCwd stays the same to preserve session resumption
-  const sdkCwd = options?.workingDirectory ?? getSessionPath(workspaceRootPath, sessionId);
+  const sdkCwd = options?.workingDirectory ?? getSessionPath(normalizedWorkspaceRootPath, sessionId);
 
   const session: SessionConfig = {
     id: sessionId,
-    workspaceRootPath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
     name: options?.name,
     createdAt: now,
     lastUsedAt: now,
@@ -249,18 +254,19 @@ export async function createImportedSession(
     messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp?: number }>;
   }
 ): Promise<SessionConfig> {
-  ensureSessionsDir(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  ensureSessionsDir(normalizedWorkspaceRootPath);
 
   const now = Date.now();
-  const sessionId = generateSessionId(workspaceRootPath);
-  ensureSessionDir(workspaceRootPath, sessionId);
+  const sessionId = generateSessionId(normalizedWorkspaceRootPath);
+  ensureSessionDir(normalizedWorkspaceRootPath, sessionId);
 
   const createdAt = options.createdAt ?? now;
   const lastUsedAt = options.updatedAt ?? now;
 
   const session: SessionConfig = {
     id: sessionId,
-    workspaceRootPath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
     name: options.name,
     createdAt,
     lastUsedAt,
@@ -299,7 +305,8 @@ export async function getOrCreateSessionById(
   workspaceRootPath: string,
   sessionId: string
 ): Promise<SessionConfig> {
-  const existing = loadSession(workspaceRootPath, sessionId);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const existing = loadSession(normalizedWorkspaceRootPath, sessionId);
   if (existing) {
     return {
       id: existing.id,
@@ -314,18 +321,18 @@ export async function getOrCreateSessionById(
   }
 
   // Create new session with the specified ID
-  ensureSessionsDir(workspaceRootPath);
+  ensureSessionsDir(normalizedWorkspaceRootPath);
 
   // Create session directory with all subdirectories (plans, attachments)
-  ensureSessionDir(workspaceRootPath, sessionId);
+  ensureSessionDir(normalizedWorkspaceRootPath, sessionId);
 
   const now = Date.now();
   // Set sdkCwd to session path - this never changes (ensures SDK can find session transcripts)
-  const sdkCwd = getSessionPath(workspaceRootPath, sessionId);
+  const sdkCwd = getSessionPath(normalizedWorkspaceRootPath, sessionId);
 
   const session: SessionConfig = {
     id: sessionId,
-    workspaceRootPath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
     sdkCwd,
     createdAt: now,
     lastUsedAt: now,
@@ -357,6 +364,13 @@ export async function getOrCreateSessionById(
  * Writes in JSONL format: line 1 = header, lines 2+ = messages
  */
 export async function saveSession(session: StoredSession): Promise<void> {
+  session.workspaceRootPath = normalizeWorkspaceRootPath(session.workspaceRootPath);
+  if (session.sdkCwd) {
+    session.sdkCwd = expandPath(session.sdkCwd);
+  }
+  if (session.workingDirectory) {
+    session.workingDirectory = expandPath(session.workingDirectory);
+  }
   sessionPersistenceQueue.enqueue(session);
   await sessionPersistenceQueue.flush(session.id);
 }
@@ -375,10 +389,20 @@ export { sessionPersistenceQueue } from './persistence-queue.js'
 export function loadSession(workspaceRootPath: string, sessionId: string): StoredSession | null {
   const end = perf.start('session.loadSession', { sessionId });
 
-  const jsonlPath = getSessionFilePath(workspaceRootPath, sessionId);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const jsonlPath = getSessionFilePath(normalizedWorkspaceRootPath, sessionId);
   if (existsSync(jsonlPath)) {
     const session = readSessionJsonl(jsonlPath);
     if (session) {
+      session.workspaceRootPath = normalizeWorkspaceRootPath(
+        session.workspaceRootPath || normalizedWorkspaceRootPath,
+      );
+      if (session.sdkCwd) {
+        session.sdkCwd = expandPath(session.sdkCwd);
+      }
+      if (session.workingDirectory) {
+        session.workingDirectory = expandPath(session.workingDirectory);
+      }
       end();
       return session;
     }
@@ -396,7 +420,8 @@ export function loadSession(workspaceRootPath: string, sessionId: string): Store
  */
 export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   const span = perf.span('session.listSessions');
-  const sessionsDir = getWorkspaceSessionsPath(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const sessionsDir = getWorkspaceSessionsPath(normalizedWorkspaceRootPath);
   if (!existsSync(sessionsDir)) {
     span.end();
     return [];
@@ -422,7 +447,7 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
       if (existsSync(jsonlFile)) {
         const header = readSessionHeader(jsonlFile);
         if (header) {
-          const metadata = headerToMetadata(header, workspaceRootPath);
+          const metadata = headerToMetadata(header, normalizedWorkspaceRootPath);
           if (metadata) sessions.push(metadata);
         }
       }
@@ -443,11 +468,12 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
  */
 function headerToMetadata(header: SessionHeader, workspaceRootPath: string): SessionMetadata | null {
   try {
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
     // Validate todoState against workspace status config
-    const validatedTodoState = validateSessionStatus(workspaceRootPath, header.todoState);
+    const validatedTodoState = validateSessionStatus(normalizedWorkspaceRootPath, header.todoState);
 
     // Count plan files for this session
-    const planCount = listPlanFiles(workspaceRootPath, header.id).length;
+    const planCount = listPlanFiles(normalizedWorkspaceRootPath, header.id).length;
 
     // Migration: For sessions created before sdkCwd was added, use workingDirectory as fallback.
     const workingDir = header.workingDirectory ? expandPath(header.workingDirectory) : undefined;
@@ -455,7 +481,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
 
     return {
       id: header.id,
-      workspaceRootPath,
+      workspaceRootPath: normalizedWorkspaceRootPath,
       name: header.name,
       createdAt: header.createdAt,
       lastUsedAt: header.lastUsedAt,

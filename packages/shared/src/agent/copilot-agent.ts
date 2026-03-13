@@ -32,6 +32,7 @@ export function resolveCopilotModelId(modelId: string): string {
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
 import type { Workspace } from '../config/storage.ts';
+import { expandPath } from '../utils/paths.ts';
 
 // Copilot SDK
 import { CopilotClient, CopilotSession } from '@github/copilot-sdk';
@@ -1013,7 +1014,7 @@ export class CopilotAgent extends BaseAgent {
       const workspaceRootPath = this.config.workspace.rootPath;
       if (sessionId && workspaceRootPath) {
         const nodePath = this.config.nodePath || 'bun';
-        const plansFolderPath = join(workspaceRootPath, 'sessions', sessionId, 'plans');
+        const plansFolderPath = join(expandPath(workspaceRootPath), 'sessions', sessionId, 'plans');
         config['session'] = {
           type: 'local',
           command: nodePath,

@@ -43,16 +43,28 @@ function resolveUpwards(base: string, relativePath: string, maxLevels = 6): stri
 }
 
 function resolveBundledRuntimePath(hostRuntime: BackendHostRuntimeContext): string | undefined {
-  if (hostRuntime.nodeRuntimePath && existsSync(hostRuntime.nodeRuntimePath)) {
-    return hostRuntime.nodeRuntimePath;
-  }
-
   const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun';
   const bunBasePath = process.platform === 'win32'
     ? (hostRuntime.resourcesPath || hostRuntime.appRootPath)
     : hostRuntime.appRootPath;
   const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary);
-  return existsSync(bunPath) ? bunPath : undefined;
+  if (existsSync(bunPath)) {
+    return bunPath;
+  }
+
+  if (!hostRuntime.isPackaged) {
+    try {
+      const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+      const systemBun = execFileSync(whichCmd, ['bun'], { encoding: 'utf-8' }).trim();
+      if (systemBun && existsSync(systemBun)) {
+        return systemBun;
+      }
+    } catch {
+      // Fall back to plain "bun" below if PATH resolution is unavailable.
+    }
+  }
+
+  return undefined;
 }
 
 function resolveClaudeCliPath(hostRuntime: BackendHostRuntimeContext): string | undefined {
@@ -152,7 +164,7 @@ function resolveRipgrepPath(hostRuntime: BackendHostRuntimeContext): string | un
 }
 
 export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContext): ResolvedBackendRuntimePaths {
-  const bundledRuntimePath = resolveBundledRuntimePath(hostRuntime);
+  const bundledRuntimePath = hostRuntime.nodeRuntimePath || resolveBundledRuntimePath(hostRuntime);
 
   return {
     claudeCliPath: resolveClaudeCliPath(hostRuntime),
@@ -161,7 +173,7 @@ export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContex
     copilotInterceptorPath: resolveCopilotInterceptorPath(hostRuntime),
     piServerPath: resolvePiServerPath(hostRuntime),
     piInterceptorPath: resolvePiInterceptorPath(hostRuntime),
-    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || (process.platform === 'win32' && !hostRuntime.isPackaged ? 'node' : undefined),
+    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || 'bun',
     bundledRuntimePath,
   };
 }

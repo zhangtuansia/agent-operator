@@ -1,161 +1,108 @@
-import { ipcMain } from 'electron'
+import { shell } from 'electron'
+import {
+  CHATGPT_OAUTH_CONFIG,
+  createCallbackServer,
+  prepareChatGptOAuth,
+  type CallbackServer,
+  exchangeChatGptTokens,
+} from '@agent-operator/shared/auth'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
-import { IPC_CHANNELS } from '../../shared/types'
-import { ipcLog } from '../logger'
+import type { Logger } from '../logger'
 import { getModelRefreshService } from '../model-fetchers'
 
-export function registerOauthHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.CHATGPT_START_OAUTH, async (_event, connectionSlug: string): Promise<{
-    success: boolean
-    error?: string
-  }> => {
-    try {
-      const { startChatGptOAuth, exchangeChatGptCode } = await import('@agent-operator/shared/auth')
-      const credentialManager = getCredentialManager()
+let activeChatGptFlow:
+  | {
+    callbackServer: CallbackServer
+    reject: (error: Error) => void
+  }
+  | null = null
 
-      ipcLog.info(`Starting ChatGPT OAuth flow for connection: ${connectionSlug}`)
+export async function performLocalChatGptOAuthFlow(
+  connectionSlug: string,
+  logger: Pick<Logger, 'info' | 'error' | 'warn'>,
+): Promise<{ success: boolean; error?: string }> {
+  if (activeChatGptFlow) {
+    activeChatGptFlow.callbackServer.close()
+    activeChatGptFlow.reject(new Error('ChatGPT OAuth flow replaced by a newer request'))
+    activeChatGptFlow = null
+  }
 
-      const code = await startChatGptOAuth((status) => {
-        ipcLog.info(`[ChatGPT OAuth] ${status}`)
-      })
+  const credentialManager = getCredentialManager()
+  let callbackServer: CallbackServer | null = null
 
-      const tokens = await exchangeChatGptCode(code, (status) => {
-        ipcLog.info(`[ChatGPT OAuth] ${status}`)
-      })
+  try {
+    logger.info(`[ChatGPT OAuth] Starting local flow for ${connectionSlug}`)
 
-      await credentialManager.setLlmOAuth(connectionSlug, {
-        accessToken: tokens.accessToken,
-        idToken: tokens.idToken,
-        refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt,
-      })
+    callbackServer = await createCallbackServer({
+      appType: 'electron',
+      port: CHATGPT_OAUTH_CONFIG.CALLBACK_PORT,
+      callbackPaths: ['/auth/callback'],
+    })
 
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('ChatGPT OAuth failed:', error)
+    const prepared = prepareChatGptOAuth()
+    const callbackPromise = new Promise<Awaited<typeof callbackServer.promise>>((resolve, reject) => {
+      activeChatGptFlow = {
+        callbackServer: callbackServer!,
+        reject,
+      }
+      callbackServer!.promise.then(resolve, reject)
+    })
+
+    await shell.openExternal(prepared.authUrl)
+
+    const callback = await callbackPromise
+
+    if (callback.query.error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'OAuth authentication failed',
+        error: callback.query.error_description || callback.query.error,
       }
     }
-  })
 
-  ipcMain.handle(IPC_CHANNELS.CHATGPT_CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
-    try {
-      const { cancelChatGptOAuth } = await import('@agent-operator/shared/auth')
-      cancelChatGptOAuth()
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('Failed to cancel ChatGPT OAuth:', error)
-      return { success: false }
+    const code = callback.query.code
+    if (!code) {
+      return { success: false, error: 'No authorization code received' }
     }
-  })
 
-  ipcMain.handle(IPC_CHANNELS.CHATGPT_GET_AUTH_STATUS, async (_event, connectionSlug: string): Promise<{
-    authenticated: boolean
-    expiresAt?: number
-    hasRefreshToken?: boolean
-  }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      const oauth = await credentialManager.getLlmOAuth(connectionSlug)
-      if (!oauth) {
-        return { authenticated: false }
-      }
+    const tokens = await exchangeChatGptTokens(code, prepared.codeVerifier, (status) => {
+      logger.info(`[ChatGPT OAuth] ${status}`)
+    })
 
-      const isExpired = oauth.expiresAt !== undefined
-        ? Date.now() > oauth.expiresAt - 5 * 60 * 1000
-        : false
-      const hasRefreshToken = !!oauth.refreshToken
-      const authenticated = !!oauth.accessToken && !!oauth.idToken && (!isExpired || hasRefreshToken)
+    await credentialManager.setLlmOAuth(connectionSlug, {
+      accessToken: tokens.accessToken,
+      idToken: tokens.idToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+    })
 
-      return {
-        authenticated,
-        expiresAt: oauth.expiresAt,
-        hasRefreshToken,
-      }
-    } catch (error) {
-      ipcLog.error('Failed to get ChatGPT auth status:', error)
-      return { authenticated: false }
+    getModelRefreshService().refreshNow(connectionSlug).catch(err => {
+      logger.warn(`[ChatGPT OAuth] Model refresh failed for ${connectionSlug}: ${err instanceof Error ? err.message : err}`)
+    })
+
+    logger.info(`[ChatGPT OAuth] Completed local flow for ${connectionSlug}`)
+    return { success: true }
+  } catch (error) {
+    logger.error('[ChatGPT OAuth] Local flow failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'ChatGPT OAuth flow failed',
     }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.CHATGPT_LOGOUT, async (_event, connectionSlug: string): Promise<{ success: boolean }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      await credentialManager.deleteLlmCredentials(connectionSlug)
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('Failed to clear ChatGPT credentials:', error)
-      return { success: false }
+  } finally {
+    callbackServer?.close()
+    if (activeChatGptFlow?.callbackServer === callbackServer) {
+      activeChatGptFlow = null
     }
-  })
+  }
+}
 
-  ipcMain.handle(IPC_CHANNELS.COPILOT_START_OAUTH, async (event, connectionSlug: string): Promise<{
-    success: boolean
-    error?: string
-  }> => {
-    try {
-      const { startGithubOAuth } = await import('@agent-operator/shared/auth')
-      const credentialManager = getCredentialManager()
-
-      const tokens = await startGithubOAuth(
-        (status) => ipcLog.info(`[GitHub OAuth] ${status}`),
-        (deviceCode) => {
-          event.sender.send(IPC_CHANNELS.COPILOT_DEVICE_CODE, deviceCode)
-        },
-      )
-
-      await credentialManager.setLlmOAuth(connectionSlug, {
-        accessToken: tokens.accessToken,
-      })
-
-      getModelRefreshService().refreshNow(connectionSlug).catch(err => {
-        ipcLog.warn(`Model refresh after OAuth failed for ${connectionSlug}:`, err)
-      })
-
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('GitHub OAuth failed:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'OAuth authentication failed',
-      }
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.COPILOT_CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
-    try {
-      const { cancelGithubOAuth } = await import('@agent-operator/shared/auth')
-      cancelGithubOAuth()
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('Failed to cancel GitHub OAuth:', error)
-      return { success: false }
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.COPILOT_GET_AUTH_STATUS, async (_event, connectionSlug: string): Promise<{
-    authenticated: boolean
-  }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      const oauth = await credentialManager.getLlmOAuth(connectionSlug)
-      return { authenticated: !!oauth?.accessToken }
-    } catch (error) {
-      ipcLog.error('Failed to get GitHub auth status:', error)
-      return { authenticated: false }
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.COPILOT_LOGOUT, async (_event, connectionSlug: string): Promise<{ success: boolean }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      await credentialManager.deleteLlmCredentials(connectionSlug)
-      return { success: true }
-    } catch (error) {
-      ipcLog.error('Failed to clear Copilot credentials:', error)
-      return { success: false }
-    }
-  })
+export function cancelLocalChatGptOAuthFlow(
+  logger: Pick<Logger, 'info' | 'error' | 'warn'>,
+): { success: boolean } {
+  if (activeChatGptFlow) {
+    activeChatGptFlow.callbackServer.close()
+    activeChatGptFlow.reject(new Error('ChatGPT OAuth cancelled'))
+    activeChatGptFlow = null
+    logger.info('[ChatGPT OAuth] Local flow cancelled')
+  }
+  return { success: true }
 }

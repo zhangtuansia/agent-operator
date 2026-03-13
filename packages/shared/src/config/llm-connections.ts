@@ -9,13 +9,17 @@
 import {
   type ModelDefinition,
   CLAUDE_MODELS,
-  BEDROCK_MODELS,
   DEEPSEEK_MODELS,
   GLM_MODELS,
   MINIMAX_MODELS,
   DOUBAO_MODELS,
   KIMI_MODELS,
+  getBedrockModel,
+  getEffectiveBedrockDefaultModel,
+  getEffectiveBedrockModels,
+  getPreferredBedrockSmallFastModelFromEnv,
 } from './models.ts';
+import type { CredentialManager } from '../credentials/manager.ts';
 
 // ============================================================
 // Types
@@ -74,6 +78,10 @@ export interface LlmConnection {
   models?: Array<ModelDefinition | string>;
   /** Default model */
   defaultModel?: string;
+  /** Model list ownership mode */
+  modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier';
+  /** Underlying Pi auth provider when providerType is 'pi' */
+  piAuthProvider?: string;
   /**
    * Optional codex binary path for OpenAI provider connections.
    * If absent, runtime should use `codex` from PATH.
@@ -100,6 +108,12 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   isDefault?: boolean;
 }
 
+export interface ResolvedAuthEnvVars {
+  envVars: Record<string, string>;
+  success: boolean;
+  warning?: string;
+}
+
 // ============================================================
 // Built-in model defaults
 // ============================================================
@@ -118,6 +132,13 @@ const OPENAI_MODELS: ModelDefinition[] = [
     description: 'Fast OpenAI model',
   },
 ];
+
+type PiModelResolver = (piAuthProvider?: string) => ModelDefinition[];
+let _piModelResolver: PiModelResolver = () => [];
+
+export function registerPiModelResolver(resolver: PiModelResolver): void {
+  _piModelResolver = resolver;
+}
 
 // ============================================================
 // Helpers
@@ -247,6 +268,83 @@ export function isCopilotProvider(providerType: LlmProviderType): boolean {
   return providerType === 'copilot';
 }
 
+export async function resolveAuthEnvVars(
+  connection: LlmConnection,
+  connectionSlug: string,
+  credentialManager: CredentialManager,
+  getValidOAuthToken: (slug: string) => Promise<{ accessToken?: string | null }>,
+): Promise<ResolvedAuthEnvVars> {
+  const envVars: Record<string, string> = {};
+
+  if (!isAnthropicProvider(connection.providerType)) {
+    return { envVars, success: true };
+  }
+
+  if (connection.providerType === 'bedrock') {
+    envVars.CLAUDE_CODE_USE_BEDROCK = '1';
+
+    const resolvedRegion = connection.awsRegion?.trim() || process.env.AWS_REGION?.trim();
+    if (resolvedRegion) {
+      envVars.AWS_REGION = resolvedRegion;
+    }
+
+    const resolvedProfile = process.env.AWS_PROFILE?.trim() || process.env.CLAUDE_CODE_AWS_PROFILE?.trim();
+    if (resolvedProfile) {
+      envVars.AWS_PROFILE = resolvedProfile;
+    }
+
+    const resolvedModel = getBedrockModel(connection.defaultModel);
+    if (resolvedModel) {
+      envVars.ANTHROPIC_MODEL = resolvedModel;
+    }
+
+    const resolvedSmallFastModel = getPreferredBedrockSmallFastModelFromEnv();
+    if (resolvedSmallFastModel) {
+      envVars.ANTHROPIC_SMALL_FAST_MODEL = resolvedSmallFastModel;
+      envVars.ANTHROPIC_DEFAULT_HAIKU_MODEL = resolvedSmallFastModel;
+    }
+
+    return { envVars, success: true };
+  }
+
+  if (connection.baseUrl) {
+    envVars.ANTHROPIC_BASE_URL = connection.baseUrl;
+  }
+
+  const authType = connection.authType;
+
+  if (authType === 'api_key' || authType === 'api_key_with_endpoint' || authType === 'bearer_token') {
+    const apiKey = await credentialManager.getLlmApiKey(connectionSlug);
+    if (apiKey) {
+      envVars.ANTHROPIC_API_KEY = apiKey;
+    } else if (connection.baseUrl) {
+      envVars.ANTHROPIC_API_KEY = 'not-needed';
+    } else {
+      return { envVars, success: false, warning: `No API key found for: ${connectionSlug}` };
+    }
+  } else if (authType === 'oauth') {
+    if (connection.providerType === 'anthropic') {
+      const tokenResult = await getValidOAuthToken(connectionSlug);
+      if (tokenResult.accessToken) {
+        envVars.CLAUDE_CODE_OAUTH_TOKEN = tokenResult.accessToken;
+      } else {
+        return { envVars, success: false, warning: `Failed to get OAuth token for: ${connectionSlug}` };
+      }
+    } else {
+      const llmOAuth = await credentialManager.getLlmOAuth(connectionSlug);
+      if (llmOAuth?.accessToken) {
+        envVars.CLAUDE_CODE_OAUTH_TOKEN = llmOAuth.accessToken;
+      } else {
+        return { envVars, success: false, warning: `No OAuth token found for: ${connectionSlug}` };
+      }
+    }
+  } else if (authType === 'environment') {
+    return { envVars, success: true };
+  }
+
+  return { envVars, success: true };
+}
+
 /**
  * Whether provider uses Pi backend.
  */
@@ -258,13 +356,16 @@ export function isPiProvider(providerType: LlmProviderType): boolean {
  * Registry models for standard providers.
  * Compat providers intentionally return empty here.
  */
-export function getModelsForProviderType(providerType: LlmProviderType): ModelDefinition[] {
+export function getModelsForProviderType(
+  providerType: LlmProviderType,
+  piAuthProvider?: string,
+): ModelDefinition[] {
   if (isCompatProvider(providerType)) {
     return [];
   }
 
   if (providerType === 'bedrock') {
-    return BEDROCK_MODELS;
+    return getEffectiveBedrockModels();
   }
 
   if (providerType === 'openai') {
@@ -276,7 +377,7 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
   }
 
   if (providerType === 'pi') {
-    return [];
+    return _piModelResolver(piAuthProvider);
   }
 
   return CLAUDE_MODELS;
@@ -286,15 +387,18 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
  * Model defaults for a connection provider type.
  * Compat providers use explicit string model IDs.
  */
-export function getDefaultModelsForConnection(providerType: LlmProviderType): Array<ModelDefinition | string> {
+export function getDefaultModelsForConnection(
+  providerType: LlmProviderType,
+  piAuthProvider?: string,
+): Array<ModelDefinition | string> {
   if (providerType === 'openai_compat') return [
     'openai/gpt-5.3-codex',
     'openai/gpt-5.1-codex-mini',
   ];
   if (providerType === 'openai') return OPENAI_MODELS;
-  if (providerType === 'bedrock') return BEDROCK_MODELS;
+  if (providerType === 'bedrock') return getEffectiveBedrockModels();
   if (providerType === 'copilot') return [];
-  if (providerType === 'pi') return [];
+  if (providerType === 'pi') return _piModelResolver(piAuthProvider);
   if (providerType === 'anthropic_compat') return [
     'anthropic/claude-opus-4.5',
     'anthropic/claude-sonnet-4.5',
@@ -306,15 +410,21 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType): Ar
 /**
  * Default model ID for a provider type.
  */
-export function getDefaultModelForConnection(providerType: LlmProviderType): string {
+export function getDefaultModelForConnection(
+  providerType: LlmProviderType,
+  piAuthProvider?: string,
+): string {
   if (providerType === 'copilot') {
     // Copilot models are dynamic; use a stable placeholder until listModels() refreshes.
     return 'gpt-5';
   }
+  if (providerType === 'bedrock') {
+    return getEffectiveBedrockDefaultModel();
+  }
   if (providerType === 'pi') {
     return 'pi/claude-sonnet-4-5-20250929';
   }
-  const models = getDefaultModelsForConnection(providerType);
+  const models = getDefaultModelsForConnection(providerType, piAuthProvider);
   const first = models[0];
   if (!first) return CLAUDE_MODELS[0]!.id;
   return typeof first === 'string' ? first : first.id;

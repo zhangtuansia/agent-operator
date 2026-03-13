@@ -15,9 +15,14 @@ import type { WorkspaceLabelConfig, LabelConfig } from './types.ts';
 import { flattenLabels, findLabelById } from './tree.ts';
 import { migrateLabelColors } from '../colors/migrate.ts';
 import { debug } from '../utils/debug.ts';
+import { expandPath } from '../utils/paths.ts';
 
 const LABEL_CONFIG_DIR = 'labels';
 const LABEL_CONFIG_FILE = 'labels/config.json';
+
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
 
 /** Label name translations per locale */
 const LABEL_NAMES: Record<string, Record<string, string>> = {
@@ -119,14 +124,15 @@ export function getDefaultLabelConfig(locale?: string): WorkspaceLabelConfig {
  * @param locale - Optional locale for seeding default labels with localized names
  */
 export function loadLabelConfig(workspaceRootPath: string, locale?: string): WorkspaceLabelConfig {
-  const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const configPath = join(normalizedWorkspaceRootPath, LABEL_CONFIG_FILE);
 
   // If no config file exists, seed with defaults and persist to disk.
   // This ensures existing workspaces (created before default labels existed) get populated.
   if (!existsSync(configPath)) {
     const defaults = getDefaultLabelConfig(locale);
     debug('[loadLabelConfig] No config found, seeding with default labels');
-    saveLabelConfig(workspaceRootPath, defaults);
+    saveLabelConfig(normalizedWorkspaceRootPath, defaults);
     return defaults;
   }
 
@@ -138,7 +144,7 @@ export function loadLabelConfig(workspaceRootPath: string, locale?: string): Wor
     const migrated = migrateLabelColors(config);
     if (migrated) {
       debug('[loadLabelConfig] Migrated old color format, writing back');
-      saveLabelConfig(workspaceRootPath, config);
+      saveLabelConfig(normalizedWorkspaceRootPath, config);
     }
 
     return config;
@@ -156,8 +162,9 @@ export function saveLabelConfig(
   workspaceRootPath: string,
   config: WorkspaceLabelConfig
 ): void {
-  const labelDir = join(workspaceRootPath, LABEL_CONFIG_DIR);
-  const configPath = join(workspaceRootPath, LABEL_CONFIG_FILE);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const labelDir = join(normalizedWorkspaceRootPath, LABEL_CONFIG_DIR);
+  const configPath = join(normalizedWorkspaceRootPath, LABEL_CONFIG_FILE);
 
   if (!existsSync(labelDir)) {
     mkdirSync(labelDir, { recursive: true });
@@ -222,5 +229,4 @@ export function isValidLabelIdFormat(labelId: string): boolean {
   const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
   return SLUG_PATTERN.test(labelId);
 }
-
 

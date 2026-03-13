@@ -9,14 +9,18 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.labels.DELETE,
 ] as const
 
-export function registerLabelsHandlers(server: RpcServer, _deps: HandlerDeps): void {
+export function registerLabelsHandlers(server: RpcServer, deps: HandlerDeps): void {
   // List all labels for a workspace
   server.handle(RPC_CHANNELS.labels.LIST, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
     const { listLabels } = await import('@agent-operator/shared/labels/storage')
-    return listLabels(workspace.rootPath)
+    const { loadStoredConfig } = await import('@agent-operator/shared/config/storage')
+    const storedLang = loadStoredConfig()?.uiLanguage
+    const systemLang = deps.platform.appLocale?.()?.startsWith('zh') ? 'zh' : undefined
+    const locale = storedLang || systemLang
+    return listLabels(workspace.rootPath, locale)
   })
 
   // Create a new label in a workspace

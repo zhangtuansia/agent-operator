@@ -55,21 +55,12 @@ function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
 }
 
 /**
- * Start the OAuth flow by generating the login URL and opening the browser
- *
- * Returns the authorization URL that was opened. The user will authenticate
- * and then need to copy the authorization code from the callback page.
+ * Prepare the OAuth flow without opening the browser.
  */
-export async function startClaudeOAuth(
-  onStatus?: (message: string) => void
-): Promise<string> {
-  onStatus?.('Generating authentication URL...')
-
-  // Generate secure random values
+export function prepareClaudeOAuth(): string {
   const state = generateState()
   const { codeVerifier, codeChallenge } = generatePKCE()
 
-  // Store state for later verification
   const now = Date.now()
   currentOAuthState = {
     state,
@@ -78,7 +69,6 @@ export async function startClaudeOAuth(
     expiresAt: now + STATE_EXPIRY_MS,
   }
 
-  // Build OAuth URL
   const params = new URLSearchParams({
     code: 'true',
     client_id: CLAUDE_CLIENT_ID,
@@ -90,7 +80,20 @@ export async function startClaudeOAuth(
     state,
   })
 
-  const authUrl = `${CLAUDE_AUTH_URL}?${params.toString()}`
+  return `${CLAUDE_AUTH_URL}?${params.toString()}`
+}
+
+/**
+ * Start the OAuth flow by generating the login URL and opening the browser
+ *
+ * Returns the authorization URL that was opened. The user will authenticate
+ * and then need to copy the authorization code from the callback page.
+ */
+export async function startClaudeOAuth(
+  onStatus?: (message: string) => void
+): Promise<string> {
+  onStatus?.('Generating authentication URL...')
+  const authUrl = prepareClaudeOAuth()
 
   // Open browser
   onStatus?.('Opening browser for authentication...')

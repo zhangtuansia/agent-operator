@@ -33,6 +33,10 @@ const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 const PLUGIN_NAME_PREFIX = 'dazi-workspace-';
 const LEGACY_PLUGIN_NAME_PREFIX = 'craft-workspace-';
 
+function normalizeWorkspaceRootPath(rootPath: string): string {
+  return expandPath(rootPath);
+}
+
 // ============================================================
 // Path Utilities
 // ============================================================
@@ -67,7 +71,7 @@ export function getWorkspacePath(workspaceId: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function getWorkspaceSourcesPath(rootPath: string): string {
-  return join(rootPath, 'sources');
+  return join(normalizeWorkspaceRootPath(rootPath), 'sources');
 }
 
 /**
@@ -75,7 +79,7 @@ export function getWorkspaceSourcesPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function getWorkspaceSessionsPath(rootPath: string): string {
-  return join(rootPath, 'sessions');
+  return join(normalizeWorkspaceRootPath(rootPath), 'sessions');
 }
 
 /**
@@ -83,7 +87,7 @@ export function getWorkspaceSessionsPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function getWorkspaceSkillsPath(rootPath: string): string {
-  return join(rootPath, 'skills');
+  return join(normalizeWorkspaceRootPath(rootPath), 'skills');
 }
 
 // ============================================================
@@ -95,7 +99,8 @@ export function getWorkspaceSkillsPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
-  const configPath = join(rootPath, 'config.json');
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  const configPath = join(normalizedRootPath, 'config.json');
   if (!existsSync(configPath)) return null;
 
   try {
@@ -117,8 +122,9 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): void {
-  if (!existsSync(rootPath)) {
-    mkdirSync(rootPath, { recursive: true });
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  if (!existsSync(normalizedRootPath)) {
+    mkdirSync(normalizedRootPath, { recursive: true });
   }
 
   // Convert paths to portable form for cross-machine compatibility
@@ -134,7 +140,7 @@ export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): 
     };
   }
 
-  writeFileSync(join(rootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
+  writeFileSync(join(normalizedRootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
 }
 
 // ============================================================
@@ -266,6 +272,7 @@ export function createWorkspaceAtPath(
   name: string,
   defaults?: WorkspaceConfig['defaults']
 ): WorkspaceConfig {
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
   const now = Date.now();
   const slug = generateSlug(name);
 
@@ -279,7 +286,7 @@ export function createWorkspaceAtPath(
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
     thinkingLevel: globalDefaults.workspaceDefaults.thinkingLevel,
     enabledSourceSlugs: [],
-    workingDirectory: rootPath,
+    workingDirectory: normalizedRootPath,
     ...defaults, // User-provided defaults override global defaults
   };
 
@@ -294,20 +301,20 @@ export function createWorkspaceAtPath(
   };
 
   // Create workspace directory structure
-  mkdirSync(rootPath, { recursive: true });
-  mkdirSync(getWorkspaceSourcesPath(rootPath), { recursive: true });
-  mkdirSync(getWorkspaceSessionsPath(rootPath), { recursive: true });
-  mkdirSync(getWorkspaceSkillsPath(rootPath), { recursive: true });
+  mkdirSync(normalizedRootPath, { recursive: true });
+  mkdirSync(getWorkspaceSourcesPath(normalizedRootPath), { recursive: true });
+  mkdirSync(getWorkspaceSessionsPath(normalizedRootPath), { recursive: true });
+  mkdirSync(getWorkspaceSkillsPath(normalizedRootPath), { recursive: true });
 
   // Save config
-  saveWorkspaceConfig(rootPath, config);
+  saveWorkspaceConfig(normalizedRootPath, config);
 
   // Initialize status configuration with defaults
-  saveStatusConfig(rootPath, getDefaultStatusConfig());
-  ensureDefaultIconFiles(rootPath);
+  saveStatusConfig(normalizedRootPath, getDefaultStatusConfig());
+  ensureDefaultIconFiles(normalizedRootPath);
 
   // Initialize plugin manifest for SDK integration (enables skills, commands, agents)
-  ensurePluginManifest(rootPath, name);
+  ensurePluginManifest(normalizedRootPath, name);
 
   return config;
 }
@@ -317,10 +324,11 @@ export function createWorkspaceAtPath(
  * @param rootPath - Absolute path to workspace root folder
  */
 export function deleteWorkspaceFolder(rootPath: string): boolean {
-  if (!existsSync(rootPath)) return false;
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  if (!existsSync(normalizedRootPath)) return false;
 
   try {
-    rmSync(rootPath, { recursive: true });
+    rmSync(normalizedRootPath, { recursive: true });
     return true;
   } catch {
     return false;
@@ -332,7 +340,7 @@ export function deleteWorkspaceFolder(rootPath: string): boolean {
  * @param rootPath - Absolute path to check
  */
 export function isValidWorkspace(rootPath: string): boolean {
-  return existsSync(join(rootPath, 'config.json'));
+  return existsSync(join(normalizeWorkspaceRootPath(rootPath), 'config.json'));
 }
 
 /**
@@ -341,12 +349,13 @@ export function isValidWorkspace(rootPath: string): boolean {
  * @param newName - New display name
  */
 export function renameWorkspaceFolder(rootPath: string, newName: string): boolean {
-  const config = loadWorkspaceConfig(rootPath);
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  const config = loadWorkspaceConfig(normalizedRootPath);
   if (!config) return false;
 
   config.name = newName.trim();
-  saveWorkspaceConfig(rootPath, config);
-  ensurePluginManifest(rootPath, config.name);
+  saveWorkspaceConfig(normalizedRootPath, config);
+  ensurePluginManifest(normalizedRootPath, config.name);
   return true;
 }
 
@@ -394,7 +403,7 @@ export function discoverWorkspacesInDefaultLocation(): string[] {
  * @returns Theme ID or undefined (inherit from app default)
  */
 export function getWorkspaceColorTheme(rootPath: string): string | undefined {
-  const config = loadWorkspaceConfig(rootPath);
+  const config = loadWorkspaceConfig(normalizeWorkspaceRootPath(rootPath));
   return config?.defaults?.colorTheme;
 }
 
@@ -406,7 +415,8 @@ export function getWorkspaceColorTheme(rootPath: string): string | undefined {
  * @param themeId - Preset theme ID or undefined to inherit
  */
 export function setWorkspaceColorTheme(rootPath: string, themeId: string | undefined): void {
-  const config = loadWorkspaceConfig(rootPath);
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  const config = loadWorkspaceConfig(normalizedRootPath);
   if (!config) return;
 
   // Only allow safe theme IDs
@@ -427,7 +437,7 @@ export function setWorkspaceColorTheme(rootPath: string, themeId: string | undef
     delete config.defaults.colorTheme;
   }
 
-  saveWorkspaceConfig(rootPath, config);
+  saveWorkspaceConfig(normalizedRootPath, config);
 }
 
 // ============================================================
@@ -449,7 +459,7 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
   }
 
   // 2. Workspace config
-  const config = loadWorkspaceConfig(rootPath);
+  const config = loadWorkspaceConfig(normalizeWorkspaceRootPath(rootPath));
   if (config?.localMcpServers?.enabled !== undefined) {
     return config.localMcpServers.enabled;
   }
@@ -475,7 +485,8 @@ export function isLocalMcpEnabled(rootPath: string): boolean {
  * @param workspaceName - Display name for the workspace (used in plugin name)
  */
 export function ensurePluginManifest(rootPath: string, workspaceName: string): void {
-  const pluginDir = join(rootPath, '.claude-plugin');
+  const normalizedRootPath = normalizeWorkspaceRootPath(rootPath);
+  const pluginDir = join(normalizedRootPath, '.claude-plugin');
   const manifestPath = join(pluginDir, 'plugin.json');
   const desiredName = generatePluginManifestName(workspaceName);
 

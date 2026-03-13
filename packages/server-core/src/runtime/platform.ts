@@ -44,6 +44,7 @@ export interface PlatformServices {
 
   // -- App metadata --
   appVersion: string
+  appLocale?(): string | undefined
 
   // -- Image processing (nativeImage on Electron, sharp on headless) --
   imageProcessor: ImageProcessor

@@ -16,6 +16,7 @@ import { join } from 'path';
 import { debug } from '../utils/debug.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { getSourcePath } from '../sources/storage.ts';
+import { expandPath } from '../utils/paths.ts';
 import {
   SAFE_MODE_CONFIG,
   PermissionsConfigSchema,
@@ -31,6 +32,10 @@ import {
 // ============================================================
 
 const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
+
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
 
 /**
  * Get the app-level permissions directory.
@@ -281,14 +286,14 @@ export function validatePermissionsConfig(config: PermissionsConfigFile): string
  * Get path to workspace permissions.json
  */
 export function getWorkspacePermissionsPath(workspaceRootPath: string): string {
-  return join(workspaceRootPath, 'permissions.json');
+  return join(normalizeWorkspaceRootPath(workspaceRootPath), 'permissions.json');
 }
 
 /**
  * Get path to source permissions.json
  */
 export function getSourcePermissionsPath(workspaceRootPath: string, sourceSlug: string): string {
-  return join(getSourcePath(workspaceRootPath, sourceSlug), 'permissions.json');
+  return join(getSourcePath(normalizeWorkspaceRootPath(workspaceRootPath), sourceSlug), 'permissions.json');
 }
 
 /**
@@ -388,19 +393,24 @@ class PermissionsConfigCache {
    * Get or load workspace config
    */
   getWorkspaceConfig(workspaceRootPath: string): PermissionsCustomConfig | null {
-    if (!this.workspaceConfigs.has(workspaceRootPath)) {
-      this.workspaceConfigs.set(workspaceRootPath, loadWorkspacePermissionsConfig(workspaceRootPath));
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+    if (!this.workspaceConfigs.has(normalizedWorkspaceRootPath)) {
+      this.workspaceConfigs.set(
+        normalizedWorkspaceRootPath,
+        loadWorkspacePermissionsConfig(normalizedWorkspaceRootPath),
+      );
     }
-    return this.workspaceConfigs.get(workspaceRootPath) ?? null;
+    return this.workspaceConfigs.get(normalizedWorkspaceRootPath) ?? null;
   }
 
   /**
    * Get or load source config
    */
   getSourceConfig(workspaceRootPath: string, sourceSlug: string): PermissionsCustomConfig | null {
-    const key = `${workspaceRootPath}::${sourceSlug}`;
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+    const key = `${normalizedWorkspaceRootPath}::${sourceSlug}`;
     if (!this.sourceConfigs.has(key)) {
-      this.sourceConfigs.set(key, loadSourcePermissionsConfig(workspaceRootPath, sourceSlug));
+      this.sourceConfigs.set(key, loadSourcePermissionsConfig(normalizedWorkspaceRootPath, sourceSlug));
     }
     return this.sourceConfigs.get(key) ?? null;
   }
@@ -420,11 +430,12 @@ class PermissionsConfigCache {
    * Invalidate workspace config (called by ConfigWatcher)
    */
   invalidateWorkspace(workspaceRootPath: string): void {
-    debug(`[Permissions] Invalidating workspace config: ${workspaceRootPath}`);
-    this.workspaceConfigs.delete(workspaceRootPath);
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+    debug(`[Permissions] Invalidating workspace config: ${normalizedWorkspaceRootPath}`);
+    this.workspaceConfigs.delete(normalizedWorkspaceRootPath);
     // Clear all merged configs for this workspace
     for (const key of this.mergedConfigs.keys()) {
-      if (key.startsWith(`${workspaceRootPath}::`)) {
+      if (key.startsWith(`${normalizedWorkspaceRootPath}::`)) {
         this.mergedConfigs.delete(key);
       }
     }
@@ -434,16 +445,17 @@ class PermissionsConfigCache {
    * Invalidate source config (called by ConfigWatcher)
    */
   invalidateSource(workspaceRootPath: string, sourceSlug: string): void {
-    debug(`[Permissions] Invalidating source config: ${workspaceRootPath}/${sourceSlug}`);
-    this.sourceConfigs.delete(`${workspaceRootPath}::${sourceSlug}`);
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+    debug(`[Permissions] Invalidating source config: ${normalizedWorkspaceRootPath}/${sourceSlug}`);
+    this.sourceConfigs.delete(`${normalizedWorkspaceRootPath}::${sourceSlug}`);
     // Clear merged configs that include this source
     // Cache key format: "{workspaceRootPath}::{source1},{source2},..."
     // Use precise matching to avoid false positives (e.g., "linear" matching "linear-triage")
     for (const key of this.mergedConfigs.keys()) {
-      if (!key.startsWith(`${workspaceRootPath}::`)) continue;
+      if (!key.startsWith(`${normalizedWorkspaceRootPath}::`)) continue;
 
       // Extract sources portion after the ::
-      const sourcesStr = key.slice(workspaceRootPath.length + 2);
+      const sourcesStr = key.slice(normalizedWorkspaceRootPath.length + 2);
       if (!sourcesStr) continue;
 
       // Check for exact match: at start, end, or between commas
@@ -669,8 +681,9 @@ class PermissionsConfigCache {
   }
 
   private buildCacheKey(context: PermissionsContext): string {
+    const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(context.workspaceRootPath);
     const sources = context.activeSourceSlugs?.sort().join(',') ?? '';
-    return `${context.workspaceRootPath}::${sources}`;
+    return `${normalizedWorkspaceRootPath}::${sources}`;
   }
 
   /**

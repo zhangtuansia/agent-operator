@@ -99,13 +99,34 @@ export function SessionBadges({ item }: SessionBadgesProps) {
       {item.sharedUrl && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}>
+            <span
+              className="titlebar-no-drag inline-flex"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation()
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+              }}
+            >
               <EntityListBadge variant="icon" colorClass="bg-foreground/5 text-foreground/70" className="cursor-pointer">
                 <CloudUpload className="h-[10px] w-[10px]" />
               </EntityListBadge>
-            </div>
+            </span>
           </DropdownMenuTrigger>
-          <StyledDropdownMenuContent align="start" side="bottom" sideOffset={4}>
+          <StyledDropdownMenuContent
+            align="start"
+            side="bottom"
+            sideOffset={4}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
             <ShareMenuItems sessionId={item.id} sharedUrl={item.sharedUrl} menu={{ MenuItem: StyledDropdownMenuItem, Separator: StyledDropdownMenuSeparator }} />
           </StyledDropdownMenuContent>
         </DropdownMenu>

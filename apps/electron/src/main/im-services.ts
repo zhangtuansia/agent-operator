@@ -2,11 +2,10 @@
  * IM Service Manager
  *
  * Electron-specific integration layer for IM channel plugins.
- * Handles IPC registration, lifecycle management, and bridges
+ * Handles RPC registration, lifecycle management, and bridges
  * the IM GatewayManager with the SessionManager.
  */
 
-import { ipcMain } from 'electron'
 import {
   IMGatewayManager,
   IMCoworkHandler,
@@ -26,9 +25,12 @@ import {
   type ChannelConfig,
 } from '@agent-operator/shared/im'
 import { IPC_CHANNELS } from '@agent-operator/shared/ipc'
+import type { ISessionManager } from '@agent-operator/server-core/handlers'
+import type { CreateSessionOptions, SessionEvent } from '@agent-operator/shared/protocol'
+import { pushTyped, type RpcServer } from '../transport/server'
 import type { WindowManager } from './window-manager'
-import type { SessionManager } from './sessions'
 import { mainLog } from './logger'
+import type { SessionEventHub } from './session-event-hub'
 
 // ============================================================
 // IM Service Manager
@@ -37,12 +39,14 @@ import { mainLog } from './logger'
 export class IMServiceManager {
   private gatewayManager: IMGatewayManager
   private coworkHandler: IMCoworkHandler | null = null
-  private sessionManager: SessionManager
-  private windowManager: WindowManager
+  private sessionManager: ISessionManager
+  private sessionEventHub: SessionEventHub
+  private rpcServer: RpcServer | null = null
 
-  constructor(sessionManager: SessionManager, windowManager: WindowManager) {
+  constructor(sessionManager: ISessionManager, windowManager: WindowManager, sessionEventHub: SessionEventHub) {
     this.sessionManager = sessionManager
-    this.windowManager = windowManager
+    void windowManager
+    this.sessionEventHub = sessionEventHub
 
     // Create gateway manager and register channels
     this.gatewayManager = new IMGatewayManager()
@@ -51,12 +55,14 @@ export class IMServiceManager {
 
     // Forward status changes to renderer
     this.gatewayManager.on('statusChange', (statuses) => {
-      this.broadcastToAllWindows(IPC_CHANNELS.IM_STATUS_CHANGED, statuses)
+      if (!this.rpcServer) return
+      pushTyped(this.rpcServer, IPC_CHANNELS.IM_STATUS_CHANGED, { to: 'all' }, statuses)
     })
 
     // Forward message events to renderer (for activity log)
     this.gatewayManager.on('message', (message) => {
-      this.broadcastToAllWindows(IPC_CHANNELS.IM_MESSAGE_RECEIVED, message)
+      if (!this.rpcServer) return
+      pushTyped(this.rpcServer, IPC_CHANNELS.IM_MESSAGE_RECEIVED, { to: 'all' }, message)
     })
   }
 
@@ -107,15 +113,17 @@ export class IMServiceManager {
   }
 
   /**
-   * Register IPC handlers for IM operations
+   * Register transport handlers for IM operations
    */
-  registerIpcHandlers(): void {
+  registerRpcHandlers(server: RpcServer): void {
+    this.rpcServer = server
+
     // Config
-    ipcMain.handle(IPC_CHANNELS.IM_GET_CONFIG, async () => {
+    server.handle(IPC_CHANNELS.IM_GET_CONFIG, async () => {
       return getIMConfig()
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_SET_CONFIG, async (_event, config) => {
+    server.handle(IPC_CHANNELS.IM_SET_CONFIG, async (_ctx, config) => {
       // Merge with existing config to preserve secret fields not sent by UI
       const existing = getIMConfig()
       const merged: Record<string, unknown> = {}
@@ -133,18 +141,18 @@ export class IMServiceManager {
       this.setupMessageHandler()
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_GET_SETTINGS, async () => {
+    server.handle(IPC_CHANNELS.IM_GET_SETTINGS, async () => {
       return getIMSettings()
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_SET_SETTINGS, async (_event, settings) => {
+    server.handle(IPC_CHANNELS.IM_SET_SETTINGS, async (_ctx, settings) => {
       saveIMSettings(settings)
       // Re-setup message handler in case workspace routing changed
       this.setupMessageHandler()
     })
 
     // Channel lifecycle
-    ipcMain.handle(IPC_CHANNELS.IM_START_CHANNEL, async (_event, platform: IMPlatform) => {
+    server.handle(IPC_CHANNELS.IM_START_CHANNEL, async (_ctx, platform: IMPlatform) => {
       const config = getChannelConfig(platform)
       if (!config) {
         throw new Error(`No config for platform: ${platform}`)
@@ -152,11 +160,11 @@ export class IMServiceManager {
       await this.gatewayManager.startChannel(platform, config)
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_STOP_CHANNEL, async (_event, platform: IMPlatform) => {
+    server.handle(IPC_CHANNELS.IM_STOP_CHANNEL, async (_ctx, platform: IMPlatform) => {
       await this.gatewayManager.stopChannel(platform)
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_TEST_CHANNEL, async (_event, platform: IMPlatform, config?: ChannelConfig) => {
+    server.handle(IPC_CHANNELS.IM_TEST_CHANNEL, async (_ctx, platform: IMPlatform, config?: ChannelConfig) => {
       const channelConfig = config || getChannelConfig(platform)
       if (!channelConfig) {
         throw new Error(`No config for platform: ${platform}`)
@@ -165,16 +173,16 @@ export class IMServiceManager {
     })
 
     // Status
-    ipcMain.handle(IPC_CHANNELS.IM_GET_STATUS, async () => {
+    server.handle(IPC_CHANNELS.IM_GET_STATUS, async () => {
       return this.gatewayManager.getAllStatus()
     })
 
     // Session mappings
-    ipcMain.handle(IPC_CHANNELS.IM_GET_SESSION_MAPPINGS, async (_event, platform?: IMPlatform) => {
+    server.handle(IPC_CHANNELS.IM_GET_SESSION_MAPPINGS, async (_ctx, platform?: IMPlatform) => {
       return listSessionMappings(platform)
     })
 
-    ipcMain.handle(IPC_CHANNELS.IM_DELETE_SESSION_MAPPING, async (_event, conversationId: string, platform: IMPlatform) => {
+    server.handle(IPC_CHANNELS.IM_DELETE_SESSION_MAPPING, async (_ctx, conversationId: string, platform: IMPlatform) => {
       deleteSessionMapping(conversationId, platform)
     })
   }
@@ -243,12 +251,13 @@ export class IMServiceManager {
           if (options.platform) {
             labels.push(`im:${options.platform}`)
           }
-          const session = await this.sessionManager.createSession(workspace.id, {
+          const sessionOptions: CreateSessionOptions = {
             permissionMode: 'allow-all',
             workingDirectory: options.workingDirectory || workingDirectory,
             name: options.title,
             labels,
-          } as any)
+          }
+          const session = await this.sessionManager.createSession(workspace.id, sessionOptions)
           return session.id
         },
 
@@ -256,12 +265,14 @@ export class IMServiceManager {
           await this.sessionManager.sendMessage(sessionId, content)
         },
 
-        isSessionActive: (sessionId) => {
-          return this.sessionManager.isSessionProcessing(sessionId)
+        isSessionActive: async (sessionId) => {
+          const session = await this.sessionManager.getSession(sessionId)
+          return session?.isProcessing ?? false
         },
 
-        sessionExists: (sessionId) => {
-          return this.sessionManager.hasSession(sessionId)
+        sessionExists: async (sessionId) => {
+          const session = await this.sessionManager.getSession(sessionId)
+          return session !== null
         },
 
         stopSession: (sessionId) => {
@@ -269,8 +280,7 @@ export class IMServiceManager {
         },
 
         onSessionEvent: (sessionId, event, callback) => {
-          // Map IM event names to SessionEvent types and filter
-          return this.sessionManager.addSessionEventListener(sessionId, (evt) => {
+          return this.sessionEventHub.onSessionEvent(sessionId, (evt: SessionEvent) => {
             switch (event) {
               case 'message':
                 if (evt.type === 'text_complete' && 'text' in evt) {
@@ -327,16 +337,6 @@ export class IMServiceManager {
       mainLog.error('[IM] Failed to create CoworkHandler:', error.message)
     }
   }
-
-  private broadcastToAllWindows(channel: string, data: unknown): void {
-    for (const entry of this.windowManager.getAllWindows()) {
-      try {
-        entry.window.webContents.send(channel, data)
-      } catch {
-        // Window may be closed
-      }
-    }
-  }
 }
 
 // ============================================================
@@ -350,9 +350,10 @@ export function getIMServiceManager(): IMServiceManager | null {
 }
 
 export function createIMServiceManager(
-  sessionManager: SessionManager,
-  windowManager: WindowManager
+  sessionManager: ISessionManager,
+  windowManager: WindowManager,
+  sessionEventHub: SessionEventHub,
 ): IMServiceManager {
-  imServiceManager = new IMServiceManager(sessionManager, windowManager)
+  imServiceManager = new IMServiceManager(sessionManager, windowManager, sessionEventHub)
   return imServiceManager
 }

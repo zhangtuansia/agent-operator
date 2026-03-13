@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./transport": "./src/transport/index.ts",
+    "./transport/capabilities": "./src/transport/capabilities.ts",
+    "./transport/codec": "./src/transport/codec.ts",
+    "./transport/types": "./src/transport/types.ts",
     "./runtime": "./src/runtime/index.ts",
     "./handlers": "./src/handlers/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",

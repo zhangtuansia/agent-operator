@@ -22,6 +22,7 @@ export {
   isPathInPlansDir,
   // Callback registry for session-scoped tool notifications
   registerSessionScopedToolCallbacks,
+  mergeSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
   // Types
   type SessionScopedToolCallbacks,
@@ -50,6 +51,8 @@ export {
   getModeState,
   initializeModeState,
   cleanupModeState,
+  hydratePreviousPermissionMode,
+  getPermissionModeDiagnostics,
   // Tool blocking (centralized)
   shouldAllowToolInMode,
   blockWithReason,
@@ -64,6 +67,7 @@ export {
   type ModeState,
   type ModeCallbacks,
   type ModeConfig,
+  type PermissionModeChangedBy,
 } from './mode-manager.ts';
 
 // Export plan types and permission mode messages

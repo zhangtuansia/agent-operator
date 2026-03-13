@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { ensurePluginManifest, generatePluginManifestName } from './storage.ts';
+import {
+  ensurePluginManifest,
+  generatePluginManifestName,
+  getWorkspaceSessionsPath,
+  getWorkspaceSkillsPath,
+  getWorkspaceSourcesPath,
+} from './storage.ts';
 
 describe('workspace plugin manifest', () => {
   it('generates dazi plugin names', () => {
@@ -70,5 +76,15 @@ describe('workspace plugin manifest', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('workspace path helpers', () => {
+  it('expands tilde workspace roots before resolving child directories', () => {
+    const portableRoot = '~/workspace-root';
+
+    expect(getWorkspaceSourcesPath(portableRoot)).not.toContain('~/');
+    expect(getWorkspaceSessionsPath(portableRoot)).not.toContain('~/');
+    expect(getWorkspaceSkillsPath(portableRoot)).not.toContain('~/');
   });
 });

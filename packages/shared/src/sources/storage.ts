@@ -35,11 +35,15 @@ import {
 // Directory Utilities
 // ============================================================
 
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
+
 /**
  * Get path to a source folder within a workspace
  */
 export function getSourcePath(workspaceRootPath: string, sourceSlug: string): string {
-  return join(getWorkspaceSourcesPath(workspaceRootPath), sourceSlug);
+  return join(getWorkspaceSourcesPath(normalizeWorkspaceRootPath(workspaceRootPath)), sourceSlug);
 }
 
 /**
@@ -300,22 +304,23 @@ export { isIconUrl } from '../utils/icon.ts';
  * @param sourceSlug - Source folder name
  */
 export function loadSource(workspaceRootPath: string, sourceSlug: string): LoadedSource | null {
-  const folderPath = getSourcePath(workspaceRootPath, sourceSlug);
-  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const folderPath = getSourcePath(normalizedWorkspaceRootPath, sourceSlug);
+  const config = loadSourceConfig(normalizedWorkspaceRootPath, sourceSlug);
   if (!config) return null;
 
   // Extract workspace folder name for credential lookup
   // Credentials are keyed by folder name (e.g., "046a02d0-..."), not full path
-  const workspaceId = basename(workspaceRootPath);
+  const workspaceId = basename(normalizedWorkspaceRootPath);
 
   // Pre-compute icon path for renderer (avoids fs access in browser)
   const iconPath = findIconFile(folderPath);
 
   return {
     config,
-    guide: loadSourceGuide(workspaceRootPath, sourceSlug),
+    guide: loadSourceGuide(normalizedWorkspaceRootPath, sourceSlug),
     folderPath,
-    workspaceRootPath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
     workspaceId,
     iconPath,
   };
@@ -379,19 +384,20 @@ export function isSourceUsable(source: LoadedSource): boolean {
  * (like craft-agents-docs) that don't have filesystem folders.
  */
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
-  const workspaceId = basename(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const workspaceId = basename(normalizedWorkspaceRootPath);
   const sources: LoadedSource[] = [];
   for (const slug of slugs) {
     // Check builtin sources first (they don't exist on disk)
     if (isBuiltinSource(slug)) {
       // Currently only craft-agents-docs is a builtin source
       if (slug === 'craft-agents-docs') {
-        sources.push(getDocsSource(workspaceId, workspaceRootPath));
+        sources.push(getDocsSource(workspaceId, normalizedWorkspaceRootPath));
       }
       continue;
     }
     // Load user-configured source from disk
-    const source = loadSource(workspaceRootPath, slug);
+    const source = loadSource(normalizedWorkspaceRootPath, slug);
     if (source) {
       sources.push(source);
     }
@@ -408,9 +414,10 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
  * including system-provided ones that don't live on disk.
  */
 export function loadAllSources(workspaceRootPath: string): LoadedSource[] {
-  const workspaceId = basename(workspaceRootPath);
-  const userSources = loadWorkspaceSources(workspaceRootPath);
-  const builtinSources = getBuiltinSources(workspaceId, workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const workspaceId = basename(normalizedWorkspaceRootPath);
+  const userSources = loadWorkspaceSources(normalizedWorkspaceRootPath);
+  const builtinSources = getBuiltinSources(workspaceId, normalizedWorkspaceRootPath);
   return [...userSources, ...builtinSources];
 }
 
@@ -583,4 +590,3 @@ export function sourceExists(workspaceRootPath: string, sourceSlug: string): boo
 // ============================================================
 
 export { parseGuideMarkdown };
-

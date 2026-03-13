@@ -46,6 +46,12 @@ export interface ChatGptOAuthState {
   expiresAt: number;
 }
 
+export interface PreparedChatGptOAuth {
+  authUrl: string;
+  state: string;
+  codeVerifier: string;
+}
+
 // In-memory state storage for the current OAuth flow
 let currentOAuthState: ChatGptOAuthState | null = null;
 
@@ -159,6 +165,44 @@ export function stopCallbackServer(): void {
 }
 
 /**
+ * Prepare a ChatGPT OAuth flow without opening the browser or starting a callback server.
+ * This is the PKCE/server-safe building block used by the core WS handlers.
+ */
+export function prepareChatGptOAuth(): PreparedChatGptOAuth {
+  // Generate secure random values
+  const state = generateState();
+  const { codeVerifier, codeChallenge } = generatePKCE();
+
+  // Store state for later verification
+  const now = Date.now();
+  currentOAuthState = {
+    state,
+    codeVerifier,
+    timestamp: now,
+    expiresAt: now + STATE_EXPIRY_MS,
+  };
+
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    scope: OAUTH_SCOPES,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    state,
+    // Codex CLI compatibility parameters (required for the flow to work)
+    codex_cli_simplified_flow: 'true',
+    id_token_add_organizations: 'true',
+  });
+
+  return {
+    authUrl: `${AUTH_URL}?${params.toString()}`,
+    state,
+    codeVerifier,
+  };
+}
+
+/**
  * Start the OAuth flow
  *
  * Opens the browser for authentication and starts a local callback server.
@@ -176,18 +220,7 @@ export async function startChatGptOAuth(
   // Clean up any previous server
   stopCallbackServer();
 
-  // Generate secure random values
-  const state = generateState();
-  const { codeVerifier, codeChallenge } = generatePKCE();
-
-  // Store state for later verification
-  const now = Date.now();
-  currentOAuthState = {
-    state,
-    codeVerifier,
-    timestamp: now,
-    expiresAt: now + STATE_EXPIRY_MS,
-  };
+  const prepared = prepareChatGptOAuth();
 
   // Start callback server
   onStatus?.('Starting authentication server...');
@@ -195,7 +228,7 @@ export async function startChatGptOAuth(
   return new Promise<string>(async (resolve, reject) => {
     try {
       callbackServer = await startCallbackServer(
-        state,
+        prepared.state,
         (code) => {
           stopCallbackServer();
           resolve(code);
@@ -207,25 +240,9 @@ export async function startChatGptOAuth(
         }
       );
 
-      // Build OAuth URL with Codex CLI compatibility params
-      const params = new URLSearchParams({
-        client_id: CLIENT_ID,
-        response_type: 'code',
-        redirect_uri: REDIRECT_URI,
-        scope: OAUTH_SCOPES,
-        code_challenge: codeChallenge,
-        code_challenge_method: 'S256',
-        state,
-        // Codex CLI compatibility parameters (required for the flow to work)
-        codex_cli_simplified_flow: 'true',
-        id_token_add_organizations: 'true',
-      });
-
-      const authUrl = `${AUTH_URL}?${params.toString()}`;
-
       // Open browser
       onStatus?.('Opening browser for authentication...');
-      await openUrl(authUrl);
+      await openUrl(prepared.authUrl);
 
       onStatus?.('Waiting for authentication...');
     } catch (error) {
@@ -234,6 +251,67 @@ export async function startChatGptOAuth(
       reject(error);
     }
   });
+}
+
+async function exchangeChatGptCodeWithVerifier(
+  authorizationCode: string,
+  codeVerifier: string,
+  onStatus?: (message: string) => void,
+): Promise<ChatGptTokens> {
+  onStatus?.('Exchanging authorization code for tokens...');
+
+  const params = new URLSearchParams({
+    grant_type: 'authorization_code',
+    client_id: CLIENT_ID,
+    code: authorizationCode,
+    redirect_uri: REDIRECT_URI,
+    code_verifier: codeVerifier,
+  });
+
+  try {
+    const response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error_description || errorJson.error || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new Error(`Token exchange failed: ${response.status} - ${errorMessage}`);
+    }
+
+    const data = (await response.json()) as {
+      id_token: string;
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+      token_type?: string;
+    };
+
+    onStatus?.('Authentication successful!');
+
+    return {
+      idToken: data.id_token,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Token exchange failed: ${String(error)}`);
+  }
 }
 
 /**
@@ -279,57 +357,15 @@ export async function exchangeChatGptCode(
     throw new Error('OAuth state expired (older than 10 minutes). Please try again.');
   }
 
-  onStatus?.('Exchanging authorization code for tokens...');
-
-  const params = new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: CLIENT_ID,
-    code: authorizationCode,
-    redirect_uri: REDIRECT_URI,
-    code_verifier: currentOAuthState.codeVerifier,
-  });
-
   try {
-    const response = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: params.toString(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage: string;
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.error_description || errorJson.error || errorText;
-      } catch {
-        errorMessage = errorText;
-      }
-      throw new Error(`Token exchange failed: ${response.status} - ${errorMessage}`);
-    }
-
-    const data = (await response.json()) as {
-      id_token: string;
-      access_token: string;
-      refresh_token?: string;
-      expires_in?: number;
-      token_type?: string;
-    };
-
+    const tokens = await exchangeChatGptCodeWithVerifier(
+      authorizationCode,
+      currentOAuthState.codeVerifier,
+      onStatus,
+    );
     // Clear state after successful exchange
     clearOAuthState();
-
-    onStatus?.('Authentication successful!');
-
-    return {
-      idToken: data.id_token,
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
-    };
+    return tokens;
   } catch (error) {
     clearOAuthState();
     if (error instanceof Error) {
@@ -337,6 +373,18 @@ export async function exchangeChatGptCode(
     }
     throw new Error(`Token exchange failed: ${String(error)}`);
   }
+}
+
+/**
+ * Exchange a ChatGPT OAuth code using an explicit PKCE verifier.
+ * This is used by core WS handlers where state lives outside this module.
+ */
+export async function exchangeChatGptTokens(
+  authorizationCode: string,
+  codeVerifier: string,
+  onStatus?: (message: string) => void,
+): Promise<ChatGptTokens> {
+  return exchangeChatGptCodeWithVerifier(authorizationCode, codeVerifier, onStatus);
 }
 
 /**

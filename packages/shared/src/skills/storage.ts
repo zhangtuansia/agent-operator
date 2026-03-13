@@ -30,10 +30,10 @@ import {
 // ============================================================
 
 /** Global agent skills directory: ~/.agents/skills/ */
-const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
+export const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
 
 /** Project-level agent skills directory name */
-const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
+export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
 
 // ============================================================
 // Parsing
@@ -182,6 +182,10 @@ export function loadSkill(workspaceRoot: string, slug: string, projectRoot?: str
   }
 
   return null;
+}
+
+export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  return loadSkill(workspaceRoot, slug, projectRoot);
 }
 
 /**

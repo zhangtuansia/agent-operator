@@ -20,6 +20,11 @@ const FALLBACK_TRUNCATION_LIMIT = 40000;
 // Lazy-initialized Anthropic client for summarization
 let anthropicClient: Anthropic | null = null;
 
+export function resetSummarizationClient(): void {
+  anthropicClient = null;
+  debug('[summarize] resetSummarizationClient called');
+}
+
 /**
  * Get or create Anthropic client for summarization.
  * Supports auth types: api_key and oauth_token.

@@ -389,8 +389,8 @@ export function validateSourceConfig(config: unknown): ValidationResult {
 /**
  * Validate a source folder (workspace-scoped)
  */
-export function validateSource(workspaceId: string, slug: string): ValidationResult {
-  const sourcesDir = getWorkspaceSourcesPath(workspaceId);
+export function validateSource(workspaceRootPath: string, slug: string): ValidationResult {
+  const sourcesDir = getWorkspaceSourcesPath(workspaceRootPath);
   const file = `sources/${slug}/config.json`;
   const configPath = join(sourcesDir, slug, 'config.json');
 
@@ -457,8 +457,8 @@ export function validateSource(workspaceId: string, slug: string): ValidationRes
 /**
  * Validate all sources in a workspace
  */
-export function validateAllSources(workspaceId: string): ValidationResult {
-  const sourcesDir = getWorkspaceSourcesPath(workspaceId);
+export function validateAllSources(workspaceRootPath: string): ValidationResult {
+  const sourcesDir = getWorkspaceSourcesPath(workspaceRootPath);
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 

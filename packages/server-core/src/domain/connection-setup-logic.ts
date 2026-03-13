@@ -51,7 +51,7 @@ export function parseTestConnectionError(msg: string): string {
  * Guard against ambiguous Pi custom endpoint tests where no provider routing is selected.
  */
 export function validateSetupTestInput(params: {
-  provider: 'anthropic' | 'pi'
+  provider: 'anthropic' | 'openai' | 'pi'
   baseUrl?: string
   piAuthProvider?: string
 }): { valid: true } | { valid: false; error: string } {

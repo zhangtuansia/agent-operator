@@ -240,10 +240,11 @@ export async function initAnalytics(api: ElectronAPI): Promise<void> {
   })
 
   try {
+    const localWindowMode = new URLSearchParams(window.location.search).get('windowMode') || 'main'
     const [versions, appVersion, windowMode, isDebug, agentType, model, storedConfig] = await Promise.all([
       Promise.resolve(api.getVersions()),
       api.getAppVersion(),
-      api.getWindowMode(),
+      Promise.resolve(localWindowMode),
       api.isDebugMode(),
       api.getAgentType?.(),
       api.getModel(),

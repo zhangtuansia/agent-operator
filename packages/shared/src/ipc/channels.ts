@@ -163,7 +163,6 @@ export const IPC_CHANNELS = {
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
   ONBOARDING_VALIDATE_MCP: 'onboarding:validateMcp',
   ONBOARDING_START_MCP_OAUTH: 'onboarding:startMcpOAuth',
-  ONBOARDING_SAVE_CONFIG: 'onboarding:saveConfig',
   // Claude OAuth
   ONBOARDING_GET_EXISTING_CLAUDE_TOKEN: 'onboarding:getExistingClaudeToken',
   ONBOARDING_IS_CLAUDE_CLI_INSTALLED: 'onboarding:isClaudeCliInstalled',
@@ -189,6 +188,7 @@ export const IPC_CHANNELS = {
 
   // Settings - API Setup
   SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
+  SETTINGS_TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
   SETTINGS_TEST_OPENAI_CONNECTION: 'settings:testOpenAiConnection',
 

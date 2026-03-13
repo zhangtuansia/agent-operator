@@ -33,6 +33,12 @@ export interface StdioMcpClientConfig {
  */
 export type McpClientConfig = HttpMcpClientConfig | StdioMcpClientConfig;
 
+export interface PoolClient {
+  listTools(): Promise<Tool[]>;
+  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  close(): Promise<void>;
+}
+
 /**
  * Sensitive environment variables that should NOT be passed to MCP subprocesses.
  * These could contain API keys, tokens, or credentials that MCP servers don't need
@@ -57,7 +63,7 @@ const BLOCKED_ENV_VARS = [
   'NPM_TOKEN',
 ];
 
-export class OperatorMcpClient {
+export class CraftMcpClient implements PoolClient {
   private client: Client;
   private transport: Transport;
   private connected = false;
@@ -139,3 +145,5 @@ export class OperatorMcpClient {
     }
   }
 }
+
+export { CraftMcpClient as OperatorMcpClient };

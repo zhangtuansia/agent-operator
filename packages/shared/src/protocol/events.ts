@@ -4,6 +4,8 @@
  */
 
 import type { ThemeOverrides } from '../config/index'
+import type { IMGatewayStatus, IMMessage } from '../im'
+import { IPC_CHANNELS } from '../ipc/channels'
 import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import { RPC_CHANNELS } from './channels'
@@ -52,6 +54,10 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.browserPane.STATE_CHANGED]: [info: BrowserInstanceInfo]
   [RPC_CHANNELS.browserPane.REMOVED]: [id: string]
   [RPC_CHANNELS.browserPane.INTERACTED]: [id: string]
+
+  // IM broadcasts (global)
+  [IPC_CHANNELS.IM_STATUS_CHANGED]: [statuses: IMGatewayStatus[]]
+  [IPC_CHANNELS.IM_MESSAGE_RECEIVED]: [message: IMMessage]
 
   // Navigation events (per-window)
   [RPC_CHANNELS.notification.NAVIGATE]: [data: { workspaceId: string; sessionId: string }]

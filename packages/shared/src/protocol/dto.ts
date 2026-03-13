@@ -275,6 +275,19 @@ export interface SessionFile {
   children?: SessionFile[]
 }
 
+export interface SessionFilesResult {
+  sessionFiles: SessionFile[]
+  workspaceFiles: SessionFile[]
+}
+
+export type SessionFileScope = 'session' | 'workspace'
+
+export interface SessionFilesChangedEvent {
+  sessionId: string
+  scope: SessionFileScope
+  changedPath?: string
+}
+
 export interface FileSearchResult {
   name: string
   path: string
@@ -299,10 +312,11 @@ export interface LlmConnectionSetup {
 }
 
 export interface TestLlmConnectionParams {
-  provider: 'anthropic' | 'pi'
+  provider: 'anthropic' | 'openai' | 'pi'
   apiKey: string
   baseUrl?: string
   model?: string
+  models?: string[]
   piAuthProvider?: string
 }
 

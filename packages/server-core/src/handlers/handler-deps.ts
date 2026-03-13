@@ -25,4 +25,5 @@ export interface HandlerDeps<
   windowManager?: TWindowManager
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
+  prepareWorkspaceSources?: (workspaceId: string, workspaceRootPath: string) => Promise<void> | void
 }

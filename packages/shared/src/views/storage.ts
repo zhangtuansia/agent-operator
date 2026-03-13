@@ -13,8 +13,13 @@ import { join } from 'path';
 import type { ViewConfig } from './types.ts';
 import { getDefaultViews } from './defaults.ts';
 import { debug } from '../utils/debug.ts';
+import { expandPath } from '../utils/paths.ts';
 
 const VIEWS_FILE = 'views.json';
+
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
 
 /**
  * Views configuration file structure.
@@ -32,12 +37,13 @@ export interface ViewsConfig {
  * Also handles migration from old labels/config.json smartLabels key.
  */
 export function loadViewsConfig(workspaceRootPath: string): ViewsConfig {
-  const configPath = join(workspaceRootPath, VIEWS_FILE);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const configPath = join(normalizedWorkspaceRootPath, VIEWS_FILE);
 
   // If no views.json exists, check for legacy smartLabels in labels/config.json
   // and migrate them. Otherwise seed with defaults.
   if (!existsSync(configPath)) {
-    const migrated = migrateFromSmartLabels(workspaceRootPath);
+    const migrated = migrateFromSmartLabels(normalizedWorkspaceRootPath);
     if (migrated) {
       debug('[loadViewsConfig] Migrated from legacy smartLabels');
       return migrated;
@@ -46,7 +52,7 @@ export function loadViewsConfig(workspaceRootPath: string): ViewsConfig {
     // No legacy data — seed with defaults
     const defaults: ViewsConfig = { version: 1, views: getDefaultViews() };
     debug('[loadViewsConfig] No config found, seeding with default views');
-    saveViewsConfig(workspaceRootPath, defaults);
+    saveViewsConfig(normalizedWorkspaceRootPath, defaults);
     return defaults;
   }
 
@@ -66,7 +72,8 @@ export function saveViewsConfig(
   workspaceRootPath: string,
   config: ViewsConfig
 ): void {
-  const configPath = join(workspaceRootPath, VIEWS_FILE);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const configPath = join(normalizedWorkspaceRootPath, VIEWS_FILE);
 
   try {
     writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
@@ -104,7 +111,8 @@ export function saveViews(
  * Returns the migrated config if migration occurred, null otherwise.
  */
 function migrateFromSmartLabels(workspaceRootPath: string): ViewsConfig | null {
-  const labelsConfigPath = join(workspaceRootPath, 'labels', 'config.json');
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const labelsConfigPath = join(normalizedWorkspaceRootPath, 'labels', 'config.json');
   if (!existsSync(labelsConfigPath)) return null;
 
   try {
@@ -118,7 +126,7 @@ function migrateFromSmartLabels(workspaceRootPath: string): ViewsConfig | null {
     }));
 
     const config: ViewsConfig = { version: 1, views };
-    saveViewsConfig(workspaceRootPath, config);
+    saveViewsConfig(normalizedWorkspaceRootPath, config);
 
     // Remove smartLabels from labels config to avoid confusion
     delete labelsConfig.smartLabels;

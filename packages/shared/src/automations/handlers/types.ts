@@ -40,7 +40,7 @@ export interface PromptHandlerOptions {
   /** Session ID (if executing in a session context) */
   sessionId?: string;
   /** Called when prompts are ready to be executed */
-  onPromptsReady?: (prompts: PendingPrompt[]) => void;
+  onPromptsReady?: (prompts: PendingPrompt[]) => void | Promise<void>;
   /** Called when a prompt execution fails */
   onError?: (event: AutomationEvent, error: Error) => void;
 }

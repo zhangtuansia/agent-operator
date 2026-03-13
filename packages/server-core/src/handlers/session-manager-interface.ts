@@ -35,6 +35,7 @@ export interface ISessionManager {
   cleanup(): void
   setEventSink(sink: EventSink): void
   flushAllSessions(): Promise<void>
+  reloadSessions?(): void
 
   // ---------------------------------------------------------------------------
   // Session CRUD

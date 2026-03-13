@@ -23,9 +23,10 @@ import { normalizePermissionMode } from '../agent/mode-types.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, type AutomationsConfigProvider } from './handlers/index.ts';
-import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
+import { AGENT_EVENTS, type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { testMatcherAgainst, getMatchValueForSdkInput } from './utils.ts';
+import { buildEnvFromSdkInput } from './sdk-bridge.ts';
+import { testMatcherAgainst, getMatchValueForSdkInput, buildPendingPromptsForMatcher } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduled-tasks/scheduler-service.ts';
 
 const log = createLogger('automation-system');
@@ -50,7 +51,7 @@ export interface AutomationSystemOptions {
   /** Whether to start the scheduler service (default: false) */
   enableScheduler?: boolean;
   /** Called when prompts are ready to be executed */
-  onPromptsReady?: (prompts: PendingPrompt[]) => void;
+  onPromptsReady?: (prompts: PendingPrompt[]) => void | Promise<void>;
   /** Called when an error occurs during automation execution */
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
@@ -485,15 +486,25 @@ export class AutomationSystem implements AutomationsConfigProvider {
     const matchers = this.config.automations[event];
     if (!matchers?.length) return;
 
+    if (signal?.aborted) return;
+
     const matchValue = getMatchValueForSdkInput(event, input);
+    const env = buildEnvFromSdkInput(event, input);
+    const pendingPrompts: PendingPrompt[] = [];
 
     for (const matcher of matchers) {
       if (!testMatcherAgainst(matcher, event, matchValue)) continue;
+      pendingPrompts.push(...buildPendingPromptsForMatcher(matcher, env));
+    }
 
-      // Note: Command execution has been removed. Prompt-based execution for
-      // non-Claude backends is not yet implemented. This method currently only
-      // validates matching — actual execution is a no-op.
-      log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
+    if (pendingPrompts.length === 0) return;
+
+    try {
+      log.debug(`[AutomationSystem] Delivering ${pendingPrompts.length} agent-event prompts for ${event}`);
+      await this.options.onPromptsReady?.(pendingPrompts);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.options.onError?.(event, err);
     }
   }
 
@@ -504,12 +515,50 @@ export class AutomationSystem implements AutomationsConfigProvider {
   /**
    * Build SDK hook callbacks from automations.json definitions.
    *
-   * Command execution has been removed — all automation actions now go through prompt-based
-   * execution (creating agent sessions via PromptHandler). Agent event automations are not
-   * currently supported via prompts, so this returns empty.
+   * Build prompt-based SDK hook callbacks for agent events. This keeps Claude/Operator
+   * backends aligned with app-event prompt automations.
    */
   buildSdkHooks(): Partial<Record<AgentEvent, SdkAutomationCallbackMatcher[]>> {
-    return {};
+    const sdkHooks: Partial<Record<AgentEvent, SdkAutomationCallbackMatcher[]>> = {};
+    if (!this.config) return sdkHooks;
+
+    for (const event of AGENT_EVENTS) {
+      const matchers = (this.config.automations[event] ?? [])
+        .filter((matcher) => matcher.enabled !== false)
+        .filter((matcher) => matcher.actions.some((action) => action.type === 'prompt'));
+
+      if (matchers.length === 0) continue;
+
+      sdkHooks[event] = matchers.map((matcher) => ({
+        matcher: matcher.matcher,
+        timeout: 30,
+        hooks: [async (input: SdkAutomationInput, _toolUseId: string, options: { signal?: AbortSignal }) => {
+          if (options.signal?.aborted) {
+            return { continue: true };
+          }
+
+          try {
+            const matchValue = getMatchValueForSdkInput(event, input);
+            if (!testMatcherAgainst(matcher, event, matchValue)) {
+              return { continue: true };
+            }
+
+            const env = buildEnvFromSdkInput(event, input);
+            const pendingPrompts = buildPendingPromptsForMatcher(matcher, env);
+            if (pendingPrompts.length > 0) {
+              await this.options.onPromptsReady?.(pendingPrompts);
+            }
+          } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.options.onError?.(event, err);
+          }
+
+          return { continue: true };
+        }],
+      }));
+    }
+
+    return sdkHooks;
   }
 
   // ============================================================================

@@ -7,9 +7,18 @@
  * Callers orchestrate via their agent's runMiniCompletion() for summarization.
  */
 
-import { mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
 import { join, relative } from 'path';
 import { debug } from './debug.ts';
+import {
+  looksLikeBinary,
+  extractBase64Binary,
+  detectExtensionFromMagic,
+  saveBinaryResponse,
+  sanitizeFilename,
+  formatBytes,
+} from './binary-detection.ts';
 
 // ============================================================
 // Constants (re-exported from summarize.ts for convenience)
@@ -81,6 +90,209 @@ export function saveLargeResponse(
     debug('large-response', `Failed to save: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+// ============================================================
+// Structured Media Extraction (JSON payloads)
+// ============================================================
+
+interface SavedJsonArtifact extends SaveResult {
+  filename: string;
+}
+
+interface SavedAsset {
+  absolutePath: string;
+  relativePath: string;
+  mimeType: string | null;
+  ext: string;
+  size: number;
+  sizeHuman: string;
+  sha256: string;
+  jsonPath: string;
+  source: 'data-url' | 'raw-base64';
+}
+
+interface JsonAssetExtractionResult {
+  originalJsonPath: string;
+  linkedJsonPath: string;
+  assets: SavedAsset[];
+}
+
+function saveJsonArtifact(
+  sessionPath: string,
+  toolName: string,
+  suffix: string,
+  content: string
+): SavedJsonArtifact | null {
+  const responsesDir = join(sessionPath, LONG_RESPONSES_DIR);
+  try {
+    mkdirSync(responsesDir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23);
+    const safeTool = sanitizeFilename(toolName || 'tool_result');
+    const filename = `${timestamp}_${safeTool}_${suffix}.json`;
+    const absolutePath = join(responsesDir, filename);
+    writeFileSync(absolutePath, content, 'utf-8');
+    return {
+      absolutePath,
+      relativePath: relative(sessionPath, absolutePath),
+      filename,
+    };
+  } catch (error) {
+    debug('large-response', `Failed to save JSON artifact: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function inferMimeFromContext(container: unknown): string | null {
+  if (!container || typeof container !== 'object' || Array.isArray(container)) return null;
+  const obj = container as Record<string, unknown>;
+  const keys = ['mimeType', 'media_type', 'mime', 'contentType', 'content_type'];
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function saveExtractedAsset(
+  sessionPath: string,
+  toolName: string,
+  buffer: Buffer,
+  ext: string,
+  mimeType: string | null,
+  jsonPath: string,
+  source: 'data-url' | 'raw-base64'
+): SavedAsset | null {
+  try {
+    const assetsDir = join(sessionPath, 'downloads', 'assets');
+    mkdirSync(assetsDir, { recursive: true });
+
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const safeTool = sanitizeFilename(toolName || 'tool_result');
+    const safeExt = ext.startsWith('.') ? ext : `.${ext || 'bin'}`;
+    const filename = `${safeTool}_${sha256.slice(0, 16)}${safeExt}`;
+    const absolutePath = join(assetsDir, filename);
+
+    if (!existsSync(absolutePath)) {
+      writeFileSync(absolutePath, buffer, { flag: 'wx' });
+    }
+
+    return {
+      absolutePath,
+      relativePath: relative(sessionPath, absolutePath),
+      mimeType,
+      ext: safeExt,
+      size: buffer.length,
+      sizeHuman: formatBytes(buffer.length),
+      sha256,
+      jsonPath,
+      source,
+    };
+  } catch (error) {
+    debug('large-response', `Failed to save extracted asset: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function extractAssetsFromStructuredJson(
+  text: string,
+  sessionPath: string,
+  toolName: string
+): JsonAssetExtractionResult | null {
+  const trimmed = text.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const linked = JSON.parse(JSON.stringify(parsed)) as unknown;
+  const assets: SavedAsset[] = [];
+
+  const walk = (node: unknown, path: string, parent: Record<string, unknown> | unknown[] | null, key: string | number | null) => {
+    if (typeof node === 'string') {
+      const extraction = extractBase64Binary(node);
+      if (!extraction || !parent || key === null) return;
+
+      const contextMime = inferMimeFromContext(parent);
+      const mime = extraction.mimeType || contextMime;
+      const ext = extraction.ext || '.bin';
+      const saved = saveExtractedAsset(sessionPath, toolName, extraction.buffer, ext, mime, path, extraction.source);
+      if (!saved) return;
+
+      const replacement = {
+        assetRef: {
+          path: saved.absolutePath,
+          relativePath: saved.relativePath,
+          mimeType: saved.mimeType,
+          ext: saved.ext,
+          size: saved.size,
+          sizeHuman: saved.sizeHuman,
+          sha256: saved.sha256,
+          jsonPath: saved.jsonPath,
+          source: saved.source,
+        },
+      };
+
+      if (Array.isArray(parent)) {
+        parent[key as number] = replacement;
+      } else {
+        (parent as Record<string, unknown>)[String(key)] = replacement;
+      }
+      assets.push(saved);
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      node.forEach((item, idx) => walk(item, `${path}[${idx}]`, node, idx));
+      return;
+    }
+
+    if (node && typeof node === 'object') {
+      const obj = node as Record<string, unknown>;
+      for (const [k, v] of Object.entries(obj)) {
+        const childPath = path === '$' ? `$.${k}` : `${path}.${k}`;
+        walk(v, childPath, obj, k);
+      }
+    }
+  };
+
+  walk(linked, '$', null, null);
+
+  if (assets.length === 0) return null;
+
+  const originalArtifact = saveJsonArtifact(sessionPath, toolName, 'original', text);
+  const linkedArtifact = saveJsonArtifact(sessionPath, toolName, 'linked', JSON.stringify(linked, null, 2));
+
+  if (!originalArtifact || !linkedArtifact) return null;
+
+  return {
+    originalJsonPath: originalArtifact.absolutePath,
+    linkedJsonPath: linkedArtifact.absolutePath,
+    assets,
+  };
+}
+
+function formatStructuredMediaExtractionMessage(result: JsonAssetExtractionResult): string {
+  const assetsList = result.assets
+    .map((asset, index) => `${index + 1}. ${asset.absolutePath} (${asset.sizeHuman}, ${asset.mimeType || asset.ext.slice(1).toUpperCase()}, from ${asset.jsonPath})`)
+    .join('\n');
+
+  return [
+    '[Structured media assets extracted and saved]',
+    '',
+    `Original JSON: ${result.originalJsonPath}`,
+    `Linked JSON: ${result.linkedJsonPath}`,
+    `Assets extracted: ${result.assets.length}`,
+    assetsList ? `\n${assetsList}` : '',
+    '',
+    'Use the linked JSON for analysis and click asset file paths to preview/open the extracted media.',
+  ].join('\n');
 }
 
 // ============================================================
@@ -217,6 +429,81 @@ export interface HandleLargeResponseResult {
   filePath: string;
   /** Whether the response was summarized (vs preview-only) */
   wasSummarized: boolean;
+}
+
+/**
+ * Thin guard wrapper: returns the replacement text if the result is too large
+ * or contains binary data, or null if the result should be passed through as-is.
+ *
+ * Accepts string | Buffer:
+ * - Buffer: binary detection on raw bytes (preserves data integrity for file saving).
+ *   Used by api-tools which has raw HTTP response buffers.
+ * - string: binary detection via Buffer conversion. Used by MCP pool and Claude SDK
+ *   where data is already a string.
+ *
+ * Pipeline: binary check → (if text) size check → save + summarize.
+ *
+ * Shared by McpClientPool.callTool(), api-tools.ts, and claude-agent.ts.
+ */
+export async function guardLargeResult(
+  input: string | Buffer,
+  opts: {
+    sessionPath: string;
+    toolName: string;
+    input?: Record<string, unknown>;
+    intent?: string;
+    summarize?: (prompt: string) => Promise<string | null>;
+  }
+): Promise<string | null> {
+  // 1. Binary detection — check before any text processing
+  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf-8');
+  if (looksLikeBinary(buffer)) {
+    debug('large-response', `${opts.toolName}: binary content detected (${buffer.length} bytes)`);
+    const ext = detectExtensionFromMagic(buffer) || '.bin';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const safeName = sanitizeFilename(opts.toolName);
+    const filename = `${safeName}_${timestamp}${ext}`;
+    const result = saveBinaryResponse(opts.sessionPath, filename, buffer, null);
+    if (result.type === 'file_download') {
+      return `[Binary content detected and saved]\n\nFile: ${result.path}\nSize: ${result.sizeHuman}\nType: ${ext.slice(1).toUpperCase() || 'unknown'}\n\nUse the Read tool or reference this path to work with the file.`;
+    }
+    return `[Binary content detected but save failed: ${result.error}]`;
+  }
+
+  // 2. Convert to string (no-op if already string, toString if Buffer that passed binary check)
+  const text = typeof input === 'string' ? input : buffer.toString('utf-8');
+
+  // 2b. Structured JSON extraction path — preserve original JSON, extract binary assets,
+  // and emit a linked JSON that replaces base64 blobs with file references.
+  const structuredExtraction = extractAssetsFromStructuredJson(text, opts.sessionPath, opts.toolName);
+  if (structuredExtraction) {
+    debug('large-response', `${opts.toolName}: extracted ${structuredExtraction.assets.length} media assets from structured JSON payload`);
+    return formatStructuredMediaExtractionMessage(structuredExtraction);
+  }
+
+  // 2c. Inline base64-encoded binary detection (data URLs and raw base64 blobs)
+  const base64Result = extractBase64Binary(text);
+  if (base64Result) {
+    debug('large-response', `${opts.toolName}: ${base64Result.source} binary detected (${base64Result.buffer.length} decoded bytes)`);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const safeName = sanitizeFilename(opts.toolName);
+    const filename = `${safeName}_${timestamp}${base64Result.ext}`;
+    const result = saveBinaryResponse(opts.sessionPath, filename, base64Result.buffer, base64Result.mimeType);
+    if (result.type === 'file_download') {
+      return `[Base64-encoded binary detected and saved]\n\nFile: ${result.path}\nSize: ${result.sizeHuman}\nType: ${base64Result.ext.slice(1).toUpperCase() || 'unknown'}\n\nThe tool result contained base64-encoded binary data which has been decoded and saved.`;
+    }
+    return `[Base64-encoded binary detected but save failed: ${result.error}]`;
+  }
+
+  // 3. Existing size check + summarize flow
+  if (estimateTokens(text) <= TOKEN_LIMIT) return null;
+  const result = await handleLargeResponse({
+    text,
+    sessionPath: opts.sessionPath,
+    context: { toolName: opts.toolName, input: opts.input, intent: opts.intent },
+    summarize: opts.summarize,
+  });
+  return result?.message ?? null;
 }
 
 /**

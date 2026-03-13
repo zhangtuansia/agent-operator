@@ -21,6 +21,7 @@ import type { AuthRequest } from '../session-scoped-tools.ts';
 import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
 import type { AutomationSystem } from '../../automations/index.ts';
+import type { SourceManager } from '../core/source-manager.ts';
 
 // Import AbortReason and RecoveryMessage from core module (single source of truth)
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
@@ -94,6 +95,56 @@ export type SourceChangeCallback = (slug: string, source: LoadedSource | null) =
  * Returns true if source was successfully activated.
  */
 export type SourceActivationCallback = (sourceSlug: string) => Promise<boolean>;
+
+// ============================================================
+// Lifecycle Types
+// ============================================================
+
+export interface PostInitResult {
+  authInjected: boolean;
+  authWarning?: string;
+  authWarningLevel?: 'error' | 'warning' | 'info';
+}
+
+export interface BridgeUpdateContext {
+  sessionPath: string;
+  enabledSources: LoadedSource[];
+  mcpServers: Record<string, SdkMcpServerConfig>;
+  sessionId: string;
+  workspaceRootPath: string;
+  context: string;
+  poolServerUrl?: string;
+}
+
+export interface CoreBackendConfig {
+  workspace: Workspace;
+  session?: Session;
+  model?: string;
+  miniModel?: string;
+  thinkingLevel?: ThinkingLevel;
+  isHeadless?: boolean;
+  debugMode?: {
+    enabled: boolean;
+    logFilePath?: string;
+  };
+  systemPromptPreset?: 'default' | 'mini' | string;
+  automationSystem?: AutomationSystem;
+  envOverrides?: Record<string, string>;
+  mcpPool?: unknown;
+  poolServerUrl?: string;
+  onSdkSessionIdUpdate?: (sdkSessionId: string) => void;
+  onSdkSessionIdCleared?: () => void;
+  getRecoveryMessages?: () => RecoveryMessage[];
+  getBranchSeedMessages?: () => RecoveryMessage[];
+  markBranchSeedApplied?: () => void;
+  onImageResize?: (filePath: string, maxSizeBytes: number) => Promise<string | null>;
+  initialSources?: {
+    enabledSources: LoadedSource[];
+    mcpServers: Record<string, SdkMcpServerConfig>;
+    apiServers: Record<string, unknown>;
+    enabledSlugs: string[];
+  };
+}
 
 // ============================================================
 // Backend Interface
@@ -178,9 +229,36 @@ export interface AgentBackend {
   forceAbort(reason: AbortReason): void;
 
   /**
+   * Redirect the backend mid-stream with a new user message.
+   * Returns true when the backend can steer in-place; false means the session
+   * layer should queue and re-send after abort.
+   */
+  redirect(message: string): boolean;
+
+  /**
+   * Run a simple text completion using the backend's auth infrastructure.
+   */
+  runMiniCompletion(prompt: string): Promise<string | null>;
+
+  /**
    * Clean up resources (MCP connections, watchers, etc.)
    */
   destroy(): void;
+
+  /**
+   * Alias for destroy() for consistency.
+   */
+  dispose(): void;
+
+  /**
+   * Post-construction initialization.
+   */
+  postInit(): Promise<PostInitResult>;
+
+  /**
+   * Apply bridge/config updates mid-session.
+   */
+  applyBridgeUpdates(context: BridgeUpdateContext): Promise<void>;
 
   /**
    * Check if currently processing a query.
@@ -263,6 +341,60 @@ export interface AgentBackend {
    */
   getAllSources(): LoadedSource[];
 
+  /**
+   * Set all sources (for context injection).
+   */
+  setAllSources(sources: LoadedSource[]): void;
+
+  /**
+   * Mark a source as unseen (will show introduction text again).
+   */
+  markSourceUnseen(sourceSlug: string): void;
+
+  /**
+   * Get a bound summarize callback for API tool builders.
+   */
+  getSummarizeCallback(): (prompt: string) => Promise<string | null>;
+
+  /**
+   * Update the working directory.
+   */
+  updateWorkingDirectory(path: string): void;
+
+  /**
+   * Update the SDK cwd (transcript storage location).
+   */
+  updateSdkCwd(path: string): void;
+
+  /**
+   * Set workspace configuration.
+   */
+  setWorkspace(workspace: Workspace): void;
+
+  /**
+   * Set session ID.
+   */
+  setSessionId(sessionId: string | null): void;
+
+  /**
+   * Get SourceManager for advanced source queries.
+   */
+  getSourceManager(): SourceManager;
+
+  /**
+   * Generate a session title from a user message.
+   */
+  generateTitle(message: string, options?: { language?: string }): Promise<string | null>;
+
+  /**
+   * Regenerate a session title from recent conversation.
+   */
+  regenerateTitle(
+    recentUserMessages: string[],
+    lastAssistantResponse: string,
+    options?: { language?: string }
+  ): Promise<string | null>;
+
   // ============================================================
   // Permission Resolution
   // ============================================================
@@ -300,6 +432,12 @@ export interface AgentBackend {
 
   /** Called when a source tool is used but source isn't active */
   onSourceActivationRequest: SourceActivationCallback | null;
+
+  /** Called when backend-specific auth is required */
+  onBackendAuthRequired: ((reason: string) => void) | null;
+
+  /** Called when the backend requests spawning a new session */
+  onSpawnSession: ((request: unknown) => Promise<unknown>) | null;
 }
 
 /**

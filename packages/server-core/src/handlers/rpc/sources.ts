@@ -1,9 +1,9 @@
 import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
 import { getWorkspaceByNameOrId } from '@agent-operator/shared/config'
-import { loadWorkspaceSources } from '@agent-operator/shared/sources'
+import { loadSourceConfig, loadWorkspaceSources, saveSourceConfig, type FolderSourceConfig } from '@agent-operator/shared/sources'
 import { safeJsonParse } from '@agent-operator/shared/utils/files'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
-import type { RpcServer } from '@agent-operator/server-core/transport'
+import { pushTyped, type RpcServer } from '@agent-operator/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -12,6 +12,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
+  RPC_CHANNELS.sources.UPDATE,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
@@ -28,6 +29,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       log.error(`SOURCES_GET: Workspace not found: ${workspaceId}`)
       return []
     }
+    await deps.prepareWorkspaceSources?.(workspace.id, workspace.rootPath)
     return loadWorkspaceSources(workspace.rootPath)
   })
 
@@ -36,7 +38,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { createSource } = await import('@agent-operator/shared/sources')
-    return createSource(workspace.rootPath, {
+    const created = createSource(workspace.rootPath, {
       name: config.name || 'New Source',
       provider: config.provider || 'custom',
       type: config.type || 'mcp',
@@ -45,6 +47,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       api: config.api,
       local: config.local,
     })
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return created
   })
 
   // Delete a source
@@ -61,6 +65,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       config.defaults.enabledSourceSlugs = config.defaults.enabledSourceSlugs.filter(s => s !== sourceSlug)
       saveWorkspaceConfig(workspace.rootPath, config)
     }
+
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
   })
 
   // Start OAuth flow for a source (DEPRECATED — use oauth:start + performOAuth client-side)
@@ -88,6 +94,33 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     await credManager.save(source, { value: credential })
 
     log.info(`Saved credentials for source: ${sourceSlug}`)
+  })
+
+  // Update an existing source
+  server.handle(RPC_CHANNELS.sources.UPDATE, async (_ctx, workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig>) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const existing = loadSourceConfig(workspace.rootPath, sourceSlug)
+    if (!existing) {
+      throw new Error(`Source not found: ${sourceSlug}`)
+    }
+
+    const updated: FolderSourceConfig = {
+      ...existing,
+      ...config,
+      id: existing.id,
+      slug: existing.slug,
+      createdAt: existing.createdAt,
+      updatedAt: Date.now(),
+      mcp: config.mcp ? { ...existing.mcp, ...config.mcp } : existing.mcp,
+      api: config.api ? { ...existing.api, ...config.api } : existing.api,
+      local: config.local ? { ...existing.local, ...config.local } : existing.local,
+    }
+
+    saveSourceConfig(workspace.rootPath, updated)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return updated
   })
 
   // Get permissions config for a source (raw format for UI display)
@@ -210,6 +243,18 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       const tools = await client.listTools()
       await client.close()
 
+      if (
+        source.config.provider === 'googleworkspace'
+        && source.config.mcp.transport === 'stdio'
+        && tools.length === 0
+        && !hasGoogleWorkspaceServiceSelection(source.config.mcp.args)
+      ) {
+        return {
+          success: false,
+          error: 'Google Workspace CLI started without any enabled services. Reconfigure this source with `gws mcp -s all` or choose specific services.',
+        }
+      }
+
       const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@agent-operator/shared/agent')
       const permissionsConfig = loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
 
@@ -239,5 +284,17 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       }
       return { success: false, error: errorMessage }
     }
+  })
+}
+
+function hasGoogleWorkspaceServiceSelection(args: string[] | undefined): boolean {
+  if (!args || args.length === 0) return false
+
+  return args.some((arg, index) => {
+    if (arg === '-s' || arg === '--services') {
+      return typeof args[index + 1] === 'string' && args[index + 1]!.trim().length > 0
+    }
+
+    return arg.startsWith('--services=') || arg.startsWith('-s=')
   })
 }

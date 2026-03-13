@@ -36,12 +36,40 @@ describe('getPiAuthProviderForConnectionProvider', () => {
 
 describe('resolvePiRuntimeModel', () => {
   const originalAnthropicModel = process.env.ANTHROPIC_MODEL;
+  const originalOpusModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  const originalSonnetModel = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+  const originalHaikuModel = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+  const originalSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL;
 
   afterEach(() => {
     if (originalAnthropicModel === undefined) {
       delete process.env.ANTHROPIC_MODEL;
     } else {
       process.env.ANTHROPIC_MODEL = originalAnthropicModel;
+    }
+
+    if (originalOpusModel === undefined) {
+      delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+    } else {
+      process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = originalOpusModel;
+    }
+
+    if (originalSonnetModel === undefined) {
+      delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+    } else {
+      process.env.ANTHROPIC_DEFAULT_SONNET_MODEL = originalSonnetModel;
+    }
+
+    if (originalHaikuModel === undefined) {
+      delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+    } else {
+      process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = originalHaikuModel;
+    }
+
+    if (originalSmallFastModel === undefined) {
+      delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+    } else {
+      process.env.ANTHROPIC_SMALL_FAST_MODEL = originalSmallFastModel;
     }
   });
 
@@ -52,6 +80,10 @@ describe('resolvePiRuntimeModel', () => {
   });
 
   it('resolves bedrock models to the effective runtime ARN and keeps the template id', () => {
+    delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+    delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
     process.env.ANTHROPIC_MODEL = 'arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/test-profile';
 
     expect(resolvePiRuntimeModel('pi/us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'bedrock')).toEqual({

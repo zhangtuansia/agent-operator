@@ -438,7 +438,7 @@ export default function App() {
 
   const handleTodoStateChange = useCallback((sessionId: string, state: TodoState) => {
     updateSessionById(sessionId, { todoState: state })
-    window.electronAPI.sessionCommand(sessionId, { type: 'setTodoState', state })
+    window.electronAPI.sessionCommand(sessionId, { type: 'setSessionStatus', state })
   }, [updateSessionById])
 
   const handleArchiveSession = useCallback((sessionId: string) => {

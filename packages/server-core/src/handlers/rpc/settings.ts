@@ -1,15 +1,58 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId } from '@agent-operator/shared/config'
+import {
+  getPreferencesPath,
+  getSessionDraft,
+  setSessionDraft,
+  deleteSessionDraft,
+  getAllSessionDrafts,
+  getWorkspaceByNameOrId,
+  getAgentType,
+  getAuthType,
+  getCustomModels,
+  getModel,
+  getProviderConfig,
+  loadStoredConfig,
+  setAgentType,
+  setAuthType,
+  setCustomModels,
+  setModel,
+  setProviderConfig,
+  updateCustomModel,
+  addCustomModel,
+  deleteCustomModel,
+  reorderCustomModels,
+  type AgentType,
+} from '@agent-operator/shared/config'
+import { getCredentialManager } from '@agent-operator/shared/credentials'
+import { isCodexAuthenticated, startCodexOAuth, getExistingClaudeCredentials } from '@agent-operator/shared/auth'
+import { isSafeHttpHeaderValue } from '@agent-operator/shared/utils'
 import { getWorkspaceOrThrow } from '@agent-operator/server-core/handlers'
 import type { RpcServer } from '@agent-operator/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@agent-operator/server-core/transport'
+import type { AuthType, BillingMethodInfo, CustomModel } from '@agent-operator/shared/ipc/types'
 
 export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.settings.GET_BILLING_METHOD,
+  RPC_CHANNELS.settings.UPDATE_BILLING_METHOD,
+  RPC_CHANNELS.settings.GET_AGENT_TYPE,
+  RPC_CHANNELS.settings.SET_AGENT_TYPE,
+  RPC_CHANNELS.settings.CHECK_CODEX_AUTH,
+  RPC_CHANNELS.settings.START_CODEX_LOGIN,
+  RPC_CHANNELS.settings.GET_STORED_CONFIG,
+  RPC_CHANNELS.settings.UPDATE_PROVIDER_CONFIG,
+  RPC_CHANNELS.settings.GET_MODEL,
+  RPC_CHANNELS.settings.SET_MODEL,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.customModels.GET,
+  RPC_CHANNELS.customModels.SET,
+  RPC_CHANNELS.customModels.ADD,
+  RPC_CHANNELS.customModels.UPDATE,
+  RPC_CHANNELS.customModels.DELETE,
+  RPC_CHANNELS.customModels.REORDER,
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
   RPC_CHANNELS.drafts.GET,
@@ -31,6 +74,162 @@ export const HANDLED_CHANNELS = [
 ] as const
 
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(RPC_CHANNELS.settings.GET_BILLING_METHOD, async (): Promise<BillingMethodInfo> => {
+    const authType = getAuthType()
+    const manager = getCredentialManager()
+    const providerConfig = getProviderConfig()
+
+    let hasCredential = false
+    if (authType === 'api_key') {
+      hasCredential = !!(await manager.getApiKey())
+    } else if (authType === 'oauth_token') {
+      hasCredential = !!(await manager.getClaudeOAuth())
+    } else if (authType === 'bedrock') {
+      hasCredential = true
+    }
+
+    let provider: string | undefined
+    if (authType === 'bedrock') {
+      provider = 'bedrock'
+    } else if (authType === 'oauth_token') {
+      provider = 'anthropic'
+    } else {
+      provider = providerConfig?.provider
+    }
+
+    const billingAuthType: BillingMethodInfo['authType'] =
+      authType === 'api_key' || authType === 'oauth_token' || authType === 'bedrock'
+        ? authType
+        : 'api_key'
+
+    return { authType: billingAuthType, hasCredential, provider }
+  })
+
+  server.handle(RPC_CHANNELS.settings.UPDATE_BILLING_METHOD, async (_ctx, authType: AuthType, credential?: string) => {
+    const manager = getCredentialManager()
+    const normalizedCredential = credential?.trim()
+
+    if (normalizedCredential && authType === 'api_key' && !isSafeHttpHeaderValue(normalizedCredential)) {
+      throw new Error('API key appears masked or contains invalid characters. Please paste the full key.')
+    }
+
+    if (normalizedCredential) {
+      if (authType === 'api_key') {
+        await manager.setApiKey(normalizedCredential)
+      } else if (authType === 'oauth_token') {
+        const cliCreds = getExistingClaudeCredentials()
+        if (cliCreds) {
+          await manager.setClaudeOAuthCredentials({
+            accessToken: cliCreds.accessToken,
+            refreshToken: cliCreds.refreshToken,
+            expiresAt: cliCreds.expiresAt,
+          })
+          deps.platform.logger.info('Saved Claude OAuth credentials with refresh token')
+        } else {
+          await manager.setClaudeOAuth(normalizedCredential)
+          deps.platform.logger.info('Saved Claude OAuth access token only')
+        }
+      }
+    }
+
+    const oldAuthType = getAuthType()
+    if (oldAuthType !== authType) {
+      if (oldAuthType === 'api_key') {
+        await manager.delete({ type: 'anthropic_api_key' })
+      } else if (oldAuthType === 'oauth_token') {
+        await manager.delete({ type: 'claude_oauth' })
+      }
+    }
+
+    setAuthType(authType)
+
+    try {
+      await deps.sessionManager.reinitializeAuth()
+    } catch (authError) {
+      deps.platform.logger.error('Failed to reinitialize auth:', authError)
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.GET_AGENT_TYPE, async (): Promise<AgentType> => getAgentType())
+
+  server.handle(RPC_CHANNELS.settings.SET_AGENT_TYPE, async (_ctx, agentType: AgentType) => {
+    setAgentType(agentType)
+    deps.platform.logger.info(`Agent type updated to: ${agentType}`)
+  })
+
+  server.handle(RPC_CHANNELS.settings.CHECK_CODEX_AUTH, async (): Promise<boolean> => {
+    return isCodexAuthenticated()
+  })
+
+  server.handle(RPC_CHANNELS.settings.START_CODEX_LOGIN, async () => {
+    try {
+      await startCodexOAuth((status) => {
+        deps.platform.logger.info(`Codex OAuth status: ${status}`)
+      })
+      return { success: true }
+    } catch (error) {
+      deps.platform.logger.error('Codex login error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.GET_STORED_CONFIG, async () => {
+    const config = loadStoredConfig()
+    return config ? { providerConfig: config.providerConfig } : null
+  })
+
+  server.handle(RPC_CHANNELS.settings.UPDATE_PROVIDER_CONFIG, async (_ctx, providerConfig: {
+    provider: string
+    baseURL: string
+    apiFormat: 'anthropic' | 'openai'
+  }) => {
+    setProviderConfig(providerConfig)
+
+    try {
+      await deps.sessionManager.reinitializeAuth()
+    } catch (authError) {
+      deps.platform.logger.error('Failed to reinitialize auth:', authError)
+    }
+  })
+
+  server.handle(RPC_CHANNELS.settings.GET_MODEL, async (): Promise<string | null> => getModel())
+
+  server.handle(RPC_CHANNELS.settings.SET_MODEL, async (_ctx, model: string) => {
+    setModel(model)
+    deps.platform.logger.info(`Model updated to: ${model}`)
+  })
+
+  server.handle(RPC_CHANNELS.customModels.GET, async () => getCustomModels())
+
+  server.handle(RPC_CHANNELS.customModels.SET, async (_ctx, models: CustomModel[]) => {
+    setCustomModels(models)
+    deps.platform.logger.info(`Custom models set: ${models.length} models`)
+  })
+
+  server.handle(RPC_CHANNELS.customModels.ADD, async (_ctx, model: CustomModel) => {
+    const updatedModels = addCustomModel(model)
+    deps.platform.logger.info(`Custom model added: ${model.id} (${model.name})`)
+    return updatedModels
+  })
+
+  server.handle(RPC_CHANNELS.customModels.UPDATE, async (_ctx, modelId: string, updates: Partial<CustomModel>) => {
+    const updatedModels = updateCustomModel(modelId, updates)
+    deps.platform.logger.info(`Custom model updated: ${modelId}`)
+    return updatedModels
+  })
+
+  server.handle(RPC_CHANNELS.customModels.DELETE, async (_ctx, modelId: string) => {
+    const updatedModels = deleteCustomModel(modelId)
+    deps.platform.logger.info(`Custom model deleted: ${modelId}`)
+    return updatedModels
+  })
+
+  server.handle(RPC_CHANNELS.customModels.REORDER, async (_ctx, modelIds: string[]) => {
+    const updatedModels = reorderCustomModels(modelIds)
+    deps.platform.logger.info(`Custom models reordered: ${modelIds.join(', ')}`)
+    return updatedModels
+  })
+
   // ============================================================
   // Settings - Model (Session-Specific)
   // ============================================================

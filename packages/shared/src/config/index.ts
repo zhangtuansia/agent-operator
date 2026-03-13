@@ -6,6 +6,8 @@ export * from './storage.ts';
 export * from './theme.ts';
 export * from './validators.ts';
 export * from './model-fetcher.ts';
+export * from './llm-validation.ts';
+export * from './git-bash.ts';
 export {
   ConfigWatcher,
   createConfigWatcher,

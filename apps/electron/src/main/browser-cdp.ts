@@ -679,6 +679,17 @@ export class BrowserCDP {
     }
   }
 
+  async dispatchMouseWheel(x: number, y: number, deltaX: number, deltaY: number): Promise<void> {
+    await this.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x,
+      y,
+      deltaX,
+      deltaY,
+      pointerType: 'mouse',
+    })
+  }
+
   async typeText(text: string): Promise<void> {
     await this.send('Input.insertText', { text })
   }

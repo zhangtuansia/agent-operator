@@ -28,7 +28,12 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import type { ChatOptions, PermissionCallback } from './backend/types.ts';
+import type {
+  ChatOptions,
+  PermissionCallback,
+  PostInitResult,
+  BridgeUpdateContext,
+} from './backend/types.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -472,6 +477,12 @@ export class OperatorAgent {
   // The callback should enable the source and return true if successful, false otherwise.
   // This enables auto-enabling sources when the agent tries to use their tools.
   public onSourceActivationRequest: ((sourceSlug: string) => Promise<boolean>) | null = null;
+
+  // Callback when backend-specific authentication is required.
+  public onBackendAuthRequired: ((reason: string) => void) | null = null;
+
+  // Callback when the agent requests spawning a new session.
+  public onSpawnSession: ((request: unknown) => Promise<unknown>) | null = null;
 
   get supportsBranching(): boolean {
     return true;
@@ -3587,6 +3598,11 @@ Please continue the conversation naturally from where we left off.
     this.forceAbort(AbortReason.UserStop);
   }
 
+  redirect(_message: string): boolean {
+    this.forceAbort(AbortReason.Redirect);
+    return false;
+  }
+
   isProcessing(): boolean {
     return this.currentQuery !== null;
   }
@@ -3597,6 +3613,30 @@ Please continue the conversation naturally from where we left off.
 
   getSummarizeCallback(): (prompt: string) => Promise<string | null> {
     return async () => null;
+  }
+
+  async runMiniCompletion(_prompt: string): Promise<string | null> {
+    return null;
+  }
+
+  async generateTitle(_message: string, _options?: { language?: string }): Promise<string | null> {
+    return null;
+  }
+
+  async regenerateTitle(
+    _recentUserMessages: string[],
+    _lastAssistantResponse: string,
+    _options?: { language?: string }
+  ): Promise<string | null> {
+    return null;
+  }
+
+  async postInit(): Promise<PostInitResult> {
+    return { authInjected: true };
+  }
+
+  async applyBridgeUpdates(_context: BridgeUpdateContext): Promise<void> {
+    // Operator runtime keeps bridge state in-process today.
   }
 
   destroy(): void {
@@ -3632,6 +3672,8 @@ Please continue the conversation naturally from where we left off.
     this.onSourcesListChange = null;
     this.onConfigValidationError = null;
     this.onSourceActivationRequest = null;
+    this.onBackendAuthRequired = null;
+    this.onSpawnSession = null;
 
     // Stop config watcher
     this.stopConfigWatcher();

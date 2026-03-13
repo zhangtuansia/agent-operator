@@ -368,6 +368,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId, t])
 
+  const runShareMenuAction = React.useCallback(
+    (action: () => void | Promise<void>) => async (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      await action()
+    },
+    []
+  )
+
   const handleOpenInNewWindow = React.useCallback(async () => {
     const route = routes.view.allChats(sessionId)
     const separator = route.includes('?') ? '&' : '?'
@@ -415,39 +424,39 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       <StyledDropdownMenuContent align="end" sideOffset={8}>
         {sharedUrl ? (
           <>
-            <StyledDropdownMenuItem onClick={handleOpenInBrowser}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(handleOpenInBrowser)}>
               <Globe className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.openInBrowser')}</span>
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={handleCopyLink}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(handleCopyLink)}>
               <Copy className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.copyLink')}</span>
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={handleUpdateShare}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(handleUpdateShare)}>
               <RefreshCw className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.updateShare')}</span>
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={handleRevokeShare} variant="destructive">
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(handleRevokeShare)} variant="destructive">
               <Link2Off className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.stopSharing')}</span>
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://www.aicowork.chat')}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(() => window.electronAPI.openUrl('https://www.aicowork.chat'))}>
               <Info className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.learnMore')}</span>
             </StyledDropdownMenuItem>
           </>
         ) : (
           <>
-            <StyledDropdownMenuItem onClick={handleShare}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(handleShare)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                 <path d="M8 8.53809C6.74209 8.60866 5.94798 8.80911 5.37868 9.37841C4.5 10.2571 4.5 11.6713 4.5 14.4997V15.4997C4.5 18.3282 4.5 19.7424 5.37868 20.6211C6.25736 21.4997 7.67157 21.4997 10.5 21.4997H13.5C16.3284 21.4997 17.7426 21.4997 18.6213 20.6211C19.5 19.7424 19.5 18.3282 19.5 15.4997V14.4997C19.5 11.6713 19.5 10.2571 18.6213 9.37841C18.052 8.80911 17.2579 8.60866 16 8.53809M12 14V3.5M9.5 5.5C9.99903 4.50411 10.6483 3.78875 11.5606 3.24093C11.7612 3.12053 11.8614 3.06033 12 3.06033C12.1386 3.06033 12.2388 3.12053 12.4394 3.24093C13.3517 3.78875 14.001 4.50411 14.5 5.5" />
               </svg>
               <span className="flex-1">{t('sessionMenu.shareOnline')}</span>
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://www.aicowork.chat')}>
+            <StyledDropdownMenuItem onSelect={runShareMenuAction(() => window.electronAPI.openUrl('https://www.aicowork.chat'))}>
               <Info className="h-3.5 w-3.5" />
               <span className="flex-1">{t('sessionMenu.learnMore')}</span>
             </StyledDropdownMenuItem>
@@ -455,7 +464,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         )}
       </StyledDropdownMenuContent>
     </DropdownMenu>
-  ), [sharedUrl, t, handleShare, handleOpenInBrowser, handleCopyLink, handleUpdateShare, handleRevokeShare])
+  ), [sharedUrl, t, handleShare, handleOpenInBrowser, handleCopyLink, handleUpdateShare, handleRevokeShare, runShareMenuAction])
 
   // Build title menu content for chat sessions using shared SessionMenu
   const titleMenu = React.useMemo(() => {

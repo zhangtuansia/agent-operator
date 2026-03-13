@@ -33,6 +33,8 @@ import type {
   SourceActivationCallback,
   SdkMcpServerConfig,
   BackendConfig,
+  PostInitResult,
+  BridgeUpdateContext,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
 import type { AuthRequest } from './session-scoped-tools.ts';
@@ -152,6 +154,8 @@ export abstract class BaseAgent implements AgentBackend {
   onDebug: ((message: string) => void) | null = null;
   onSourceActivationRequest: SourceActivationCallback | null = null;
   onUsageUpdate: ((update: UsageUpdate) => void) | null = null;
+  onBackendAuthRequired: ((reason: string) => void) | null = null;
+  onSpawnSession: ((request: unknown) => Promise<unknown>) | null = null;
 
   // ============================================================
   // Constructor
@@ -769,6 +773,11 @@ Please continue the conversation naturally from where we left off.
    */
   abstract forceAbort(reason: AbortReason): void;
 
+  redirect(_message: string): boolean {
+    this.forceAbort(AbortReason.Redirect);
+    return false;
+  }
+
   /**
    * Check if currently processing a query.
    */
@@ -785,6 +794,14 @@ Please continue the conversation naturally from where we left off.
    */
   async runMiniCompletion(_prompt: string): Promise<string | null> {
     return null;
+  }
+
+  async postInit(): Promise<PostInitResult> {
+    return { authInjected: true };
+  }
+
+  async applyBridgeUpdates(_context: BridgeUpdateContext): Promise<void> {
+    // No-op by default. Bridge-aware backends override this.
   }
 
   /**
@@ -806,9 +823,10 @@ Please continue the conversation naturally from where we left off.
    * @param message - The user's message to generate a title from
    * @returns Generated title (2-5 words), or null if generation fails
    */
-  async generateTitle(message: string): Promise<string | null> {
+  async generateTitle(message: string, options?: { language?: string }): Promise<string | null> {
     try {
-      const prompt = buildTitlePrompt(message);
+      const language = options?.language === 'zh' ? 'zh' : 'en';
+      const prompt = buildTitlePrompt(message, language);
       const result = await this.runMiniCompletion(prompt);
       return validateTitle(result);
     } catch (error) {
@@ -825,9 +843,14 @@ Please continue the conversation naturally from where we left off.
    * @param lastAssistantResponse - The most recent assistant response
    * @returns Generated title (2-5 words), or null if generation fails
    */
-  async regenerateTitle(recentUserMessages: string[], lastAssistantResponse: string): Promise<string | null> {
+  async regenerateTitle(
+    recentUserMessages: string[],
+    lastAssistantResponse: string,
+    options?: { language?: string }
+  ): Promise<string | null> {
     try {
-      const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse);
+      const language = options?.language === 'zh' ? 'zh' : 'en';
+      const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse, language);
       const result = await this.runMiniCompletion(prompt);
       return validateTitle(result);
     } catch (error) {

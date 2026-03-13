@@ -168,20 +168,19 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     deps.platform.logger.info('[renderer]', ...args)
   })
 
-  // Shell operations - open URL in external browser (or handle dazi:// internally)
+  // Shell operations - open URL in external browser or host deep-link handler.
   server.handle(RPC_CHANNELS.shell.OPEN_URL, async (ctx, url: string) => {
     deps.platform.logger.info('[OPEN_URL] Received request:', url)
     try {
       const parsed = new URL(url)
 
-      // dazi:// URLs require the GUI deep-link handler (Electron only)
-      if (parsed.protocol === 'dazi:') {
-        deps.platform.logger.info('[OPEN_URL] dazi:// URLs require GUI deep-link handler — skipping in core')
-        return
+      if (!['http:', 'https:', 'mailto:', 'dazi:', 'agentoperator:'].includes(parsed.protocol)) {
+        throw new Error('Only http, https, mailto, dazi, agentoperator URLs are allowed')
       }
 
-      if (!['http:', 'https:', 'mailto:', 'dazi:'].includes(parsed.protocol)) {
-        throw new Error('Only http, https, mailto, dazi URLs are allowed')
+      if (deps.platform.openExternal) {
+        await deps.platform.openExternal(url)
+        return
       }
 
       const result = await requestClientOpenExternal(server, ctx.clientId, url)
@@ -200,6 +199,10 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     try {
       const absolutePath = resolve(path)
       const safePath = await validateFilePath(absolutePath)
+      if (deps.platform.openPath) {
+        await deps.platform.openPath(safePath)
+        return
+      }
       const result = await requestClientOpenPath(server, ctx.clientId, safePath)
       if (result.error) throw new Error(result.error)
     } catch (error) {
@@ -213,6 +216,10 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     try {
       const absolutePath = resolve(path)
       const safePath = await validateFilePath(absolutePath)
+      if (deps.platform.showItemInFolder) {
+        deps.platform.showItemInFolder(safePath)
+        return
+      }
       await requestClientShowInFolder(server, ctx.clientId, safePath)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

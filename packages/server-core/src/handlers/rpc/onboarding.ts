@@ -5,7 +5,16 @@
  */
 import { getAuthState, getSetupNeeds } from '@agent-operator/shared/auth'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
-import { prepareClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState, prepareMcpOAuth } from '@agent-operator/shared/auth'
+import {
+  prepareClaudeOAuth,
+  exchangeClaudeCode,
+  hasValidOAuthState,
+  clearOAuthState,
+  prepareMcpOAuth,
+  getExistingClaudeToken,
+  isClaudeCliInstalled,
+  runClaudeSetupToken,
+} from '@agent-operator/shared/auth'
 import { validateMcpConnection } from '@agent-operator/shared/mcp'
 import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
 import type { RpcServer } from '@agent-operator/server-core/transport'
@@ -19,6 +28,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.onboarding.GET_AUTH_STATE,
   RPC_CHANNELS.onboarding.VALIDATE_MCP,
   RPC_CHANNELS.onboarding.START_MCP_OAUTH,
+  RPC_CHANNELS.onboarding.GET_EXISTING_CLAUDE_TOKEN,
+  RPC_CHANNELS.onboarding.IS_CLAUDE_CLI_INSTALLED,
+  RPC_CHANNELS.onboarding.RUN_CLAUDE_SETUP_TOKEN,
   RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH,
   RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
   RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
@@ -85,6 +97,48 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       log.error('[Onboarding:Main] MCP OAuth prepare failed:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.GET_EXISTING_CLAUDE_TOKEN, async () => {
+    try {
+      log.info('[Onboarding] Checking for existing Claude token...')
+      const token = getExistingClaudeToken()
+      log.info('[Onboarding] Existing Claude token:', token ? `found (${token.length} chars)` : 'not found')
+      return token
+    } catch (error) {
+      log.error('[Onboarding] Get existing Claude token error:', error)
+      return null
+    }
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.IS_CLAUDE_CLI_INSTALLED, async () => {
+    try {
+      const installed = isClaudeCliInstalled()
+      log.info('[Onboarding] Claude CLI installed:', installed)
+      return installed
+    } catch (error) {
+      log.error('[Onboarding] Check Claude CLI error:', error)
+      return false
+    }
+  })
+
+  server.handle(RPC_CHANNELS.onboarding.RUN_CLAUDE_SETUP_TOKEN, async () => {
+    try {
+      log.info('[Onboarding] Starting claude setup-token...')
+      const result = await runClaudeSetupToken((status) => {
+        log.info('[Onboarding] Claude setup-token status:', status)
+      })
+      log.info('[Onboarding] Claude setup-token result:', {
+        success: result.success,
+        hasToken: !!result.token,
+        error: result.error,
+      })
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.error('[Onboarding] Run Claude setup-token error:', message, error)
       return { success: false, error: message }
     }
   })

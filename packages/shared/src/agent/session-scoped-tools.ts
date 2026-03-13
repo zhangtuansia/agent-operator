@@ -66,6 +66,7 @@ import { FEATURE_FLAGS } from '../config/feature-flags.ts';
 import { loadTemplate, validateTemplateData } from '../utils/template-loader.ts';
 import { renderMustache } from '../utils/mustache.ts';
 import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
+import { expandPath } from '../utils/paths.ts';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -75,6 +76,10 @@ import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
  * Credential input modes for different auth types
  */
 export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query';
+
+function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
+  return expandPath(workspaceRootPath);
+}
 
 /**
  * Auth request types
@@ -203,6 +208,19 @@ export function registerSessionScopedToolCallbacks(
 ): void {
   sessionScopedToolCallbackRegistry.set(sessionId, callbacks);
   debug(`[SessionScopedTools] Registered callbacks for session ${sessionId}`);
+}
+
+/**
+ * Merge additional callbacks into an existing session tool registration.
+ * Used by the session layer to wire browser/session helpers after backend creation.
+ */
+export function mergeSessionScopedToolCallbacks(
+  sessionId: string,
+  callbacks: Partial<SessionScopedToolCallbacks>
+): void {
+  const existing = sessionScopedToolCallbackRegistry.get(sessionId) ?? {};
+  sessionScopedToolCallbackRegistry.set(sessionId, { ...existing, ...callbacks });
+  debug(`[SessionScopedTools] Merged callbacks for session ${sessionId}`);
 }
 
 /**
@@ -517,14 +535,15 @@ async function testGoogleSource(
   workspaceRootPath: string
 ): Promise<{ success: boolean; status?: number; error?: string; credentialType?: string }> {
   const credManager = getSourceCredentialManager();
-  const workspaceId = basename(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const workspaceId = basename(normalizedWorkspaceRootPath);
 
   // Build LoadedSource from config for credential manager
   const loadedSource: LoadedSource = {
     config: source,
     guide: null,
     folderPath: '',
-    workspaceRootPath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
     workspaceId,
   };
 
@@ -591,7 +610,8 @@ async function testApiSource(
 
     // Get credentials if needed
     if (requiresAuth) {
-      const workspaceId = basename(workspaceRootPath);
+      const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+      const workspaceId = basename(normalizedWorkspaceRootPath);
 
       if (isApiOAuthProvider(source.provider)) {
         // Use SourceCredentialManager for OAuth providers - handles expiry checking and refresh
@@ -600,7 +620,7 @@ async function testApiSource(
           config: source,
           guide: null,
           folderPath: '',
-          workspaceRootPath,
+          workspaceRootPath: normalizedWorkspaceRootPath,
           workspaceId,
         };
 
@@ -875,7 +895,7 @@ After creating or editing a source's config.json, run this tool to:
             }
 
             // Verify the source has valid credentials for session use
-            const workspaceId = basename(workspaceRootPath);
+            const workspaceId = basename(normalizeWorkspaceRootPath(workspaceRootPath));
             const loadedSource: LoadedSource = {
               config: source,
               guide: null,
@@ -989,7 +1009,7 @@ After creating or editing a source's config.json, run this tool to:
             let mcpAccessToken: string | undefined;
             if (source.isAuthenticated && source.mcp.authType !== 'none') {
               const credentialManager = getCredentialManager();
-              const workspaceId = basename(workspaceRootPath);
+              const workspaceId = basename(normalizeWorkspaceRootPath(workspaceRootPath));
               // Try OAuth first, then bearer
               const oauthCred = await credentialManager.get({
                 type: 'source_oauth',
@@ -1047,7 +1067,7 @@ After creating or editing a source's config.json, run this tool to:
                   guide: null,
                   folderPath: sourcePath,
                   workspaceRootPath,
-                  workspaceId: basename(workspaceRootPath),
+                  workspaceId: basename(normalizeWorkspaceRootPath(workspaceRootPath)),
                 };
                 const credManager = getSourceCredentialManager();
                 const hasCredentials = await credManager.hasValidCredentials(loadedSource);
@@ -1131,12 +1151,13 @@ async function verifySourceHasValidToken(
   }
 
   const credManager = getSourceCredentialManager();
-  const workspaceId = basename(workspaceRootPath);
+  const normalizedWorkspaceRootPath = normalizeWorkspaceRootPath(workspaceRootPath);
+  const workspaceId = basename(normalizedWorkspaceRootPath);
   const loadedSource: LoadedSource = {
     config: source,
     guide: null,
-    folderPath: getSourcePath(workspaceRootPath, sourceSlug),
-    workspaceRootPath,
+    folderPath: getSourcePath(normalizedWorkspaceRootPath, sourceSlug),
+    workspaceRootPath: normalizedWorkspaceRootPath,
     workspaceId,
   };
 
@@ -2055,7 +2076,7 @@ Workflow:
       data: z.record(z.string(), z.unknown()).describe('JSON data to render into the template'),
     },
     async (args) => {
-      const sourcePath = join(workspaceRootPath, 'sources', args.source);
+      const sourcePath = getSourcePath(workspaceRootPath, args.source);
 
       if (!existsSync(sourcePath)) {
         return {

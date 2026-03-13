@@ -173,6 +173,7 @@ export type SessionEvent =
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'connection_changed'; sessionId: string; connectionSlug: string; supportsBranching?: boolean }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
+  | { type: 'session_status_changed'; sessionId: string; sessionStatus: TodoState }
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
@@ -260,15 +261,6 @@ export interface RefreshTitleResult {
   success: boolean
   title?: string
   error?: string
-}
-
-/**
- * Result of saving onboarding configuration
- */
-export interface OnboardingSaveResult {
-  success: boolean
-  error?: string
-  workspaceId?: string
 }
 
 /**

@@ -78,7 +78,7 @@ function createMockWebContents() {
     })),
     executeJavaScript: mock(async (expression: string) => {
       if (expression.includes('window.scrollBy')) {
-        return { x: 0, y: 500 }
+        return { x: 0, y: 500, scrolled: false }
       }
       return null
     }),
@@ -263,6 +263,7 @@ mock.module('../browser-cdp', () => ({
       this.fillElement = mock(async (ref: string) => this.getElementGeometry(ref))
       this.selectOption = mock(async (ref: string) => this.getElementGeometry(ref))
       this.typeText = mock(async () => {})
+      this.dispatchMouseWheel = mock(async () => {})
       this.pressKey = mock(async () => {})
       this.setFileInputFiles = mock(async (ref: string) => this.getElementGeometry(ref))
       this.renderTemporaryOverlay = mock(async () => {})
@@ -280,6 +281,7 @@ mock.module('../browser-cdp', () => ({
     fillElement: any
     selectOption: any
     typeText: any
+    dispatchMouseWheel: any
     pressKey: any
     setFileInputFiles: any
     renderTemporaryOverlay: any
@@ -497,6 +499,21 @@ describe('BrowserPaneManager', () => {
     )
   })
 
+  it('ignores toolbar IPC after the browser instance is destroyed', async () => {
+    const id = manager.createInstance({ id: 'pane-toolbar-destroyed' })
+    manager.registerToolbarIpc()
+
+    const menuGeometryHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.MENU_GEOMETRY)
+    const hideHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.HIDE)
+    const destroyHandler = getToolbarHandler(BROWSER_TOOLBAR_CHANNELS.DESTROY)
+
+    manager.destroyInstance(id)
+
+    await expect(menuGeometryHandler?.({}, id, true, 120)).resolves.toBeUndefined()
+    await expect(hideHandler?.({}, id)).resolves.toBeUndefined()
+    await expect(destroyHandler?.({}, id)).resolves.toBeUndefined()
+  })
+
   it('closes the toolbar menu when the native overlay is tapped', async () => {
     const id = manager.createInstance({ id: 'pane-overlay-tap' })
     const record = (manager as any).instances.get(id)
@@ -553,6 +570,7 @@ describe('BrowserPaneManager', () => {
       await manager.pressKey(id, 'Enter')
       await manager.uploadFiles(id, '@e1', [uploadPath])
       manager.setClipboard('clipboard text')
+      await manager.scroll(id, 'down', 500)
 
       expect(await manager.getClipboard()).toBe('clipboard text')
       await manager.paste(id, 'paste text')
@@ -561,6 +579,13 @@ describe('BrowserPaneManager', () => {
       expect(cdp.drag).toHaveBeenCalledWith(10, 20, 30, 40)
       expect(cdp.typeText).toHaveBeenCalledWith('hello')
       expect(cdp.pressKey).toHaveBeenCalled()
+      expect(record.window.show).toHaveBeenCalled()
+      expect(record.window.focus).toHaveBeenCalled()
+      expect(record.pageView.webContents.executeJavaScript).toHaveBeenCalledWith(
+        expect.stringContaining('document.elementFromPoint'),
+        true,
+      )
+      expect(cdp.dispatchMouseWheel).toHaveBeenCalledWith(expect.any(Number), expect.any(Number), 0, 500)
       expect((cdp.setFileInputFiles as any).mock.calls[0]?.[0]).toBe('@e1')
       expect((cdp.setFileInputFiles as any).mock.calls[0]?.[1]?.[0]).toContain('/browser-pane-manager-test-')
       expect((cdp.setFileInputFiles as any).mock.calls[0]?.[1]?.[0]).toContain('/demo.txt')

@@ -25,13 +25,16 @@ import {
   getWorkspaces,
   getWorkspaceByNameOrId,
   loadConfigDefaults,
+  loadStoredConfig,
 
   migrateLegacyCredentials,
   migrateLegacyLlmConnectionsConfig,
   migrateOrphanedDefaultConnections,
   MODEL_REGISTRY,
+  getPreferredBedrockSmallFastModelFromEnv,
   type Workspace,
 } from '@agent-operator/shared/config'
+import { expandPath } from '@agent-operator/shared/utils'
 import { loadWorkspaceConfig } from '@agent-operator/shared/workspaces'
 import {
   // Session persistence functions
@@ -65,7 +68,7 @@ import { getCredentialManager } from '@agent-operator/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@agent-operator/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, RPC_CHANNELS, generateMessageId } from '@agent-operator/shared/protocol'
 import type { Message, StoredAttachment, ToolDisplayMeta } from '@agent-operator/core/types'
-import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment } from '@agent-operator/shared/utils'
+import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, buildFallbackTitleFromMessages } from '@agent-operator/shared/utils'
 import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@agent-operator/shared/skills'
 import { getToolIconsDir, getMiniModel } from '@agent-operator/shared/config'
 import type { SummarizeCallback } from '@agent-operator/shared/sources'
@@ -74,6 +77,14 @@ import { evaluateAutoLabels } from '@agent-operator/shared/labels/auto'
 import { listLabels } from '@agent-operator/shared/labels/storage'
 import { extractLabelId } from '@agent-operator/shared/labels'
 import { AutomationSystem, AUTOMATIONS_HISTORY_FILE, type AutomationSystemMetadataSnapshot } from '@agent-operator/shared/automations'
+import {
+  shouldSynthesizeStreamingTextOnComplete,
+  withStreamingSnapshotMessage,
+} from './persistence-utils'
+import {
+  normalizeAutomationPromptMentions,
+  type ResolvedAutomationMentions,
+} from './automation-mentions'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@agent-operator/server-core/domain'
@@ -134,6 +145,35 @@ function buildBackendHostRuntimeContext(): BackendHostRuntimeContext {
     resourcesPath: _platform.resourcesPath,
     isPackaged: _platform.isPackaged,
   }
+}
+
+function resolveSessionMiniModel(connection: { providerType?: string; defaultModel?: string; models?: unknown[] } | null | undefined): string | undefined {
+  if (!connection) return undefined
+
+  const fallbackMiniModel = getMiniModel(connection as { models: unknown[] }) ?? connection.defaultModel
+  if (connection.providerType !== 'bedrock') {
+    return fallbackMiniModel
+  }
+
+  return getPreferredBedrockSmallFastModelFromEnv() ?? fallbackMiniModel
+}
+
+function resolveTitleLanguage(): 'en' | 'zh' {
+  const uiLanguage = loadStoredConfig()?.uiLanguage
+  if (uiLanguage === 'zh' || uiLanguage === 'en') {
+    return uiLanguage
+  }
+
+  const locale = (
+    _platform?.appLocale?.() ||
+    Intl.DateTimeFormat().resolvedOptions().locale ||
+    process.env.LC_ALL ||
+    process.env.LC_MESSAGES ||
+    process.env.LANG ||
+    ''
+  ).toLowerCase()
+
+  return locale.startsWith('zh') ? 'zh' : 'en'
 }
 
 /**
@@ -1161,7 +1201,7 @@ export class SessionManager implements ISessionManager {
           )
 
           // Write enriched history entries (with session IDs and prompt summaries)
-          const historyPath = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE)
+          const historyPath = join(expandPath(workspaceRootPath), AUTOMATIONS_HISTORY_FILE)
           for (const [idx, result] of settled.entries()) {
             const pending = prompts[idx]
             if (!pending.matcherId) continue
@@ -1443,9 +1483,16 @@ export class SessionManager implements ISessionManager {
   // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
     try {
+      const allMessages = withStreamingSnapshotMessage(
+        managed.messages,
+        managed.streamingText,
+        managed.id,
+        this.monotonic(),
+      )
+
       // Filter out transient status messages (progress indicators like "Compacting...")
       // Error messages are now persisted with rich fields for diagnostics
-      const persistableMessages = managed.messages.filter(m =>
+      const persistableMessages = allMessages.filter(m =>
         m.role !== 'status'
       )
 
@@ -1478,7 +1525,50 @@ export class SessionManager implements ISessionManager {
 
   // Flush all pending sessions (call on app quit)
   async flushAllSessions(): Promise<void> {
+    for (const managed of this.sessions.values()) {
+      if (managed.streamingText) {
+        this.persistSession(managed)
+      }
+    }
     await sessionPersistenceQueue.flushAll()
+  }
+
+  private synthesizeStreamingTextOnComplete(managed: ManagedSession): Message | null {
+    if (!shouldSynthesizeStreamingTextOnComplete(managed.messages, managed.streamingText)) {
+      return null
+    }
+
+    const sessionId = managed.id
+    const workspaceId = managed.workspace.id
+    const pendingTurnId = this.pendingDeltas.get(sessionId)?.turnId
+
+    this.flushDelta(sessionId, workspaceId)
+
+    const assistantMessage: Message = {
+      id: generateMessageId(),
+      role: 'assistant',
+      content: managed.streamingText,
+      timestamp: this.monotonic(),
+      isIntermediate: false,
+      turnId: pendingTurnId,
+    }
+
+    managed.messages.push(assistantMessage)
+    managed.streamingText = ''
+    managed.lastMessageRole = 'assistant'
+    managed.lastFinalMessageId = assistantMessage.id
+
+    this.sendEvent({
+      type: 'text_complete',
+      sessionId,
+      text: assistantMessage.content,
+      isIntermediate: false,
+      turnId: pendingTurnId,
+      timestamp: assistantMessage.timestamp,
+      messageId: assistantMessage.id,
+    }, workspaceId)
+
+    return assistantMessage
   }
 
   // ============================================
@@ -2276,7 +2366,7 @@ export class SessionManager implements ISessionManager {
         hostRuntime: buildBackendHostRuntimeContext(),
         coreConfig: {
         workspace: managed.workspace,
-        miniModel: connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined,
+        miniModel: resolveSessionMiniModel(connection),
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,
@@ -2439,8 +2529,7 @@ export class SessionManager implements ISessionManager {
           return { windows, target: validated.target }
         }
 
-        mergeSessionScopedToolCallbacks(sid, {
-          browserPaneFns: {
+        const browserPaneFns = {
             openPanel: async (options) => {
               const instanceId = options?.background
                 ? bpm.createForSession(sid, { show: false })
@@ -2668,7 +2757,10 @@ export class SessionManager implements ISessionManager {
               const instanceId = resolveSessionBrowserInstance('browser_detect_challenge')
               return bpm.detectSecurityChallenge(instanceId)
             },
-          } satisfies BrowserPaneFns,
+          } satisfies BrowserPaneFns
+
+        mergeSessionScopedToolCallbacks(sid, {
+          getBrowserPaneFns: () => browserPaneFns,
         })
       }
 
@@ -3249,8 +3341,7 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      // Load session directly from disk (already in correct format)
-      const storedSession = loadStoredSession(managed.workspace.rootPath, sessionId)
+      const storedSession = await this.loadStoredSessionForShare(managed)
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
@@ -3313,8 +3404,7 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      // Load session directly from disk (already in correct format)
-      const storedSession = loadStoredSession(managed.workspace.rootPath, sessionId)
+      const storedSession = await this.loadStoredSessionForShare(managed)
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
@@ -3334,8 +3424,16 @@ export class SessionManager implements ISessionManager {
         return { success: false, error: 'Failed to update shared session' }
       }
 
-      sessionLog.info(`Session ${sessionId} share updated at ${managed.sharedUrl}`)
-      return { success: true, url: managed.sharedUrl }
+      const shareUrl = managed.sharedUrl || `${VIEWER_URL}/s/${managed.sharedId}`
+      managed.sharedUrl = shareUrl
+      await updateSessionMetadata(managed.workspace.rootPath, sessionId, {
+        sharedUrl: shareUrl,
+        sharedId: managed.sharedId,
+      })
+
+      sessionLog.info(`Session ${sessionId} share updated at ${shareUrl}`)
+      this.sendEvent({ type: 'session_shared', sessionId, sharedUrl: shareUrl }, managed.workspace.id)
+      return { success: true, url: shareUrl }
     } catch (error) {
       sessionLog.error('Update share error:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -3344,6 +3442,48 @@ export class SessionManager implements ISessionManager {
       managed.isAsyncOperationOngoing = false
       this.sendEvent({ type: 'async_operation', sessionId, isOngoing: false }, managed.workspace.id)
     }
+  }
+
+  private async loadStoredSessionForShare(managed: ManagedSession): Promise<StoredSession | null> {
+    if (!managed.isProcessing && managed.streamingText) {
+      this.synthesizeStreamingTextOnComplete(managed)
+    }
+
+    const snapshot = this.buildStoredSessionSnapshot(managed)
+    if (snapshot) {
+      // Persist opportunistically so restarts and future shares stay consistent,
+      // but use the in-memory snapshot as the source of truth for this upload.
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      return snapshot
+    }
+
+    await this.flushSession(managed.id)
+    return loadStoredSession(managed.workspace.rootPath, managed.id)
+  }
+
+  private buildStoredSessionSnapshot(managed: ManagedSession): StoredSession | null {
+    if (!managed.messagesLoaded && managed.messages.length === 0 && !managed.streamingText) {
+      return null
+    }
+
+    const allMessages = withStreamingSnapshotMessage(
+      managed.messages,
+      managed.streamingText,
+      managed.id,
+      this.monotonic(),
+    )
+
+    const persistableMessages = allMessages.filter(message => message.role !== 'status')
+
+    return {
+      ...pickSessionFields(managed),
+      workspaceRootPath: managed.workspace.rootPath,
+      createdAt: managed.createdAt ?? Date.now(),
+      lastUsedAt: Date.now(),
+      messages: persistableMessages.map(messageToStored),
+      tokenUsage: managed.tokenUsage ?? DEFAULT_TOKEN_USAGE,
+    } as StoredSession
   }
 
   /**
@@ -3661,7 +3801,7 @@ export class SessionManager implements ISessionManager {
     if (!agent && managed.llmConnection) {
       try {
         const connection = getLlmConnection(managed.llmConnection)
-        const resolvedMiniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+        const resolvedMiniModel = resolveSessionMiniModel(connection)
 
         agent = createBackendFromConnection(managed.llmConnection, {
           workspace: managed.workspace,
@@ -3690,6 +3830,7 @@ export class SessionManager implements ISessionManager {
     }
 
     sessionLog.info(`refreshTitle: Calling agent.regenerateTitle...`)
+    const titleLanguage = resolveTitleLanguage()
 
 
     // Notify renderer that title regeneration has started (for shimmer effect)
@@ -3699,7 +3840,7 @@ export class SessionManager implements ISessionManager {
     this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: true }, managed.workspace.id)
 
     try {
-      const title = await agent.regenerateTitle(userMessages, assistantResponse)
+      const title = await agent.regenerateTitle(userMessages, assistantResponse, { language: titleLanguage })
       sessionLog.info(`refreshTitle: regenerateTitle returned: ${title ? `"${title}"` : 'null'}`)
       if (title) {
         managed.name = title
@@ -3709,15 +3850,23 @@ export class SessionManager implements ISessionManager {
         sessionLog.info(`Refreshed title for session ${sessionId}: "${title}"`)
         return { success: true, title }
       }
-      // Failed to generate - clear regenerating state
-      this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: false }, managed.workspace.id)
-      return { success: false, error: 'Failed to generate title' }
+      const fallbackCandidates = userMessages.length > 0 ? userMessages : [assistantResponse]
+      const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates, titleLanguage)
+      managed.name = fallbackTitle
+      this.persistSession(managed)
+      this.sendEvent({ type: 'title_generated', sessionId, title: fallbackTitle }, managed.workspace.id)
+      sessionLog.warn(`refreshTitle: regenerateTitle returned null, using fallback "${fallbackTitle}"`)
+      return { success: true, title: fallbackTitle }
     } catch (error) {
-      // Error occurred - clear regenerating state
-      this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: false }, managed.workspace.id)
       const message = error instanceof Error ? error.message : 'Unknown error'
       sessionLog.error(`Failed to refresh title for session ${sessionId}:`, error)
-      return { success: false, error: message }
+      const fallbackCandidates = userMessages.length > 0 ? userMessages : [assistantResponse]
+      const fallbackTitle = buildFallbackTitleFromMessages(fallbackCandidates, titleLanguage)
+      managed.name = fallbackTitle
+      this.persistSession(managed)
+      this.sendEvent({ type: 'title_generated', sessionId, title: fallbackTitle }, managed.workspace.id)
+      sessionLog.warn(`refreshTitle: regenerateTitle failed, using fallback "${fallbackTitle}" (reason: ${message})`)
+      return { success: true, title: fallbackTitle }
     } finally {
       // Clean up temporary agent
       if (isTemporary && agent) {
@@ -4276,6 +4425,8 @@ export class SessionManager implements ISessionManager {
           }
 
           sessionLog.info('Chat completed via complete event')
+
+          this.synthesizeStreamingTextOnComplete(managed)
 
           // Check if we got an assistant response in this turn
           // If not, the SDK may have hit context limits or other issues
@@ -5043,6 +5194,7 @@ To view this task's output:
    */
   private async generateTitle(managed: ManagedSession, userMessage: string): Promise<void> {
     sessionLog.info(`[generateTitle] Starting for session ${managed.id}`)
+    const titleLanguage = resolveTitleLanguage()
 
     // Use existing agent or create temporary one
     let agent: AgentInstance | null = managed.agent
@@ -5065,7 +5217,7 @@ To view this task's output:
 
         agent = createBackendFromConnection(managed.llmConnection, {
           workspace: managed.workspace,
-          miniModel: connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined,
+          miniModel: resolveSessionMiniModel(connection),
           session: {
             id: `title-${managed.id}`,
             workspaceRootPath: managed.workspace.rootPath,
@@ -5090,7 +5242,7 @@ To view this task's output:
     }
 
     try {
-      const title = await agent.generateTitle(userMessage)
+      const title = await agent.generateTitle(userMessage, { language: titleLanguage })
       if (title) {
         managed.name = title
         this.persistSession(managed)
@@ -5102,10 +5254,22 @@ To view this task's output:
         this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
         sessionLog.info(`Generated title for session ${managed.id}: "${title}"`)
       } else {
-        sessionLog.warn(`Title generation returned null for session ${managed.id}`)
+        const fallbackTitle = buildFallbackTitleFromMessages([userMessage], titleLanguage)
+        managed.name = fallbackTitle
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title: fallbackTitle }, managed.workspace.id)
+        sessionLog.warn(`Title generation returned null for session ${managed.id}; using fallback "${fallbackTitle}"`)
       }
     } catch (error) {
       sessionLog.error(`Failed to generate title for session ${managed.id}:`, error)
+
+      const fallbackTitle = buildFallbackTitleFromMessages([userMessage], titleLanguage)
+      managed.name = fallbackTitle
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'title_generated', sessionId: managed.id, title: fallbackTitle }, managed.workspace.id)
+      sessionLog.warn(`Title generation failed for session ${managed.id}; using fallback "${fallbackTitle}"`)
 
       // Surface quota/auth errors to the user — these indicate the main chat call will also fail
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -5750,6 +5914,7 @@ To view this task's output:
 
     // Resolve @mentions to source/skill slugs
     const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
+    const normalized = normalizeAutomationPromptMentions(prompt, resolved)
 
     // Use automation name if provided, otherwise fall back to prompt snippet
     const fallback = `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`
@@ -5779,8 +5944,9 @@ To view this task's output:
     this.sendEvent({ type: 'session_created', sessionId: session.id }, workspaceId)
 
     // Send the prompt
-    await this.sendMessage(session.id, prompt, undefined, undefined, {
+    await this.sendMessage(session.id, normalized.prompt, undefined, undefined, {
       skillSlugs: resolved?.skillSlugs,
+      badges: normalized.badges,
     })
 
     return { sessionId: session.id }
@@ -5789,23 +5955,40 @@ To view this task's output:
   /**
    * Resolve @mentions in automation prompts to source and skill slugs
    */
-  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
+  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): ResolvedAutomationMentions | undefined {
     const sources = loadWorkspaceSources(workspaceRootPath)
     const skills = loadAllSkills(workspaceRootPath)
+    const workspaceConfig = loadWorkspaceConfig(workspaceRootPath)
     const sourceSlugs: string[] = []
     const skillSlugs: string[] = []
+    const resolvedSources: LoadedSource[] = []
+    const resolvedSkills: LoadedSkill[] = []
 
     for (const mention of mentions) {
-      if (sources.some(s => s.config.slug === mention)) {
+      const source = sources.find(s => s.config.slug === mention)
+      if (source) {
         sourceSlugs.push(mention)
-      } else if (skills.some(s => s.slug === mention)) {
-        skillSlugs.push(mention)
+        resolvedSources.push(source)
       } else {
-        sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
+        const skill = skills.find(s => s.slug === mention)
+        if (skill) {
+        skillSlugs.push(mention)
+          resolvedSkills.push(skill)
+        } else {
+          sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
+        }
       }
     }
 
-    return (sourceSlugs.length > 0 || skillSlugs.length > 0) ? { sourceSlugs, skillSlugs } : undefined
+    return (sourceSlugs.length > 0 || skillSlugs.length > 0)
+      ? {
+          workspaceId: workspaceConfig?.id || basename(normalize(workspaceRootPath)),
+          sourceSlugs,
+          skillSlugs,
+          sources: resolvedSources,
+          skills: resolvedSkills,
+        }
+      : undefined
   }
 
   /**

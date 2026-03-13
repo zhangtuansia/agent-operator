@@ -22,6 +22,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,
   RPC_CHANNELS.llmConnections.GET,
   RPC_CHANNELS.llmConnections.GET_API_KEY,
+  RPC_CHANNELS.credentials.GET_LLM_API_KEY,
   RPC_CHANNELS.llmConnections.SAVE,
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
@@ -46,6 +47,11 @@ export const HANDLED_CHANNELS = [
 
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
+
+  server.handle(RPC_CHANNELS.credentials.GET_LLM_API_KEY, async (_ctx, connectionSlug: string) => {
+    const manager = getCredentialManager()
+    return manager.getLlmApiKey(connectionSlug)
+  })
 
   // Unified handler for LLM connection setup
   server.handle(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION, async (_ctx, setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }> => {
@@ -227,7 +233,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Unified connection test — uses the agent factory to spawn a real agent subprocess
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@agent-operator/shared/protocol').TestLlmConnectionParams): Promise<import('@agent-operator/shared/protocol').TestLlmConnectionResult> => {
-    const { provider, apiKey, baseUrl, model, piAuthProvider } = params
+    const { provider, apiKey, baseUrl, model, models, piAuthProvider } = params
     const trimmedKey = apiKey?.trim()
 
     if (!trimmedKey) {
@@ -247,6 +253,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         provider,
         apiKey: trimmedKey,
         model: testModel,
+        models,
         baseUrl,
         timeoutMs: 20000,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),

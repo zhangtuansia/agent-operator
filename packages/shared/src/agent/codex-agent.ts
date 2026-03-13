@@ -76,6 +76,11 @@ import { readFileSync, existsSync } from 'node:fs';
 
 // System prompt for Cowork context
 import { getSystemPrompt } from '../prompts/system.ts';
+import {
+  buildTitlePrompt,
+  buildRegenerateTitlePrompt,
+  validateTitle,
+} from '../utils/title-generator.ts';
 
 // PreToolUse utilities
 import {
@@ -1550,7 +1555,7 @@ export class CodexAgent extends BaseAgent {
    * Uses the cheapest model (Codex Mini) with an ephemeral thread.
    * Falls back to null on failure — caller should fall back to Claude.
    */
-  async generateTitle(prompt: string): Promise<string | null> {
+  private async runTitleCompletion(prompt: string): Promise<string | null> {
     const client = await this.ensureClient();
 
     // Use the cheapest model (Codex Mini) — title is just a 5-word summary
@@ -1640,7 +1645,23 @@ export class CodexAgent extends BaseAgent {
 
     const trimmed = result.trim();
     this.debug(`[generateTitle] Result: "${trimmed}"`);
-    return (trimmed.length > 0 && trimmed.length < 100) ? trimmed : null;
+    return validateTitle(trimmed);
+  }
+
+  async generateTitle(message: string, options?: { language?: string }): Promise<string | null> {
+    const language = options?.language === 'zh' ? 'zh' : 'en';
+    const prompt = buildTitlePrompt(message, language);
+    return this.runTitleCompletion(prompt);
+  }
+
+  async regenerateTitle(
+    recentUserMessages: string[],
+    lastAssistantResponse: string,
+    options?: { language?: string },
+  ): Promise<string | null> {
+    const language = options?.language === 'zh' ? 'zh' : 'en';
+    const prompt = buildRegenerateTitlePrompt(recentUserMessages, lastAssistantResponse, language);
+    return this.runTitleCompletion(prompt);
   }
 
   // ============================================================

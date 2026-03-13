@@ -50,6 +50,11 @@ export function createHeadlessPlatform(): PlatformServices {
     resourcesPath: process.env.COWORK_RESOURCES_PATH || join(process.cwd(), 'resources'),
     isPackaged: process.env.COWORK_IS_PACKAGED === 'true',
     appVersion: process.env.COWORK_VERSION || '0.0.0-dev',
+    appLocale: () =>
+      process.env.LC_ALL ||
+      process.env.LC_MESSAGES ||
+      process.env.LANG ||
+      Intl.DateTimeFormat().resolvedOptions().locale,
 
     imageProcessor: {
       async getMetadata(buffer) {

@@ -248,7 +248,7 @@ See `CLAUDE.md` for complete route reference.
 | File | Purpose |
 |------|---------|
 | `main/index.ts` | App entry, window creation |
-| `main/sessions.ts` | OperatorAgent wrapper, event processing, source integration |
+| `packages/server-core/src/sessions/SessionManager.ts` | Core session orchestration, event processing, source integration |
 | `main/ipc.ts` | IPC channel handlers (sessions, files, shell) |
 | `main/menu.ts` | Application menu (File, Edit, View, Help) |
 | `main/deep-link.ts` | Deep link URL parsing and handling |

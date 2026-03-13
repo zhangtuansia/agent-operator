@@ -14,6 +14,7 @@ import {
   type TokenRefreshManager,
 } from '@agent-operator/shared/sources'
 import type { AutomationSystem } from '@agent-operator/shared/automations'
+import { expandPath } from '@agent-operator/shared/utils'
 import { sessionLog } from './logger'
 
 export type McpServerDir = 'bridge-mcp-server' | 'session-mcp-server' | 'pi-agent-server'
@@ -107,7 +108,7 @@ export async function setupCodexSessionConfig(
   const workspaceId = sources[0]?.workspaceId
   const bridgeConfigPath = join(codexHome, 'bridge-config.json')
   const plansFolderPath = sessionId && workspaceRootPath
-    ? join(workspaceRootPath, 'sessions', sessionId, 'plans')
+    ? join(expandPath(workspaceRootPath), 'sessions', sessionId, 'plans')
     : undefined
 
   const configResult = generateCodexConfig({

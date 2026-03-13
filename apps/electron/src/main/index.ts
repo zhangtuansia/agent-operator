@@ -3,12 +3,13 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
+import { cleanupSessionFileWatchForClient } from '@agent-operator/server-core/handlers/rpc'
 
 // Initialize Sentry error tracking as early as possible after app import.
 // Only enabled when SENTRY_ELECTRON_INGEST_URL is set (baked in at build time or via .env).
@@ -52,19 +53,27 @@ Sentry.init({
 // Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
-import { SessionManager } from './sessions'
+import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@agent-operator/server-core/sessions'
+import { setFetcherPlatform } from '@agent-operator/server-core/model-fetchers'
+import { setImageProcessor, setSearchPlatform } from '@agent-operator/server-core/services'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces } from '@agent-operator/shared/config'
+import {
+  getAllPiModels,
+  getPiModelsForAuthProvider,
+  getWorkspaces,
+  registerPiModelResolver,
+} from '@agent-operator/shared/config'
+import { OAuthFlowStore } from '@agent-operator/shared/auth'
 import { initializeDocs } from '@agent-operator/shared/docs'
 import { initializeReleaseNotes } from '@agent-operator/shared/release-notes'
 import { ensureDefaultPermissions } from '@agent-operator/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug, setBundledAssetsRoot } from '@agent-operator/shared/utils'
-import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
+import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
 import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { initTray, destroyTray } from './tray'
 import { getSkillServiceManager } from './skill-services'
@@ -72,7 +81,12 @@ import { createIMServiceManager, getIMServiceManager } from './im-services'
 import { initModelRefreshService, getModelRefreshService } from './model-fetchers'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { findBundledResourcePath } from './resource-paths'
-import { WsRpcServer } from '../transport/server'
+import { WsRpcServer, pushTyped } from '../transport/server'
+import { SessionEventHub } from './session-event-hub'
+import { IPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS, type SessionEvent } from '@agent-operator/shared/protocol'
+import { createElectronPlatformServices } from './platform-services'
+import { registerTransportBootstrapHandlers } from './bootstrap-handlers'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -103,27 +117,15 @@ let sessionManager: SessionManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
 let rpcServer: WsRpcServer | null = null
 let rpcToken: string | null = null
+let sessionEventHub: SessionEventHub | null = null
+let oauthFlowStore: OAuthFlowStore | null = null
+
+registerPiModelResolver((piAuthProvider?: string) =>
+  piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels(),
+)
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
-
-function registerTransportBootstrapHandlers(): void {
-  ipcMain.on('__get-ws-port', (event) => {
-    event.returnValue = rpcServer?.port ?? 0
-  })
-
-  ipcMain.on('__get-ws-token', (event) => {
-    event.returnValue = rpcToken ?? ''
-  })
-
-  ipcMain.on('__get-web-contents-id', (event) => {
-    event.returnValue = event.sender.id
-  })
-
-  ipcMain.on('__get-workspace-id', (event) => {
-    event.returnValue = windowManager?.getWorkspaceForWindow(event.sender.id) ?? ''
-  })
-}
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: COWORK_APP_NAME env var (e.g., "Dazi [1]")
@@ -299,12 +301,21 @@ app.whenReady().then(async () => {
     rpcServer = new WsRpcServer({
       requireAuth: true,
       validateToken: async (token) => token === rpcToken,
+      onClientDisconnected: (clientId) => {
+        cleanupSessionFileWatchForClient(clientId)
+      },
     })
     mainLog.info('[startup] Starting WS RPC server')
     await rpcServer.listen()
     mainLog.info(`[startup] WS RPC server listening on 127.0.0.1:${rpcServer.port}`)
     mainLog.info('[startup] Registering WS bootstrap IPC')
-    registerTransportBootstrapHandlers()
+    registerTransportBootstrapHandlers({
+      getRpcServer: () => rpcServer,
+      getRpcToken: () => rpcToken,
+      getWindowManager: () => windowManager,
+      getSessionManager: () => sessionManager,
+      logger: mainLog,
+    })
 
     // Create the application menu (needs windowManager for New Window action)
     mainLog.info('[startup] Creating application menu')
@@ -316,12 +327,55 @@ app.whenReady().then(async () => {
       mainLog.error('[tray] Failed to initialize tray:', error)
     }
 
+    const platform = createElectronPlatformServices()
+    setFetcherPlatform(platform)
+    setSessionPlatform(platform)
+    const { onSessionStarted, onSessionStopped } = await import('./power-manager')
+    setSessionRuntimeHooks({
+      updateBadgeCount,
+      onSessionStarted,
+      onSessionStopped,
+      captureException: (error, context) => {
+        Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
+          tags: {
+            ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
+            ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
+          },
+        })
+      },
+    })
+    setSearchPlatform(platform)
+    setImageProcessor(platform.imageProcessor)
+
     // Initialize session manager
     mainLog.info('[startup] Initializing SessionManager')
     sessionManager = new SessionManager()
     mainLog.info('[startup] Wiring SessionManager dependencies')
-    sessionManager.setWindowManager(windowManager)
     sessionManager.setBrowserPaneManager(browserPaneManager)
+    sessionEventHub = new SessionEventHub()
+    sessionManager.setEventSink((channel, target, ...args) => {
+      if (channel === IPC_CHANNELS.SESSION_EVENT && args.length > 0) {
+        sessionEventHub?.emit(args[0] as SessionEvent)
+      }
+
+      if (rpcServer) {
+        rpcServer.push(channel, target, ...args)
+        return
+      }
+
+      if (channel === IPC_CHANNELS.SESSION_EVENT && target.to === 'workspace') {
+        const windows = windowManager.getAllWindowsForWorkspace(target.workspaceId)
+        for (const window of windows) {
+          if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
+            try {
+              window.webContents.send(channel, ...args)
+            } catch {
+              // Ignore window closure races.
+            }
+          }
+        }
+      }
+    })
 
     // Initialize notification service
     mainLog.info('[startup] Initializing notification service')
@@ -348,7 +402,22 @@ app.whenReady().then(async () => {
     // always available to the renderer even if initialization fails.
     // This prevents "No handler registered" errors during onboarding on fresh installs.
     mainLog.info('[startup] Registering IPC handlers')
-    registerIpcHandlers(sessionManager, windowManager, browserPaneManager, rpcServer)
+    oauthFlowStore = new OAuthFlowStore()
+    const imServices = createIMServiceManager(sessionManager, windowManager, sessionEventHub)
+    registerIpcHandlers(
+      sessionManager,
+      windowManager,
+      browserPaneManager,
+      rpcServer,
+      {
+        sessionManager,
+        windowManager,
+        browserPaneManager,
+        oauthFlowStore,
+        platform,
+      },
+      imServices,
+    )
 
     // Initialize session manager (load sessions from disk BEFORE window creation)
     // Non-fatal: if initialization fails (e.g. corrupted config, missing files),
@@ -369,8 +438,6 @@ app.whenReady().then(async () => {
     })
 
     // Initialize IM services (Feishu, Telegram)
-    const imServices = createIMServiceManager(sessionManager, windowManager)
-    imServices.registerIpcHandlers()
     imServices.initialize().catch(error => {
       mainLog.error('Failed to initialize IM services:', error)
     })
@@ -482,6 +549,8 @@ app.on('before-quit', async (event) => {
       mainLog.error('Failed to close WS RPC server:', error)
     }
   }
+  oauthFlowStore?.dispose()
+  oauthFlowStore = null
 
   // Flush all pending session writes before quitting
   if (sessionManager) {

@@ -87,7 +87,6 @@ export type {
   EnsureGwsInstalledResult,
   ShareResult,
   RefreshTitleResult,
-  OnboardingSaveResult,
   ClaudeOAuthResult,
   // Settings types
   BillingMethodInfo,
@@ -394,6 +393,47 @@ export interface BrowserPaneAPI {
   onInteracted(callback: (id: string) => void): () => void
 }
 
+export type TransportMode = 'local' | 'remote'
+
+export type TransportConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'failed'
+
+export type TransportConnectionErrorKind =
+  | 'auth'
+  | 'protocol'
+  | 'timeout'
+  | 'network'
+  | 'server'
+  | 'unknown'
+
+export interface TransportConnectionError {
+  kind: TransportConnectionErrorKind
+  message: string
+  code?: string
+}
+
+export interface TransportCloseInfo {
+  code?: number
+  reason?: string
+  wasClean?: boolean
+}
+
+export interface TransportConnectionState {
+  mode: TransportMode
+  status: TransportConnectionStatus
+  url: string
+  attempt: number
+  nextRetryInMs?: number
+  lastError?: TransportConnectionError
+  lastClose?: TransportCloseInfo
+  updatedAt: number
+}
+
 export const BROWSER_TOOLBAR_CHANNELS = {
   NAVIGATE: 'browser-toolbar:navigate',
   GO_BACK: 'browser-toolbar:go-back',
@@ -487,7 +527,6 @@ import type {
   ShareResult,
   RefreshTitleResult,
   OAuthResult,
-  OnboardingSaveResult,
   ClaudeOAuthResult,
   BillingMethodInfo,
   UpdateInfo,
@@ -601,6 +640,12 @@ export interface ElectronAPI {
   newWindow(): Promise<void>
   browserPane?: BrowserPaneAPI
 
+  // Transport state (preload-only helpers)
+  getTransportConnectionState(): Promise<TransportConnectionState>
+  onTransportConnectionStateChanged(callback: (state: TransportConnectionState) => void): () => void
+  reconnectTransport(): Promise<void>
+  isChannelAvailable(channel: string): boolean
+
   // Deep link navigation listener (for external agentoperator:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
   getPendingDeepLink(): Promise<DeepLinkNavigation | null>
@@ -609,23 +654,12 @@ export interface ElectronAPI {
   showLogoutConfirmation(): Promise<boolean>
   showDeleteSessionConfirmation(name: string): Promise<boolean>
   logout(): Promise<void>
+  performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string }): Promise<{ success: boolean; error?: string; email?: string }>
 
   // Onboarding
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
-  // Legacy onboarding config save (kept for backward compatibility)
-  saveOnboardingConfig(config: {
-    authType?: AuthType
-    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }
-    credential?: string
-    mcpCredentials?: { accessToken: string; clientId?: string }
-    providerConfig?: {
-      provider: string
-      baseURL: string
-      apiFormat: 'anthropic' | 'openai'
-    }
-  }): Promise<OnboardingSaveResult>
   // Claude OAuth
   getExistingClaudeToken(): Promise<string | null>
   isClaudeCliInstalled(): Promise<boolean>
@@ -891,6 +925,7 @@ export interface ElectronAPI {
   imTestChannel(platform: import('@agent-operator/shared/im').IMPlatform, config?: import('@agent-operator/shared/im').ChannelConfig): Promise<import('@agent-operator/shared/im').IMConnectivityTestResult>
   imGetStatus(): Promise<import('@agent-operator/shared/im').IMGatewayStatus[]>
   onImStatusChanged(callback: (statuses: import('@agent-operator/shared/im').IMGatewayStatus[]) => void): () => void
+  onImMessageReceived(callback: (message: import('@agent-operator/shared/im').IMMessage) => void): () => void
   imGetSessionMappings(platform?: import('@agent-operator/shared/im').IMPlatform): Promise<import('@agent-operator/shared/im').IMSessionMapping[]>
   imDeleteSessionMapping(conversationId: string, platform: import('@agent-operator/shared/im').IMPlatform): Promise<void>
 }

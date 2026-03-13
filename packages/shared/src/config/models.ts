@@ -15,6 +15,7 @@ export interface ModelDefinition {
   name: string;
   shortName: string;
   description: string;
+  provider?: string;
   /** Token pricing (optional, defaults provided) */
   pricing?: ModelPricing;
   /** Optional model context window size */
@@ -128,6 +129,57 @@ export const BEDROCK_MODELS: ModelDefinition[] = [
   { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', name: 'Haiku 4.5 (Bedrock)', shortName: 'Haiku', description: 'Fast & efficient', pricing: DEFAULT_PRICING.haiku },
 ];
 
+type BedrockEnvModelSlot = {
+  envVar:
+    | 'ANTHROPIC_MODEL'
+    | 'ANTHROPIC_DEFAULT_OPUS_MODEL'
+    | 'ANTHROPIC_DEFAULT_SONNET_MODEL'
+    | 'ANTHROPIC_DEFAULT_HAIKU_MODEL'
+    | 'ANTHROPIC_SMALL_FAST_MODEL';
+  fallbackName: string;
+  fallbackShortName: string;
+  fallbackDescription: string;
+  fallbackPricing: ModelPricing;
+};
+
+const BEDROCK_ENV_MODEL_SLOTS: BedrockEnvModelSlot[] = [
+  {
+    envVar: 'ANTHROPIC_MODEL',
+    fallbackName: 'Configured Bedrock Model',
+    fallbackShortName: 'Configured',
+    fallbackDescription: 'Configured via environment',
+    fallbackPricing: DEFAULT_PRICING.sonnet,
+  },
+  {
+    envVar: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    fallbackName: 'Opus 4.6 (Bedrock)',
+    fallbackShortName: 'Opus',
+    fallbackDescription: 'Most capable',
+    fallbackPricing: DEFAULT_PRICING.opus,
+  },
+  {
+    envVar: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    fallbackName: 'Sonnet 4.5 (Bedrock)',
+    fallbackShortName: 'Sonnet',
+    fallbackDescription: 'Balanced',
+    fallbackPricing: DEFAULT_PRICING.sonnet,
+  },
+  {
+    envVar: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    fallbackName: 'Haiku 4.5 (Bedrock)',
+    fallbackShortName: 'Haiku',
+    fallbackDescription: 'Fast & efficient',
+    fallbackPricing: DEFAULT_PRICING.haiku,
+  },
+  {
+    envVar: 'ANTHROPIC_SMALL_FAST_MODEL',
+    fallbackName: 'Haiku 4.5 (Bedrock)',
+    fallbackShortName: 'Haiku',
+    fallbackDescription: 'Fast & efficient',
+    fallbackPricing: DEFAULT_PRICING.haiku,
+  },
+];
+
 // OpenRouter models (uses provider/model-name format, 2026 updated)
 export const OPENROUTER_MODELS: ModelDefinition[] = [
   { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', shortName: 'Opus 4.6', description: 'Most capable ($15/$75 per 1M)' },
@@ -202,6 +254,10 @@ export function getModelsForProvider(
 ): ModelDefinition[] {
   if (!provider) return CLAUDE_MODELS;
 
+  if (provider === 'bedrock') {
+    return getEffectiveBedrockModels();
+  }
+
   // For custom provider, use passed custom models
   if (provider === 'custom' && customModels && customModels.length > 0) {
     return customModels.map(m => ({
@@ -229,6 +285,10 @@ export function getDefaultModelForProvider(
   customModels?: Array<{ id: string; name: string }>
 ): string {
   if (!provider) return DEFAULT_MODEL;
+
+  if (provider === 'bedrock') {
+    return getEffectiveBedrockDefaultModel();
+  }
 
   // For custom provider with user-defined models, use the first custom model
   if (provider === 'custom' && customModels && customModels.length > 0) {
@@ -295,9 +355,12 @@ const ALL_MODELS: ModelDefinition[] = [
   ...OLLAMA_MODELS,
 ];
 
+export const MODEL_REGISTRY: ModelDefinition[] = ALL_MODELS;
+
 /** Resolve model definition by ID from built-in registries. */
 export function getModelById(modelId: string): ModelDefinition | undefined {
-  return ALL_MODELS.find(model => model.id === modelId);
+  return ALL_MODELS.find(model => model.id === modelId)
+    ?? getEffectiveBedrockModels().find(model => model.id === modelId);
 }
 
 /** Get model id by short name. Throws if no match is found. */
@@ -313,6 +376,11 @@ export function getModelIdByShortName(shortName: string): string {
 export function getModelDisplayName(modelId: string): string {
   const model = ALL_MODELS.find(m => m.id === modelId);
   if (model) return model.name;
+  const configuredBedrockModel = getEffectiveBedrockModels().find(m => m.id === modelId);
+  if (configuredBedrockModel) return configuredBedrockModel.name;
+  if (isBedrockArn(modelId) || isBedrockModelId(modelId)) {
+    return getBedrockModelDisplayName(modelId);
+  }
   // Fallback: strip prefix and date suffix
   return modelId.replace('claude-', '').replace(/-\d{8}$/, '');
 }
@@ -321,6 +389,8 @@ export function getModelDisplayName(modelId: string): string {
 export function getModelShortName(modelId: string): string {
   const model = ALL_MODELS.find(m => m.id === modelId);
   if (model) return model.shortName;
+  const configuredBedrockModel = getEffectiveBedrockModels().find(m => m.id === modelId);
+  if (configuredBedrockModel) return configuredBedrockModel.shortName;
   // Fallback: strip prefix and date suffix
   return modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
 }
@@ -447,39 +517,159 @@ export function isValidBedrockModel(modelId: string): boolean {
   return getClaudeToBedrockMapping().has(modelId);
 }
 
+function inferBedrockEnvModelMetadata(
+  modelId: string,
+  slot: BedrockEnvModelSlot,
+): Pick<ModelDefinition, 'name' | 'shortName' | 'description' | 'pricing'> {
+  const lowerModelId = modelId.toLowerCase();
+
+  if (slot.envVar === 'ANTHROPIC_DEFAULT_OPUS_MODEL' || lowerModelId.includes('opus')) {
+    return {
+      name: 'Opus 4.6 (Bedrock)',
+      shortName: 'Opus',
+      description: 'Most capable',
+      pricing: DEFAULT_PRICING.opus,
+    };
+  }
+
+  if (slot.envVar === 'ANTHROPIC_DEFAULT_SONNET_MODEL' || lowerModelId.includes('sonnet')) {
+    return {
+      name: 'Sonnet 4.5 (Bedrock)',
+      shortName: 'Sonnet',
+      description: 'Balanced',
+      pricing: DEFAULT_PRICING.sonnet,
+    };
+  }
+
+  if (
+    slot.envVar === 'ANTHROPIC_DEFAULT_HAIKU_MODEL'
+    || slot.envVar === 'ANTHROPIC_SMALL_FAST_MODEL'
+    || lowerModelId.includes('haiku')
+  ) {
+    return {
+      name: 'Haiku 4.5 (Bedrock)',
+      shortName: 'Haiku',
+      description: 'Fast & efficient',
+      pricing: DEFAULT_PRICING.haiku,
+    };
+  }
+
+  return {
+    name: slot.fallbackName,
+    shortName: slot.fallbackShortName,
+    description: slot.fallbackDescription,
+    pricing: slot.fallbackPricing,
+  };
+}
+
+function getBedrockModelAlias(modelId: string): 'Opus' | 'Sonnet' | 'Haiku' | null {
+  const lowerModelId = modelId.toLowerCase();
+  if (lowerModelId.includes('opus')) return 'Opus';
+  if (lowerModelId.includes('sonnet')) return 'Sonnet';
+  if (lowerModelId.includes('haiku')) return 'Haiku';
+  return null;
+}
+
+function readEnvBedrockModel(slot: BedrockEnvModelSlot): string | undefined {
+  const modelId = process.env[slot.envVar]?.trim();
+  if (!modelId || !isValidBedrockModel(modelId)) {
+    return undefined;
+  }
+  return modelId;
+}
+
+export function getConfiguredBedrockModelsFromEnv(): ModelDefinition[] {
+  const configuredModels: ModelDefinition[] = [];
+  const seen = new Set<string>();
+
+  for (const slot of BEDROCK_ENV_MODEL_SLOTS) {
+    const modelId = readEnvBedrockModel(slot);
+    if (!modelId || seen.has(modelId)) continue;
+
+    const metadata = inferBedrockEnvModelMetadata(modelId, slot);
+    configuredModels.push({
+      id: modelId,
+      name: metadata.name,
+      shortName: metadata.shortName,
+      description: metadata.description,
+      pricing: metadata.pricing,
+    });
+    seen.add(modelId);
+  }
+
+  return configuredModels;
+}
+
+export function getEffectiveBedrockModels(): ModelDefinition[] {
+  const configuredModels = getConfiguredBedrockModelsFromEnv();
+  return configuredModels.length > 0 ? configuredModels : BEDROCK_MODELS;
+}
+
+export function getEffectiveBedrockDefaultModel(): string {
+  return getEffectiveBedrockModels()[0]?.id
+    ?? DEFAULT_PROVIDER_MODEL.bedrock
+    ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+}
+
+export function getPreferredBedrockPrimaryModelFromEnv(): string | undefined {
+  return getConfiguredBedrockModelsFromEnv()[0]?.id;
+}
+
+export function getPreferredBedrockSmallFastModelFromEnv(): string | undefined {
+  const explicitSmallFast = process.env.ANTHROPIC_SMALL_FAST_MODEL?.trim();
+  if (explicitSmallFast && isValidBedrockModel(explicitSmallFast)) {
+    return explicitSmallFast;
+  }
+
+  const explicitHaiku = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL?.trim();
+  if (explicitHaiku && isValidBedrockModel(explicitHaiku)) {
+    return explicitHaiku;
+  }
+
+  return getConfiguredBedrockModelsFromEnv().find((model) => model.shortName === 'Haiku')?.id;
+}
+
 /**
  * Get the effective model for Bedrock mode.
  * Priority:
- * 1. ANTHROPIC_MODEL env var (supports ARN format for Application Inference Profiles)
- * 2. App-configured model (if it's a valid Bedrock model ID or mappable Claude model)
+ * 1. App-configured model (if it's a valid Bedrock model ID or mappable Claude model)
+ * 2. Environment-configured Bedrock default model
  * 3. Default Bedrock model
  *
- * This allows users to configure custom Inference Profile ARNs while still
- * allowing the app to work with standard Bedrock model IDs.
+ * This lets environment variables define the available Bedrock models while
+ * still allowing the app to choose among them per connection/session.
  */
 export function getBedrockModel(appConfiguredModel?: string): string {
-  // First priority: ANTHROPIC_MODEL env var (supports ARN and standard formats)
-  const envModel = process.env.ANTHROPIC_MODEL;
-  if (envModel) {
-    return envModel;
-  }
+  const envConfiguredModels = getConfiguredBedrockModelsFromEnv();
 
-  // Second priority: app-configured model
+  // First priority: app-configured model
   if (appConfiguredModel) {
     // Already a Bedrock ARN - use as-is
     if (isBedrockArn(appConfiguredModel)) {
       return appConfiguredModel;
     }
 
+    if (envConfiguredModels.some((model) => model.id === appConfiguredModel)) {
+      return appConfiguredModel;
+    }
+
     // Already a native Bedrock model ID - use as-is
     if (isBedrockModelId(appConfiguredModel)) {
-      return appConfiguredModel;
+      const alias = getBedrockModelAlias(appConfiguredModel);
+      const matchedEnvModel = alias
+        ? envConfiguredModels.find((model) => model.shortName === alias)
+        : undefined;
+      return matchedEnvModel?.id ?? envConfiguredModels[0]?.id ?? appConfiguredModel;
     }
 
     // Try to map standard Claude model to Bedrock equivalent
     const bedrockModel = getClaudeToBedrockMapping().get(appConfiguredModel);
     if (bedrockModel) {
-      return bedrockModel;
+      const alias = getBedrockModelAlias(bedrockModel);
+      const matchedEnvModel = alias
+        ? envConfiguredModels.find((model) => model.shortName === alias)
+        : undefined;
+      return matchedEnvModel?.id ?? envConfiguredModels[0]?.id ?? bedrockModel;
     }
 
     // Unmappable model - log warning and fall through to default
@@ -489,8 +679,14 @@ export function getBedrockModel(appConfiguredModel?: string): string {
     );
   }
 
+  // Second priority: environment-configured primary model
+  const envModel = getPreferredBedrockPrimaryModelFromEnv();
+  if (envModel) {
+    return envModel;
+  }
+
   // Fallback: default Bedrock model
-  return DEFAULT_PROVIDER_MODEL.bedrock ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+  return getEffectiveBedrockDefaultModel();
 }
 
 /**

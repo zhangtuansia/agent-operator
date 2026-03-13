@@ -1,3 +1,4 @@
+import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
 import { IPC_CHANNELS, type ElectronAPI } from '../shared/types'
 import type { ChannelMapEntry } from './build-api'
 
@@ -12,11 +13,27 @@ function listener(channel: string): Extract<ChannelMapEntry, { type: 'listener' 
   return { type: 'listener', channel }
 }
 
+function listenerWithArgs(
+  channel: string,
+  transformArgs: (...args: any[]) => unknown[],
+): Extract<ChannelMapEntry, { type: 'listener' }> {
+  return { type: 'listener', channel, transformArgs }
+}
+
 type AnyFn = (...args: any[]) => any
 
 type ElectronApiMethodKeys = {
   [K in keyof ElectronAPI]-?: Extract<ElectronAPI[K], AnyFn> extends never ? never : K
 }[keyof ElectronAPI] & string
+
+type PreloadOnlyElectronApiMethodKeys =
+  | 'performOAuth'
+  | 'getTransportConnectionState'
+  | 'onTransportConnectionStateChanged'
+  | 'reconnectTransport'
+  | 'isChannelAvailable'
+
+type ChannelMappedElectronApiMethodKeys = Exclude<ElectronApiMethodKeys, PreloadOnlyElectronApiMethodKeys>
 
 export const CHANNEL_MAP = {
   // Session management
@@ -131,7 +148,6 @@ export const CHANNEL_MAP = {
     transform: result => result.setupNeeds,
   }),
   startWorkspaceMcpOAuth: invoke(IPC_CHANNELS.ONBOARDING_START_MCP_OAUTH),
-  saveOnboardingConfig: invoke(IPC_CHANNELS.ONBOARDING_SAVE_CONFIG),
   getExistingClaudeToken: invoke(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN),
   isClaudeCliInstalled: invoke(IPC_CHANNELS.ONBOARDING_IS_CLAUDE_CLI_INSTALLED),
   runClaudeSetupToken: invoke(IPC_CHANNELS.ONBOARDING_RUN_CLAUDE_SETUP_TOKEN),
@@ -156,8 +172,28 @@ export const CHANNEL_MAP = {
 
   // Unified API setup flow
   setupLlmConnection: invoke(IPC_CHANNELS.SETUP_LLM_CONNECTION),
-  testApiConnection: invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION),
-  testOpenAiConnection: invoke(IPC_CHANNELS.SETTINGS_TEST_OPENAI_CONNECTION),
+  testApiConnection: {
+    type: 'invoke',
+    channel: IPC_CHANNELS.SETTINGS_TEST_LLM_CONNECTION_SETUP,
+    mapArgs: (apiKey: string, baseUrl?: string, models?: string[]) => [{
+      provider: 'anthropic',
+      apiKey,
+      baseUrl,
+      model: models?.[0],
+      models,
+    }],
+  },
+  testOpenAiConnection: {
+    type: 'invoke',
+    channel: IPC_CHANNELS.SETTINGS_TEST_LLM_CONNECTION_SETUP,
+    mapArgs: (apiKey: string, baseUrl?: string, models?: string[]) => [{
+      provider: 'openai',
+      apiKey,
+      baseUrl,
+      model: models?.[0],
+      models,
+    }],
+  },
 
   // LLM Connections
   listLlmConnections: invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
@@ -237,8 +273,8 @@ export const CHANNEL_MAP = {
   getDefaultPermissionsConfig: invoke(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET),
   getMcpTools: invoke(IPC_CHANNELS.SOURCES_GET_MCP_TOOLS),
   ensureGwsInstalled: invoke(IPC_CHANNELS.SOURCES_ENSURE_GWS_INSTALLED),
-  onSourcesChanged: listener(IPC_CHANNELS.SOURCES_CHANGED),
-  onDefaultPermissionsChanged: listener(IPC_CHANNELS.DEFAULT_PERMISSIONS_CHANGED),
+  onSourcesChanged: listenerWithArgs(IPC_CHANNELS.SOURCES_CHANGED, (_workspaceId, sources) => [sources]),
+  onDefaultPermissionsChanged: listenerWithArgs(IPC_CHANNELS.DEFAULT_PERMISSIONS_CHANGED, () => []),
 
   // Skills
   getSkills: invoke(IPC_CHANNELS.SKILLS_GET),
@@ -248,7 +284,7 @@ export const CHANNEL_MAP = {
   openSkillInFinder: invoke(IPC_CHANNELS.SKILLS_OPEN_FINDER),
   importSkillFromUrl: invoke(IPC_CHANNELS.SKILLS_IMPORT_URL),
   importSkillFromContent: invoke(IPC_CHANNELS.SKILLS_IMPORT_CONTENT),
-  onSkillsChanged: listener(IPC_CHANNELS.SKILLS_CHANGED),
+  onSkillsChanged: listenerWithArgs(IPC_CHANNELS.SKILLS_CHANGED, (_workspaceId, skills) => [skills]),
 
   // Statuses
   listStatuses: invoke(IPC_CHANNELS.STATUSES_LIST),
@@ -278,13 +314,13 @@ export const CHANNEL_MAP = {
   getWorkspaceColorTheme: invoke(IPC_CHANNELS.THEME_GET_WORKSPACE_COLOR_THEME),
   setWorkspaceColorTheme: invoke(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME),
   getAllWorkspaceThemes: invoke(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES),
-  broadcastWorkspaceThemeChange: invoke(IPC_CHANNELS.THEME_WORKSPACE_CHANGED),
-  onWorkspaceThemeChange: listener(IPC_CHANNELS.THEME_WORKSPACE_CHANGED),
+  broadcastWorkspaceThemeChange: invoke(RPC_CHANNELS.theme.BROADCAST_WORKSPACE_THEME),
+  onWorkspaceThemeChange: listener(RPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED),
   getToolIconMappings: invoke(IPC_CHANNELS.TOOL_ICONS_GET_MAPPINGS),
   getRichToolDescriptions: invoke(IPC_CHANNELS.APPEARANCE_GET_RICH_TOOL_DESCRIPTIONS),
   setRichToolDescriptions: invoke(IPC_CHANNELS.APPEARANCE_SET_RICH_TOOL_DESCRIPTIONS),
   getFontsPath: invoke(IPC_CHANNELS.GET_FONTS_PATH),
-  onAppThemeChange: listener(IPC_CHANNELS.THEME_APP_CHANGED),
+  onAppThemeChange: listener(RPC_CHANNELS.theme.APP_CHANGED),
   getLogoUrl: invoke(IPC_CHANNELS.LOGO_GET_URL),
 
   // Notifications
@@ -327,8 +363,8 @@ export const CHANNEL_MAP = {
   onWindowFocusChange: listener(IPC_CHANNELS.WINDOW_FOCUS_STATE),
 
   // Theme preferences sync across windows
-  broadcastThemePreferences: invoke(IPC_CHANNELS.THEME_BROADCAST_PREFERENCES),
-  onThemePreferencesChange: listener(IPC_CHANNELS.THEME_PREFERENCES_CHANGED),
+  broadcastThemePreferences: invoke(RPC_CHANNELS.theme.BROADCAST_PREFERENCES),
+  onThemePreferencesChange: listener(RPC_CHANNELS.theme.PREFERENCES_CHANGED),
 
   // System Permissions
   checkFullDiskAccess: invoke(IPC_CHANNELS.PERMISSIONS_CHECK_FULL_DISK_ACCESS),
@@ -348,6 +384,7 @@ export const CHANNEL_MAP = {
   imTestChannel: invoke(IPC_CHANNELS.IM_TEST_CHANNEL),
   imGetStatus: invoke(IPC_CHANNELS.IM_GET_STATUS),
   onImStatusChanged: listener(IPC_CHANNELS.IM_STATUS_CHANGED),
+  onImMessageReceived: listener(IPC_CHANNELS.IM_MESSAGE_RECEIVED),
   imGetSessionMappings: invoke(IPC_CHANNELS.IM_GET_SESSION_MAPPINGS),
   imDeleteSessionMapping: invoke(IPC_CHANNELS.IM_DELETE_SESSION_MAPPING),
 
@@ -393,4 +430,4 @@ export const CHANNEL_MAP = {
   'browserPane.onStateChanged': listener(IPC_CHANNELS.BROWSER_PANE_STATE_CHANGED),
   'browserPane.onRemoved': listener(IPC_CHANNELS.BROWSER_PANE_REMOVED),
   'browserPane.onInteracted': listener(IPC_CHANNELS.BROWSER_PANE_INTERACTED),
-} satisfies Record<ElectronApiMethodKeys, ChannelMapEntry>
+} satisfies Record<ChannelMappedElectronApiMethodKeys, ChannelMapEntry>

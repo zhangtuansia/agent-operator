@@ -833,7 +833,7 @@ this.sendEvent({
 |------|------|
 | 主进程入口 | `apps/electron/src/main/index.ts` |
 | IPC 处理 | `apps/electron/src/main/ipc.ts` |
-| 会话管理 | `apps/electron/src/main/sessions.ts` |
+| 会话管理 | `packages/server-core/src/sessions/SessionManager.ts` |
 | OperatorAgent | `packages/shared/src/agent/agent-operator.ts` |
 | 权限模式 | `packages/shared/src/agent/mode-manager.ts` |
 | 会话工具 | `packages/shared/src/agent/session-scoped-tools.ts` |

@@ -410,7 +410,54 @@ describe('AutomationSystem', () => {
   });
 
   describe('buildSdkHooks', () => {
-    it('should return empty object (command execution removed)', async () => {
+    it('should build prompt hook callbacks for matching agent events', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PreToolUse: [
+            {
+              id: 'matcher-1',
+              name: 'Tool Audit',
+              matcher: 'Bash',
+              labels: ['tool-$CRAFT_TOOL_NAME'],
+              actions: [{ type: 'prompt', prompt: 'check $CRAFT_TOOL_NAME $CRAFT_TOOL_INPUT' }],
+            },
+          ],
+        },
+      }));
+
+      const onPromptsReady = spyOn({ fn: async () => {} }, 'fn');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        onPromptsReady,
+      });
+
+      const result = system.buildSdkHooks();
+      expect(result.PreToolUse).toHaveLength(1);
+
+      const hook = result.PreToolUse?.[0]?.hooks[0];
+      expect(hook).toBeDefined();
+
+      await hook?.({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+      }, 'tool-use-1', {});
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts = onPromptsReady.mock.calls[0]?.[0];
+      expect(prompts).toHaveLength(1);
+      expect(prompts?.[0]).toMatchObject({
+        matcherId: 'matcher-1',
+        automationName: 'Tool Audit',
+        labels: ['tool-Bash'],
+      });
+      expect(prompts?.[0]?.prompt).toContain('check Bash');
+
+      await system.dispose();
+    });
+
+    it('should not deliver prompts for non-matching agent events', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {
           PreToolUse: [
@@ -419,13 +466,57 @@ describe('AutomationSystem', () => {
         },
       }));
 
+      const onPromptsReady = spyOn({ fn: async () => {} }, 'fn');
       const system = new AutomationSystem({
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
+        onPromptsReady,
       });
 
       const result = system.buildSdkHooks();
-      expect(result).toEqual({});
+      const hook = result.PreToolUse?.[0]?.hooks[0];
+      await hook?.({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+      }, 'tool-use-1', {});
+
+      expect(onPromptsReady).not.toHaveBeenCalled();
+
+      await system.dispose();
+    });
+
+    it('should execute agent events directly for non-Claude backends', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          UserPromptSubmit: [
+            {
+              id: 'matcher-2',
+              name: 'Prompt Mirror',
+              actions: [{ type: 'prompt', prompt: 'mirror $CRAFT_PROMPT' }],
+            },
+          ],
+        },
+      }));
+
+      const onPromptsReady = spyOn({ fn: async () => {} }, 'fn');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        onPromptsReady,
+      });
+
+      await system.executeAgentEvent('UserPromptSubmit', {
+        hook_event_name: 'UserPromptSubmit',
+        prompt: 'hello world',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts = onPromptsReady.mock.calls[0]?.[0];
+      expect(prompts?.[0]).toMatchObject({
+        matcherId: 'matcher-2',
+        automationName: 'Prompt Mirror',
+      });
+      expect(prompts?.[0]?.prompt).toBe('mirror hello world');
 
       await system.dispose();
     });
