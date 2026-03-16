@@ -20,11 +20,16 @@ export type {
   AgentEvent,
   AutomationEvent,
   PromptAction,
+  WebhookHttpMethod,
+  WebhookBodyFormat,
+  WebhookAuth,
+  WebhookAction,
   AutomationAction,
   AutomationMatcher,
   AutomationsConfig,
   PromptReferences,
   PromptActionResult,
+  WebhookActionResult,
   ActionExecutionResult,
   PendingPrompt,
   AutomationResult,
@@ -73,7 +78,13 @@ export { AutomationsConfigSchema, zodErrorToIssues, VALID_EVENTS } from './schem
 export { sanitizeForShell } from './security.ts';
 
 // Config constants
-export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
+export {
+  AUTOMATIONS_CONFIG_FILE,
+  AUTOMATIONS_HISTORY_FILE,
+  AUTOMATIONS_RETRY_QUEUE_FILE,
+  DEFAULT_WEBHOOK_METHOD,
+  HISTORY_FIELD_MAX_LENGTH,
+} from './constants.ts';
 
 // Config path resolution
 export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
@@ -109,8 +120,20 @@ export {
 export {
   PromptHandler,
   EventLogHandler,
+  WebhookHandler,
   type AutomationHandler,
   type PromptHandlerOptions,
   type EventLogHandlerOptions,
   type AutomationsConfigProvider,
+  type WebhookHandlerOptions,
 } from './handlers/index.ts';
+
+export {
+  executeWebhookRequest,
+  executeWithRetry,
+  isTransientFailure,
+  redactUrl,
+  createWebhookHistoryEntry,
+  createPromptHistoryEntry,
+  expandWebhookAction,
+} from './webhook-utils.ts';

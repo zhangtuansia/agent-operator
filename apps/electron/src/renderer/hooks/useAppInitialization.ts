@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Workspace, SetupNeeds, TodoState } from '../../shared/types'
 import type { ThemeOverrides } from '@config/theme'
 import type { Language } from '@/i18n'
-import { DEFAULT_MODEL, getDefaultModelForProvider } from '@config/models'
+import { DEFAULT_MODEL } from '@config/models'
 
 export type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -84,13 +84,21 @@ export function useAppInitialization(): UseAppInitializationResult {
         const lang = await window.electronAPI.getLanguage()
         setInitialLanguage(lang as Language | undefined)
 
-        // Load model with provider-aware default
-        const config = await window.electronAPI.getStoredConfig()
-        const provider = config?.providerConfig?.provider || 'anthropic'
-        const savedModel = await window.electronAPI.getModel()
-        const customModels = config?.providerConfig?.customModels
-        const providerDefault = getDefaultModelForProvider(provider, customModels)
-        setCurrentModel(savedModel || providerDefault || DEFAULT_MODEL)
+        // Load model with connection-aware default
+        const [savedModel, connections] = await Promise.all([
+          window.electronAPI.getModel(),
+          window.electronAPI.listLlmConnectionsWithStatus(),
+        ])
+        const defaultConnection = connections.find(connection => connection.isDefault) ?? connections[0]
+        const availableModelIds = (defaultConnection?.models ?? [])
+          .map((model) => typeof model === 'string' ? model : model.id)
+        const fallbackModel = defaultConnection?.defaultModel ?? DEFAULT_MODEL
+
+        if (savedModel && (availableModelIds.length === 0 || availableModelIds.includes(savedModel))) {
+          setCurrentModel(savedModel)
+        } else {
+          setCurrentModel(fallbackModel)
+        }
 
         // Load notifications setting
         const notificationsEnabled = await window.electronAPI.getNotificationsEnabled()

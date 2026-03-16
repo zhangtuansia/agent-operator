@@ -306,4 +306,80 @@ describe('SessionManager sharing regression', () => {
       'answer visible but session messages not fully loaded',
     )
   })
+
+  it('shares the latest visible assistant message when the turn only produced intermediate assistant text', async () => {
+    const manager = new SessionManager()
+    manager.setEventSink(() => {})
+
+    const workspace: Workspace = {
+      id: 'ws-intermediate-share',
+      name: 'Intermediate Share Workspace',
+      rootPath: tempRoot,
+      createdAt: Date.now(),
+    }
+
+    const managed = {
+      id: 'session-intermediate-share',
+      workspace,
+      agent: null,
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'tell me what you found',
+          timestamp: 1,
+          isIntermediate: false,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '我来帮你查看这个文档的内容。',
+          timestamp: 2,
+          isIntermediate: true,
+        },
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          content: '看起来直接抓取返回的内容是空的，这可能是因为页面需要 JavaScript 渲染。',
+          timestamp: 3,
+          isIntermediate: true,
+        },
+      ],
+      isProcessing: false,
+      lastMessageAt: 3,
+      streamingText: '',
+      processingGeneration: 0,
+      isFlagged: false,
+      messageQueue: [],
+      backgroundShellCommands: new Map(),
+      messagesLoaded: true,
+      tokenRefreshManager: {} as never,
+    }
+
+    ;(manager as unknown as { sessions: Map<string, unknown> }).sessions.set(managed.id, managed)
+
+    let uploadedBody: Record<string, unknown> | null = null
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      uploadedBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+      return new Response(JSON.stringify({ id: 'share-intermediate', url: 'https://viewer.test/share-intermediate' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const result = await manager.shareToViewer(managed.id)
+
+    expect(result).toEqual({ success: true, url: 'https://viewer.test/share-intermediate' })
+    expect(Array.isArray(uploadedBody?.messages)).toBe(true)
+    expect((uploadedBody?.messages as Array<{ content?: string; isIntermediate?: boolean }>).at(-1)).toMatchObject({
+      content: '看起来直接抓取返回的内容是空的，这可能是因为页面需要 JavaScript 渲染。',
+      isIntermediate: false,
+    })
+
+    const stored = loadSession(workspace.rootPath, managed.id)
+    expect(stored?.messages.at(-1)).toMatchObject({
+      content: '看起来直接抓取返回的内容是空的，这可能是因为页面需要 JavaScript 渲染。',
+      isIntermediate: false,
+    })
+  })
 })

@@ -7,6 +7,7 @@ import { appendFile, readFile, writeFile, mkdir, realpath } from 'fs/promises'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns } from '@agent-operator/shared/agent'
+import { setAnthropicOptionsEnv } from '@agent-operator/shared/agent/options'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -18,7 +19,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@agent-operator/shared/agent/backend'
-import { getLlmConnection, getDefaultLlmConnection } from '@agent-operator/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection } from '@agent-operator/shared/config'
 import { PrivilegedExecutionBroker } from '@agent-operator/server-core/services'
 import { InitGate } from '@agent-operator/server-core/domain'
 import {
@@ -71,6 +72,7 @@ import type { Message, StoredAttachment, ToolDisplayMeta } from '@agent-operator
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, buildFallbackTitleFromMessages } from '@agent-operator/shared/utils'
 import { loadAllSkills, loadSkillBySlug, type LoadedSkill } from '@agent-operator/shared/skills'
 import { getToolIconsDir, getMiniModel } from '@agent-operator/shared/config'
+import type { SpawnSessionRequest } from '@agent-operator/shared/agent/spawn-session-tool'
 import type { SummarizeCallback } from '@agent-operator/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@agent-operator/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@agent-operator/shared/labels/auto'
@@ -935,6 +937,30 @@ export class SessionManager implements ISessionManager {
     return this.lastTimestamp
   }
 
+  private async resolveConnectionAuthEnvVars(connectionSlug?: string): Promise<Record<string, string>> {
+    const slug = connectionSlug || getDefaultLlmConnection()
+    if (!slug) return {}
+
+    const connection = getLlmConnection(slug)
+    if (!connection) return {}
+
+    const result = await resolveAuthEnvVars(connection, slug, getCredentialManager(), getValidClaudeOAuthToken)
+    return result.success ? result.envVars : {}
+  }
+
+  private async refreshManagedAuthEnvOverrides(managed: ManagedSession): Promise<void> {
+    const target = managed.envOverrides ?? {}
+    if (!managed.envOverrides) {
+      managed.envOverrides = target
+    }
+
+    for (const key of Object.keys(target)) {
+      delete target[key]
+    }
+
+    Object.assign(target, await this.resolveConnectionAuthEnvVars(managed.llmConnection))
+  }
+
   private getAdminRememberKey(sessionId: string, commandHash: string): string {
     return `${sessionId}:${commandHash}`
   }
@@ -1356,7 +1382,10 @@ export class SessionManager implements ISessionManager {
       }
       const connection = slug ? getLlmConnection(slug) : null
 
-      // Clear all auth env vars first to ensure clean state
+      // Clear SDK auth env snapshot first so helper SDK queries don't keep stale auth.
+      setAnthropicOptionsEnv({})
+
+      // Clear legacy process env compatibility vars first to ensure clean state
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN
       delete process.env.ANTHROPIC_BASE_URL
@@ -1375,7 +1404,10 @@ export class SessionManager implements ISessionManager {
       if (!result.success) {
         sessionLog.error(`Auth resolution failed for ${slug}: ${result.warning}`)
       } else {
-        // Apply resolved env vars to process.env
+        // Primary path: keep SDK subprocess helpers on connection-scoped auth snapshot.
+        setAnthropicOptionsEnv(result.envVars)
+
+        // Compatibility path for residual helpers that still read process.env directly.
         for (const [key, value] of Object.entries(result.envVars)) {
           process.env[key] = value
         }
@@ -2312,6 +2344,7 @@ export class SessionManager implements ISessionManager {
       // Per-session env overrides
       const envOverrides: Record<string, string> = {}
       managed.envOverrides = envOverrides
+      await this.refreshManagedAuthEnvOverrides(managed)
 
       // ============================================================
       // Common session + callback config (identical for all backends)
@@ -2761,6 +2794,77 @@ export class SessionManager implements ISessionManager {
 
         mergeSessionScopedToolCallbacks(sid, {
           getBrowserPaneFns: () => browserPaneFns,
+          queryFn: request => managed.agent.queryLlm(request),
+          spawnSessionFn: async (input) => {
+            if (input.help) {
+              const defaultConnectionSlug = getDefaultLlmConnection()
+              const activeSourceSlugs = new Set(managed.enabledSourceSlugs ?? [])
+              return {
+                connections: getLlmConnections().map(connection => ({
+                  slug: connection.slug,
+                  name: connection.name,
+                  isDefault: connection.slug === defaultConnectionSlug,
+                  providerType: connection.providerType,
+                  models: (connection.models ?? []).map(model => typeof model === 'string' ? model : model.id),
+                  defaultModel: connection.defaultModel,
+                })),
+                sources: loadAllSources(managed.workspace.rootPath).map(source => ({
+                  slug: source.config.slug,
+                  name: source.config.name,
+                  type: source.config.type,
+                  enabled: activeSourceSlugs.has(source.config.slug),
+                })),
+                defaults: {
+                  defaultConnection: defaultConnectionSlug,
+                  permissionMode: managed.permissionMode,
+                },
+              }
+            }
+
+            const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : ''
+            if (!prompt) {
+              throw new Error('prompt is required when not in help mode. Call with help=true to see available options.')
+            }
+
+            if (!managed.agent.onSpawnSession) {
+              throw new Error('spawn_session is not available in this context.')
+            }
+
+            return managed.agent.onSpawnSession({
+              prompt,
+              name: typeof input.name === 'string' ? input.name : undefined,
+              llmConnection: typeof input.llmConnection === 'string' ? input.llmConnection : undefined,
+              model: typeof input.model === 'string' ? input.model : undefined,
+              enabledSourceSlugs: Array.isArray(input.enabledSourceSlugs)
+                ? input.enabledSourceSlugs.filter((value): value is string => typeof value === 'string')
+                : undefined,
+              permissionMode: typeof input.permissionMode === 'string'
+                ? input.permissionMode as SpawnSessionRequest['permissionMode']
+                : undefined,
+              labels: Array.isArray(input.labels)
+                ? input.labels.filter((value): value is string => typeof value === 'string')
+                : undefined,
+              workingDirectory: typeof input.workingDirectory === 'string' ? input.workingDirectory : undefined,
+              attachments: Array.isArray(input.attachments)
+                ? input.attachments
+                    .filter((value): value is { path: string; name?: string } => (
+                      typeof value === 'object'
+                      && value !== null
+                      && typeof (value as { path?: unknown }).path === 'string'
+                      && (typeof (value as { name?: unknown }).name === 'undefined'
+                        || typeof (value as { name?: unknown }).name === 'string')
+                    ))
+                    .map(value => ({
+                      path: value.path,
+                      name: value.name,
+                    }))
+                : undefined,
+            } satisfies SpawnSessionRequest)
+          },
+          getAuthEnvVars: async () => {
+            const envVars = await this.resolveConnectionAuthEnvVars(managed.llmConnection)
+            return Object.keys(envVars).length > 0 ? envVars : undefined
+          },
         })
       }
 
@@ -4346,6 +4450,8 @@ export class SessionManager implements ISessionManager {
     }
 
     try {
+      await this.refreshManagedAuthEnvOverrides(managed)
+
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
       sessionLog.info('Message:', message)

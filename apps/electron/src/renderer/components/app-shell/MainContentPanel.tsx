@@ -222,17 +222,34 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
     // Subscribe to live updates
     const cleanup = window.electronAPI.onAutomationsChanged(() => {
       window.electronAPI.getAutomationHistory(activeWorkspaceId, automationId, 20)
-        .then((entries: Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }>) => {
+        .then((entries: Array<{
+          id: string
+          ts: number
+          ok: boolean
+          sessionId?: string
+          prompt?: string
+          error?: string
+          webhook?: {
+            method: string
+            url: string
+            statusCode: number
+            durationMs: number
+            attempts?: number
+            error?: string
+            responseBody?: string
+          }
+        }>) => {
           setExecutions(entries.map(e => ({
             id: `${e.id}-${e.ts}`,
             automationId: e.id,
             event: automation?.event ?? 'LabelAdd',
             status: e.ok ? 'success' as const : 'error' as const,
-            duration: 0,
+            duration: e.webhook?.durationMs ?? 0,
             timestamp: e.ts,
             sessionId: e.sessionId,
-            actionSummary: e.prompt,
-            error: e.error,
+            actionSummary: e.prompt ?? (e.webhook ? `${e.webhook.method} ${e.webhook.url}` : undefined),
+            error: e.error ?? e.webhook?.error,
+            webhookDetails: e.webhook,
           })))
         })
         .catch(() => {})
@@ -273,6 +290,29 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
       .catch(() => {})
   }, [automation, activeWorkspaceId])
 
+  const handleReplay = useCallback((automationId: string, eventName: string) => {
+    if (!activeWorkspaceId) return
+    window.electronAPI.replayAutomation(activeWorkspaceId, automationId, eventName)
+      .then(() => {
+        return window.electronAPI.getAutomationHistory(activeWorkspaceId, automationId, 20)
+      })
+      .then((entries) => {
+        setExecutions(entries.map(e => ({
+          id: `${e.id}-${e.ts}`,
+          automationId: e.id,
+          event: automation?.event ?? 'LabelAdd',
+          status: e.ok ? 'success' as const : 'error' as const,
+          duration: e.webhook?.durationMs ?? 0,
+          timestamp: e.ts,
+          sessionId: e.sessionId,
+          actionSummary: e.prompt ?? (e.webhook ? `${e.webhook.method} ${e.webhook.url}` : undefined),
+          error: e.error ?? e.webhook?.error,
+          webhookDetails: e.webhook,
+        })))
+      })
+      .catch(() => {})
+  }, [activeWorkspaceId, automation?.event])
+
   if (!automation) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -289,6 +329,7 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
       onTest={handleTest}
       onDuplicate={handleDuplicate}
       onDelete={handleDelete}
+      onReplay={handleReplay}
     />
   )
 }

@@ -192,12 +192,11 @@ export class PiAgent extends BaseAgent {
         const llmApiKey = await cm.getLlmApiKey(slug);
         if (llmApiKey) return llmApiKey;
       }
-
-      const legacyApiKey = await cm.getApiKey();
-      return legacyApiKey || null;
     } catch {
       return null;
     }
+
+    return null;
   }
 
   private getConnectionSlug(): string | null {
@@ -403,6 +402,29 @@ export class PiAgent extends BaseAgent {
     await this.spawnSubprocess();
   }
 
+  private buildSubprocessEnv(sessionDir?: string): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...(this.config.envOverrides ?? {}),
+      ...(sessionDir ? { COWORK_SESSION_DIR: sessionDir } : {}),
+      COWORK_DEBUG: (process.argv.includes('--debug') || process.env.COWORK_DEBUG === '1') ? '1' : '0',
+    };
+
+    if (this.config.providerType === 'bedrock') {
+      const resolvedProfile = env.AWS_PROFILE || env.CLAUDE_CODE_AWS_PROFILE;
+      if (resolvedProfile) {
+        env.AWS_PROFILE = resolvedProfile;
+      }
+
+      const resolvedRegion = env.AWS_REGION || env.AWS_DEFAULT_REGION;
+      if (resolvedRegion) {
+        env.AWS_REGION = resolvedRegion;
+      }
+    }
+
+    return env;
+  }
+
   private async spawnSubprocess(): Promise<void> {
     const cwd = this.resolvedCwd();
     const sessionId = this.config.session?.id || `agent-${Date.now()}`;
@@ -422,11 +444,7 @@ export class PiAgent extends BaseAgent {
     const child = spawn(this.nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...(sessionDir ? { COWORK_SESSION_DIR: sessionDir } : {}),
-        COWORK_DEBUG: (process.argv.includes('--debug') || process.env.COWORK_DEBUG === '1') ? '1' : '0',
-      },
+      env: this.buildSubprocessEnv(sessionDir),
     });
 
     this.subprocess = child;

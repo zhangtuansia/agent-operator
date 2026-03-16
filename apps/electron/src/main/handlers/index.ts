@@ -9,6 +9,7 @@ import { registerSourceHandlers } from './sources'
 import { registerSystemGuiHandlers } from './system'
 import { registerUiPreferenceGuiHandlers } from './ui-preferences'
 import { registerWorkspaceGuiHandlers } from './workspace-window'
+import { registerSettingsGuiHandlers } from './settings'
 import type { WindowManager } from '../window-manager'
 import type { IMServiceManager } from '../im-services'
 
@@ -34,6 +35,7 @@ export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): vo
 
   registerSystemGuiHandlers(server)
   registerUiPreferenceGuiHandlers(server)
+  registerSettingsGuiHandlers(server)
 
   if (deps.windowManager) {
     registerWorkspaceGuiHandlers(server, deps.windowManager)

@@ -11,6 +11,7 @@
  */
 
 import { computeNextRuns } from './utils'
+import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
 // Automation System Types (mirrored from packages/shared/src/automations/types.ts)
@@ -59,7 +60,18 @@ export interface PromptAction {
   prompt: string
 }
 
-export type AutomationAction = PromptAction
+export interface WebhookAction {
+  type: 'webhook'
+  url: string
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  headers?: Record<string, string>
+  bodyFormat?: 'json' | 'form' | 'raw'
+  body?: unknown
+  captureResponse?: boolean
+  auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
+}
+
+export type AutomationAction = PromptAction | WebhookAction
 
 // ============================================================================
 // List Item (flattened from automations.json for display)
@@ -117,6 +129,16 @@ export const AUTOMATION_TYPE_TO_FILTER_KIND: Record<string, AutomationFilterKind
 
 export type ExecutionStatus = 'success' | 'error' | 'blocked'
 
+export interface WebhookDetails {
+  method: string
+  url: string
+  statusCode: number
+  durationMs: number
+  attempts?: number
+  error?: string
+  responseBody?: string
+}
+
 export interface ExecutionEntry {
   id: string
   automationId: string
@@ -132,6 +154,8 @@ export interface ExecutionEntry {
   actionSummary?: string
   /** Session ID created by this execution (for deep linking) */
   sessionId?: string
+  /** Structured webhook execution details */
+  webhookDetails?: WebhookDetails
 }
 
 // ============================================================================
@@ -229,7 +253,10 @@ interface AutomationsConfigMatcher {
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   labels?: string[]
   enabled?: boolean
-  actions?: ({ type: 'prompt'; prompt: string })[]
+  actions?: Array<
+    | { type: 'prompt'; prompt: string }
+    | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
+  >
 }
 
 /** Derive a human-readable name from task actions and event */
@@ -238,6 +265,11 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
   const allActions = matcher.actions ?? []
   const firstAction = allActions[0]
   if (!firstAction) return getEventDisplayName(event as AutomationTrigger)
+
+  if (firstAction.type === 'webhook') {
+    const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
+    return label.length > 40 ? label.slice(0, 40) + '...' : label
+  }
 
   // Extract @skill mentions or use first ~40 chars
   const mentionMatch = firstAction.prompt.match(/@(\S+)/)
@@ -296,7 +328,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       if (!rawActions || !Array.isArray(rawActions) || rawActions.length === 0) continue
 
       const actions: AutomationAction[] = rawActions
-        .filter((a): a is { type: 'prompt'; prompt: string } => a.type === 'prompt')
+        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook')
       if (actions.length === 0) continue
 
       items.push({

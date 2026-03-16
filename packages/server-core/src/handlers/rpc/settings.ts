@@ -11,6 +11,8 @@ import {
   getAgentType,
   getAuthType,
   getCustomModels,
+  getDefaultLlmConnection,
+  getLlmConnection,
   getModel,
   getProviderConfig,
   loadStoredConfig,
@@ -20,6 +22,7 @@ import {
   setModel,
   setProviderConfig,
   updateCustomModel,
+  updateLlmConnection,
   addCustomModel,
   deleteCustomModel,
   reorderCustomModels,
@@ -68,17 +71,18 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.power.GET_KEEP_AWAKE,
   RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS,
   RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS,
+  RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.sessions.GET_MODEL,
   RPC_CHANNELS.sessions.SET_MODEL,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
-export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
-  server.handle(RPC_CHANNELS.settings.GET_BILLING_METHOD, async (): Promise<BillingMethodInfo> => {
-    const authType = getAuthType()
-    const manager = getCredentialManager()
-    const providerConfig = getProviderConfig()
+function resolveLegacyBillingMethodInfo(): Promise<BillingMethodInfo> | BillingMethodInfo {
+  const authType = getAuthType()
+  const manager = getCredentialManager()
+  const providerConfig = getProviderConfig()
 
+  return (async (): Promise<BillingMethodInfo> => {
     let hasCredential = false
     if (authType === 'api_key') {
       hasCredential = !!(await manager.getApiKey())
@@ -103,6 +107,273 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
         : 'api_key'
 
     return { authType: billingAuthType, hasCredential, provider }
+  })()
+}
+
+async function resolveDefaultConnectionBillingMethodInfo(): Promise<BillingMethodInfo | null> {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!defaultConnectionSlug) {
+    return null
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  if (!connection) {
+    return null
+  }
+
+  const manager = getCredentialManager()
+  const legacyProviderConfig = getProviderConfig()
+
+  if (connection.providerType === 'bedrock') {
+    const hasCredential = await manager.hasLlmCredentials(
+      defaultConnectionSlug,
+      connection.authType,
+      connection.providerType,
+    )
+
+    return {
+      authType: 'bedrock',
+      hasCredential,
+      provider: 'bedrock',
+    }
+  }
+
+  if (connection.providerType === 'anthropic') {
+    const billingAuthType: BillingMethodInfo['authType'] =
+      connection.authType === 'oauth' ? 'oauth_token' : 'api_key'
+
+    const hasCredential = await manager.hasLlmCredentials(
+      defaultConnectionSlug,
+      connection.authType,
+      connection.providerType,
+    )
+
+    return {
+      authType: billingAuthType,
+      hasCredential,
+      provider: 'anthropic',
+    }
+  }
+
+  if (connection.providerType === 'anthropic_compat' || connection.providerType === 'openai_compat') {
+    const hasCredential = await manager.hasLlmCredentials(
+      defaultConnectionSlug,
+      connection.authType,
+      connection.providerType,
+    )
+
+    return {
+      authType: 'api_key',
+      hasCredential,
+      provider: legacyProviderConfig?.provider ?? 'custom',
+    }
+  }
+
+  return null
+}
+
+function resolveDefaultConnectionProviderConfig():
+  | {
+      providerConfig: {
+        provider: string
+        baseURL: string
+        apiFormat: 'anthropic' | 'openai'
+        awsRegion?: string
+        customModels?: unknown
+      }
+    }
+  | null {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!defaultConnectionSlug) {
+    return null
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  if (!connection) {
+    return null
+  }
+
+  const legacyProviderConfig = getProviderConfig()
+
+  if (connection.providerType === 'bedrock') {
+    return {
+      providerConfig: {
+        provider: 'bedrock',
+        baseURL: '',
+        apiFormat: 'anthropic',
+        awsRegion: connection.awsRegion,
+      },
+    }
+  }
+
+  if (connection.providerType === 'anthropic') {
+    return {
+      providerConfig: {
+        provider: 'anthropic',
+        baseURL: connection.baseUrl ?? 'https://api.anthropic.com',
+        apiFormat: 'anthropic',
+      },
+    }
+  }
+
+  if (connection.providerType === 'anthropic_compat' || connection.providerType === 'openai_compat') {
+    return {
+      providerConfig: {
+        provider: legacyProviderConfig?.provider ?? 'custom',
+        baseURL: connection.baseUrl ?? legacyProviderConfig?.baseURL ?? '',
+        apiFormat: connection.providerType === 'openai_compat' ? 'openai' : 'anthropic',
+        customModels: legacyProviderConfig?.customModels,
+      },
+    }
+  }
+
+  return null
+}
+
+function canSyncSettingsToDefaultConnection(connectionSlug: string | null): connectionSlug is string {
+  if (!connectionSlug) {
+    return false
+  }
+  const connection = getLlmConnection(connectionSlug)
+  if (!connection) {
+    return false
+  }
+  return (
+    connection.providerType === 'anthropic'
+    || connection.providerType === 'bedrock'
+    || connection.providerType === 'anthropic_compat'
+    || connection.providerType === 'openai_compat'
+  )
+}
+
+async function syncBillingMethodToDefaultConnection(
+  authType: AuthType,
+  normalizedCredential: string | undefined,
+  deps: HandlerDeps,
+): Promise<void> {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!canSyncSettingsToDefaultConnection(defaultConnectionSlug)) {
+    return
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  if (!connection) {
+    return
+  }
+
+  const manager = getCredentialManager()
+
+  if (normalizedCredential) {
+    if (authType === 'api_key') {
+      await manager.setLlmApiKey(defaultConnectionSlug, normalizedCredential)
+    } else if (authType === 'oauth_token' && connection.providerType === 'anthropic') {
+      const cliCreds = getExistingClaudeCredentials()
+      if (cliCreds) {
+        await manager.setLlmOAuth(defaultConnectionSlug, {
+          accessToken: cliCreds.accessToken,
+          refreshToken: cliCreds.refreshToken,
+          expiresAt: cliCreds.expiresAt,
+        })
+      } else {
+        await manager.setLlmOAuth(defaultConnectionSlug, {
+          accessToken: normalizedCredential,
+        })
+      }
+    }
+  }
+
+  if (authType === 'api_key') {
+    if (connection.providerType === 'anthropic') {
+      updateLlmConnection(defaultConnectionSlug, { authType: 'api_key' })
+    } else if (connection.providerType === 'anthropic_compat' || connection.providerType === 'openai_compat') {
+      updateLlmConnection(defaultConnectionSlug, { authType: 'api_key_with_endpoint' })
+    }
+  } else if (authType === 'oauth_token') {
+    updateLlmConnection(defaultConnectionSlug, {
+      providerType: 'anthropic',
+      authType: 'oauth',
+      baseUrl: undefined,
+    })
+  } else if (authType === 'bedrock') {
+    updateLlmConnection(defaultConnectionSlug, {
+      providerType: 'bedrock',
+      authType: 'environment',
+      baseUrl: undefined,
+    })
+  }
+
+  deps.platform.logger.debug?.(`[settings] Synced billing method to default connection ${defaultConnectionSlug}`)
+}
+
+async function syncProviderConfigToDefaultConnection(providerConfig: {
+  provider: string
+  baseURL: string
+  apiFormat: 'anthropic' | 'openai'
+}): Promise<void> {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!canSyncSettingsToDefaultConnection(defaultConnectionSlug)) {
+    return
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  if (!connection) {
+    return
+  }
+
+  const legacyAuthType = getAuthType()
+
+  if (providerConfig.provider === 'bedrock') {
+    updateLlmConnection(defaultConnectionSlug, {
+      providerType: 'bedrock',
+      authType: 'environment',
+      baseUrl: undefined,
+    })
+    return
+  }
+
+  if (providerConfig.provider === 'anthropic') {
+    updateLlmConnection(defaultConnectionSlug, {
+      providerType: 'anthropic',
+      authType: legacyAuthType === 'oauth_token' ? 'oauth' : 'api_key',
+      baseUrl: providerConfig.baseURL || undefined,
+    })
+    return
+  }
+
+  updateLlmConnection(defaultConnectionSlug, {
+    providerType: providerConfig.apiFormat === 'openai' ? 'openai_compat' : 'anthropic_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: providerConfig.baseURL || undefined,
+  })
+}
+
+function resolveDefaultConnectionModel(): string | null {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!defaultConnectionSlug) {
+    return null
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  return connection?.defaultModel ?? null
+}
+
+function syncModelToDefaultConnection(model: string): void {
+  const defaultConnectionSlug = getDefaultLlmConnection()
+  if (!defaultConnectionSlug) {
+    return
+  }
+
+  const connection = getLlmConnection(defaultConnectionSlug)
+  if (!connection) {
+    return
+  }
+
+  updateLlmConnection(defaultConnectionSlug, { defaultModel: model })
+}
+
+export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(RPC_CHANNELS.settings.GET_BILLING_METHOD, async (): Promise<BillingMethodInfo> => {
+    return (await resolveDefaultConnectionBillingMethodInfo()) ?? (await resolveLegacyBillingMethodInfo())
   })
 
   server.handle(RPC_CHANNELS.settings.UPDATE_BILLING_METHOD, async (_ctx, authType: AuthType, credential?: string) => {
@@ -131,6 +402,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
         }
       }
     }
+
+    await syncBillingMethodToDefaultConnection(authType, normalizedCredential, deps)
 
     const oldAuthType = getAuthType()
     if (oldAuthType !== authType) {
@@ -174,8 +447,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   server.handle(RPC_CHANNELS.settings.GET_STORED_CONFIG, async () => {
-    const config = loadStoredConfig()
-    return config ? { providerConfig: config.providerConfig } : null
+    return resolveDefaultConnectionProviderConfig()
+      ?? (() => {
+        const config = loadStoredConfig()
+        return config ? { providerConfig: config.providerConfig } : null
+      })()
   })
 
   server.handle(RPC_CHANNELS.settings.UPDATE_PROVIDER_CONFIG, async (_ctx, providerConfig: {
@@ -183,6 +459,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     baseURL: string
     apiFormat: 'anthropic' | 'openai'
   }) => {
+    await syncProviderConfigToDefaultConnection(providerConfig)
     setProviderConfig(providerConfig)
 
     try {
@@ -192,9 +469,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
   })
 
-  server.handle(RPC_CHANNELS.settings.GET_MODEL, async (): Promise<string | null> => getModel())
+  server.handle(RPC_CHANNELS.settings.GET_MODEL, async (): Promise<string | null> => {
+    return resolveDefaultConnectionModel() ?? getModel()
+  })
 
   server.handle(RPC_CHANNELS.settings.SET_MODEL, async (_ctx, model: string) => {
+    syncModelToDefaultConnection(model)
     setModel(model)
     deps.platform.logger.info(`Model updated to: ${model}`)
   })
@@ -440,5 +720,10 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS, async (_ctx, enabled: boolean) => {
     const { setRichToolDescriptions } = await import('@agent-operator/shared/config/storage')
     setRichToolDescriptions(enabled)
+  })
+
+  server.handle(RPC_CHANNELS.settings.GET_NETWORK_PROXY, async () => {
+    const { getNetworkProxySettings } = await import('@agent-operator/shared/config/storage')
+    return getNetworkProxySettings()
   })
 }

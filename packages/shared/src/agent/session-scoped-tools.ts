@@ -47,8 +47,6 @@ import {
   getValidationErrorMessage,
 } from '../mcp/validation.ts';
 import {
-  getAnthropicApiKey,
-  getClaudeOAuthToken,
 } from '../config/storage.ts';
 import {
   loadSourceConfig,
@@ -61,7 +59,8 @@ import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServ
 import { buildAuthorizationHeader } from '../sources/api-tools.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { renderMermaid } from '@agent-operator/mermaid';
-import { createLLMTool } from './llm-tool.ts';
+import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
+import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
 import { FEATURE_FLAGS } from '../config/feature-flags.ts';
 import { loadTemplate, validateTemplateData } from '../utils/template-loader.ts';
 import { renderMustache } from '../utils/mustache.ts';
@@ -191,6 +190,12 @@ export interface SessionScopedToolCallbacks {
   onAuthRequest?: (request: AuthRequest) => void;
   /** Called lazily to resolve browser pane actions for browser_tool. */
   getBrowserPaneFns?: () => BrowserPaneFns | undefined;
+  /** Called lazily to run a secondary LLM query using the current backend auth. */
+  queryFn?: (request: LLMQueryRequest) => Promise<LLMQueryResult>;
+  /** Called lazily to create delegated sessions for spawn_session. */
+  spawnSessionFn?: SpawnSessionFn;
+  /** Called lazily to resolve provider auth env vars for tools that spawn SDK validation. */
+  getAuthEnvVars?: () => Promise<Record<string, string> | undefined> | Record<string, string> | undefined;
 }
 
 /**
@@ -237,6 +242,14 @@ export function unregisterSessionScopedToolCallbacks(sessionId: string): void {
  */
 function getSessionScopedToolCallbacks(sessionId: string): SessionScopedToolCallbacks | undefined {
   return sessionScopedToolCallbackRegistry.get(sessionId);
+}
+
+export async function resolveSessionScopedAuthEnvVars(sessionId: string): Promise<Record<string, string> | undefined> {
+  const callbackEnv = await getSessionScopedToolCallbacks(sessionId)?.getAuthEnvVars?.();
+  if (callbackEnv && Object.keys(callbackEnv).length > 0) {
+    return callbackEnv;
+  }
+  return undefined;
 }
 
 // ============================================================
@@ -1030,20 +1043,16 @@ After creating or editing a source's config.json, run this tool to:
               }
             }
 
-            // Get Claude credentials for the validation request
-            const claudeApiKey = await getAnthropicApiKey();
-            const claudeOAuthToken = await getClaudeOAuthToken();
-
-            if (!claudeApiKey && !claudeOAuthToken) {
+            const authEnvVars = await resolveSessionScopedAuthEnvVars(sessionId);
+            if (!authEnvVars || Object.keys(authEnvVars).length === 0) {
               hasErrors = true;
-              results.push('**❌ Cannot Test MCP**: No Claude API key or OAuth token configured.');
+              results.push('**❌ Cannot Test MCP**: No authentication is configured for the current AI connection.');
             } else {
               // Run the validation
               const mcpResult = await validateMcpConnection({
                 mcpUrl: source.mcp.url,
                 mcpAccessToken,
-                claudeApiKey: claudeApiKey ?? undefined,
-                claudeOAuthToken: claudeOAuthToken ?? undefined,
+                authEnvVars,
               });
 
               // Update the source's status and timestamp
@@ -2257,7 +2266,15 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
           getBrowserPaneFns: () => getSessionScopedToolCallbacks(sessionId)?.getBrowserPaneFns?.(),
         }),
         // LLM tool - invoke secondary Claude calls for subtasks
-        createLLMTool({ sessionId }),
+        createLLMTool({
+          sessionId,
+          sessionPath: getSessionPath(workspaceRootPath, sessionId),
+          getQueryFn: () => getSessionScopedToolCallbacks(sessionId)?.queryFn,
+        }),
+        createSpawnSessionTool({
+          sessionId,
+          getSpawnSessionFn: () => getSessionScopedToolCallbacks(sessionId)?.spawnSessionFn,
+        }),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);

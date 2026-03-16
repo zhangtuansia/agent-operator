@@ -1,4 +1,4 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options, type SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
@@ -8,10 +8,11 @@ import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
 // Plan types are used by UI components; not needed in agent-operator.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel } from '../config/models.ts';
+import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -723,7 +724,7 @@ export class ClaudeAgent extends BaseAgent {
       }
 
       const options: Options = {
-        ...getDefaultOptions(),
+        ...getDefaultOptions(this.config.envOverrides),
         model,
         // Capture stderr from SDK subprocess for error diagnostics
         // This helps identify why sessions fail with "process exited with code 1"
@@ -1685,17 +1686,18 @@ export class ClaudeAgent extends BaseAgent {
 
           debug('[SESSION_DEBUG] >>> TAKING PATH: Run diagnostics (not session expired)');
 
-          // Run diagnostics to identify specific cause (2s timeout)
-          // Derive authType from the default LLM connection
-          const { getDefaultLlmConnection, getLlmConnection } = await import('../config/storage.ts');
-          const defaultConnSlug = getDefaultLlmConnection();
-          const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
-          // Map connection authType to legacy AuthType format for diagnostics
           let diagnosticAuthType: AuthType | undefined;
-          if (connection) {
-            if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+          if (
+            this.config.providerType === 'anthropic' ||
+            this.config.providerType === 'anthropic_compat'
+          ) {
+            if (
+              this.config.authType === 'api_key' ||
+              this.config.authType === 'api_key_with_endpoint' ||
+              this.config.authType === 'bearer_token'
+            ) {
               diagnosticAuthType = 'api_key';
-            } else if (connection.authType === 'oauth') {
+            } else if (this.config.authType === 'oauth') {
               diagnosticAuthType = 'oauth_token';
             }
           }
@@ -3001,6 +3003,44 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // getActiveSourceSlugs() is now inherited from BaseAgent
+
+  async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    const model = request.model ?? this.config.miniModel ?? DEFAULT_MODEL;
+    const options = {
+      ...getDefaultOptions(this.config.envOverrides),
+      model,
+      maxTurns: 1,
+      systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
+      ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
+      ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.outputSchema
+        ? {
+            outputFormat: { type: 'json_schema' as const, schema: request.outputSchema },
+          }
+        : {}),
+    };
+
+    let text = '';
+    let structuredOutput: unknown = undefined;
+
+    for await (const msg of query({ prompt: request.prompt, options })) {
+      if (msg.type === 'assistant') {
+        for (const block of msg.message.content) {
+          if (block.type === 'text') {
+            text += block.text;
+          }
+        }
+      }
+      if (msg.type === 'result' && (msg as SDKResultSuccess).subtype === 'success') {
+        structuredOutput = (msg as SDKResultSuccess).structured_output;
+      }
+    }
+
+    if (structuredOutput !== undefined) {
+      return { text: JSON.stringify(structuredOutput, null, 2), model };
+    }
+    return { text: text.trim(), model };
+  }
 
   // ============================================================
 }

@@ -472,12 +472,24 @@ export interface TestAutomationPayload {
   workspaceId: string
   automationId?: string
   automationName?: string
-  actions: Array<{ type: 'prompt'; prompt: string; llmConnection?: string; model?: string }>
+  actions: Array<
+    | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string }
+    | {
+      type: 'webhook'
+      url: string
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+      headers?: Record<string, string>
+      bodyFormat?: 'json' | 'form' | 'raw'
+      body?: unknown
+      captureResponse?: boolean
+      auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
+    }
+  >
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   labels?: string[]
 }
 
-export interface TestAutomationActionResult {
+export interface TestAutomationPromptActionResult {
   type: 'prompt'
   success: boolean
   stderr?: string
@@ -485,8 +497,27 @@ export interface TestAutomationActionResult {
   duration: number
 }
 
+export interface TestAutomationWebhookActionResult {
+  type: 'webhook'
+  url: string
+  statusCode: number
+  success: boolean
+  error?: string
+  attempts?: number
+  duration: number
+  responseBody?: string
+}
+
+export type TestAutomationActionResult =
+  | TestAutomationPromptActionResult
+  | TestAutomationWebhookActionResult
+
 export interface TestAutomationResult {
   actions: TestAutomationActionResult[]
+}
+
+export interface ReplayAutomationResult {
+  results: TestAutomationWebhookActionResult[]
 }
 
 // ---------------------------------------------------------------------------

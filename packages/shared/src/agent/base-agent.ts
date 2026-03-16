@@ -61,6 +61,7 @@ import {
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
 import { parseMentions, stripAllMentions } from '../mentions/index.ts';
 import { loadWorkspaceSkills } from '../skills/storage.ts';
+import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 
 // ============================================================
 // Mini Agent Configuration
@@ -794,6 +795,17 @@ Please continue the conversation naturally from where we left off.
    */
   async runMiniCompletion(_prompt: string): Promise<string | null> {
     return null;
+  }
+
+  async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    const text = await this.runMiniCompletion(request.prompt);
+    if (!text) {
+      throw new Error(`${this.constructor.name} does not support call_llm for the current authentication/runtime.`);
+    }
+    return {
+      text,
+      model: request.model ?? this.config.miniModel ?? this.getModel(),
+    };
   }
 
   async postInit(): Promise<PostInitResult> {

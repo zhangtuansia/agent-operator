@@ -38,8 +38,8 @@ export type {
 // Import and re-export auth types for onboarding
 // Use types-only subpaths to avoid pulling in Node.js dependencies
 import type { AuthState, SetupNeeds } from '@agent-operator/shared/auth/types';
-import type { AuthType, AgentType } from '@agent-operator/shared/config/types';
-export type { AuthState, SetupNeeds, AuthType, AgentType };
+import type { AuthType, AgentType, NetworkProxySettings } from '@agent-operator/shared/config/types';
+export type { AuthState, SetupNeeds, AuthType, AgentType, NetworkProxySettings };
 
 // Import source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@agent-operator/shared/sources/types';
@@ -494,12 +494,24 @@ export interface TestAutomationPayload {
   workspaceId: string
   /** Matcher ID for writing history entries */
   automationId?: string
-  actions: Array<{ type: 'prompt'; prompt: string; llmConnection?: string; model?: string }>
+  actions: Array<
+    | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string }
+    | {
+      type: 'webhook'
+      url: string
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+      headers?: Record<string, string>
+      bodyFormat?: 'json' | 'form' | 'raw'
+      body?: unknown
+      captureResponse?: boolean
+      auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
+    }
+  >
   permissionMode?: 'safe' | 'ask' | 'allow-all'
   labels?: string[]
 }
 
-export interface TestAutomationActionResult {
+export interface TestAutomationPromptActionResult {
   type: 'prompt'
   success: boolean
   stderr?: string
@@ -507,8 +519,27 @@ export interface TestAutomationActionResult {
   duration: number
 }
 
+export interface TestAutomationWebhookActionResult {
+  type: 'webhook'
+  url: string
+  statusCode: number
+  success: boolean
+  error?: string
+  attempts?: number
+  duration: number
+  responseBody?: string
+}
+
+export type TestAutomationActionResult =
+  | TestAutomationPromptActionResult
+  | TestAutomationWebhookActionResult
+
 export interface TestAutomationResult {
   actions: TestAutomationActionResult[]
+}
+
+export interface ReplayAutomationResult {
+  results: TestAutomationWebhookActionResult[]
 }
 
 // Import types needed for ElectronAPI
@@ -725,6 +756,8 @@ export interface ElectronAPI {
     baseURL: string
     apiFormat: 'anthropic' | 'openai'
   }): Promise<void>
+  getNetworkProxySettings(): Promise<NetworkProxySettings | undefined>
+  setNetworkProxySettings(settings: NetworkProxySettings): Promise<void>
 
   // Settings - Model (global default)
   getModel(): Promise<string | null>
@@ -899,8 +932,25 @@ export interface ElectronAPI {
   setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
   duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
-  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }>>
+  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{
+    id: string
+    ts: number
+    ok: boolean
+    sessionId?: string
+    prompt?: string
+    error?: string
+    webhook?: {
+      method: string
+      url: string
+      statusCode: number
+      durationMs: number
+      attempts?: number
+      error?: string
+      responseBody?: string
+    }
+  }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
+  replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<ReplayAutomationResult>
 
   // Automations change listener (live updates when automations.json changes on disk)
   onAutomationsChanged(callback: (workspaceId: string) => void): () => void

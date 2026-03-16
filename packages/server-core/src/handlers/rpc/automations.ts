@@ -7,7 +7,23 @@ import type { HandlerDeps } from '../handler-deps'
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @agent-operator/shared/automations/constants
 const HISTORY_FILE = 'automations-history.jsonl'
-interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string }
+interface HistoryEntry {
+  id: string
+  ts: number
+  ok: boolean
+  sessionId?: string
+  prompt?: string
+  error?: string
+  webhook?: {
+    method: string
+    url: string
+    statusCode: number
+    durationMs: number
+    attempts?: number
+    error?: string
+    responseBody?: string
+  }
+}
 
 // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
 // to prevent concurrent IPC calls from clobbering each other's changes.
@@ -59,6 +75,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.DELETE,
   RPC_CHANNELS.automations.GET_HISTORY,
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
+  RPC_CHANNELS.automations.REPLAY,
 ] as const
 
 export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -70,9 +87,35 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
     const results: import('@agent-operator/shared/protocol').TestAutomationActionResult[] = []
     const { parsePromptReferences } = await import('@agent-operator/shared/automations')
+    const { executeWebhookRequest, createWebhookHistoryEntry, createPromptHistoryEntry } = await import('@agent-operator/shared/automations/webhook-utils')
 
     for (const action of payload.actions) {
       const start = Date.now()
+
+      if (action.type === 'webhook') {
+        const result = await executeWebhookRequest(action as import('@agent-operator/shared/automations').WebhookAction)
+        const method = action.method ?? 'POST'
+
+        results.push({
+          ...result,
+          duration: Date.now() - start,
+        })
+
+        if (payload.automationId) {
+          const entry = createWebhookHistoryEntry({
+            matcherId: payload.automationId,
+            ok: result.success,
+            method,
+            url: action.url as string,
+            statusCode: result.statusCode,
+            durationMs: result.durationMs ?? 0,
+            error: result.error,
+            responseBody: result.responseBody,
+          })
+          appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
+        }
+        continue
+      }
 
       // Parse @mentions from the prompt to resolve source/skill references
       const references = parsePromptReferences(action.prompt)
@@ -98,7 +141,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
         // Write history entry for test runs
         if (payload.automationId) {
-          const entry = { id: payload.automationId, ts: Date.now(), ok: true, sessionId, prompt: action.prompt.slice(0, 200) }
+          const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: true, sessionId, prompt: action.prompt })
           appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
         }
       } catch (err: unknown) {
@@ -111,7 +154,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
         // Write failed history entry
         if (payload.automationId) {
-          const entry = { id: payload.automationId, ts: Date.now(), ok: false, error: ((err as Error).message ?? '').slice(0, 200), prompt: action.prompt.slice(0, 200) }
+          const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: false, error: (err as Error).message, prompt: action.prompt })
           appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8').catch(e => log.warn('[Automations] Failed to write history:', e))
         }
       }
@@ -170,6 +213,46 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     } catch {
       return [] // File doesn't exist yet
     }
+  })
+
+  server.handle(RPC_CHANNELS.automations.REPLAY, async (_ctx, workspaceId: string, automationId: string, eventName: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { resolveAutomationsConfigPath } = await import('@agent-operator/shared/automations/resolve-config-path')
+    const configPath = resolveAutomationsConfigPath(workspace.rootPath)
+    const raw = await readFile(configPath, 'utf-8')
+    const config = JSON.parse(raw) as { automations?: Record<string, Array<{ id?: string; actions?: Array<{ type: string; [key: string]: unknown }> }>> }
+
+    const matchers = config.automations?.[eventName] ?? []
+    const matcher = matchers.find(m => m.id === automationId)
+    if (!matcher) throw new Error('Automation not found')
+
+    const webhookActions = (matcher.actions ?? []).filter(a => a.type === 'webhook')
+    if (webhookActions.length === 0) throw new Error('No webhook actions to replay')
+
+    const { executeWebhookRequest, createWebhookHistoryEntry } = await import('@agent-operator/shared/automations/webhook-utils')
+    const results = await Promise.all(
+      webhookActions.map(a => executeWebhookRequest(a as unknown as import('@agent-operator/shared/automations').WebhookAction))
+    )
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]!
+      const action = webhookActions[i]!
+      const entry = createWebhookHistoryEntry({
+        matcherId: automationId,
+        ok: result.success,
+        method: (action as { method?: string }).method,
+        url: result.url,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs ?? 0,
+        error: result.error,
+      })
+      appendFile(join(workspace.rootPath, HISTORY_FILE), JSON.stringify(entry) + '\n', 'utf-8')
+        .catch(e => log.warn('[Automations] Failed to write replay history:', e))
+    }
+
+    return { results: results.map(r => ({ ...r, duration: r.durationMs ?? 0 })) }
   })
 
   // Return last execution timestamp for all automations

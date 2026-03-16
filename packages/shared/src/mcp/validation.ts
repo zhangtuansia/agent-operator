@@ -119,6 +119,8 @@ export interface McpValidationConfig {
   mcpUrl: string;
   /** Access token for MCP server (OAuth or bearer) */
   mcpAccessToken?: string;
+  /** Provider-aware auth env vars for the SDK runtime. */
+  authEnvVars?: Record<string, string>;
   /** Anthropic API key (for API key auth) */
   claudeApiKey?: string;
   /** Claude OAuth token (for Max subscription auth) */
@@ -138,19 +140,36 @@ export async function validateMcpConnection(
   config: McpValidationConfig
 ): Promise<McpValidationResult> {
   debug('Validating MCP connection to', config.mcpUrl);
-  // Store original env vars to restore later
-  const originalApiKey = process.env.ANTHROPIC_API_KEY;
-  const originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  const authEnvKeys = new Set([
+    'ANTHROPIC_API_KEY',
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'ANTHROPIC_BASE_URL',
+    'CLAUDE_CODE_USE_BEDROCK',
+    'AWS_REGION',
+    'AWS_PROFILE',
+    'ANTHROPIC_MODEL',
+    'ANTHROPIC_SMALL_FAST_MODEL',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    ...Object.keys(config.authEnvVars ?? {}),
+  ]);
+  const originalEnv = new Map<string, string | undefined>();
+  for (const key of authEnvKeys) {
+    originalEnv.set(key, process.env[key]);
+  }
 
   try {
-    // Set Claude credentials for SDK (temporarily)
-    if (config.claudeApiKey) {
+    if (config.authEnvVars && Object.keys(config.authEnvVars).length > 0) {
+      for (const key of authEnvKeys) {
+        delete process.env[key];
+      }
+      for (const [key, value] of Object.entries(config.authEnvVars)) {
+        process.env[key] = value;
+      }
+    } else if (config.claudeApiKey) {
       process.env.ANTHROPIC_API_KEY = config.claudeApiKey;
-      // Clear OAuth token if API key is provided
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
     } else if (config.claudeOAuthToken) {
       process.env.CLAUDE_CODE_OAUTH_TOKEN = config.claudeOAuthToken;
-      // Clear API key if OAuth token is provided
       delete process.env.ANTHROPIC_API_KEY;
     }
 
@@ -320,17 +339,12 @@ export async function validateMcpConnection(
       };
     }
   } finally {
-    // Restore original env vars
-    if (originalApiKey !== undefined) {
-      process.env.ANTHROPIC_API_KEY = originalApiKey;
-    } else {
-      delete process.env.ANTHROPIC_API_KEY;
-    }
-
-    if (originalOAuthToken !== undefined) {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken;
-    } else {
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    for (const [key, value] of originalEnv.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 }

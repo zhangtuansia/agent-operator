@@ -13,5 +13,13 @@ export type {
   OAuthCredentials,
 } from '@agent-operator/core/types';
 
+/** App-level network proxy configuration. */
+export interface NetworkProxySettings {
+  enabled: boolean;
+  httpProxy?: string;
+  httpsProxy?: string;
+  noProxy?: string;
+}
+
 // Agent type - which AI backend to use
 export type AgentType = 'claude' | 'codex';

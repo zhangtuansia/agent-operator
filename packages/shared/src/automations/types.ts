@@ -51,6 +51,8 @@ export const AGENT_EVENTS: AgentEvent[] = [
 // Action Definitions
 // ============================================================================
 
+import type { PermissionMode } from '../agent/mode-types.ts';
+
 /** A prompt action - sends a prompt to Craft Agent */
 export interface PromptAction {
   type: 'prompt';
@@ -61,7 +63,37 @@ export interface PromptAction {
   model?: string;
 }
 
-export type AutomationAction = PromptAction;
+/** HTTP method for webhook actions */
+export type WebhookHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** Body format for webhook actions */
+export type WebhookBodyFormat = 'json' | 'form' | 'raw';
+
+/** Authentication shorthand for webhook actions */
+export type WebhookAuth =
+  | { type: 'basic'; username: string; password: string }
+  | { type: 'bearer'; token: string };
+
+/** A webhook action - sends an HTTP request to an endpoint */
+export interface WebhookAction {
+  type: 'webhook';
+  /** The URL to send the webhook to (http or https) */
+  url: string;
+  /** HTTP method (default: POST) */
+  method?: WebhookHttpMethod;
+  /** HTTP headers as key-value pairs */
+  headers?: Record<string, string>;
+  /** Body format: 'json' sends Content-Type application/json, 'form' URL-encodes, 'raw' sends as-is */
+  bodyFormat?: WebhookBodyFormat;
+  /** Request body — JSON object when bodyFormat is 'json' or 'form', string when 'raw' */
+  body?: unknown;
+  /** Capture response body in result (truncated to 4KB). Default: false */
+  captureResponse?: boolean;
+  /** Authentication shorthand (applied before custom headers) */
+  auth?: WebhookAuth;
+}
+
+export type AutomationAction = PromptAction | WebhookAction;
 
 export interface AutomationMatcher {
   /** Short 6-character hex ID for stable identification across config changes. */
@@ -75,7 +107,7 @@ export interface AutomationMatcher {
   /** IANA timezone for cron evaluation (e.g., "Europe/Budapest", "America/New_York") */
   timezone?: string;
   /** Permission mode for sessions created by prompt actions. */
-  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  permissionMode?: PermissionMode;
   /** Labels to apply to sessions created by prompt actions */
   labels?: string[];
   /** Whether this automation matcher is enabled. Defaults to true. Set to false to disable without removing. */
@@ -111,7 +143,26 @@ export interface PromptActionResult {
   references: PromptReferences;
 }
 
-export type ActionExecutionResult = PromptActionResult;
+/** Result of a webhook action */
+export interface WebhookActionResult {
+  type: 'webhook';
+  /** The URL that was called */
+  url: string;
+  /** HTTP status code from the response */
+  statusCode: number;
+  /** Whether the request was successful (2xx status) */
+  success: boolean;
+  /** Error message if the request failed */
+  error?: string;
+  /** Number of attempts made (1 = no retry, 2+ = retried) */
+  attempts?: number;
+  /** Total duration including retries, in ms */
+  durationMs?: number;
+  /** Captured response body (only when captureResponse is true, truncated to 4KB) */
+  responseBody?: string;
+}
+
+export type ActionExecutionResult = PromptActionResult | WebhookActionResult;
 
 /** A pending prompt with its metadata */
 export interface PendingPrompt {
@@ -131,7 +182,7 @@ export interface PendingPrompt {
   /** Labels to apply to the created session */
   labels?: string[];
   /** Permission mode for the created session (from matcher config) */
-  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  permissionMode?: PermissionMode;
   /** LLM connection slug for the created session (falls back to default if not found) */
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */

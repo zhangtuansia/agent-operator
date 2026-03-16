@@ -39,7 +39,7 @@ import {
 import type { IBrowserPaneManager } from '@agent-operator/server-core/handlers'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
-const BROWSER_PANE_PARTITION = 'persist:browser-pane'
+export const BROWSER_PANE_SESSION_PARTITION = 'persist:browser-pane'
 const DEFAULT_WINDOW_SIZE = { width: 1240, height: 860 }
 const DEFAULT_WINDOW_MIN_SIZE = { width: 920, height: 640 }
 const TOOLBAR_HEIGHT = 48
@@ -356,7 +356,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       return id
     }
 
-    const sharedSession = session.fromPartition(BROWSER_PANE_PARTITION)
+    const sharedSession = session.fromPartition(BROWSER_PANE_SESSION_PARTITION)
     this.ensureNetworkTracking(sharedSession)
 
     const backgroundColor = nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#f6f3ef'
@@ -376,7 +376,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       icon: getBrowserIconPath(),
       autoHideMenuBar: true,
       webPreferences: {
-        partition: BROWSER_PANE_PARTITION,
+        partition: BROWSER_PANE_SESSION_PARTITION,
         session: sharedSession,
         contextIsolation: true,
         nodeIntegration: false,
@@ -386,7 +386,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const toolbarView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_PARTITION,
+        partition: BROWSER_PANE_SESSION_PARTITION,
         session: sharedSession,
         preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
@@ -397,7 +397,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const pageView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_PARTITION,
+        partition: BROWSER_PANE_SESSION_PARTITION,
         session: sharedSession,
         contextIsolation: true,
         nodeIntegration: false,
@@ -407,7 +407,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const nativeOverlayView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_PARTITION,
+        partition: BROWSER_PANE_SESSION_PARTITION,
         session: sharedSession,
         contextIsolation: true,
         nodeIntegration: false,

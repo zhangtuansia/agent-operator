@@ -28,6 +28,7 @@ import { ClaudeAgent } from '../../claude-agent.ts';
 import { CodexAgent } from '../../codex-agent.ts';
 import { OperatorAgent } from '../../operator-agent.ts';
 import { isValidProviderAuthCombination, validateCodexPath } from '../../../config/llm-connections.ts';
+import { getDefaultModelForConnection } from '../../../config/index.ts';
 
 // Test helpers
 function createTestWorkspace(): Workspace {
@@ -96,6 +97,19 @@ describe('createBackend / createAgent', () => {
       const agent = createBackend(config);
 
       expect(agent).toBeInstanceOf(OperatorAgent);
+    });
+
+    it('should use the provider default model when operator runtime is created without an explicit model', () => {
+      const config = createTestConfig({
+        provider: 'anthropic',
+        anthropicRuntime: 'operator',
+        providerType: 'bedrock',
+        model: undefined,
+      });
+
+      const agent = createBackend(config) as OperatorAgent;
+
+      expect(agent.getModel()).toBe(getDefaultModelForConnection('bedrock'));
     });
   });
 

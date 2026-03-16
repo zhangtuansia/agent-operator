@@ -87,6 +87,7 @@ import { IPC_CHANNELS } from '../shared/types'
 import { RPC_CHANNELS, type SessionEvent } from '@agent-operator/shared/protocol'
 import { createElectronPlatformServices } from './platform-services'
 import { registerTransportBootstrapHandlers } from './bootstrap-handlers'
+import { applyConfiguredProxySettings } from './network-proxy'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -146,6 +147,8 @@ if (process.defaultApp) {
   // Production mode
   app.setAsDefaultProtocolClient(DEEPLINK_SCHEME)
 }
+
+void applyConfiguredProxySettings()
 
 // Handle deeplink on macOS (when app is already running)
 app.on('open-url', (event, url) => {

@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
 import { debug } from './debug.ts';
-import { getCredentialManager } from '../credentials/index.ts';
+import { getAnthropicOptionsEnvSnapshot } from '../agent/options.ts';
 
 // Token limit for summarization trigger (roughly ~60KB of text)
 export const TOKEN_LIMIT = 15000;
@@ -34,8 +34,10 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
     return anthropicClient;
   }
 
+  const optionsEnv = getAnthropicOptionsEnvSnapshot();
+
   // Option 1: Direct API key from env (set by setAuthEnvironment)
-  const envApiKey = process.env.ANTHROPIC_API_KEY;
+  const envApiKey = optionsEnv.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (envApiKey) {
     anthropicClient = new Anthropic({ apiKey: envApiKey });
     debug('[summarize] Using ANTHROPIC_API_KEY for summarization');
@@ -43,23 +45,14 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
   }
 
   // Option 2: Claude Max OAuth token
-  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  const oauthToken = optionsEnv.CLAUDE_CODE_OAUTH_TOKEN || process.env.CLAUDE_CODE_OAUTH_TOKEN;
   if (oauthToken) {
     anthropicClient = new Anthropic({ apiKey: oauthToken });
     debug('[summarize] Using CLAUDE_CODE_OAUTH_TOKEN for summarization');
     return anthropicClient;
   }
 
-  // Fallback: try credential manager (for cases where env vars aren't set yet)
-  const manager = getCredentialManager();
-  const apiKey = await manager.getApiKey();
-  if (apiKey) {
-    anthropicClient = new Anthropic({ apiKey });
-    debug('[summarize] Using API key from credential manager for summarization');
-    return anthropicClient;
-  }
-
-  debug('[summarize] No auth available - summarization will use truncation fallback');
+  debug('[summarize] No compatible Anthropic auth in current runtime env - using truncation fallback');
   return null;
 }
 

@@ -220,6 +220,8 @@ export const CHANNEL_MAP = {
   // Settings - Provider Config
   getStoredConfig: invoke(IPC_CHANNELS.SETTINGS_GET_STORED_CONFIG),
   updateProviderConfig: invoke(IPC_CHANNELS.SETTINGS_UPDATE_PROVIDER_CONFIG),
+  getNetworkProxySettings: invoke(IPC_CHANNELS.SETTINGS_GET_NETWORK_PROXY),
+  setNetworkProxySettings: invoke(IPC_CHANNELS.SETTINGS_SET_NETWORK_PROXY),
 
   // Settings - Model
   getModel: invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
@@ -395,6 +397,7 @@ export const CHANNEL_MAP = {
   deleteAutomation: invoke(IPC_CHANNELS.AUTOMATIONS_DELETE),
   getAutomationHistory: invoke(IPC_CHANNELS.AUTOMATIONS_GET_HISTORY),
   getAutomationLastExecuted: invoke(IPC_CHANNELS.AUTOMATIONS_GET_LAST_EXECUTED),
+  replayAutomation: invoke(IPC_CHANNELS.AUTOMATIONS_REPLAY),
   onAutomationsChanged: listener(IPC_CHANNELS.AUTOMATIONS_CHANGED),
 
   // Browser pane management

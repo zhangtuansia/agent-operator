@@ -17,6 +17,7 @@ describe('Pi session tool proxy defs', () => {
     expect(names).toContain('mcp__session__config_validate');
     expect(names).toContain('mcp__session__browser_tool');
     expect(names).toContain('mcp__session__call_llm');
+    expect(names).toContain('mcp__session__spawn_session');
     expect(defs.every((def) => def.inputSchema.$schema === undefined)).toBe(true);
   });
 

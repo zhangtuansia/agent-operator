@@ -22,6 +22,7 @@ import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
 import type { AutomationSystem } from '../../automations/index.ts';
 import type { SourceManager } from '../core/source-manager.ts';
+import type { LLMQueryRequest, LLMQueryResult } from '../llm-tool.ts';
 
 // Import AbortReason and RecoveryMessage from core module (single source of truth)
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
@@ -239,6 +240,11 @@ export interface AgentBackend {
    * Run a simple text completion using the backend's auth infrastructure.
    */
   runMiniCompletion(prompt: string): Promise<string | null>;
+
+  /**
+   * Run a secondary LLM query using the backend's current auth/runtime.
+   */
+  queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult>;
 
   /**
    * Clean up resources (MCP connections, watchers, etc.)
@@ -508,6 +514,13 @@ export interface BackendConfig {
 
   /** Workspace-level automation system (Operator runtime only) */
   automationSystem?: AutomationSystem;
+
+  /**
+   * Per-backend environment overrides.
+   * Used for connection-scoped auth/runtime env that should not depend on
+   * ambient global process state.
+   */
+  envOverrides?: Record<string, string>;
 
   /**
    * Custom CODEX_HOME directory for per-session configuration (Codex backend only).

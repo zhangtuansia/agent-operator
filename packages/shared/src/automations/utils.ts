@@ -218,22 +218,18 @@ export function cleanEnv(): Record<string, string> {
   );
 }
 
-/**
- * Build environment variables from an event payload.
- * Sanitizes user-controlled values using sanitizeForShell.
- */
-export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
+const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
+
+function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env: Record<string, string> = {
-    ...cleanEnv(),
     CRAFT_EVENT: event,
     CRAFT_EVENT_DATA: JSON.stringify(payload),
   };
 
   if (payload.sessionId) env.CRAFT_SESSION_ID = payload.sessionId;
-  if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
+  if (payload.sessionName) env.CRAFT_SESSION_NAME = payload.sessionName;
   if (payload.workspaceId) env.CRAFT_WORKSPACE_ID = payload.workspaceId;
 
-  // Add session metadata as JSON (includes sessionId, sessionName if available)
   const sessionMetadata: Record<string, string> = {};
   if (payload.sessionId) sessionMetadata.id = payload.sessionId;
   if (payload.sessionName) sessionMetadata.name = payload.sessionName;
@@ -241,20 +237,50 @@ export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPa
     env.CRAFT_SESSION_METADATA = JSON.stringify(sessionMetadata);
   }
 
-  // Add local time for scheduler events
   if (event === 'SchedulerTick') {
     const now = new Date();
     env.CRAFT_LOCAL_TIME = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
     env.CRAFT_LOCAL_DATE = now.toISOString().split('T')[0]!;
   }
 
-  // Add payload fields as individual env vars
   for (const [key, value] of Object.entries(payload)) {
-    if (key === 'sessionId' || key === 'sessionName' || key === 'workspaceId' || key === 'timestamp') continue;
+    if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
-    // Sanitize user-controlled values
+    env[envKey] = typeof value === 'string' ? value : String(value);
+  }
+
+  return env;
+}
+
+/**
+ * Build environment variables from an event payload.
+ * Sanitizes user-controlled values using sanitizeForShell.
+ */
+export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
+  const env: Record<string, string> = {
+    ...cleanEnv(),
+    ...buildBaseEventEnv(event, payload),
+  };
+
+  if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (PAYLOAD_SKIP_KEYS.has(key)) continue;
+    const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
     const sanitized = typeof value === 'string' ? sanitizeForShell(value) : String(value);
     env[envKey] = sanitized;
+  }
+
+  return env;
+}
+
+export function buildWebhookEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
+  const env = buildBaseEventEnv(event, payload);
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('CRAFT_WH_') && value !== undefined) {
+      env[key] = value;
+    }
   }
 
   return env;

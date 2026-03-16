@@ -267,7 +267,7 @@ export async function initAnalytics(api: ElectronAPI): Promise<void> {
       agent_type: agentType || '',
       model: model || '',
       // Provider info (without sensitive data)
-      provider: storedConfig?.provider || '',
+      provider: storedConfig?.providerConfig?.provider || '',
     })
   } catch {
     // Ignore context enrichment failures

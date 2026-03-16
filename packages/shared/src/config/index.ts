@@ -2,6 +2,7 @@ export * from './llm-connections.ts';
 export * from './models.ts';
 export * from './models-pi.ts';
 export * from './preferences.ts';
+export * from './types.ts';
 export * from './storage.ts';
 export * from './theme.ts';
 export * from './validators.ts';

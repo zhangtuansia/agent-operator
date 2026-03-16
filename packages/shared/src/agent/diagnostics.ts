@@ -5,7 +5,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getLastApiError } from '../network/interceptor.ts';
-import { getAnthropicApiKey, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
+import type { AuthType } from '../config/storage.ts';
+import { getAnthropicOptionsEnvSnapshot } from './options.ts';
 
 export type DiagnosticCode =
   | 'billing_error'         // HTTP 402 from Anthropic API
@@ -225,7 +226,8 @@ async function validateApiKeyWithAnthropic(apiKey: string): Promise<CheckResult>
 /** Check API key presence and validity */
 async function checkApiKey(): Promise<CheckResult> {
   try {
-    const apiKey = await getAnthropicApiKey();
+    const optionsEnv = getAnthropicOptionsEnvSnapshot();
+    const apiKey = optionsEnv.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return {
         ok: false,
@@ -247,7 +249,8 @@ async function checkApiKey(): Promise<CheckResult> {
 /** Check OAuth token presence */
 async function checkOAuthToken(): Promise<CheckResult> {
   try {
-    const token = await getClaudeOAuthToken();
+    const optionsEnv = getAnthropicOptionsEnvSnapshot();
+    const token = optionsEnv.CLAUDE_CODE_OAUTH_TOKEN || process.env.CLAUDE_CODE_OAUTH_TOKEN;
     if (!token) {
       return {
         ok: false,

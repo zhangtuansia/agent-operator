@@ -96,6 +96,19 @@ function getTranslatedStatusLabel(stateId: string, label: string, t: (key: strin
     : label
 }
 
+function getDisplayedSessionRows(items: SessionMeta[]): SessionMeta[] {
+  const visibleItems = items.filter(item => !item.hidden)
+  const presentIds = new Set(visibleItems.map(item => item.id))
+  return visibleItems.filter(item => {
+    if (!item.parentSessionId) return true
+    return !presentIds.has(item.parentSessionId)
+  })
+}
+
+function getDisplayedSessionCount(items: SessionMeta[]): number {
+  return getDisplayedSessionRows(items).length
+}
+
 function shallowStringArrayEqual(left?: string[], right?: string[]): boolean {
   const leftValue = left ?? []
   const rightValue = right ?? []
@@ -839,6 +852,10 @@ function AppShellContent({
     () => workspaceSessionMetas.filter(s => !s.isArchived),
     [workspaceSessionMetas]
   )
+  const activeSessionCount = useMemo(
+    () => getDisplayedSessionCount(activeSessionMetas),
+    [activeSessionMetas]
+  )
   const workspaceUnreadMap = useMemo(() => {
     const nextMap: Record<string, boolean> = {}
     for (const meta of sessionMetaMap.values()) {
@@ -851,12 +868,18 @@ function AppShellContent({
 
   // Count sessions by todo state (scoped to workspace)
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
-  const flaggedCount = activeSessionMetas.filter(s => s.isFlagged).length
+  const flaggedCount = useMemo(
+    () => getDisplayedSessionCount(activeSessionMetas.filter(s => s.isFlagged)),
+    [activeSessionMetas]
+  )
 
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
   const anthropicCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:anthropic')).length
-  const archivedCount = workspaceSessionMetas.filter(s => s.isArchived).length
+  const archivedCount = useMemo(
+    () => getDisplayedSessionCount(workspaceSessionMetas.filter(s => s.isArchived)),
+    [workspaceSessionMetas]
+  )
 
   // Count automations by type
   const automationTypeCounts = useMemo(() => {
@@ -889,9 +912,11 @@ function AppShellContent({
       for (const did of getDescendantIds(labelConfigs, label.id)) {
         targetIds.add(did)
       }
-      counts[label.id] = workspaceSessionMetas.filter(s =>
-        !s.isArchived && s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
-      ).length
+      counts[label.id] = getDisplayedSessionCount(
+        workspaceSessionMetas.filter(s =>
+          !s.isArchived && s.labels?.some(entry => targetIds.has(extractLabelId(entry)))
+        )
+      )
     }
     return counts
   }, [workspaceSessionMetas, labelConfigs])
@@ -903,12 +928,10 @@ function AppShellContent({
     for (const state of todoStates) {
       counts[state.id] = 0
     }
-    // Count sessions (exclude archived — archived sessions have their own view)
-    for (const s of workspaceSessionMetas) {
-      if (s.isArchived) continue
-      const state = (s.todoState || 'todo') as SessionStatusId
-      // Increment count (initialize to 0 if status not in todoStates yet)
-      counts[state] = (counts[state] || 0) + 1
+    for (const state of todoStates) {
+      counts[state.id] = getDisplayedSessionCount(
+        workspaceSessionMetas.filter(s => !s.isArchived && (s.todoState || 'todo') === state.id)
+      )
     }
     return counts
   }, [workspaceSessionMetas, todoStates])
@@ -1784,7 +1807,7 @@ function AppShellContent({
                         {
                           id: "nav:allChats",
                           title: t('sessionList.allSessions') ?? 'All Sessions',
-                          label: String(activeSessionMetas.length),
+                          label: String(activeSessionCount),
                           icon: Inbox,
                           variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
                           onClick: handleAllChatsClick,

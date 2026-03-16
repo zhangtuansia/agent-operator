@@ -51,6 +51,7 @@ export type {
 
 // Import for local use
 import type { Workspace, AuthType } from '@agent-operator/core/types';
+import type { NetworkProxySettings } from './types.ts';
 
 
 /**
@@ -111,6 +112,8 @@ export interface StoredConfig {
   spellCheck?: boolean;  // Enable spell check in input (default: false)
   // Power settings
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
+  // Network proxy
+  networkProxy?: NetworkProxySettings;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -2278,6 +2281,47 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+function normalizeProxyString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function normalizeNetworkProxySettings(settings: NetworkProxySettings): NetworkProxySettings {
+  return {
+    enabled: Boolean(settings.enabled),
+    httpProxy: normalizeProxyString(settings.httpProxy),
+    httpsProxy: normalizeProxyString(settings.httpsProxy),
+    noProxy: normalizeProxyString(settings.noProxy),
+  };
+}
+
+/**
+ * Get the current network proxy settings.
+ * Returns undefined if not configured.
+ */
+export function getNetworkProxySettings(): NetworkProxySettings | undefined {
+  const config = loadStoredConfig();
+  return config?.networkProxy;
+}
+
+/**
+ * Persist network proxy settings.
+ * Deletes the key when disabled and all proxy fields are empty.
+ */
+export function setNetworkProxySettings(settings: NetworkProxySettings): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const normalized = normalizeNetworkProxySettings(settings);
+  if (!normalized.enabled && !normalized.httpProxy && !normalized.httpsProxy && !normalized.noProxy) {
+    delete config.networkProxy;
+  } else {
+    config.networkProxy = normalized;
+  }
+
   saveConfig(config);
 }
 

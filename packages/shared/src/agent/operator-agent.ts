@@ -8,10 +8,11 @@ import { loadAllSkills } from '../skills/storage.ts';
 // Plan types are used by UI components; not needed in agent-operator.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
+import { loadConfigDefaults, type Workspace, type AuthType } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, getBedrockModel, getDefaultModelForProvider } from '../config/models.ts';
+import { DEFAULT_MODEL, getBedrockModel } from '../config/models.ts';
+import { getDefaultModelForConnection, type LlmProviderType } from '../config/llm-connections.ts';
 import { isBedrockMode } from '../auth/state.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
@@ -61,6 +62,7 @@ import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from '.
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
 import type { AutomationSystem, SdkAutomationCallbackMatcher } from '../automations/index.ts';
+import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 
 // Re-export permission mode functions for application usage
 export {
@@ -489,13 +491,13 @@ export class OperatorAgent {
   }
 
   constructor(config: OperatorAgentConfig) {
-    // Resolve model: prioritize session model > config model > global config > provider default
-    // This ensures that when using non-Anthropic providers (DeepSeek, GLM, etc.),
-    // the default model is appropriate for that provider instead of Claude Sonnet
-    const storedConfig = loadStoredConfig();
-    const currentProvider = storedConfig?.providerConfig?.provider;
-    const providerDefaultModel = getDefaultModelForProvider(currentProvider, storedConfig?.providerConfig?.customModels);
-    const resolvedModel = config.session?.model ?? config.model ?? storedConfig?.model ?? providerDefaultModel;
+    // Resolve model from session/config/default connection context.
+    // Avoid falling back to legacy global storedConfig.model, which can drift
+    // from the active default connection after the settings migration.
+    const providerDefaultModel = config.providerType
+      ? getDefaultModelForConnection(config.providerType as LlmProviderType)
+      : undefined;
+    const resolvedModel = config.session?.model ?? config.model ?? providerDefaultModel;
     this.config = { ...config, model: resolvedModel };
     this.isHeadless = config.isHeadless ?? false;
 
@@ -922,7 +924,7 @@ export class OperatorAgent {
       this.lastStderrOutput = [];
 
       const options: Options = {
-        ...getDefaultOptions(),
+        ...getDefaultOptions(this.config.envOverrides),
         model,
         // Capture stderr from SDK subprocess for error diagnostics
         // This helps identify why sessions fail with "process exited with code 1"
@@ -1986,10 +1988,23 @@ export class OperatorAgent {
 
           debug('[SESSION_DEBUG] >>> TAKING PATH: Run diagnostics (not session expired)');
 
-          // Run diagnostics to identify specific cause (2s timeout)
-          const storedConfig = loadStoredConfig();
+          let diagnosticAuthType: AuthType | undefined;
+          if (
+            this.config.providerType === 'anthropic' ||
+            this.config.providerType === 'anthropic_compat'
+          ) {
+            if (
+              this.config.authType === 'api_key' ||
+              this.config.authType === 'api_key_with_endpoint' ||
+              this.config.authType === 'bearer_token'
+            ) {
+              diagnosticAuthType = 'api_key';
+            } else if (this.config.authType === 'oauth') {
+              diagnosticAuthType = 'oauth_token';
+            }
+          }
           const diagnostics = await runErrorDiagnostics({
-            authType: storedConfig?.authType,
+            authType: diagnosticAuthType,
             workspaceId: this.config.workspace?.id,
             rawError: stderrContext || rawErrorMsg,
           });
@@ -3405,7 +3420,7 @@ Please continue the conversation naturally from where we left off.
         : this.workspaceRootPath);
 
     const options: Options = {
-      ...getDefaultOptions(),
+      ...getDefaultOptions(this.config.envOverrides),
       model: this.getModel(),
       maxTurns: 0,
       resume: this.branchFromSdkSessionId,
@@ -3617,6 +3632,37 @@ Please continue the conversation naturally from where we left off.
 
   async runMiniCompletion(_prompt: string): Promise<string | null> {
     return null;
+  }
+
+  async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    const model = request.model ?? this.getModel();
+    const options = {
+      ...getDefaultOptions(this.config.envOverrides),
+      model,
+      maxTurns: 1,
+      systemPrompt: request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.',
+      ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
+      ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.outputSchema
+        ? {
+            outputFormat: { type: 'json_schema' as const, schema: request.outputSchema },
+          }
+        : {}),
+    };
+
+    let text = '';
+
+    for await (const msg of query({ prompt: request.prompt, options })) {
+      if (msg.type === 'assistant') {
+        for (const block of msg.message.content) {
+          if (block.type === 'text') {
+            text += block.text;
+          }
+        }
+      }
+    }
+
+    return { text: text.trim(), model };
   }
 
   async generateTitle(_message: string, _options?: { language?: string }): Promise<string | null> {

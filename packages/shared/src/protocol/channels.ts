@@ -192,6 +192,8 @@ export const RPC_CHANNELS = {
     UPDATE_PROVIDER_CONFIG: 'settings:updateProviderConfig',
     GET_MODEL: 'settings:getModel',
     SET_MODEL: 'settings:setModel',
+    GET_NETWORK_PROXY: 'settings:getNetworkProxy',
+    SET_NETWORK_PROXY: 'settings:setNetworkProxy',
   },
   customModels: {
     GET: 'customModels:get',
@@ -347,6 +349,7 @@ export const RPC_CHANNELS = {
     DELETE: 'automations:delete',
     GET_HISTORY: 'automations:getHistory',
     GET_LAST_EXECUTED: 'automations:getLastExecuted',
+    REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
   },
 } as const

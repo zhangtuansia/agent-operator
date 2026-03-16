@@ -22,8 +22,8 @@ import { AUTOMATIONS_HISTORY_FILE } from './constants.ts';
 import { normalizePermissionMode } from '../agent/mode-types.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
-import { PromptHandler, EventLogHandler, type AutomationsConfigProvider } from './handlers/index.ts';
-import { AGENT_EVENTS, type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
+import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { AGENT_EVENTS, type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { buildEnvFromSdkInput } from './sdk-bridge.ts';
 import { testMatcherAgainst, getMatchValueForSdkInput, buildPendingPromptsForMatcher } from './utils.ts';
@@ -52,6 +52,8 @@ export interface AutomationSystemOptions {
   enableScheduler?: boolean;
   /** Called when prompts are ready to be executed */
   onPromptsReady?: (prompts: PendingPrompt[]) => void | Promise<void>;
+  /** Called when webhook results are available */
+  onWebhookResults?: (results: WebhookActionResult[]) => void;
   /** Called when an error occurs during automation execution */
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
@@ -68,6 +70,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private readonly options: AutomationSystemOptions;
   private config: AutomationsConfig | null = null;
   private promptHandler: PromptHandler | null = null;
+  private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
   private scheduler: SchedulerService | null = null;
   private disposed = false;
@@ -267,6 +270,17 @@ export class AutomationSystem implements AutomationsConfigProvider {
       this
     );
     this.promptHandler.subscribe(this.eventBus);
+
+    this.webhookHandler = new WebhookHandler(
+      {
+        workspaceId: this.options.workspaceId,
+        workspaceRootPath: this.options.workspaceRootPath,
+        onWebhookResults: this.options.onWebhookResults,
+        onError: this.options.onError,
+      },
+      this,
+    );
+    this.webhookHandler.subscribe(this.eventBus);
 
     // Event log handler
     this.eventLogHandler = new EventLogHandler({
@@ -585,6 +599,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
     // Dispose handlers
     this.promptHandler?.dispose();
+    this.webhookHandler?.dispose();
     await this.eventLogHandler?.dispose();
 
     // Dispose event bus

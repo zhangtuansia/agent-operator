@@ -1,0 +1,1 @@
+export const DEFAULT_WEBHOOK_METHOD = 'POST'

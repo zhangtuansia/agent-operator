@@ -217,6 +217,8 @@ export const IPC_CHANNELS = {
   // Settings - Provider Config
   SETTINGS_GET_STORED_CONFIG: 'settings:getStoredConfig',
   SETTINGS_UPDATE_PROVIDER_CONFIG: 'settings:updateProviderConfig',
+  SETTINGS_GET_NETWORK_PROXY: 'settings:getNetworkProxy',
+  SETTINGS_SET_NETWORK_PROXY: 'settings:setNetworkProxy',
 
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
@@ -380,6 +382,7 @@ export const IPC_CHANNELS = {
   AUTOMATIONS_DELETE: 'automations:delete',
   AUTOMATIONS_GET_HISTORY: 'automations:getHistory',
   AUTOMATIONS_GET_LAST_EXECUTED: 'automations:getLastExecuted',
+  AUTOMATIONS_REPLAY: 'automations:replay',
   AUTOMATIONS_CHANGED: 'automations:changed',  // Broadcast event
 
   // IM Integration (Feishu, Telegram)
