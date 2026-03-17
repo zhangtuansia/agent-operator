@@ -19,6 +19,7 @@ env:
   BUN_VERSION: "1.3.5"
   BUN_DOWNLOAD_VERSION: "bun-v1.3.5"
   ELECTRON_BUILDER_PUBLISH: "always"
+  NODE_OPTIONS: "--max-old-space-size=8192"
 
 jobs:
   # ─── macOS ARM64 ──────────────────────────────────────────────────────────────
