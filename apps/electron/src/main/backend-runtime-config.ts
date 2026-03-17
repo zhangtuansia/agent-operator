@@ -37,7 +37,9 @@ export function getBundledBunPath(): string | undefined {
 export function resolveMcpServerPath(serverDir: McpServerDir): { path: string; exists: boolean } {
   const candidates = app.isPackaged
     ? [
+        join(app.getAppPath(), 'dist', 'resources', serverDir, 'index.js'),
         join(app.getAppPath(), 'resources', serverDir, 'index.js'),
+        join(process.resourcesPath, 'app', 'dist', 'resources', serverDir, 'index.js'),
         join(process.resourcesPath, serverDir, 'index.js'),
       ]
     : [

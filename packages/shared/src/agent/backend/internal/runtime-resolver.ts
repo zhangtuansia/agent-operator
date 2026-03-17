@@ -126,7 +126,9 @@ function resolvePiInterceptorPath(hostRuntime: BackendHostRuntimeContext): strin
 
 function resolvePiServerPath(hostRuntime: BackendHostRuntimeContext): string | undefined {
   const packagedCandidates = [
+    join(hostRuntime.appRootPath, 'dist', 'resources', 'pi-agent-server', 'index.js'),
     join(hostRuntime.appRootPath, 'resources', 'pi-agent-server', 'index.js'),
+    hostRuntime.resourcesPath ? join(hostRuntime.resourcesPath, 'app', 'dist', 'resources', 'pi-agent-server', 'index.js') : '',
     hostRuntime.resourcesPath ? join(hostRuntime.resourcesPath, 'pi-agent-server', 'index.js') : '',
   ].filter(Boolean) as string[];
 
