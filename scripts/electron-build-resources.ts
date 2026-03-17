@@ -2,7 +2,7 @@
  * Cross-platform resources copy script
  */
 
-import { existsSync, cpSync, copyFileSync, mkdirSync } from "fs";
+import { existsSync, cpSync, copyFileSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 
@@ -23,15 +23,12 @@ if (existsSync(srcDir)) {
 type McpServerName = "bridge-mcp-server" | "session-mcp-server" | "pi-agent-server";
 
 function syncMcpServer(server: McpServerName): void {
-  const preferredBuiltPath = join(ROOT_DIR, "packages", server, "dist", "index.js");
-  const fallbackResourcePath = join(ELECTRON_DIR, "resources", server, "index.js");
-  const sourcePath = existsSync(preferredBuiltPath)
-    ? preferredBuiltPath
-    : existsSync(fallbackResourcePath)
-      ? fallbackResourcePath
-      : null;
+  const preferredBuiltDir = join(ROOT_DIR, "packages", server, "dist");
+  const preferredBuiltPath = join(preferredBuiltDir, "index.js");
+  const fallbackResourceDir = join(ELECTRON_DIR, "resources", server);
+  const fallbackResourcePath = join(fallbackResourceDir, "index.js");
 
-  if (!sourcePath) {
+  if (!existsSync(preferredBuiltPath) && !existsSync(fallbackResourcePath)) {
     if (server === "pi-agent-server") {
       console.warn(
         `[resources] Optional ${server}/index.js not found. PI provider will be unavailable until it is built.`
@@ -44,10 +41,19 @@ function syncMcpServer(server: McpServerName): void {
   }
 
   const targetDir = join(destDir, server);
+
+  if (existsSync(preferredBuiltDir)) {
+    rmSync(targetDir, { recursive: true, force: true });
+    mkdirSync(targetDir, { recursive: true });
+    cpSync(preferredBuiltDir, targetDir, { recursive: true, force: true });
+    console.log(`[resources] Synced ${server} dist/ from ${preferredBuiltDir}`);
+    return;
+  }
+
   mkdirSync(targetDir, { recursive: true });
   const targetPath = join(targetDir, "index.js");
-  copyFileSync(sourcePath, targetPath);
-  console.log(`[resources] Synced ${server}/index.js from ${sourcePath}`);
+  copyFileSync(fallbackResourcePath, targetPath);
+  console.log(`[resources] Synced ${server}/index.js from ${fallbackResourcePath}`);
 }
 
 function findNpmCommand(): string | null {
