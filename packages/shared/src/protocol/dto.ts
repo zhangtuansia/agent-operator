@@ -288,6 +288,27 @@ export interface SessionFilesChangedEvent {
   changedPath?: string
 }
 
+export type DocumentKind =
+  | 'workspace'
+  | 'download'
+  | 'attachment'
+  | 'plan'
+  | 'data'
+  | 'longResponse'
+  | 'note'
+
+export interface DocumentEntry {
+  id: string
+  name: string
+  path: string
+  scope: 'workspace' | 'session-artifact'
+  kind: DocumentKind
+  sessionId?: string
+  sessionName?: string
+  updatedAt: number
+  size?: number
+}
+
 export interface FileSearchResult {
   name: string
   path: string

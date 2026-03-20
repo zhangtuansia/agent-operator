@@ -58,6 +58,8 @@ export const getSidebarModeKey = (mode: SidebarMode): string => {
 export const parseSidebarModeKey = (key: string): SidebarMode | null => {
   if (key === 'sources') return { type: 'sources' }
   if (key === 'allChats') return { type: 'chats', filter: { kind: 'allChats' } }
+  if (key === 'unread') return { type: 'chats', filter: { kind: 'unread' } }
+  if (key === 'read') return { type: 'chats', filter: { kind: 'read' } }
   if (key === 'flagged') return { type: 'chats', filter: { kind: 'flagged' } }
   if (key.startsWith('state:')) {
     const stateId = key.slice(6)

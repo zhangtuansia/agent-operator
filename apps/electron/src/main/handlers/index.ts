@@ -5,6 +5,7 @@ import { registerBrowserHandlers } from './browser'
 import { registerFileOpsHandlers } from './file-ops'
 import { registerImHandlers } from './im'
 import { registerPermissionsHandlers } from './permissions'
+import { registerOpenTargetHandlers } from './open-targets'
 import { registerSourceHandlers } from './sources'
 import { registerSystemGuiHandlers } from './system'
 import { registerUiPreferenceGuiHandlers } from './ui-preferences'
@@ -33,6 +34,7 @@ export function registerGuiRpcHandlers(server: RpcServer, deps: HandlerDeps): vo
     })
   }
 
+  registerOpenTargetHandlers(server)
   registerSystemGuiHandlers(server)
   registerUiPreferenceGuiHandlers(server)
   registerSettingsGuiHandlers(server)

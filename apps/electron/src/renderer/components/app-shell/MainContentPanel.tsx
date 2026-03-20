@@ -25,6 +25,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isDocumentsNavigation,
   isAutomationsNavigation,
   type NavigationState,
 } from '@/contexts/NavigationContext'
@@ -34,6 +35,7 @@ import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { useLanguage } from '@/context/LanguageContext'
 import { AutomationInfoPage } from '@/components/automations/AutomationInfoPage'
+import { DocumentsWorkspace } from './DocumentsWorkspace'
 import { automationsAtom } from '@/atoms/automations'
 import type { ExecutionEntry } from '@/components/automations/types'
 
@@ -121,6 +123,16 @@ export function MainContentPanel({
     )
   }
 
+  // Documents navigator - workspace-scoped documents surface
+  if (isDocumentsNavigation(navState)) {
+    return wrapWithStoplight(
+      <DocumentsWorkspace
+        isFocusedMode={isFocusedMode}
+        navState={navState}
+      />
+    )
+  }
+
   // Automations navigator - show automation info or empty state
   if (isAutomationsNavigation(navState)) {
     if (navState.details) {
@@ -168,7 +180,11 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">
-            {navState.filter.kind === 'flagged'
+            {navState.filter.kind === 'unread'
+              ? t('emptyStates.noUnreadConversations')
+              : navState.filter.kind === 'read'
+                ? t('emptyStates.noReadConversations')
+              : navState.filter.kind === 'flagged'
               ? t('emptyStates.noFlaggedConversations')
               : navState.filter.kind === 'archived'
                 ? t('emptyStates.noArchivedConversations')

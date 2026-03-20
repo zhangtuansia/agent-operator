@@ -47,7 +47,7 @@ export interface DetailsProps {
  */
 export interface NavigationData {
   /** All sessions in the current filter */
-  sessions: Array<{ id: string; isFlagged?: boolean; stateId?: string }>
+  sessions: Array<{ id: string; isFlagged?: boolean; stateId?: string; hasUnread?: boolean }>
   /** All sources */
   sources: Array<{ slug: string }>
   /** Current chat filter (if in chats mode) */
@@ -80,7 +80,7 @@ export type NavigatorType = 'chats' | 'sources' | 'settings'
 /**
  * Chat filter kinds that map to sidebar routes
  */
-export type ChatFilterKind = 'allChats' | 'flagged' | 'state'
+export type ChatFilterKind = 'allChats' | 'unread' | 'read' | 'flagged' | 'state'
 
 // =============================================================================
 // Details Page Metadata
@@ -135,8 +135,17 @@ export const NavigationRegistry = {
 
       let filtered = ctx.sessions
       switch (filter.kind) {
+        case 'unread':
+          filtered = ctx.sessions.filter(s => (s as { hasUnread?: boolean }).hasUnread === true)
+          break
+        case 'read':
+          filtered = ctx.sessions.filter(s => (s as { hasUnread?: boolean }).hasUnread !== true)
+          break
         case 'flagged':
           filtered = ctx.sessions.filter(s => s.isFlagged)
+          break
+        case 'archived':
+          filtered = []
           break
         case 'state':
           filtered = ctx.sessions.filter(s => s.stateId === filter.stateId)

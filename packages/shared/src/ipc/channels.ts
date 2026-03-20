@@ -99,6 +99,7 @@ export const IPC_CHANNELS = {
   WATCH_SESSION_FILES: 'sessions:watchFiles',      // Start watching session directory
   UNWATCH_SESSION_FILES: 'sessions:unwatchFiles',  // Stop watching
   SESSION_FILES_CHANGED: 'sessions:filesChanged',  // Event: main → renderer
+  DOCUMENTS_LIST: 'documents:list',
 
   // Theme
   GET_SYSTEM_THEME: 'theme:getSystemPreference',
@@ -126,6 +127,9 @@ export const IPC_CHANNELS = {
   OPEN_URL: 'shell:openUrl',
   OPEN_FILE: 'shell:openFile',
   SHOW_IN_FOLDER: 'shell:showInFolder',
+  OPEN_TARGETS_LIST: 'shell:listOpenTargets',
+  OPEN_FILE_WITH_TARGET: 'shell:openFileWithTarget',
+  SET_OPEN_TARGET_PREFERENCE: 'shell:setOpenTargetPreference',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',

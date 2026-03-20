@@ -9,9 +9,11 @@ import {
   ChevronRight,
   ChevronDown,
   Globe,
+  MessageCircleMore,
   MoreHorizontal,
   RotateCw,
   Flag,
+  FileText,
   ListFilter,
   ListTodo,
   Check,
@@ -29,6 +31,7 @@ import {
 import { McpIcon } from "../icons/McpIcon"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
+import { CircleDashed } from "../icons/TodoStateIcons"
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { cn, isHexColor } from "@/lib/utils"
@@ -60,6 +63,7 @@ import {
 } from "@/components/ui/collapsible"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
+import { DocumentsWorkspace } from "./DocumentsWorkspace"
 import { LeftSidebar } from "./LeftSidebar"
 import { TopBar } from "./TopBar"
 import { PanelStackContainer } from "./PanelStackContainer"
@@ -153,6 +157,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isDocumentsNavigation,
   isAutomationsNavigation,
   type NavigationState,
   type ChatFilter,
@@ -410,6 +415,8 @@ function AppShellContent({
     : null
 
   const showSessionListPanel = !isFocusedMode
+  const isDocumentsLayout = isDocumentsNavigation(navState)
+  const showNavigatorPane = showSessionListPanel && !isDocumentsLayout
 
   // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
   const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
@@ -872,6 +879,14 @@ function AppShellContent({
     () => getDisplayedSessionCount(activeSessionMetas.filter(s => s.isFlagged)),
     [activeSessionMetas]
   )
+  const unreadCount = useMemo(
+    () => getDisplayedSessionCount(activeSessionMetas.filter(s => s.hasUnread)),
+    [activeSessionMetas]
+  )
+  const readCount = useMemo(
+    () => getDisplayedSessionCount(activeSessionMetas.filter(s => !s.hasUnread)),
+    [activeSessionMetas]
+  )
 
   // Count imported sessions by source
   const openaiCount = workspaceSessionMetas.filter(s => s.labels?.includes('imported:openai')).length
@@ -921,21 +936,6 @@ function AppShellContent({
     return counts
   }, [workspaceSessionMetas, labelConfigs])
 
-  // Count sessions by individual todo state (dynamic based on todoStates)
-  const todoStateCounts = useMemo(() => {
-    const counts: Record<SessionStatusId, number> = {}
-    // Initialize counts for all dynamic statuses
-    for (const state of todoStates) {
-      counts[state.id] = 0
-    }
-    for (const state of todoStates) {
-      counts[state.id] = getDisplayedSessionCount(
-        workspaceSessionMetas.filter(s => !s.isArchived && (s.todoState || 'todo') === state.id)
-      )
-    }
-    return counts
-  }, [workspaceSessionMetas, todoStates])
-
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
     // When in sources mode, return empty (no sessions to show)
@@ -952,6 +952,12 @@ function AppShellContent({
       case 'allChats':
         // "All Chats" - shows all non-archived sessions
         result = pool
+        break
+      case 'unread':
+        result = pool.filter(s => s.hasUnread)
+        break
+      case 'read':
+        result = pool.filter(s => !s.hasUnread)
         break
       case 'archived':
         // "Archived" - shows only archived sessions (use unfiltered list)
@@ -1006,8 +1012,8 @@ function AppShellContent({
         result = pool
     }
 
-    // Apply secondary filter by todo states if any are selected (only in allChats view)
-    if (chatFilter.kind === 'allChats' && listFilter.size > 0) {
+    // Apply secondary filter by workflow status in chat list views.
+    if ((chatFilter.kind === 'allChats' || chatFilter.kind === 'unread' || chatFilter.kind === 'read') && listFilter.size > 0) {
       result = result.filter(s => listFilter.has((s.todoState || 'todo') as SessionStatusId))
     }
 
@@ -1148,6 +1154,14 @@ function AppShellContent({
     navigate(routes.view.allChats())
   }, [navigate])
 
+  const handleUnreadClick = useCallback(() => {
+    navigate(routes.view.unread())
+  }, [navigate])
+
+  const handleReadClick = useCallback(() => {
+    navigate(routes.view.read())
+  }, [navigate])
+
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
   }, [navigate])
@@ -1237,11 +1251,6 @@ function AppShellContent({
     })
   }, [chatFilter, labelCounts, handleLabelClick, isExpanded, toggleExpanded, navigate, activeWorkspaceId])
 
-  // Handler for individual todo state views
-  const handleTodoStateClick = useCallback((stateId: SessionStatusId) => {
-    navigate(routes.view.state(stateId))
-  }, [navigate])
-
   // Handler for sources view
   const handleSourcesClick = useCallback(() => {
     navigate(routes.view.sources())
@@ -1263,6 +1272,11 @@ function AppShellContent({
   // Handler for skills view
   const handleSkillsClick = useCallback(() => {
     navigate(routes.view.skills())
+  }, [navigate])
+
+  // Handler for documents view
+  const handleDocumentsClick = useCallback(() => {
+    navigate(routes.view.documents())
   }, [navigate])
 
   // Handler for settings view
@@ -1509,11 +1523,10 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // Sessions section: all sessions with nested statuses, flagged, and archived
+    // Sessions section: all sessions with read/unread primary categories
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
-    for (const state of todoStates) {
-      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
-    }
+    result.push({ id: 'nav:unread', type: 'nav', action: handleUnreadClick })
+    result.push({ id: 'nav:read', type: 'nav', action: handleReadClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
     result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
 
@@ -1524,6 +1537,7 @@ function AppShellContent({
     for (const label of flattenLabels(labelConfigs)) {
       result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
     }
+    result.push({ id: 'nav:documents', type: 'nav', action: handleDocumentsClick })
     // Sources section (with sub-items)
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:sources:api', type: 'nav', action: handleSourcesApiClick })
@@ -1540,7 +1554,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, todoStates, labelConfigs, handleLabelClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleUnreadClick, handleReadClick, handleFlaggedClick, handleArchivedClick, labelConfigs, handleLabelClick, handleDocumentsClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1665,6 +1679,11 @@ function AppShellContent({
       return t('sidebar.skills')
     }
 
+    // Documents navigator
+    if (isDocumentsNavigation(navState)) {
+      return t('sidebar.documents')
+    }
+
     // Automations navigator
     if (isAutomationsNavigation(navState)) {
       if (!automationFilter) return t('sidebar.automations')
@@ -1683,6 +1702,10 @@ function AppShellContent({
     if (!chatFilter) return t('sessionList.allChats')
 
     switch (chatFilter.kind) {
+      case 'unread':
+        return t('sessionList.unread')
+      case 'read':
+        return t('sessionList.read')
       case 'flagged':
         return t('sessionList.flagged')
       case 'state':
@@ -1819,24 +1842,23 @@ function AppShellContent({
                             onConfigureStatuses: openConfigureStatuses,
                           },
                           items: [
-                            ...todoStates.map(state => ({
-                              id: `nav:state:${state.id}`,
-                              title: getTranslatedStatusLabel(state.id, state.label, t),
-                              label: String(todoStateCounts[state.id] || 0),
-                              icon: state.icon,
-                              iconColor: state.resolvedColor,
-                              iconColorable: state.iconColorable,
-                              variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                              onClick: () => handleTodoStateClick(state.id),
-                              contextMenu: {
-                                type: 'status' as const,
-                                statusId: state.id,
-                                onConfigureStatuses: openConfigureStatuses,
-                              },
-                              acceptsDrop: true,
-                              onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
-                            })),
-                            { id: "separator:states-flagged", type: "separator" as const },
+                            {
+                              id: "nav:unread",
+                              title: t('sessionList.unread'),
+                              label: String(unreadCount),
+                              icon: <CircleDashed className="h-3.5 w-3.5" />,
+                              variant: chatFilter?.kind === 'unread' ? "default" : "ghost",
+                              onClick: handleUnreadClick,
+                            },
+                            {
+                              id: "nav:read",
+                              title: t('sessionList.read'),
+                              label: String(readCount),
+                              icon: <MessageCircleMore className="h-3.5 w-3.5" />,
+                              variant: chatFilter?.kind === 'read' ? "default" : "ghost",
+                              onClick: handleReadClick,
+                            },
+                            { id: "separator:read-flagged", type: "separator" as const },
                             {
                               id: "nav:flagged",
                               title: t('sessionList.flagged'),
@@ -1871,6 +1893,13 @@ function AppShellContent({
                             onAddLabel: () => navigate(routes.view.settings('labels')),
                           },
                         }] : []),
+                        {
+                          id: "nav:documents",
+                          title: t('sidebar.documents'),
+                          icon: FileText,
+                          variant: (isDocumentsNavigation(navState) ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleDocumentsClick,
+                        },
                         { id: "separator:chats-sources", type: "separator" },
                         {
                           id: "nav:sources",
@@ -1993,14 +2022,14 @@ function AppShellContent({
               </div>
             </div>
           ) : undefined}
-          navigatorWidth={showSessionListPanel ? sessionListWidth : 0}
-          navigatorSlot={showSessionListPanel ? (
+          navigatorWidth={showNavigatorPane ? sessionListWidth : 0}
+          navigatorSlot={showNavigatorPane ? (
             <div className="h-full flex flex-col min-w-0 overflow-hidden">
               <PanelHeader
                 title={listTitle}
                 actions={
                   <>
-                    {chatFilter?.kind === 'allChats' && (
+                    {(chatFilter?.kind === 'allChats' || chatFilter?.kind === 'unread' || chatFilter?.kind === 'read') && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <HeaderIconButton
@@ -2164,6 +2193,10 @@ function AppShellContent({
                     onSessionSelect={(selectedMeta) => {
                       if (!chatFilter || chatFilter.kind === 'allChats') {
                         navigate(routes.view.allChats(selectedMeta.id))
+                      } else if (chatFilter.kind === 'unread') {
+                        navigate(routes.view.unread(selectedMeta.id))
+                      } else if (chatFilter.kind === 'read') {
+                        navigate(routes.view.read(selectedMeta.id))
                       } else if (chatFilter.kind === 'flagged') {
                         navigate(routes.view.flagged(selectedMeta.id))
                       } else if (chatFilter.kind === 'archived') {
@@ -2212,15 +2245,19 @@ function AppShellContent({
           contentSlot={
             <div className={cn(
               "h-full overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
-              isFocusedMode || !showSessionListPanel
-                ? (isRightSidebarVisible && shouldDockRightSidebar && !isFocusedMode ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-[14px]")
-                : (isRightSidebarVisible && shouldDockRightSidebar ? "rounded-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
+              isFocusedMode || !showNavigatorPane
+                ? (isRightSidebarVisible && shouldDockRightSidebar && !isFocusedMode && !isDocumentsLayout ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-[14px]")
+                : (isRightSidebarVisible && shouldDockRightSidebar && !isDocumentsLayout ? "rounded-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
             )}>
-              <MainContentPanel isFocusedMode={isFocusedMode} />
+              {isDocumentsLayout ? (
+                <DocumentsWorkspace isFocusedMode={isFocusedMode} navState={navState} />
+              ) : (
+                <MainContentPanel isFocusedMode={isFocusedMode} />
+              )}
             </div>
           }
           isSidebarAndNavigatorHidden={isFocusedMode}
-          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible}
+          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible && !isDocumentsLayout}
           isResizing={!!isResizing}
         />
 
@@ -2251,7 +2288,7 @@ function AppShellContent({
           </div>
         )}
 
-        {showSessionListPanel && (
+        {showNavigatorPane && (
           <div
             ref={sessionListHandleRef}
             onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -2285,7 +2322,7 @@ function AppShellContent({
         )}
 
           {/* Right Sidebar - Inline Mode (≥ 920px) */}
-          {!isFocusedMode && shouldDockRightSidebar && (
+          {!isFocusedMode && shouldDockRightSidebar && !isDocumentsLayout && (
             <>
               {/* Resize Handle */}
               {isRightSidebarVisible && (
@@ -2343,7 +2380,7 @@ function AppShellContent({
           )}
 
           {/* Right Sidebar - Overlay Mode (< 920px) */}
-          {!isFocusedMode && !shouldDockRightSidebar && (
+          {!isFocusedMode && !shouldDockRightSidebar && !isDocumentsLayout && (
             <AnimatePresence>
               {isRightSidebarVisible && (
                 <>

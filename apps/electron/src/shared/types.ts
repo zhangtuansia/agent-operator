@@ -99,6 +99,8 @@ export type {
   SessionFilesResult,
   SessionFileScope,
   SessionFilesChangedEvent,
+  DocumentEntry,
+  DocumentKind,
   // Plan types
   Plan,
   PlanStep,
@@ -168,6 +170,13 @@ export interface ToolIconMapping {
   /** Data URL of the icon (e.g., data:image/png;base64,...) */
   iconDataUrl: string
   commands: string[]
+}
+
+export interface OpenTargetInfo {
+  id: string
+  label: string
+  kind: 'editor' | 'terminal' | 'fileManager'
+  iconDataUrl: string | null
 }
 
 export interface BrowserInstanceInfo {
@@ -649,6 +658,9 @@ export interface ElectronAPI {
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>
   showInFolder(path: string): Promise<void>
+  listOpenTargets(path: string): Promise<{ targets: OpenTargetInfo[]; defaultTargetId: string | null }>
+  openFileWithTarget(targetId: string, path: string): Promise<void>
+  setOpenTargetPreference(targetId: string, path?: string): Promise<void>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
@@ -792,6 +804,7 @@ export interface ElectronAPI {
   getAllDrafts(): Promise<Record<string, string>>
 
   // Session Info Panel
+  listDocuments(workspaceId: string): Promise<DocumentEntry[]>
   getSessionFiles(sessionId: string): Promise<SessionFilesResult>
   getSessionFilesByScope(sessionId: string, scope: SessionFileScope): Promise<SessionFile[]>
   getSessionNotes(sessionId: string): Promise<string>
@@ -1024,6 +1037,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is documents navigation
+ */
+export const isDocumentsNavigation = (
+  state: NavigationState
+): state is Extract<NavigationState, { navigator: 'documents' }> => state.navigator === 'documents'
+
+/**
  * Type guard to check if state is automations navigation
  */
 export const isAutomationsNavigation = (
@@ -1054,6 +1074,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'documents') {
+    if (state.details) {
+      return `documents/document/${state.details.documentId}`
+    }
+    return 'documents'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -1103,6 +1129,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     return { navigator: 'skills', details: null }
   }
 
+  // Handle documents
+  if (key === 'documents') return { navigator: 'documents', details: null }
+  if (key.startsWith('documents/document/')) {
+    const documentId = key.slice(19)
+    if (documentId) {
+      return { navigator: 'documents', details: { type: 'document', documentId } }
+    }
+    return { navigator: 'documents', details: null }
+  }
+
   // Handle automations
   if (key === 'automations') return { navigator: 'automations', details: null }
   if (key.startsWith('automations/automation/')) {
@@ -1127,6 +1163,8 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   const parseChatsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
     let filter: ChatFilter
     if (filterKey === 'allChats') filter = { kind: 'allChats' }
+    else if (filterKey === 'unread') filter = { kind: 'unread' }
+    else if (filterKey === 'read') filter = { kind: 'read' }
     else if (filterKey === 'flagged') filter = { kind: 'flagged' }
     else if (filterKey.startsWith('state:')) {
       const stateId = filterKey.slice(6)

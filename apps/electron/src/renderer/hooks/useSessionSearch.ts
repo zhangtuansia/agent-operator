@@ -174,6 +174,12 @@ export function sessionMatchesCurrentFilter(
     case 'allChats':
       return session.isArchived !== true
 
+    case 'unread':
+      return session.hasUnread === true && session.isArchived !== true
+
+    case 'read':
+      return session.hasUnread !== true && session.isArchived !== true
+
     case 'flagged':
       return session.isFlagged === true && session.isArchived !== true
 

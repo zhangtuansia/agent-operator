@@ -97,6 +97,14 @@ export const routes = {
     flagged: (sessionId?: string) =>
       sessionId ? `flagged/chat/${sessionId}` as const : 'flagged' as const,
 
+    /** Unread view (chats navigator, unread filter) */
+    unread: (sessionId?: string) =>
+      sessionId ? `unread/chat/${sessionId}` as const : 'unread' as const,
+
+    /** Read view (chats navigator, read filter) */
+    read: (sessionId?: string) =>
+      sessionId ? `read/chat/${sessionId}` as const : 'read' as const,
+
     /** Archived view (chats navigator, archived filter) */
     archived: (sessionId?: string) =>
       sessionId ? `archived/chat/${sessionId}` as const : 'archived' as const,
@@ -146,6 +154,12 @@ export const routes = {
       skillSlug
         ? `skills/skill/${skillSlug}` as const
         : 'skills' as const,
+
+    /** Documents view (documents navigator) */
+    documents: (documentId?: string) =>
+      documentId
+        ? `documents/document/${documentId}` as const
+        : 'documents' as const,
 
     /** Settings view (settings navigator) */
     settings: (subpage?: SettingsSubpage) =>

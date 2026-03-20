@@ -369,6 +369,27 @@ export interface SessionFilesChangedEvent {
   changedPath?: string
 }
 
+export type DocumentKind =
+  | 'workspace'
+  | 'download'
+  | 'attachment'
+  | 'plan'
+  | 'data'
+  | 'longResponse'
+  | 'note'
+
+export interface DocumentEntry {
+  id: string
+  name: string
+  path: string
+  scope: 'workspace' | 'session-artifact'
+  kind: DocumentKind
+  sessionId?: string
+  sessionName?: string
+  updatedAt: number
+  size?: number
+}
+
 // =============================================================================
 // Plan Types
 // =============================================================================
@@ -458,6 +479,8 @@ export type RightSidebarPanel =
 /**
  * Chat filter options - determines which sessions to show
  * - 'allChats': All sessions regardless of status
+ * - 'unread': Sessions with unread messages
+ * - 'read': Sessions without unread messages
  * - 'flagged': Only flagged sessions
  * - 'state': Sessions with specific status ID
  * - 'label': Sessions with specific label (includes descendants via tree hierarchy)
@@ -468,6 +491,8 @@ export type RightSidebarPanel =
  */
 export type ChatFilter =
   | { kind: 'allChats' }
+  | { kind: 'unread' }
+  | { kind: 'read' }
   | { kind: 'flagged' }
   | { kind: 'archived' }
   | { kind: 'state'; stateId: string }
@@ -537,6 +562,17 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Documents navigation state - placeholder navigator for future documents surface
+ */
+export interface DocumentsNavigationState {
+  navigator: 'documents'
+  /** Selected document details, or null for empty state */
+  details: { type: 'document'; documentId: string } | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Automation type filter for automations navigation
  */
 export interface AutomationFilter {
@@ -570,6 +606,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | DocumentsNavigationState
   | AutomationsNavigationState
 
 // =============================================================================

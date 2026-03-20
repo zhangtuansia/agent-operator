@@ -108,6 +108,9 @@ export const CHANNEL_MAP = {
   openUrl: invoke(IPC_CHANNELS.OPEN_URL),
   openFile: invoke(IPC_CHANNELS.OPEN_FILE),
   showInFolder: invoke(IPC_CHANNELS.SHOW_IN_FOLDER),
+  listOpenTargets: invoke(IPC_CHANNELS.OPEN_TARGETS_LIST),
+  openFileWithTarget: invoke(IPC_CHANNELS.OPEN_FILE_WITH_TARGET),
+  setOpenTargetPreference: invoke(IPC_CHANNELS.SET_OPEN_TARGET_PREFERENCE),
 
   // Menu event listeners
   onMenuNewChat: listener(IPC_CHANNELS.MENU_NEW_CHAT),
@@ -255,6 +258,7 @@ export const CHANNEL_MAP = {
   getAllDrafts: invoke(IPC_CHANNELS.DRAFTS_GET_ALL),
 
   // Session Info Panel
+  listDocuments: invoke(IPC_CHANNELS.DOCUMENTS_LIST),
   getSessionFiles: invoke(IPC_CHANNELS.GET_SESSION_FILES),
   getSessionFilesByScope: invoke(IPC_CHANNELS.GET_SESSION_FILES_BY_SCOPE),
   getSessionNotes: invoke(IPC_CHANNELS.GET_SESSION_NOTES),

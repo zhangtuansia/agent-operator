@@ -119,6 +119,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     lastMessageAt: session.lastMessageAt,
     isProcessing: session.isProcessing,
     isFlagged: session.isFlagged,
+    hasUnread: session.hasUnread,
     lastReadMessageId: session.lastReadMessageId,
     workingDirectory: session.workingDirectory,
     enabledSourceSlugs: session.enabledSourceSlugs,

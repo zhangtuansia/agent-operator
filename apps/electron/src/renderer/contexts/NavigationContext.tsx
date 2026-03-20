@@ -57,6 +57,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isDocumentsNavigation,
   isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
@@ -79,7 +80,7 @@ export type { Route }
 export type { NavigationState, ChatFilter }
 /** @deprecated Use ChatFilter — aliased for OSS component compatibility */
 export type SessionFilter = ChatFilter
-export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation }
+export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isDocumentsNavigation, isAutomationsNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -166,12 +167,22 @@ export function NavigationProvider({
         switch (filter.kind) {
           case 'allChats':
             return true
+          case 'unread':
+            return session.hasUnread === true
+          case 'read':
+            return session.hasUnread !== true
           case 'flagged':
             return session.isFlagged === true
+          case 'archived':
+            return session.isArchived === true
           case 'state':
             return session.todoState === filter.stateId
           case 'imported':
             return session.labels?.includes(`imported:${filter.source}`) ?? false
+          case 'scheduled':
+            return session.labels?.some((label) => label.startsWith('scheduled:')) ?? false
+          case 'scheduledTask':
+            return session.labels?.includes(`scheduled:${filter.taskId}`) ?? false
           default:
             return false
         }
@@ -715,6 +726,10 @@ export function NavigationProvider({
     switch (filter.kind) {
       case 'allChats':
         return routes.view.allChats(sessionId)
+      case 'unread':
+        return routes.view.unread(sessionId)
+      case 'read':
+        return routes.view.read(sessionId)
       case 'flagged':
         return routes.view.flagged(sessionId)
       case 'archived':

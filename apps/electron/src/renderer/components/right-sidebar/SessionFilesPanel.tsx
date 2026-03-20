@@ -693,25 +693,25 @@ export function SessionFilesPanel({
     onFileSelect?.(undefined)
   }, [onFileSelect])
 
-  // No session selected
-  if (!sessionId) {
-    return (
-      <div className="h-full flex flex-col">
-        {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
-        <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
-          <p className="text-sm text-center">{t('fileViewer.noFileSelected')}</p>
-        </div>
-      </div>
-    )
-  }
-
-  // File selected - show preview
+  // File selected - show preview (sessionId is optional; without it we skip live file watching)
   if (selectedPath) {
     return (
       <div className="h-full flex flex-col">
         {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
         <div className="flex-1 min-h-0 overflow-hidden">
           <FileViewer sessionId={sessionId} filePath={selectedPath} onBack={handleBack} />
+        </div>
+      </div>
+    )
+  }
+
+  // No session selected and no external filePath to preview
+  if (!sessionId) {
+    return (
+      <div className="h-full flex flex-col">
+        {!hideHeader && <PanelHeader title={t('chatInfo.files')} actions={closeButton} />}
+        <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
+          <p className="text-sm text-center">{t('fileViewer.noFileSelected')}</p>
         </div>
       </div>
     )

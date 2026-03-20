@@ -648,6 +648,17 @@ export function SessionList({
       )
     }
 
+    if (currentFilter?.kind === 'unread' || currentFilter?.kind === 'read') {
+      return (
+        <EntityListEmptyScreen
+          icon={<Inbox />}
+          title={currentFilter.kind === 'unread' ? t('sessionList.noUnreadSessions') : t('sessionList.noReadSessions')}
+          description={currentFilter.kind === 'unread' ? t('sessionList.noUnreadSessionsDescription') : t('sessionList.noReadSessionsDescription')}
+          className="h-full"
+        />
+      )
+    }
+
     return (
       <EntityListEmptyScreen
         icon={<Inbox />}

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, copyFileSync, readdirSync as readdirSyncFs } from 'fs';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, resolve } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
@@ -77,6 +77,11 @@ export interface ProviderConfig {
   customModels?: CustomModelDefinition[];  // User-defined model list
 }
 
+export interface OpenTargetPreferences {
+  global?: string;
+  perPath?: Record<string, string>;
+}
+
 /**
  * Agent type - which AI backend to use
  */
@@ -114,6 +119,8 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Network proxy
   networkProxy?: NetworkProxySettings;
+  // Preferred app target for "open with" actions
+  openTargetPreferences?: OpenTargetPreferences;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -2281,6 +2288,71 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+function normalizeOpenTargetPreferences(
+  preferences: OpenTargetPreferences | undefined,
+): OpenTargetPreferences | undefined {
+  if (!preferences) return undefined;
+
+  const normalizedGlobal = preferences.global?.trim() || undefined;
+  const perPathEntries = Object.entries(preferences.perPath ?? {})
+    .map(([path, targetId]) => [toPortablePath(resolve(expandPath(path))), targetId.trim()] as const)
+    .filter(([path, targetId]) => Boolean(path && targetId));
+
+  const normalizedPerPath = perPathEntries.length > 0
+    ? Object.fromEntries(perPathEntries)
+    : undefined;
+
+  if (!normalizedGlobal && !normalizedPerPath) {
+    return undefined;
+  }
+
+  return {
+    ...(normalizedGlobal ? { global: normalizedGlobal } : {}),
+    ...(normalizedPerPath ? { perPath: normalizedPerPath } : {}),
+  };
+}
+
+export function getOpenTargetPreferences(): OpenTargetPreferences | undefined {
+  return normalizeOpenTargetPreferences(loadStoredConfig()?.openTargetPreferences);
+}
+
+export function getOpenTargetPreference(path?: string): string | null {
+  const preferences = getOpenTargetPreferences();
+  if (!preferences) return null;
+
+  if (path) {
+    const portablePath = toPortablePath(resolve(expandPath(path)));
+    const perPathTarget = preferences.perPath?.[portablePath];
+    if (perPathTarget) {
+      return perPathTarget;
+    }
+  }
+
+  return preferences.global ?? null;
+}
+
+export function setOpenTargetPreference(targetId: string, path?: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const nextPreferences = normalizeOpenTargetPreferences(config.openTargetPreferences) ?? {};
+  const normalizedTargetId = targetId.trim();
+  if (!normalizedTargetId) return;
+
+  if (path) {
+    const portablePath = toPortablePath(resolve(expandPath(path)));
+    nextPreferences.perPath = {
+      ...(nextPreferences.perPath ?? {}),
+      [portablePath]: normalizedTargetId,
+    };
+  } else {
+    nextPreferences.global = normalizedTargetId;
+  }
+
+  config.openTargetPreferences = normalizeOpenTargetPreferences(nextPreferences);
   saveConfig(config);
 }
 

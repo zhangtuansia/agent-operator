@@ -33,6 +33,7 @@ import {
   addSessionAtom,
   removeSessionAtom,
   updateSessionAtom,
+  updateSessionMetaAtom,
   sessionMetaMapAtom,
   windowWorkspaceIdAtom,
 } from '@/atoms/sessions'
@@ -73,6 +74,7 @@ export default function App() {
   const addSession = useSetAtom(addSessionAtom)
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
+  const updateSessionMetaDirect = useSetAtom(updateSessionMetaAtom)
   const store = useStore()
   const isOnline = useAtomValue(networkStatusAtom)
   const { t } = useTranslation()
@@ -422,19 +424,27 @@ export default function App() {
 
   const handleMarkSessionRead = useCallback((sessionId: string) => {
     // Find the session and compute the last final assistant message ID
+    const meta = store.get(sessionMetaMapAtom).get(sessionId)
+    updateSessionMetaDirect(sessionId, {
+      hasUnread: false,
+      lastReadMessageId: meta?.lastFinalMessageId,
+    })
     updateSessionById(sessionId, (s) => {
       const lastFinalId = s.messages.findLast(
         m => m.role === 'assistant' && !m.isIntermediate
       )?.id
-      return lastFinalId ? { lastReadMessageId: lastFinalId } : {}
+      return lastFinalId
+        ? { lastReadMessageId: lastFinalId, hasUnread: false }
+        : { hasUnread: false }
     })
     window.electronAPI.sessionCommand(sessionId, { type: 'markRead' })
-  }, [updateSessionById])
+  }, [store, updateSessionMetaDirect, updateSessionById])
 
   const handleMarkSessionUnread = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { lastReadMessageId: undefined })
+    updateSessionMetaDirect(sessionId, { lastReadMessageId: undefined, hasUnread: true })
+    updateSessionById(sessionId, { lastReadMessageId: undefined, hasUnread: true })
     window.electronAPI.sessionCommand(sessionId, { type: 'markUnread' })
-  }, [updateSessionById])
+  }, [updateSessionMetaDirect, updateSessionById])
 
   const handleTodoStateChange = useCallback((sessionId: string, state: TodoState) => {
     updateSessionById(sessionId, { todoState: state })
