@@ -327,6 +327,7 @@ export type ErrorCode =
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected request (e.g. malformed content)
   | 'image_too_large'        // Image exceeds size limit
+  | 'max_output_tokens'      // Response truncated due to max output tokens
   | 'unknown_error';
 
 /**

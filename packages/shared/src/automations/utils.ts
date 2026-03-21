@@ -6,17 +6,10 @@
  */
 
 import type { BaseEventPayload } from './event-bus.ts';
-import type {
-  AutomationEvent,
-  AutomationMatcher,
-  PromptReferences,
-  AgentEvent,
-  SdkAutomationInput,
-  PromptAction,
-  PendingPrompt,
-} from './types.ts';
+import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
 import { matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
+import { evaluateConditions } from './conditions.ts';
 
 // ============================================================================
 // String Utilities
@@ -82,45 +75,6 @@ export function parsePromptReferences(prompt: string): PromptReferences {
 }
 
 // ============================================================================
-// Prompt Expansion Utilities
-// ============================================================================
-
-/**
- * Expand prompt actions for a matcher into PendingPrompt entries.
- * Shared by app-event handlers and SDK hook execution so both paths stay aligned.
- */
-export function buildPendingPromptsForMatcher(
-  matcher: AutomationMatcher,
-  env: Record<string, string>,
-  sessionId?: string
-): PendingPrompt[] {
-  const pendingPrompts: PendingPrompt[] = [];
-
-  for (const action of matcher.actions) {
-    if (action.type !== 'prompt') continue;
-
-    const prompt = action as PromptAction;
-    const expandedPrompt = expandEnvVars(prompt.prompt, env);
-    const references = parsePromptReferences(expandedPrompt);
-    const expandedLabels = matcher.labels?.map(label => expandEnvVars(label, env));
-
-    pendingPrompts.push({
-      sessionId,
-      matcherId: matcher.id,
-      automationName: matcher.name,
-      prompt: expandedPrompt,
-      mentions: references.mentions,
-      labels: expandedLabels,
-      permissionMode: matcher.permissionMode,
-      llmConnection: prompt.llmConnection,
-      model: prompt.model,
-    });
-  }
-
-  return pendingPrompts;
-}
-
-// ============================================================================
 // Event Matching Utilities
 // ============================================================================
 
@@ -179,11 +133,22 @@ export function getMatchValueForSdkInput(event: AgentEvent, input: SdkAutomation
   }
 }
 
+export interface MatcherContext {
+  /** Precomputed value used for regex matching */
+  matchValue: string;
+  /** Payload used for condition evaluation */
+  payload: Record<string, unknown>;
+  /** Fallback timezone source for time conditions */
+  matcherTimezone?: string;
+}
+
 /**
- * Test if a matcher matches against a pre-computed match value.
- * Shared core: used by both event-bus matching (matcherMatches) and SDK matching (executeAgentEvent).
+ * Base matcher predicate (enabled flag + regex/cron). Intentionally internal.
+ *
+ * Do not call directly from feature code. Use matcherMatchesWithContext()/adapters
+ * so condition gating is never bypassed.
  */
-export function testMatcherAgainst(matcher: AutomationMatcher, event: AutomationEvent, matchValue: string): boolean {
+function matchesBasePredicate(matcher: AutomationMatcher, event: AutomationEvent, matchValue: string): boolean {
   if (matcher.enabled === false) return false;
   if (event === 'SchedulerTick') {
     return !!matcher.cron && matchesCron(matcher.cron, matcher.timezone);
@@ -197,10 +162,45 @@ export function testMatcherAgainst(matcher: AutomationMatcher, event: Automation
 }
 
 /**
- * Check if a matcher matches the given event and data (event-bus payloads).
+ * Canonical matcher evaluation pipeline used by all automation entry points.
+ */
+export function matcherMatchesWithContext(
+  matcher: AutomationMatcher,
+  event: AutomationEvent,
+  context: MatcherContext,
+): boolean {
+  if (!matchesBasePredicate(matcher, event, context.matchValue)) return false;
+
+  if (matcher.conditions?.length) {
+    return evaluateConditions(matcher.conditions, {
+      payload: context.payload,
+      matcherTimezone: context.matcherTimezone ?? matcher.timezone,
+    });
+  }
+
+  return true;
+}
+
+/**
+ * App-event adapter for canonical matcher evaluation.
  */
 export function matcherMatches(matcher: AutomationMatcher, event: AutomationEvent, data: Record<string, unknown>): boolean {
-  return testMatcherAgainst(matcher, event, getMatchValue(event, data));
+  return matcherMatchesWithContext(matcher, event, {
+    matchValue: getMatchValue(event, data),
+    payload: data,
+    matcherTimezone: matcher.timezone,
+  });
+}
+
+/**
+ * SDK agent-event adapter for canonical matcher evaluation.
+ */
+export function matcherMatchesSdk(matcher: AutomationMatcher, event: AgentEvent, input: SdkAutomationInput): boolean {
+  return matcherMatchesWithContext(matcher, event, {
+    matchValue: getMatchValueForSdkInput(event, input),
+    payload: input as unknown as Record<string, unknown>,
+    matcherTimezone: matcher.timezone,
+  });
 }
 
 // ============================================================================
@@ -218,8 +218,13 @@ export function cleanEnv(): Record<string, string> {
   );
 }
 
+/** Keys skipped when iterating payload fields for env vars */
 const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
 
+/**
+ * Build the base CRAFT_* environment variables shared by both prompt and webhook actions.
+ * Contains event info, session metadata, scheduler time, and payload fields (unsanitized).
+ */
 function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env: Record<string, string> = {
     CRAFT_EVENT: event,
@@ -230,6 +235,7 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
   if (payload.sessionName) env.CRAFT_SESSION_NAME = payload.sessionName;
   if (payload.workspaceId) env.CRAFT_WORKSPACE_ID = payload.workspaceId;
 
+  // Session metadata as JSON
   const sessionMetadata: Record<string, string> = {};
   if (payload.sessionId) sessionMetadata.id = payload.sessionId;
   if (payload.sessionName) sessionMetadata.name = payload.sessionName;
@@ -237,12 +243,14 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
     env.CRAFT_SESSION_METADATA = JSON.stringify(sessionMetadata);
   }
 
+  // Local time for scheduler events
   if (event === 'SchedulerTick') {
     const now = new Date();
     env.CRAFT_LOCAL_TIME = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
     env.CRAFT_LOCAL_DATE = now.toISOString().split('T')[0]!;
   }
 
+  // Payload fields as CRAFT_ vars (raw — callers apply sanitization if needed)
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
@@ -253,30 +261,47 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
 }
 
 /**
- * Build environment variables from an event payload.
- * Sanitizes user-controlled values using sanitizeForShell.
+ * Build environment variables from an event payload for prompt/command actions.
+ * Includes full process.env and sanitizes user-controlled values for shell safety.
  */
 export function buildEnvFromPayload(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
-  const env: Record<string, string> = {
-    ...cleanEnv(),
-    ...buildBaseEventEnv(event, payload),
-  };
+  const base = buildBaseEventEnv(event, payload);
+  const env: Record<string, string> = { ...cleanEnv(), ...base };
 
+  // Sanitize session name for shell context
   if (payload.sessionName) env.CRAFT_SESSION_NAME = sanitizeForShell(payload.sessionName);
 
+  // Sanitize payload field values for shell context
   for (const [key, value] of Object.entries(payload)) {
     if (PAYLOAD_SKIP_KEYS.has(key)) continue;
     const envKey = `CRAFT_${toSnakeCase(key).toUpperCase()}`;
-    const sanitized = typeof value === 'string' ? sanitizeForShell(value) : String(value);
-    env[envKey] = sanitized;
+    env[envKey] = typeof value === 'string' ? sanitizeForShell(value) : String(value);
   }
 
   return env;
 }
 
+/**
+ * Build environment variables for webhook actions.
+ *
+ * Unlike buildEnvFromPayload (used by prompt actions), this:
+ * - Does NOT spread process.env (no secret leakage)
+ * - Does NOT apply shell sanitization (irrelevant for HTTP context)
+ * - Only injects CRAFT_WH_* user-defined vars from process.env (webhook secrets)
+ * - Includes CRAFT_* system vars derived from the event payload
+ *
+ * Users set webhook secrets in their shell profile:
+ *   export CRAFT_WH_SLACK_URL="https://hooks.slack.com/services/T.../B.../xxx"
+ *   export CRAFT_WH_DISCORD_TOKEN="abc123"
+ *
+ * Then reference them in automations.json:
+ *   "url": "${CRAFT_WH_SLACK_URL}"
+ *   "headers": { "Authorization": "Bearer ${CRAFT_WH_DISCORD_TOKEN}" }
+ */
 export function buildWebhookEnv(event: AutomationEvent, payload: BaseEventPayload): Record<string, string> {
   const env = buildBaseEventEnv(event, payload);
 
+  // User-defined webhook secrets: only CRAFT_WH_* from process.env
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith('CRAFT_WH_') && value !== undefined) {
       env[key] = value;

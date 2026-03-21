@@ -80,9 +80,11 @@ export {
   type ThinkingLevelDefinition,
   THINKING_LEVELS,
   DEFAULT_THINKING_LEVEL,
+  THINKING_TO_EFFORT,
   getThinkingTokens,
   getThinkingLevelName,
   isValidThinkingLevel,
+  normalizeThinkingLevel,
 } from './thinking-levels.ts';
 
 // Export permissions-config - customizable permissions per workspace/source (permissions.json)

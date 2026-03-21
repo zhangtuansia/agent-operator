@@ -919,6 +919,7 @@ export default function AiSettingsPage() {
       await refreshLlmConnections?.()
       closeConnectionDialog()
     } catch (error) {
+      console.error('[AiSettingsPage] Error saving connection:', error)
       setConnectionFormError(error instanceof Error ? error.message : t('common.error'))
     } finally {
       setIsSavingConnection(false)
@@ -1009,7 +1010,8 @@ export default function AiSettingsPage() {
           setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
         }, 5000)
       }
-    } catch {
+    } catch (error) {
+      console.error('[AiSettingsPage] Error validating connection:', error)
       setValidationStates(prev => ({
         ...prev,
         [slug]: { state: 'error', error: t('apiSettings.aiPage.validationFailed') }

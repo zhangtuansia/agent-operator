@@ -160,6 +160,7 @@ export const RPC_CHANNELS = {
     LIST_WITH_STATUS: 'LLM_Connection:listWithStatus',
     GET: 'LLM_Connection:get',
     GET_API_KEY: 'LLM_Connection:getApiKey',
+    SET_API_KEY: 'LLM_Connection:setApiKey',
     SAVE: 'LLM_Connection:save',
     DELETE: 'LLM_Connection:delete',
     TEST: 'LLM_Connection:test',

@@ -7,7 +7,7 @@
     "colorTheme": "default"
   },
   "workspaceDefaults": {
-    "thinkingLevel": "think",
+    "thinkingLevel": "medium",
     "permissionMode": "ask",
     "cyclablePermissionModes": ["safe", "ask", "allow-all"],
     "localMcpServers": {

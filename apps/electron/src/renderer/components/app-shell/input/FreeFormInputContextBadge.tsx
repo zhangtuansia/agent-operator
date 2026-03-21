@@ -31,6 +31,8 @@ export interface FreeFormInputContextBadgeProps {
   buttonRef?: React.RefObject<HTMLButtonElement>
   /** Data attribute for tutorials */
   'data-tutorial'?: string
+  /** Accessibility label */
+  'aria-label'?: string
 }
 
 /**
@@ -58,6 +60,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       collapsedLabelClassName = "max-w-[140px]",
       buttonRef,
       'data-tutorial': dataTutorial,
+      'aria-label': ariaLabel,
     },
     ref
   ) {
@@ -74,6 +77,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
         onClick={onClick}
         disabled={disabled}
         data-tutorial={dataTutorial}
+        aria-label={ariaLabel}
         className={cn(
           // Base styles
           "inline-flex items-center gap-1.5 h-7 rounded-[6px] text-[13px] text-foreground transition-colors",

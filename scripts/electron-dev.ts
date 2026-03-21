@@ -328,6 +328,27 @@ async function main(): Promise<void> {
 
   console.log("✅ Initial build complete and verified\n");
 
+  // Build pi-agent-server if not already built
+  const piServerDist = join(ROOT_DIR, "packages/pi-agent-server/dist/index.js");
+  if (!existsSync(piServerDist)) {
+    console.log("🔨 Building pi-agent-server...");
+    const piResult = spawn({
+      cmd: ["bun", "run", "build"],
+      cwd: join(ROOT_DIR, "packages/pi-agent-server"),
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    await piResult.exited;
+    if (piResult.exitCode !== 0) {
+      console.error("❌ pi-agent-server build failed");
+      process.exit(1);
+    }
+    console.log("✅ pi-agent-server built\n");
+  } else {
+    console.log("✅ pi-agent-server already built\n");
+  }
+
   // =========================================================
   // PHASE 2: Start dev servers with watch mode
   // =========================================================

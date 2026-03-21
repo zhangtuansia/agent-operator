@@ -111,14 +111,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId, session])
 
-  // Mark session as read when displayed (not processing)
-  const currentSessionId = session?.id
-  const currentSessionProcessing = session?.isProcessing ?? false
-  React.useEffect(() => {
-    if (currentSessionId && !currentSessionProcessing) {
-      onMarkSessionRead(currentSessionId)
-    }
-  }, [currentSessionId, currentSessionProcessing, onMarkSessionRead])
+  // Mark-as-read is now handled by ChatDisplay (delay + scroll-to-bottom detection)
 
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(sessionId)
@@ -636,6 +629,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}
             connectionUnavailable={connectionUnavailable}
+            hasUnread={session?.hasUnread}
+            onMarkAsRead={() => onMarkSessionRead(sessionId)}
           />
         </div>
       </div>

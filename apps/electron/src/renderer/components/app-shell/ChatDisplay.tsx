@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Info,
   PenLine,
+  RotateCcw,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -180,6 +181,10 @@ interface ChatDisplayProps {
   emptyStateLabel?: string
   /** When true, the session connection was removed and input should be disabled */
   connectionUnavailable?: boolean
+  /** Whether this session has unread messages */
+  hasUnread?: boolean
+  /** Callback to mark this session as read */
+  onMarkAsRead?: () => void
 }
 
 /**
@@ -206,7 +211,7 @@ export function ChatDisplay({
   pendingCredential,
   onRespondToCredential,
   // Thinking level
-  thinkingLevel = 'think',
+  thinkingLevel = 'medium',
   onThinkingLevelChange,
   // Advanced options
   ultrathinkEnabled = false,
@@ -248,6 +253,8 @@ export function ChatDisplay({
   compactMode = false,
   emptyStateLabel,
   connectionUnavailable = false,
+  hasUnread = false,
+  onMarkAsRead,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -269,6 +276,30 @@ export function ChatDisplay({
   const skipSmoothScrollUntilRef = React.useRef(0)
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
+
+  // Mark-as-read: delayed (5s) + scroll-to-bottom detection
+  const markedAsReadRef = React.useRef(false)
+  const mountTimeRef = React.useRef(0)
+  const markReadTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const sessionId = session?.id
+  const isProcessing = session?.isProcessing ?? false
+
+  React.useEffect(() => {
+    markedAsReadRef.current = false
+    mountTimeRef.current = Date.now()
+    clearTimeout(markReadTimerRef.current)
+
+    if (!hasUnread || !onMarkAsRead || isProcessing) return
+
+    markReadTimerRef.current = setTimeout(() => {
+      if (!markedAsReadRef.current) {
+        markedAsReadRef.current = true
+        onMarkAsRead()
+      }
+    }, 5000)
+
+    return () => clearTimeout(markReadTimerRef.current)
+  }, [sessionId, hasUnread, onMarkAsRead, isProcessing])
 
   // Get isDark from useTheme hook for overlay theme
   // This accounts for scenic themes (like Haze) that force dark mode
@@ -470,7 +501,20 @@ export function ChatDisplay({
         return prev + TURNS_PER_PAGE
       })
     }
-  }, [])
+
+    // User manually scrolled to bottom → mark as read immediately
+    // Skip first 1 second after mount to ignore auto-scroll from ScrollOnMount
+    if (
+      hasUnread && onMarkAsRead &&
+      !markedAsReadRef.current &&
+      isStickToBottomRef.current &&
+      Date.now() - mountTimeRef.current > 1000
+    ) {
+      markedAsReadRef.current = true
+      clearTimeout(markReadTimerRef.current)
+      onMarkAsRead()
+    }
+  }, [hasUnread, onMarkAsRead])
 
   // Set up scroll event listener
   React.useEffect(() => {
@@ -1057,6 +1101,22 @@ export function ChatDisplay({
                     // System turns (error, status, info, warning) - render with MemoizedMessageBubble
                     if (turn.type === 'system') {
                       const turnRefId = `system-${turn.message.id}`
+                      // For error messages, find the last user message to enable retry
+                      const retryHandler = turn.message.role === 'error' ? (() => {
+                        // Walk backwards through allTurns to find the most recent user message
+                        const turnIdx = allTurns.indexOf(turn)
+                        for (let i = turnIdx - 1; i >= 0; i--) {
+                          const prevTurn = allTurns[i]
+                          if (prevTurn.type === 'user') {
+                            onSendMessage(
+                              prevTurn.message.content,
+                              prevTurn.message.attachments as FileAttachment[] | undefined,
+                              prevTurn.message.skillSlugs,
+                            )
+                            return
+                          }
+                        }
+                      }) : undefined
                       return (
                         <div
                           key={turnRefId}
@@ -1069,6 +1129,7 @@ export function ChatDisplay({
                             message={turn.message}
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
+                            onRetry={retryHandler}
                           />
                         </div>
                       )
@@ -1538,15 +1599,20 @@ interface MessageBubbleProps {
    * Callback to pop out message into a separate window
    */
   onPopOut?: (message: Message) => void
+  /**
+   * Callback to retry the last user message after an error
+   */
+  onRetry?: () => void
 }
 
 /**
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
-function ErrorMessage({ message }: { message: Message }) {
+function ErrorMessage({ message, onRetry }: { message: Message; onRetry?: () => void }) {
   const { t } = useLanguage()
   const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
   const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const canRetry = message.errorCanRetry !== false // default to true unless explicitly false
 
   return (
     // ml-3 aligns with TurnCard header left padding for visual consistency
@@ -1563,6 +1629,17 @@ function ErrorMessage({ message }: { message: Message }) {
           {message.errorTitle || t('chatDisplay.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
+
+        {/* Retry Button */}
+        {canRetry && onRetry && (
+          <button
+            onClick={onRetry}
+            className="mt-2 flex items-center gap-1.5 text-xs font-medium text-destructive/80 hover:text-destructive bg-destructive/5 hover:bg-destructive/10 rounded-md px-2.5 py-1.5 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>{t('chatDisplay.retry')}</span>
+          </button>
+        )}
 
         {/* Collapsible Details Toggle */}
         {hasDetails && (
@@ -1598,6 +1675,7 @@ function MessageBubble({
   onOpenUrl,
   renderMode = 'minimal',
   onPopOut,
+  onRetry,
 }: MessageBubbleProps) {
   const { t } = useLanguage()
 
@@ -1662,7 +1740,7 @@ function MessageBubble({
 
   // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return <ErrorMessage message={message} />
+    return <ErrorMessage message={message} onRetry={onRetry} />
   }
 
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
@@ -1719,7 +1797,7 @@ function MessageBubble({
       <div className="flex justify-start">
         <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
           <div className="text-xs text-info/50 mb-0.5 font-semibold">
-            Warning
+            {t('chatDisplay.warning')}
           </div>
           <p className="text-sm text-info">{message.content}</p>
         </div>

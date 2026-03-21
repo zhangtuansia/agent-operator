@@ -268,7 +268,7 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
             webhookDetails: e.webhook,
           })))
         })
-        .catch(() => {})
+        .catch((err) => { console.error('[Automation] Operation failed:', err) })
     })
     return () => { cleanup() }
   }, [activeWorkspaceId, automationId, automation?.event])
@@ -280,7 +280,7 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
       automation.event,
       automation.matcherIndex,
       !automation.enabled,
-    ).catch(() => {})
+    ).catch((err) => { console.error('[Automation] Operation failed:', err) })
   }, [automation, activeWorkspaceId])
 
   const handleTest = useCallback(() => {
@@ -291,19 +291,19 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
       actions: automation.actions,
       permissionMode: automation.permissionMode,
       labels: automation.labels,
-    }).catch(() => {})
+    }).catch((err) => { console.error('[Automation] Operation failed:', err) })
   }, [automation, activeWorkspaceId])
 
   const handleDuplicate = useCallback(() => {
     if (!automation || !activeWorkspaceId) return
     window.electronAPI.duplicateAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
-      .catch(() => {})
+      .catch((err) => { console.error('[Automation] Operation failed:', err) })
   }, [automation, activeWorkspaceId])
 
   const handleDelete = useCallback(() => {
     if (!automation || !activeWorkspaceId) return
     window.electronAPI.deleteAutomation(activeWorkspaceId, automation.event, automation.matcherIndex)
-      .catch(() => {})
+      .catch((err) => { console.error('[Automation] Operation failed:', err) })
   }, [automation, activeWorkspaceId])
 
   const handleReplay = useCallback((automationId: string, eventName: string) => {
@@ -326,7 +326,7 @@ function AutomationDetailView({ automationId }: { automationId: string }) {
           webhookDetails: e.webhook,
         })))
       })
-      .catch(() => {})
+      .catch((err) => { console.error('[Automation] Operation failed:', err) })
   }, [activeWorkspaceId, automation?.event])
 
   if (!automation) {

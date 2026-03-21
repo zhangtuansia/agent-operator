@@ -582,6 +582,13 @@ export interface BackendConfig {
    */
   piInterceptorPath?: string;
 
+  /**
+   * Pi auth provider identifier (e.g. 'openrouter', 'anthropic', 'google').
+   * Set from the LlmConnection's piAuthProvider field when using the Pi backend.
+   * Used by PiAgent to correctly route credentials to the Pi SDK.
+   */
+  piAuthProvider?: string;
+
   /** Callback when SDK session ID is captured/updated */
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;
 

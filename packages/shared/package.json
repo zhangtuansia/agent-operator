@@ -96,7 +96,7 @@
     "@agent-operator/codex-types": "workspace:*",
     "@agent-operator/mermaid": "workspace:*",
     "@agent-operator/session-tools-core": "workspace:*",
-    "@mariozechner/pi-agent-core": "0.55.0",
+    "@mariozechner/pi-agent-core": "^0.61.1",
     "@mariozechner/pi-ai": "^0.57.0",
     "@mariozechner/pi-coding-agent": "^0.56.3",
     "@isaacs/ttlcache": "^2.1.4",
@@ -109,7 +109,7 @@
     "shell-quote": "^1.8.3"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.72",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
     "@anthropic-ai/sdk": ">=0.70.0",
     "@modelcontextprotocol/sdk": ">=1.0.0",
     "@openai/codex-sdk": ">=0.80.0",

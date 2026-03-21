@@ -24,6 +24,7 @@ import type {
   LlmProviderType,
   LlmAuthType,
   PostInitResult,
+  AnthropicRuntime,
 } from './types.ts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -132,7 +133,7 @@ export function createBackend(config: BackendConfig): AgentBackend {
           debugMode: config.debugMode,
           systemPromptPreset: config.systemPromptPreset,
           automationSystem: config.automationSystem,
-        });
+        }) as unknown as AgentBackend;
       }
 
       // ClaudeAgent implements AgentBackend directly
@@ -181,6 +182,8 @@ export function createBackendFromResolvedContext(args: {
     providerType: context.connection?.providerType,
     authType: context.authType,
     connectionSlug: context.connection?.slug,
+    piAuthProvider: context.connection?.piAuthProvider,
+    baseUrl: context.connection?.baseUrl,
     workspace: coreConfig.workspace,
     session: coreConfig.session,
     model: context.resolvedModel,
@@ -297,6 +300,8 @@ export function resolveBackendSelection(args: {
       : agentType === 'pi'
         ? 'pi'
         : connection?.providerType === 'bedrock'
+          ? 'pi'
+        : connection?.providerType === 'anthropic_compat'
           ? 'pi'
         : undefined;
 
@@ -495,6 +500,8 @@ export function createConfigFromConnection(
     providerType,
     authType: connection.authType,
     connectionSlug: connection.slug,
+    piAuthProvider: connection.piAuthProvider,
+    baseUrl: connection.baseUrl,
     // Use connection's default model if no model specified in baseConfig
     model: baseConfig.model || connection.defaultModel,
   };
@@ -694,6 +701,60 @@ export async function fetchBackendModels(args: {
     case 'bedrock':
     case 'vertex':
       throw new Error('Dynamic model discovery not available for Bedrock/Vertex; using fallback chain.');
+
+    case 'openai':
+    case 'codex': {
+      const apiKey = credentials.apiKey;
+      const oauthAccessToken = credentials.oauthAccessToken;
+      if (!apiKey && !oauthAccessToken) {
+        throw new Error('OpenAI credentials required to fetch models');
+      }
+
+      const baseUrl = (connection.baseUrl || 'https://api.openai.com').replace(/\/$/, '');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(`${baseUrl}/v1/models`, {
+          headers: {
+            authorization: `Bearer ${apiKey || oauthAccessToken}`,
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`OpenAI /v1/models failed: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json() as {
+          data?: Array<{ id: string; created: number; owned_by: string }>;
+        };
+        if (!data.data || data.data.length === 0) {
+          throw new Error('No models returned from OpenAI API');
+        }
+
+        const supportedPrefixes = ['gpt-', 'o1', 'o3', 'o4', 'codex-'];
+        const excludedPatterns = ['gpt-3.5', 'gpt-4-base', 'realtime', 'audio', 'whisper', 'tts', 'dall-e', 'davinci', 'babbage', 'embedding'];
+
+        const models = data.data
+          .filter(m => {
+            const lower = m.id.toLowerCase();
+            return supportedPrefixes.some(p => lower.startsWith(p))
+              && !excludedPatterns.some(p => lower.includes(p));
+          })
+          .sort((a, b) => b.created - a.created)
+          .map(m => ({
+            id: m.id,
+            name: m.id.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('-').replace(/^Gpt/, 'GPT'),
+            shortName: m.id.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('-').replace(/^Gpt/, 'GPT').replace(/-\d{8}$/, ''),
+            description: '',
+            contextWindow: m.id.includes('codex') ? 192_000 : 128_000,
+          }));
+
+        return { models, serverDefault: models[0]?.id };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
 
     case 'pi': {
       const models = connection.piAuthProvider
@@ -1043,6 +1104,7 @@ export async function testBackendConnection(args: {
       providerType: args.connection?.providerType ?? 'pi',
       authType: 'api_key',
       connectionSlug: tempSlug,
+      piAuthProvider: args.connection?.piAuthProvider,
       workspace: {
         id: '__test',
         name: 'Connection Test',
@@ -1074,6 +1136,6 @@ export async function testBackendConnection(args: {
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   } finally {
-    await credentialManager.deleteLlmApiKey(tempSlug).catch(() => {});
+    await credentialManager.deleteLlmCredentials(tempSlug).catch(() => {});
   }
 }

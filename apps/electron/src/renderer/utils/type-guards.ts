@@ -213,8 +213,8 @@ export function isPermissionMode(value: unknown): value is 'safe' | 'ask' | 'all
 /**
  * Check if value is a valid thinking level
  */
-export function isThinkingLevel(value: unknown): value is 'off' | 'think' | 'max' {
-  return value === 'off' || value === 'think' || value === 'max'
+export function isThinkingLevel(value: unknown): value is 'off' | 'low' | 'medium' | 'high' | 'max' {
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'max'
 }
 
 // =============================================================================

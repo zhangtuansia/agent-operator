@@ -65,10 +65,11 @@ export function useAutomations(
           for (const item of items) {
             item.lastExecutedAt = map[item.id] ?? item.lastExecutedAt
           }
-        } catch { /* history unavailable — timestamps stay undefined */ }
+        } catch (err) { console.error('[useAutomations] Error loading execution history:', err) }
       }
       setAutomations(items)
-    } catch {
+    } catch (err) {
+      console.error('[useAutomations] Error loading automations:', err)
       setAutomations([])
     }
   }, [activeWorkspaceRootPath, activeWorkspaceId])
@@ -192,7 +193,8 @@ export function useAutomations(
         error: e.error ?? e.webhook?.error,
         webhookDetails: e.webhook,
       }))
-    } catch {
+    } catch (err) {
+      console.error('[useAutomations] Error loading execution history:', err)
       return []
     }
   }, [activeWorkspaceId, findAutomation])

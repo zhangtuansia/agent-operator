@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'bun:test';
-import type { WebhookAction } from './types.ts';
+/**
+ * Tests for webhook utility functions (expandWebhookAction, etc.)
+ */
+
+import { describe, it, expect } from 'bun:test';
 import { expandWebhookAction } from './webhook-utils.ts';
+import type { WebhookAction } from './types.ts';
 
 const env = {
   CRAFT_WH_SESSION_ID: 'sess-123',
@@ -39,7 +43,7 @@ describe('expandWebhookAction', () => {
     expect(result.body).toBe('session=sess-123');
   });
 
-  it('expands object body', () => {
+  it('expands object body (JSON)', () => {
     const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
@@ -49,26 +53,38 @@ describe('expandWebhookAction', () => {
     expect(result.body).toEqual({ id: 'sess-123', event: 'LabelAdd' });
   });
 
-  it('expands auth fields', () => {
-    const basic: WebhookAction = {
+  it('expands basic auth credentials', () => {
+    const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
       auth: { type: 'basic', username: '${CRAFT_WH_SESSION_ID}', password: '${API_TOKEN}' },
     };
-    expect(expandWebhookAction(basic, env).auth).toEqual({
-      type: 'basic',
-      username: 'sess-123',
-      password: 'tok-secret',
-    });
+    const result = expandWebhookAction(action, env);
+    expect(result.auth).toEqual({ type: 'basic', username: 'sess-123', password: 'tok-secret' });
+  });
 
-    const bearer: WebhookAction = {
+  it('expands bearer auth token', () => {
+    const action: WebhookAction = {
       type: 'webhook',
       url: 'https://api.example.com',
       auth: { type: 'bearer', token: '${API_TOKEN}' },
     };
-    expect(expandWebhookAction(bearer, env).auth).toEqual({
-      type: 'bearer',
-      token: 'tok-secret',
-    });
+    const result = expandWebhookAction(action, env);
+    expect(result.auth).toEqual({ type: 'bearer', token: 'tok-secret' });
+  });
+
+  it('passes through fields without templates unchanged', () => {
+    const action: WebhookAction = {
+      type: 'webhook',
+      url: 'https://api.example.com/static',
+      method: 'PUT',
+      bodyFormat: 'json',
+      captureResponse: true,
+    };
+    const result = expandWebhookAction(action, env);
+    expect(result.url).toBe('https://api.example.com/static');
+    expect(result.method).toBe('PUT');
+    expect(result.bodyFormat).toBe('json');
+    expect(result.captureResponse).toBe(true);
   });
 });

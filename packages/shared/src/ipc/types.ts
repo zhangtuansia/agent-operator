@@ -573,6 +573,14 @@ export interface DocumentsNavigationState {
 }
 
 /**
+ * Office navigation state - pixel-art AI office dashboard
+ */
+export interface OfficeNavigationState {
+  navigator: 'office'
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Automation type filter for automations navigation
  */
 export interface AutomationFilter {
@@ -607,6 +615,7 @@ export type NavigationState =
   | SettingsNavigationState
   | SkillsNavigationState
   | DocumentsNavigationState
+  | OfficeNavigationState
   | AutomationsNavigationState
 
 // =============================================================================

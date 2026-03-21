@@ -191,6 +191,7 @@ export function useOnboarding({
         }))
       }
     } catch (error) {
+      console.error('[Onboarding] Error saving config:', error)
       setState(s => ({
         ...s,
         completionStatus: 'complete',
@@ -315,6 +316,7 @@ export function useOnboarding({
         step: 'complete',
       }))
     } catch (error) {
+      console.error('[Onboarding] Credential validation error:', error)
       setState(s => ({
         ...s,
         credentialStatus: 'error',
@@ -413,6 +415,7 @@ export function useOnboarding({
         }))
       }
     } catch (error) {
+      console.error('[Onboarding] OAuth error:', error)
       setState(s => ({
         ...s,
         credentialStatus: 'error',
@@ -449,6 +452,7 @@ export function useOnboarding({
         }))
       }
     } catch (error) {
+      console.error('[Onboarding] Error exchanging auth code:', error)
       setState(s => ({
         ...s,
         credentialStatus: 'error',

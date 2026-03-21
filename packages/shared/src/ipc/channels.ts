@@ -193,8 +193,6 @@ export const IPC_CHANNELS = {
   // Settings - API Setup
   SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
   SETTINGS_TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
-  SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
-  SETTINGS_TEST_OPENAI_CONNECTION: 'settings:testOpenAiConnection',
 
   // LLM Connections (provider configurations)
   LLM_CONNECTION_LIST: 'LLM_Connection:list',

@@ -108,8 +108,10 @@ export function setSessionPlatform(platform: PlatformServices): void {
 interface SessionRuntimeHooks {
   updateBadgeCount: (count: number) => void
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
-  onSessionStarted: () => void
-  onSessionStopped: () => void
+  onSessionStarted: (sessionId?: string, sessionName?: string) => void
+  onSessionStopped: (sessionId?: string) => void
+  onToolStart?: (toolName: string, sessionId?: string) => void
+  onSessionError?: (errorMessage: string, sessionId?: string) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
@@ -4310,7 +4312,7 @@ export class SessionManager implements ISessionManager {
 
     // Notify power manager that a session started processing
     // (may prevent display sleep if setting enabled)
-    sessionRuntimeHooks.onSessionStarted()
+    sessionRuntimeHooks.onSessionStarted(sessionId, managed.name)
 
     // Reset auth retry flag for this new message (allows one retry per message)
     // IMPORTANT: Skip reset if this is an auth retry call - the flag is already true
@@ -4493,6 +4495,7 @@ export class SessionManager implements ISessionManager {
         if (event.type !== 'text_delta') {
           if (event.type === 'tool_start') {
             sessionLog.info(`tool_start: ${event.toolName} (${event.toolUseId})`)
+            sessionRuntimeHooks.onToolStart?.(event.toolName, sessionId)
           } else if (event.type === 'tool_result') {
             sessionLog.info(`tool_result: ${event.toolUseId} isError=${event.isError}`)
           } else {
@@ -4862,7 +4865,7 @@ export class SessionManager implements ISessionManager {
 
     // Notify power manager that a session stopped processing
     // (may allow display sleep if no other sessions are active)
-    sessionRuntimeHooks.onSessionStopped()
+    sessionRuntimeHooks.onSessionStopped(sessionId)
 
     // 2. Handle unread state based on whether user is viewing this session
     //    This is the explicit state machine for NEW badge:

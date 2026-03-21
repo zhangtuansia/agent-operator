@@ -46,7 +46,7 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     keepAwakeWhileRunning: false,
   },
   workspaceDefaults: {
-    thinkingLevel: 'think',
+    thinkingLevel: 'medium',
     permissionMode: 'ask',
     cyclablePermissionModes: ['safe', 'ask', 'allow-all'],
     localMcpServers: {

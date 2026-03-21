@@ -207,7 +207,7 @@ ${this.config.prompt}
       },
     } satisfies BackendConfig;
 
-    this.agent = createBackend(agentConfig) as OperatorAgent;
+    this.agent = createBackend(agentConfig) as unknown as OperatorAgent;
 
     // Wire up permission handler based on policy
     this.agent.onPermissionRequest = (request) => {

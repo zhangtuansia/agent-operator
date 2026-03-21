@@ -161,6 +161,9 @@ export const routes = {
         ? `documents/document/${documentId}` as const
         : 'documents' as const,
 
+    /** Office view (office navigator) */
+    office: () => 'office' as const,
+
     /** Settings view (settings navigator) */
     settings: (subpage?: SettingsSubpage) =>
       subpage && subpage !== 'app'

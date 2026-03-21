@@ -54,6 +54,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
           setError(t('emptyStates.skillNotFound'))
         }
       } catch (err) {
+        console.error('[SkillInfoPage] Error loading skill:', err)
         if (!isMounted) return
         setError(err instanceof Error ? err.message : t('skillInfo.failedToLoad'))
       } finally {
@@ -95,6 +96,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     try {
       await window.electronAPI.openSkillInFinder(workspaceId, skillSlug)
     } catch (err) {
+      console.error('[SkillInfoPage] Error opening in finder:', err)
       toast.error(t('toasts.failedToShowInFinder'), {
         description: err instanceof Error ? err.message : t('toasts.noDetailsProvided'),
       })
@@ -110,6 +112,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
       toast.success(`${t('toasts.deletedSkill')}: ${skill.metadata.name}`)
       navigate(routes.view.skills())
     } catch (err) {
+      console.error('[SkillInfoPage] Error deleting skill:', err)
       toast.error(t('toasts.failedToDeleteSkill'), {
         description: err instanceof Error ? err.message : 'Unknown error',
       })

@@ -50,6 +50,8 @@ export type BashValidationReason =
   | { type: 'redirect'; op: string; explanation: string }
   | { type: 'command_expansion'; explanation: string }
   | { type: 'process_substitution'; explanation: string }
+  | { type: 'parameter_expansion'; explanation: string }
+  | { type: 'env_assignment'; explanation: string }
   | { type: 'unsafe_command'; command: string; explanation: string }
   | { type: 'parse_error'; error: string }
   | { type: 'compound_partial_fail'; failedCommands: string[]; passedCommands: string[] }
@@ -115,6 +117,45 @@ interface ExpansionNode {
 interface ScriptNode extends ASTNode {
   type: 'Script';
   commands: ASTNode[];
+}
+
+// ============================================================
+// Dangerous Argument Patterns
+// ============================================================
+
+/**
+ * Command arguments that execute subcommands or perform writes.
+ * These are program-level features (not shell constructs) that the AST parser
+ * cannot detect — e.g., `find -exec` runs arbitrary commands despite `find`
+ * being a read-only search tool.
+ *
+ * Checked BEFORE the regex allowlist pattern match in validateCommand().
+ */
+const DANGEROUS_COMMAND_ARGS: Record<string, Set<string>> = {
+  find: new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete']),
+};
+
+const AWK_COMMANDS = new Set(['awk', 'gawk', 'mawk', 'nawk']);
+
+function getDangerousAwkReason(commandParts: string[]): string | null {
+  // commandParts[0] is awk/gawk/mawk/nawk - inspect script/args only
+  const scriptText = commandParts.slice(1).join(' ');
+
+  if (/\bsystem\s*\(/i.test(scriptText)) {
+    return 'awk system() executes arbitrary shell commands';
+  }
+
+  // command | getline executes an external command and reads from it
+  if (/\|\s*getline\b/i.test(scriptText)) {
+    return 'awk command pipes to getline execute external commands';
+  }
+
+  // print ... | "cmd" (or with quoted command forms) executes external commands
+  if (/\bprint\b[^\n]*\|\s*["'`]/i.test(scriptText)) {
+    return 'awk print-to-command pipes execute external commands';
+  }
+
+  return null;
 }
 
 // ============================================================
@@ -188,9 +229,17 @@ function validateNode(
       return validateCompoundList(node as CompoundListNode, patterns, results);
 
     default:
-      // Unknown node type - log and allow (fail open for unknown constructs)
-      debug('[BashValidator] Unknown node type:', node.type);
-      return { allowed: true };
+      // Unknown node type — fail closed. bash-parser may produce node types
+      // we don't explicitly handle (If, While, For, Case, Function, etc.).
+      // Block them rather than silently allowing arbitrary constructs.
+      debug('[BashValidator] Unknown node type (blocked):', node.type);
+      return {
+        allowed: false,
+        reason: {
+          type: 'parse_error',
+          error: `Unsupported shell construct: "${node.type}". Only simple commands, pipelines, logical expressions (&&/||), and subshells are supported in Explore mode`,
+        },
+      };
   }
 }
 
@@ -265,6 +314,20 @@ function validateCommand(
           };
         }
       }
+
+      // Block environment variable assignments in command prefix.
+      // e.g., PATH=/evil ls, LD_PRELOAD=/evil/lib.so ls, FOO=bar cmd
+      // These modify the command's environment, potentially enabling
+      // PATH hijacking or library injection (LD_PRELOAD).
+      if (item.type === 'AssignmentWord') {
+        return {
+          allowed: false,
+          reason: {
+            type: 'env_assignment',
+            explanation: `Environment variable assignment "${(item as WordNode).text}" modifies command behavior (e.g., PATH hijacking, LD_PRELOAD injection)`,
+          },
+        };
+      }
     }
   }
 
@@ -294,6 +357,56 @@ function validateCommand(
         }
 
         commandParts.push(word.text);
+      }
+    }
+  }
+
+  // Check for command arguments that enable sub-command execution or writes.
+  // e.g., `find -exec touch file \;` — the `-exec` flag runs arbitrary commands.
+  // These are program-level features invisible to the shell AST.
+  const cmdName = node.name?.text;
+  if (cmdName) {
+    const normalizedCmd = cmdName.toLowerCase();
+
+    if (AWK_COMMANDS.has(normalizedCmd)) {
+      const awkReason = getDangerousAwkReason(commandParts);
+      if (awkReason) {
+        const subResult: SubcommandResult = {
+          command: commandParts.join(' '),
+          allowed: false,
+          reason: awkReason,
+        };
+        results.push(subResult);
+        return {
+          allowed: false,
+          reason: {
+            type: 'unsafe_command',
+            command: commandParts.join(' '),
+            explanation: awkReason,
+          },
+        };
+      }
+    }
+
+    if (DANGEROUS_COMMAND_ARGS[normalizedCmd]) {
+      const dangerousArgs = DANGEROUS_COMMAND_ARGS[normalizedCmd];
+      for (const part of commandParts) {
+        if (dangerousArgs.has(part)) {
+          const subResult: SubcommandResult = {
+            command: commandParts.join(' '),
+            allowed: false,
+            reason: `Argument "${part}" executes subcommands or performs writes`,
+          };
+          results.push(subResult);
+          return {
+            allowed: false,
+            reason: {
+              type: 'unsafe_command',
+              command: commandParts.join(' '),
+              explanation: `"${part}" allows arbitrary command execution or file modification within "${normalizedCmd}"`,
+            },
+          };
+        }
       }
     }
   }
@@ -419,6 +532,16 @@ function checkWordForExpansions(word: WordNode): BashValidationReason | null {
       return {
         type: 'process_substitution',
         explanation: `Process substitution executes commands (found in: ${word.text})`,
+      };
+    }
+
+    // Parameter expansion ($VAR, ${VAR}, ${VAR:-default}) can make commands
+    // behave unpredictably based on environment state.
+    // e.g., `cat $HOME/.ssh/id_rsa` reads sensitive files via expansion.
+    if (exp.type === 'ParameterExpansion') {
+      return {
+        type: 'parameter_expansion',
+        explanation: `Variable expansion \${...} makes command behavior dependent on environment state (found in: ${word.text})`,
       };
     }
   }

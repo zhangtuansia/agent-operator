@@ -1726,6 +1726,63 @@ Use this as the default browser path for page automation inside Dazi. Do not rea
 - When done, call \`close\` to destroy the browser window, or \`hide\` / \`release\` to keep state but dismiss it from view.
 `;
 
+const AUTOMATIONS_MD = `# Automations Configuration Guide
+
+Automations let you trigger actions automatically when events occur in your workspace.
+
+## Configuration
+
+Store your automations in \`automations.json\` inside your workspace directory.
+
+### Structure
+
+\`\`\`json
+{
+  "automations": {
+    "my-automation": [
+      {
+        "events": ["SessionEnd", "LabelAdd"],
+        "matchers": { "labels": ["review"] },
+        "actions": [
+          { "type": "prompt", "prompt": "Summarize this session" },
+          { "type": "webhook", "url": "https://example.com/hook", "method": "POST" }
+        ],
+        "enabled": true
+      }
+    ]
+  }
+}
+\`\`\`
+
+### Events
+
+**App Events:** LabelAdd, LabelRemove, LabelConfigChange, PermissionModeChange, FlagChange, SessionStatusChange, SchedulerTick
+
+**Agent Events:** PreToolUse, PostToolUse, PostToolUseFailure, Notification, UserPromptSubmit, SessionStart, SessionEnd, Stop, SubagentStart, SubagentStop, PreCompact, PermissionRequest, Setup
+
+### Actions
+
+**Prompt Action:** Sends a prompt to the AI agent.
+\`\`\`json
+{ "type": "prompt", "prompt": "Your instruction here", "llmConnection": "optional-connection-slug", "model": "optional-model-id" }
+\`\`\`
+
+**Webhook Action:** Sends an HTTP request.
+\`\`\`json
+{ "type": "webhook", "url": "https://example.com/hook", "method": "POST", "headers": { "X-Custom": "value" }, "auth": { "type": "bearer", "token": "your-token" } }
+\`\`\`
+
+### Matchers
+
+Filter when automations trigger:
+- \`labels\` - Only trigger when session has specific labels
+- \`toolName\` - Only trigger for specific tool names (agent events)
+
+### Scheduling
+
+Use the \`SchedulerTick\` event with cron-like matchers for timed automations.
+`;
+
 /**
  * Map of bundled documentation files
  */
@@ -1736,6 +1793,7 @@ const BUNDLED_DOCS: Record<string, string> = {
   'themes.md': THEMES_MD,
   'statuses.md': STATUSES_MD,
   'browser-tools.md': BROWSER_TOOLS_MD,
+  'automations.md': AUTOMATIONS_MD,
 };
 
 export { BUNDLED_DOCS };

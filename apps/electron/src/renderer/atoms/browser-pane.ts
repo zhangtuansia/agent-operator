@@ -12,6 +12,9 @@ export const activeBrowserInstanceIdAtom = atom<string | null>(null)
 
 export const removedBrowserInstanceIdsAtom = atom<Set<string>>(new Set())
 
+/** Max entries before the removed-IDs set is trimmed to half its cap. */
+const REMOVED_IDS_CAP = 100
+
 export const updateBrowserInstanceAtom = atom(
   null,
   (get, set, info: BrowserInstanceInfo) => {
@@ -32,6 +35,19 @@ export const removeBrowserInstanceAtom = atom(
 
     const removed = new Set(get(removedBrowserInstanceIdsAtom))
     removed.add(id)
+
+    // Prevent unbounded growth: when the set exceeds the cap, keep only the
+    // most recent half.  Set iteration order is insertion order, so we drop
+    // the oldest entries from the front.
+    if (removed.size > REMOVED_IDS_CAP) {
+      const keep = Math.floor(REMOVED_IDS_CAP / 2)
+      const entries = Array.from(removed)
+      removed.clear()
+      for (let i = entries.length - keep; i < entries.length; i++) {
+        removed.add(entries[i])
+      }
+    }
+
     set(removedBrowserInstanceIdsAtom, removed)
   }
 )

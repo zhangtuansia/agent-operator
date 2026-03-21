@@ -214,7 +214,7 @@ async function buildCallLlmRequest(
 
 /** Messages from main process (stdin) */
 type InboundMessage =
-  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; bedrockTemplateModel?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
+  | { type: 'init'; apiKey: string; model: string; cwd: string; thinkingLevel: string; workspaceRootPath: string; sessionId: string; sessionPath: string; workingDirectory: string; plansFolderPath: string; miniModel?: string; agentDir?: string; providerType?: string; authType?: string; workspaceId?: string; branchFromSdkSessionId?: string; branchFromSessionPath?: string; bedrockTemplateModel?: string; baseUrl?: string; piAuth?: { provider: string; credential: { type: 'api_key'; key: string } | { type: 'oauth'; access: string; refresh: string; expires: number } } }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'sync_tools'; tools: ProxyToolDef[] }
@@ -479,6 +479,34 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
  * and a model registry backed by it. Used by both the main session and
  * ephemeral queryLlm sessions.
  */
+/**
+ * Detect the provider for an API key based on available environment variables.
+ * Used as a fallback when only a bare apiKey is provided (no piAuth).
+ * Checks env vars in priority order matching the Pi SDK's env-key mapping.
+ */
+function detectProviderFromEnv(): string | null {
+  const envProviderMap: [string, string][] = [
+    ['ANTHROPIC_API_KEY', 'anthropic'],
+    ['ANTHROPIC_OAUTH_TOKEN', 'anthropic'],
+    ['OPENAI_API_KEY', 'openai'],
+    ['GEMINI_API_KEY', 'google'],
+    ['OPENROUTER_API_KEY', 'openrouter'],
+    ['GROQ_API_KEY', 'groq'],
+    ['XAI_API_KEY', 'xai'],
+    ['MISTRAL_API_KEY', 'mistral'],
+    ['CEREBRAS_API_KEY', 'cerebras'],
+    ['AZURE_OPENAI_API_KEY', 'azure-openai-responses'],
+    ['HF_TOKEN', 'huggingface'],
+  ];
+
+  for (const [envVar, provider] of envProviderMap) {
+    if (process.env[envVar]) {
+      return provider;
+    }
+  }
+  return null;
+}
+
 function createAuthenticatedRegistry(): {
   authStorage: PiAuthStorage;
   modelRegistry: PiModelRegistry;
@@ -494,10 +522,34 @@ function createAuthenticatedRegistry(): {
     authStorage.set(provider, credential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
-    authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
-    debugLog('Injected API key into auth storage (legacy fallback)');
+    // Auto-detect the provider from env vars injected by the parent process,
+    // rather than blindly assuming Anthropic.  The parent process sets the
+    // appropriate env var (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.) based on
+    // the user's configured connection.
+    const detectedProvider = detectProviderFromEnv() || 'anthropic';
+    authStorage.set(detectedProvider, { type: 'api_key', key: initConfig.apiKey });
+    debugLog(`Injected API key into auth storage for provider: ${detectedProvider}`);
   }
-  return { authStorage, modelRegistry: new PiModelRegistry(authStorage) };
+  // Note: Even without explicit piAuth/apiKey, the Pi SDK's AuthStorage
+  // will fall back to checking env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+  // etc.) via getEnvApiKey().  The parent process injects these env vars
+  // based on the user's configured credentials in DAZI settings.
+  const modelRegistry = new PiModelRegistry(authStorage);
+
+  // If the user configured a custom base URL on their LLM connection,
+  // override the Pi SDK's default endpoint for the resolved provider.
+  // This supports custom proxies, self-hosted endpoints (e.g., Ollama),
+  // and any non-standard API endpoint the user configures in DAZI settings.
+  if (initConfig?.baseUrl) {
+    const provider = initConfig.piAuth?.provider
+      || detectProviderFromEnv()
+      || 'anthropic';
+    const normalizedBaseUrl = initConfig.baseUrl.replace(/\/+$/, '');
+    modelRegistry.registerProvider(provider, { baseUrl: normalizedBaseUrl });
+    debugLog(`Overrode base URL for provider "${provider}": ${normalizedBaseUrl}`);
+  }
+
+  return { authStorage, modelRegistry };
 }
 
 async function ensureSession(): Promise<AgentSession> {

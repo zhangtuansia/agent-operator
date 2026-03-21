@@ -98,6 +98,10 @@ const FILE_EXTENSIONS = new Set([
   'sh', 'bash', 'zsh',
   'mermaid',
   'excalidraw',
+  // Image formats — routed to ImagePreviewOverlay via useLinkInterceptor
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif',
+  // PDF — routed to PDFPreviewOverlay via useLinkInterceptor
+  'pdf',
 ])
 
 function getPathWithoutQueryOrHash(value: string): string {

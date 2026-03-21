@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
+import { validateBasicAuthCredentials, getPasswordValue, getPasswordLabel, getPasswordPlaceholder } from '@/utils/auth-validation'
 import type { Message, CredentialResponse } from '../../../shared/types'
 import type { AuthRequestType, AuthStatus } from '@agent-operator/core/types'
 
@@ -181,15 +182,33 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     authLabels,
     authDescription,
     authHint,
+    authPasswordRequired,
     authError,
     authEmail,
     authWorkspace,
+    authHeaderNames,
   } = message
 
+  // Multi-header state: { "DD-API-KEY": "", "DD-APPLICATION-KEY": "" }
+  const [headerValues, setHeaderValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    if (authHeaderNames) {
+      for (const name of authHeaderNames) {
+        initial[name] = ''
+      }
+    }
+    return initial
+  })
+
   const isBasicAuth = authCredentialMode === 'basic'
+  const isMultiHeader = authCredentialMode === 'multi-header'
+  const passwordRequired = authPasswordRequired ?? true
+
   const isValid = isBasicAuth
-    ? username.trim() && password.trim()
-    : value.trim()
+    ? validateBasicAuthCredentials(username, password, passwordRequired)
+    : isMultiHeader
+    ? authHeaderNames?.every(name => headerValues[name]?.trim().length > 0) ?? false
+    : value.trim().length > 0
 
   const handleSubmit = useCallback(() => {
     if (!isValid || !authRequestId || !onRespondToCredential) return
@@ -200,7 +219,18 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       onRespondToCredential(sessionId, authRequestId, {
         type: 'credential',
         username: username.trim(),
-        password: password.trim(),
+        password: getPasswordValue(password, passwordRequired),
+        cancelled: false
+      })
+    } else if (isMultiHeader) {
+      // Multi-header: send as headerValues map
+      const trimmedValues: Record<string, string> = {}
+      for (const [key, val] of Object.entries(headerValues)) {
+        trimmedValues[key] = val.trim()
+      }
+      onRespondToCredential(sessionId, authRequestId, {
+        type: 'credential',
+        headerValues: trimmedValues,
         cancelled: false
       })
     } else {
@@ -210,7 +240,12 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
         cancelled: false
       })
     }
-  }, [isBasicAuth, username, password, value, isValid, onRespondToCredential, sessionId, authRequestId])
+  }, [isBasicAuth, isMultiHeader, username, password, passwordRequired, value, headerValues, isValid, onRespondToCredential, sessionId, authRequestId])
+
+  const handleFormSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    handleSubmit()
+  }, [handleSubmit])
 
   const handleCancel = useCallback(() => {
     if (!authRequestId || !onRespondToCredential) return
@@ -441,6 +476,39 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
               </div>
             </div>
           </>
+        ) : isMultiHeader && authHeaderNames ? (
+          /* Multi-header fields (e.g., Datadog DD-API-KEY + DD-APPLICATION-KEY) */
+          <>
+            {authHeaderNames.map((headerName, index) => (
+              <div key={headerName} className="space-y-1.5">
+                <Label htmlFor={`auth-header-${authRequestId}-${headerName}`} className="text-xs">
+                  {headerName}
+                </Label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id={`auth-header-${authRequestId}-${headerName}`}
+                    type={showPassword ? 'text' : 'password'}
+                    value={headerValues[headerName] ?? ''}
+                    onChange={(e) => setHeaderValues(prev => ({ ...prev, [headerName]: e.target.value }))}
+                    onKeyDown={handleKeyDown}
+                    className="pl-9 pr-9"
+                    placeholder={t('authCard.enterField', { field: headerName })}
+                    autoFocus={index === 0}
+                    disabled={isSubmitting}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
         ) : (
           /* Single credential field */
           <div className="space-y-1.5">
@@ -529,14 +597,11 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     )
   }
 
-  return (
-    <div
-      className={cn('rounded-[8px] overflow-hidden', variantTextClass)}
-      style={{
-        backgroundColor: variantBg,
-        ...(shadowColor ? { '--shadow-color': shadowColor } as React.CSSProperties : {})
-      }}
-    >
+  // Wrap credential forms in <form> for password manager (1Password, etc.) auto-fill support
+  const isCredentialForm = authStatus === 'pending' && !isOAuth
+
+  const cardContent = (
+    <>
       <div
         className={cn(
           hasActions ? 'p-4' : 'px-4 py-3',
@@ -548,6 +613,24 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       </div>
 
       {hasActions && renderActions()}
+    </>
+  )
+
+  return (
+    <div
+      className={cn('rounded-[8px] overflow-hidden', variantTextClass)}
+      style={{
+        backgroundColor: variantBg,
+        ...(shadowColor ? { '--shadow-color': shadowColor } as React.CSSProperties : {})
+      }}
+    >
+      {isCredentialForm ? (
+        <form onSubmit={handleFormSubmit} action={message.authSourceUrl || undefined} method="post">
+          {cardContent}
+        </form>
+      ) : (
+        cardContent
+      )}
     </div>
   )
 }

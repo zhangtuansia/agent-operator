@@ -24,6 +24,7 @@ export type ErrorCode =
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
   | 'image_too_large'        // Image exceeds size limit
+  | 'max_output_tokens'      // Response truncated due to max output tokens
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -211,6 +212,15 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
       { key: 'r', label: 'Retry with smaller image', action: 'retry' },
     ],
     canRetry: false,
+  },
+  max_output_tokens: {
+    title: 'Max Output Tokens Reached',
+    message: 'The response was truncated because it reached the maximum output token limit.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
   },
   unknown_error: {
     title: 'Error',

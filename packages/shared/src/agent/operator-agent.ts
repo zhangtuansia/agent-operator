@@ -122,7 +122,7 @@ export interface OperatorAgentConfig {
   providerType?: string;
   /** Resolved connection slug for this session (for diagnostics and provider-specific handling). */
   connectionSlug?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'think')
+  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
   /**
@@ -140,6 +140,10 @@ export interface OperatorAgentConfig {
   systemPromptPreset?: 'default' | 'mini' | string;
   /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
   automationSystem?: AutomationSystem;
+  /** Environment variable overrides for SDK options */
+  envOverrides?: Record<string, string>;
+  /** Authentication type for the connection */
+  authType?: string;
 }
 
 // Permission request tracking
@@ -404,8 +408,8 @@ export class OperatorAgent {
   private safeMode: boolean = false;
   // SDK tools list (captured from init message)
   private sdkTools: string[] = [];
-  // Session-level thinking level ('off', 'think', 'max') - sticky, persisted
-  private thinkingLevel: ThinkingLevel = 'think';
+  // Session-level thinking level ('off', 'low', 'medium', 'high', 'max') - sticky, persisted
+  private thinkingLevel: ThinkingLevel = DEFAULT_THINKING_LEVEL;
   // Ultrathink override - when true, boosts to max thinking for one message (resets after query)
   private ultrathinkOverride: boolean = false;
   // Workspace-level AutomationSystem instance (shared across all agents in the workspace)
@@ -2694,6 +2698,17 @@ Please continue the conversation naturally from where we left off.
         ],
         canRetry: true,
         retryDelayMs: 2000,
+      },
+      'max_output_tokens': {
+        code: 'max_output_tokens',
+        title: 'Max Output Tokens Reached',
+        message: 'The response was truncated because it reached the maximum output token limit.',
+        details: ['Try breaking your request into smaller parts', 'The response may be incomplete'],
+        actions: [
+          { key: 'r', label: 'Retry', action: 'retry' },
+        ],
+        canRetry: true,
+        retryDelayMs: 1000,
       },
       'unknown': {
         code: 'unknown_error',

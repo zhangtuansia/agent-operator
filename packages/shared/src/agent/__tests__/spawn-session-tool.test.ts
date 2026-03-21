@@ -59,7 +59,7 @@ describe('spawn_session tool', () => {
     })
 
     expect(spawnFn).toHaveBeenCalledTimes(1)
-    expect(spawnFn.mock.calls[0]?.[0]).toMatchObject({
+    expect((spawnFn.mock.calls as any[])[0]?.[0]).toMatchObject({
       prompt: 'Research the topic',
       llmConnection: 'bedrock',
       enabledSourceSlugs: ['docs'],

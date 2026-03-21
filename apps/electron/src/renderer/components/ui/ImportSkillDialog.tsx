@@ -120,6 +120,7 @@ export function ImportSkillDialog({
         setError(result.error || t('skills.import.errorUnknown'))
       }
     } catch (err) {
+      console.error('[ImportSkillDialog] Error:', err)
       setError(err instanceof Error ? err.message : t('skills.import.errorUnknown'))
     } finally {
       setLoading(false)

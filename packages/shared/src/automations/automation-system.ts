@@ -18,15 +18,13 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
-import { AUTOMATIONS_HISTORY_FILE } from './constants.ts';
-import { normalizePermissionMode } from '../agent/mode-types.ts';
+import { compactAutomationHistorySync } from './history-store.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
-import { AGENT_EVENTS, type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
+import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { buildEnvFromSdkInput } from './sdk-bridge.ts';
-import { testMatcherAgainst, getMatchValueForSdkInput, buildPendingPromptsForMatcher } from './utils.ts';
+import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduled-tasks/scheduler-service.ts';
 
 const log = createLogger('automation-system');
@@ -51,7 +49,7 @@ export interface AutomationSystemOptions {
   /** Whether to start the scheduler service (default: false) */
   enableScheduler?: boolean;
   /** Called when prompts are ready to be executed */
-  onPromptsReady?: (prompts: PendingPrompt[]) => void | Promise<void>;
+  onPromptsReady?: (prompts: PendingPrompt[]) => void;
   /** Called when webhook results are available */
   onWebhookResults?: (results: WebhookActionResult[]) => void;
   /** Called when an error occurs during automation execution */
@@ -189,19 +187,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
         if (!Array.isArray(matchers)) continue;
         for (const m of matchers as Record<string, unknown>[]) {
           if (!m.id) { m.id = generateShortId(); changed = true; }
-          if (typeof m.permissionMode === 'string') {
-            const normalized = normalizePermissionMode(m.permissionMode);
-            if (normalized && normalized !== m.permissionMode) {
-              m.permissionMode = normalized;
-              changed = true;
-            }
-          }
         }
       }
 
       if (changed) {
         writeFileSync(configPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
-        log.debug('[AutomationSystem] Backfilled matcher metadata and normalized legacy fields');
+        log.debug('[AutomationSystem] Backfilled missing matcher IDs');
       }
     } catch {
       // Non-critical — IDs will be backfilled on next mutation via IPC
@@ -209,22 +200,16 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }
 
   /**
-   * Rotate automations-history.jsonl on startup: keep only the last 1000 entries.
+   * Compact automations-history.jsonl on startup: two-tier retention.
+   * 1) Keep only the last N entries per automation ID.
+   * 2) If total still exceeds the global cap, drop oldest globally.
    * Runs synchronously during init — single-threaded, no race with concurrent appends.
    */
-  private rotateHistory(maxEntries = 1000): void {
-    const historyPath = join(this.options.workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
+  private rotateHistory(): void {
     try {
-      if (!existsSync(historyPath)) return;
-      const content = readFileSync(historyPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(Boolean);
-      if (lines.length <= maxEntries) return;
-
-      const trimmed = lines.slice(-maxEntries).join('\n') + '\n';
-      writeFileSync(historyPath, trimmed, 'utf-8');
-      log.debug(`[AutomationSystem] Rotated automations-history.jsonl: ${lines.length} → ${maxEntries} entries`);
+      compactAutomationHistorySync(this.options.workspaceRootPath);
     } catch {
-      // Non-critical — rotation failure doesn't affect functionality
+      // Non-critical — compaction failure doesn't affect functionality
     }
   }
 
@@ -271,6 +256,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     );
     this.promptHandler.subscribe(this.eventBus);
 
+    // Webhook handler
     this.webhookHandler = new WebhookHandler(
       {
         workspaceId: this.options.workspaceId,
@@ -278,7 +264,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         onWebhookResults: this.options.onWebhookResults,
         onError: this.options.onError,
       },
-      this,
+      this
     );
     this.webhookHandler.subscribe(this.eventBus);
 
@@ -349,8 +335,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
     const emittedEvents: AppEvent[] = [];
     const timestamp = Date.now();
 
-    // Session name for all events
+    // Common fields for all events
     const sessionName = next.sessionName;
+    const labels = next.labels ?? [];
 
     // Permission mode change
     if (prev.permissionMode !== next.permissionMode) {
@@ -359,6 +346,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         oldMode: prev.permissionMode ?? '',
         newMode: next.permissionMode ?? '',
       });
@@ -376,6 +364,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
           sessionName,
           workspaceId: this.options.workspaceId,
           timestamp,
+          labels: [...nextLabels],
           label,
         });
         emittedEvents.push('LabelAdd');
@@ -389,6 +378,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
           sessionName,
           workspaceId: this.options.workspaceId,
           timestamp,
+          labels: [...nextLabels],
           label,
         });
         emittedEvents.push('LabelRemove');
@@ -404,6 +394,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         isFlagged,
       });
       emittedEvents.push('FlagChange');
@@ -416,6 +407,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         sessionName,
         workspaceId: this.options.workspaceId,
         timestamp,
+        labels,
         oldState: prev.sessionStatus ?? '',
         newState: next.sessionStatus ?? '',
       });
@@ -493,33 +485,28 @@ export class AutomationSystem implements AutomationsConfigProvider {
    * Catches all errors — automations must never break the agent flow.
    *
    * @param signal - Optional AbortSignal for cancelling automation execution on abort
+   * @returns Number of matched matchers (for diagnostics/testing)
    */
-  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<void> {
-    if (!this.config) return;
+  async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<number> {
+    if (!this.config) return 0;
 
     const matchers = this.config.automations[event];
-    if (!matchers?.length) return;
+    if (!matchers?.length) return 0;
 
-    if (signal?.aborted) return;
-
-    const matchValue = getMatchValueForSdkInput(event, input);
-    const env = buildEnvFromSdkInput(event, input);
-    const pendingPrompts: PendingPrompt[] = [];
+    let matchedCount = 0;
 
     for (const matcher of matchers) {
-      if (!testMatcherAgainst(matcher, event, matchValue)) continue;
-      pendingPrompts.push(...buildPendingPromptsForMatcher(matcher, env));
+      if (!matcherMatchesSdk(matcher, event, input)) continue;
+
+      matchedCount++;
+
+      // Note: Command execution has been removed. Prompt-based execution for
+      // non-Claude backends is not yet implemented. This method currently only
+      // validates matching (including condition gating) — actual execution is a no-op.
+      log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
     }
 
-    if (pendingPrompts.length === 0) return;
-
-    try {
-      log.debug(`[AutomationSystem] Delivering ${pendingPrompts.length} agent-event prompts for ${event}`);
-      await this.options.onPromptsReady?.(pendingPrompts);
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      this.options.onError?.(event, err);
-    }
+    return matchedCount;
   }
 
   // ============================================================================
@@ -529,50 +516,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
   /**
    * Build SDK hook callbacks from automations.json definitions.
    *
-   * Build prompt-based SDK hook callbacks for agent events. This keeps Claude/Operator
-   * backends aligned with app-event prompt automations.
+   * Command execution has been removed — all automation actions now go through prompt-based
+   * execution (creating agent sessions via PromptHandler). Agent event automations are not
+   * currently supported via prompts, so this returns empty.
    */
   buildSdkHooks(): Partial<Record<AgentEvent, SdkAutomationCallbackMatcher[]>> {
-    const sdkHooks: Partial<Record<AgentEvent, SdkAutomationCallbackMatcher[]>> = {};
-    if (!this.config) return sdkHooks;
-
-    for (const event of AGENT_EVENTS) {
-      const matchers = (this.config.automations[event] ?? [])
-        .filter((matcher) => matcher.enabled !== false)
-        .filter((matcher) => matcher.actions.some((action) => action.type === 'prompt'));
-
-      if (matchers.length === 0) continue;
-
-      sdkHooks[event] = matchers.map((matcher) => ({
-        matcher: matcher.matcher,
-        timeout: 30,
-        hooks: [async (input: SdkAutomationInput, _toolUseId: string, options: { signal?: AbortSignal }) => {
-          if (options.signal?.aborted) {
-            return { continue: true };
-          }
-
-          try {
-            const matchValue = getMatchValueForSdkInput(event, input);
-            if (!testMatcherAgainst(matcher, event, matchValue)) {
-              return { continue: true };
-            }
-
-            const env = buildEnvFromSdkInput(event, input);
-            const pendingPrompts = buildPendingPromptsForMatcher(matcher, env);
-            if (pendingPrompts.length > 0) {
-              await this.options.onPromptsReady?.(pendingPrompts);
-            }
-          } catch (error) {
-            const err = error instanceof Error ? error : new Error(String(error));
-            this.options.onError?.(event, err);
-          }
-
-          return { continue: true };
-        }],
-      }));
-    }
-
-    return sdkHooks;
+    return {};
   }
 
   // ============================================================================

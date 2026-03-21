@@ -201,7 +201,7 @@ export function FreeFormInput({
   inputRef: externalInputRef,
   currentModel,
   onModelChange,
-  thinkingLevel = 'think',
+  thinkingLevel = 'medium',
   onThinkingLevelChange,
   ultrathinkEnabled = false,
   onUltrathinkChange,
@@ -1358,6 +1358,7 @@ export function FreeFormInput({
             )}
             style={{ maxHeight: inputMaxHeight }}
             data-tutorial="chat-input"
+            aria-label={t('aria.messageInput')}
           />
         )}
 
@@ -1391,6 +1392,7 @@ export function FreeFormInput({
                 onClick={handleAttachClick}
                 tooltip={t('input.attachFile')}
                 disabled={disabled}
+                aria-label={t('aria.attachFile')}
               />
 
               {/* 2. Source Selector Badge */}
@@ -1689,6 +1691,7 @@ export function FreeFormInput({
                 launcherMode ? "h-9 w-9 ml-0" : "h-7 w-7 ml-2",
               )}
               onClick={() => handleStop(false)}
+              aria-label={t('aria.stopProcessing')}
             >
               <Square className={cn("fill-current", launcherMode ? "h-4 w-4" : "h-3 w-3")} />
             </Button>
@@ -1702,6 +1705,7 @@ export function FreeFormInput({
               )}
               disabled={!hasContent || disabled}
               data-tutorial="send-button"
+              aria-label={t('aria.sendMessage')}
             >
               <ArrowUp className="h-4 w-4" />
             </Button>

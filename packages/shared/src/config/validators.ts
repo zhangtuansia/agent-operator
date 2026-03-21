@@ -495,7 +495,7 @@ export function validateAllSources(workspaceRootPath: string): ValidationResult 
   }
 
   for (const folder of sourceFolders) {
-    const result = validateSource(workspaceId, folder);
+    const result = validateSource(workspaceRootPath, folder);
     errors.push(...result.errors);
     warnings.push(...result.warnings);
   }

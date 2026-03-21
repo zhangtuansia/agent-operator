@@ -34,7 +34,7 @@ describe('runErrorDiagnostics auth env handling', () => {
       process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken;
     }
 
-    globalThis.fetch = jest.fn().mockResolvedValue(new Response(null, { status: 200 })) as typeof fetch;
+    globalThis.fetch = jest.fn().mockResolvedValue(new Response(null, { status: 200 })) as unknown as typeof fetch;
     jest.clearAllMocks();
   });
 

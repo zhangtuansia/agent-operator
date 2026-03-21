@@ -54,6 +54,25 @@ export const en = {
     cannotSendOffline: 'Cannot send message while offline',
   },
 
+  // Transport connection banner
+  transportBanner: {
+    connecting: 'Connecting to remote server',
+    connectingDesc: 'Connecting to {url}...',
+    reconnecting: 'Reconnecting to remote server',
+    failed: 'Cannot connect to remote server',
+    disconnected: 'Connection to remote server lost',
+    status: 'Remote server connection status',
+    retryIn: 'retry in {ms}ms',
+    retrying: 'retrying',
+    attempt: 'attempt {n}',
+    waiting: 'Waiting for remote server connection.',
+    errorAuth: 'Authentication failed. Verify your server token.',
+    errorProtocol: 'Protocol mismatch between client and server versions.',
+    errorTimeout: 'Connection to {url} timed out. Server may be unreachable.',
+    errorNetwork: 'Could not connect to {url}. Is the remote server running?',
+    errorWsClosed: 'WebSocket closed with code {code}{reason}.',
+  },
+
   // Tray Panel
   trayPanel: {
     badge: 'Menu Bar',
@@ -744,6 +763,7 @@ export const en = {
     chats: 'Chats',
     labels: 'Labels',
     documents: 'Documents',
+    office: 'Office',
     sources: 'Sources',
     skills: 'Skills',
     settings: 'Settings',
@@ -999,6 +1019,9 @@ export const en = {
     permissionDenied: 'Permission denied',
     notFound: 'Not found',
     timeout: 'Request timed out',
+    openFileFailed: 'Failed to open file',
+    openUrlFailed: 'Failed to open link',
+    revealInFinderFailed: 'Failed to reveal file in Finder',
   },
 
   // Error Boundary
@@ -1075,6 +1098,44 @@ export const en = {
     upload: 'Upload',
     import: 'Import',
     export: 'Export',
+    // Action registry labels (used by keyboard shortcuts auto-generation)
+    'app.newChat': 'New Chat',
+    'app.newChat.description': 'Create a new chat session',
+    'app.settings': 'Settings',
+    'app.settings.description': 'Open application settings',
+    'app.toggleTheme': 'Toggle Theme',
+    'app.toggleTheme.description': 'Switch between light and dark mode',
+    'app.search': 'Search',
+    'app.search.description': 'Open search panel',
+    'app.keyboardShortcuts': 'Keyboard Shortcuts',
+    'app.keyboardShortcuts.description': 'Show keyboard shortcuts reference',
+    'app.newWindow': 'New Window',
+    'app.newWindow.description': 'Open a new window',
+    'app.quit': 'Quit',
+    'app.quit.description': 'Quit the application',
+    'nav.focusSidebar': 'Focus Sidebar',
+    'nav.focusSessionList': 'Focus Session List',
+    'nav.focusChat': 'Focus Chat',
+    'nav.nextZone': 'Focus Next Zone',
+    'nav.goBack': 'Go Back',
+    'nav.goBack.description': 'Navigate to previous session',
+    'nav.goForward': 'Go Forward',
+    'nav.goForward.description': 'Navigate to next session',
+    'nav.goBackAlt': 'Go Back',
+    'nav.goBackAlt.description': 'Navigate to previous session (arrow key)',
+    'nav.goForwardAlt': 'Go Forward',
+    'nav.goForwardAlt.description': 'Navigate to next session (arrow key)',
+    'view.toggleSidebar': 'Toggle Sidebar',
+    'view.toggleFocusMode': 'Toggle Focus Mode',
+    'view.toggleFocusMode.description': 'Hide both sidebars for distraction-free work',
+    'sessionList.selectAll': 'Select All Sessions',
+    'sessionList.clearSelection': 'Clear Selection',
+    'chat.stopProcessing': 'Stop Processing',
+    'chat.stopProcessing.description': 'Cancel the current agent task (double-press)',
+    'chat.cyclePermissionMode': 'Cycle Permission Mode',
+    'chat.cyclePermissionMode.description': 'Switch between Explore, Ask, and Execute modes',
+    'chat.nextSearchMatch': 'Next Search Match',
+    'chat.prevSearchMatch': 'Previous Search Match',
   },
 
   // Permission Modes
@@ -1097,6 +1158,8 @@ export const en = {
     mediumDescription: 'Balanced thinking',
     high: 'High',
     highDescription: 'Deep analysis',
+    max: 'Max',
+    maxDescription: 'Maximum effort reasoning',
   },
 
   // Input
@@ -1179,6 +1242,32 @@ export const en = {
     original: 'Original',
     modified: 'Modified',
     toolFailed: 'Tool Failed',
+    // Image preview
+    loadingImage: 'Loading image...',
+    loadFailed: 'Load Failed',
+    copyPath: 'Copy path',
+    imageLabel: 'Image',
+    // PDF preview
+    loadingPdf: 'Loading PDF...',
+    renderingPdf: 'Rendering...',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    pdfLabel: 'PDF',
+    // JSON preview
+    parseError: 'Parse Error',
+    jsonLabel: 'JSON',
+    // Code preview
+    readLabel: 'Read',
+    writeLabel: 'Write',
+    readFailed: 'Read Failed',
+    writeFailed: 'Write Failed',
+    commandLabel: 'Command',
+    // Zoom controls
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomToFit: 'Zoom to Fit',
+    zoomPresets: 'Zoom presets',
+    resetZoom: 'Reset zoom',
   },
 
   multiDiff: {
@@ -1283,6 +1372,8 @@ export const en = {
     sessionList: 'Session List',
     agentTree: 'Agent Tree',
     chat: 'Chat',
+    view: 'View',
+    contextActions: 'Context Actions',
     focusSidebar: 'Focus sidebar',
     focusSessionList: 'Focus session list',
     focusChatInput: 'Focus chat input',
@@ -1423,6 +1514,8 @@ export const en = {
     error: 'Error',
     hideTechnicalDetails: 'Hide technical details',
     showTechnicalDetails: 'Show technical details',
+    retry: 'Retry',
+    warning: 'Warning',
   },
 
   // Task action menu
@@ -1685,11 +1778,34 @@ export const en = {
     expiredTokenMessage: 'The authorization code has expired.',
   },
 
+  // Server Directory Browser
+  serverDirectoryBrowser: {
+    title: 'Select Server Directory',
+    browseDescription: 'Choose a directory on the server filesystem.',
+    browseButton: 'Browse for Folder...',
+    orEnterManually: 'or enter path manually',
+    manualDescription: 'Enter the full path on the server:',
+    pathPlaceholder: '/Users/username/projects/my-project',
+    pathInputLabel: 'Directory path',
+    goButton: 'Go',
+    cancel: 'Cancel',
+    select: 'Select',
+    browseError: 'Failed to open folder dialog',
+    wrongPlatformUnix: 'This looks like a Windows path. The server is running macOS/Linux — please enter a Unix path (e.g. /home/user/project).',
+    wrongPlatformWindows: 'This looks like a Unix path. The server is running Windows — please enter a Windows path (e.g. C:\\Users\\user\\project).',
+  },
+
   // Accessibility
   aria: {
     close: 'Close',
     sessions: 'Sessions',
     changeTodoState: 'Change todo state',
+    sendMessage: 'Send message',
+    stopProcessing: 'Stop processing',
+    attachFile: 'Attach file',
+    removeAttachment: 'Remove attachment',
+    messageInput: 'Message input',
+    navigationItem: 'Navigation item',
   },
 
   // Misc
@@ -1839,6 +1955,8 @@ export const en = {
     sessionList: 'Session List',
     agentTree: 'Agent Tree',
     chat: 'Chat',
+    view: 'View',
+    contextActions: 'Context Actions',
     focusSidebar: 'Focus sidebar',
     focusSessionList: 'Focus session list',
     focusChatInput: 'Focus chat input',

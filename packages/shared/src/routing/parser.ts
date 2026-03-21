@@ -36,7 +36,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'documents' | 'settings' | 'automations'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'documents' | 'office' | 'settings' | 'automations'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -62,7 +62,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'unread', 'read', 'flagged', 'archived', 'state', 'label', 'imported', 'scheduled', 'scheduledTask', 'sources', 'skills', 'documents', 'settings', 'automations'
+  'allChats', 'unread', 'read', 'flagged', 'archived', 'state', 'label', 'imported', 'scheduled', 'scheduledTask', 'sources', 'skills', 'documents', 'office', 'settings', 'automations'
 ]
 
 const VALID_SETTINGS_SUBPAGES: readonly SettingsSubpage[] = [
@@ -183,6 +183,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
 
     return null
+  }
+
+  // Office navigator
+  if (first === 'office') {
+    return { navigator: 'office', details: null }
   }
 
   // Automations navigator - supports type filters (scheduled, event, agentic)
@@ -462,6 +467,11 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
   }
 
+  // Office
+  if (compound.navigator === 'office') {
+    return { type: 'view', name: 'office', params: {} }
+  }
+
   // Automations
   if (compound.navigator === 'automations') {
     if (!compound.details) {
@@ -595,6 +605,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  if (compound.navigator === 'office') {
+    return { navigator: 'office' }
+  }
+
   // Automations - include filter if present
   if (compound.navigator === 'automations') {
     if (!compound.details) {
@@ -694,6 +708,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'documents', details: null }
+    case 'office':
+      return { navigator: 'office' }
     case 'chat':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -791,6 +807,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `documents/document/${state.details.documentId}`
     }
     return 'documents'
+  }
+
+  if (state.navigator === 'office') {
+    return 'office'
   }
 
   if (state.navigator === 'automations') {

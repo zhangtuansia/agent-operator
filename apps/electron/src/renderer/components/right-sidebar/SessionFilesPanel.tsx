@@ -224,6 +224,7 @@ function FileViewer({
           })
         }
       } catch (err) {
+        console.error('[SessionFilesPanel] Error loading file:', err)
         setError(err instanceof Error ? err.message : t('fileViewer.failedToLoad'))
       } finally {
         if (showLoading) {

@@ -56,6 +56,25 @@ export const zh: TranslationKeys = {
     cannotSendOffline: '离线时无法发送消息',
   },
 
+  // Transport connection banner
+  transportBanner: {
+    connecting: '正在连接远程服务器',
+    connectingDesc: '正在连接 {url}...',
+    reconnecting: '正在重新连接远程服务器',
+    failed: '无法连接到远程服务器',
+    disconnected: '与远程服务器的连接已断开',
+    status: '远程服务器连接状态',
+    retryIn: '{ms}毫秒后重试',
+    retrying: '正在重试',
+    attempt: '第 {n} 次尝试',
+    waiting: '等待远程服务器连接。',
+    errorAuth: '身份验证失败，请检查服务器令牌。',
+    errorProtocol: '客户端与服务器版本之间的协议不匹配。',
+    errorTimeout: '连接 {url} 超时，服务器可能无法访问。',
+    errorNetwork: '无法连接到 {url}，请确认远程服务器是否正在运行。',
+    errorWsClosed: 'WebSocket 已关闭，代码 {code}{reason}。',
+  },
+
   // Tray Panel
   trayPanel: {
     badge: '菜单栏',
@@ -746,6 +765,7 @@ export const zh: TranslationKeys = {
     chats: '聊天',
     labels: '标签',
     documents: '文档',
+    office: '办公室',
     sources: '数据源',
     skills: 'Skills',
     settings: '设置',
@@ -1001,6 +1021,9 @@ export const zh: TranslationKeys = {
     permissionDenied: '权限被拒绝',
     notFound: '未找到',
     timeout: '请求超时',
+    openFileFailed: '打开文件失败',
+    openUrlFailed: '打开链接失败',
+    revealInFinderFailed: '在 Finder 中显示文件失败',
   },
 
   // Error Boundary
@@ -1077,6 +1100,44 @@ export const zh: TranslationKeys = {
     upload: '上传',
     import: '导入',
     export: '导出',
+    // 操作注册表标签（用于键盘快捷键自动生成）
+    'app.newChat': '新建聊天',
+    'app.newChat.description': '创建新的聊天会话',
+    'app.settings': '设置',
+    'app.settings.description': '打开应用程序设置',
+    'app.toggleTheme': '切换主题',
+    'app.toggleTheme.description': '在浅色和深色模式之间切换',
+    'app.search': '搜索',
+    'app.search.description': '打开搜索面板',
+    'app.keyboardShortcuts': '键盘快捷键',
+    'app.keyboardShortcuts.description': '显示键盘快捷键参考',
+    'app.newWindow': '新窗口',
+    'app.newWindow.description': '打开新窗口',
+    'app.quit': '退出',
+    'app.quit.description': '退出应用程序',
+    'nav.focusSidebar': '聚焦侧边栏',
+    'nav.focusSessionList': '聚焦会话列表',
+    'nav.focusChat': '聚焦聊天',
+    'nav.nextZone': '聚焦下一个区域',
+    'nav.goBack': '后退',
+    'nav.goBack.description': '导航到上一个会话',
+    'nav.goForward': '前进',
+    'nav.goForward.description': '导航到下一个会话',
+    'nav.goBackAlt': '后退',
+    'nav.goBackAlt.description': '导航到上一个会话（方向键）',
+    'nav.goForwardAlt': '前进',
+    'nav.goForwardAlt.description': '导航到下一个会话（方向键）',
+    'view.toggleSidebar': '切换侧边栏',
+    'view.toggleFocusMode': '切换专注模式',
+    'view.toggleFocusMode.description': '隐藏两侧边栏以专注工作',
+    'sessionList.selectAll': '全选会话',
+    'sessionList.clearSelection': '清除选择',
+    'chat.stopProcessing': '停止处理',
+    'chat.stopProcessing.description': '取消当前智能体任务（双击）',
+    'chat.cyclePermissionMode': '切换权限模式',
+    'chat.cyclePermissionMode.description': '在探索、询问和执行模式之间切换',
+    'chat.nextSearchMatch': '下一个搜索匹配',
+    'chat.prevSearchMatch': '上一个搜索匹配',
   },
 
   // Permission Modes
@@ -1099,6 +1160,8 @@ export const zh: TranslationKeys = {
     mediumDescription: '平衡思考',
     high: '高',
     highDescription: '深度分析',
+    max: '最大',
+    maxDescription: '最大力度推理',
   },
 
   // Input
@@ -1181,6 +1244,32 @@ export const zh: TranslationKeys = {
     original: '原始内容',
     modified: '修改后',
     toolFailed: '工具执行失败',
+    // Image preview
+    loadingImage: '正在加载图片...',
+    loadFailed: '加载失败',
+    copyPath: '复制路径',
+    imageLabel: '图片',
+    // PDF preview
+    loadingPdf: '正在加载 PDF...',
+    renderingPdf: '渲染中...',
+    previousPage: '上一页',
+    nextPage: '下一页',
+    pdfLabel: 'PDF',
+    // JSON preview
+    parseError: '解析错误',
+    jsonLabel: 'JSON',
+    // Code preview
+    readLabel: '读取',
+    writeLabel: '写入',
+    readFailed: '读取失败',
+    writeFailed: '写入失败',
+    commandLabel: '命令',
+    // Zoom controls
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    zoomToFit: '适应窗口',
+    zoomPresets: '缩放预设',
+    resetZoom: '重置缩放',
   },
 
   multiDiff: {
@@ -1285,6 +1374,8 @@ export const zh: TranslationKeys = {
     sessionList: '会话列表',
     agentTree: '智能体树',
     chat: '聊天',
+    view: '视图',
+    contextActions: '上下文操作',
     focusSidebar: '聚焦侧边栏',
     focusSessionList: '聚焦会话列表',
     focusChatInput: '聚焦聊天输入框',
@@ -1582,6 +1673,8 @@ export const zh: TranslationKeys = {
     error: '错误',
     hideTechnicalDetails: '隐藏技术详情',
     showTechnicalDetails: '显示技术详情',
+    retry: '重试',
+    warning: '警告',
   },
 
   // Processing indicators
@@ -1687,11 +1780,34 @@ export const zh: TranslationKeys = {
     expiredTokenMessage: '授权码已过期。',
   },
 
+  // Server Directory Browser
+  serverDirectoryBrowser: {
+    title: '选择服务器目录',
+    browseDescription: '在服务器文件系统中选择一个目录。',
+    browseButton: '浏览文件夹...',
+    orEnterManually: '或手动输入路径',
+    manualDescription: '输入服务器上的完整路径：',
+    pathPlaceholder: '/Users/username/projects/my-project',
+    pathInputLabel: '目录路径',
+    goButton: '前往',
+    cancel: '取消',
+    select: '选择',
+    browseError: '无法打开文件夹对话框',
+    wrongPlatformUnix: '这看起来像是 Windows 路径。服务器运行的是 macOS/Linux，请输入 Unix 路径（例如 /home/user/project）。',
+    wrongPlatformWindows: '这看起来像是 Unix 路径。服务器运行的是 Windows，请输入 Windows 路径（例如 C:\\Users\\user\\project）。',
+  },
+
   // Accessibility
   aria: {
     close: '关闭',
     sessions: '会话',
     changeTodoState: '更改待办状态',
+    sendMessage: '发送消息',
+    stopProcessing: '停止处理',
+    attachFile: '附加文件',
+    removeAttachment: '移除附件',
+    messageInput: '消息输入',
+    navigationItem: '导航项',
   },
 
   // Misc
@@ -1839,8 +1955,10 @@ export const zh: TranslationKeys = {
     global: '全局',
     navigation: '导航',
     sessionList: '会话列表',
-    agentTree: 'Agent 树',
+    agentTree: '智能体树',
     chat: '聊天',
+    view: '视图',
+    contextActions: '上下文操作',
     focusSidebar: '聚焦侧边栏',
     focusSessionList: '聚焦会话列表',
     focusChatInput: '聚焦聊天输入框',

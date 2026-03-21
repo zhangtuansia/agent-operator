@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
   Bot,
+  Building2,
   Settings,
   ChevronRight,
   ChevronDown,
@@ -67,6 +68,7 @@ import { DocumentsWorkspace } from "./DocumentsWorkspace"
 import { LeftSidebar } from "./LeftSidebar"
 import { TopBar } from "./TopBar"
 import { PanelStackContainer } from "./PanelStackContainer"
+import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from "./TransportConnectionBanner"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { useSession } from "@/hooks/useSession"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -158,6 +160,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isDocumentsNavigation,
+  isOfficeNavigation,
   isAutomationsNavigation,
   type NavigationState,
   type ChatFilter,
@@ -383,8 +386,19 @@ function AppShellContent({
   const { t } = useTranslation()
   const { isOnline } = useNetworkStatus()
   const { navigate, canGoBack, canGoForward, goBack, goForward, updateRightSidebar } = useNavigation()
+
+  // Transport connection state — drives the TransportConnectionBanner
+  const [transportState, setTransportState] = React.useState<import('../../../shared/types').TransportConnectionState | null>(null)
+  React.useEffect(() => {
+    // Fetch initial state
+    window.electronAPI.getTransportConnectionState().then(setTransportState)
+    // Subscribe to live updates
+    const cleanup = window.electronAPI.onTransportConnectionStateChanged(setTransportState)
+    return cleanup
+  }, [])
   const collapsedSidebarInset = PANEL_EDGE_INSET + PANEL_GAP
   const panelStack = useAtomValue(panelStackAtom)
+  const setPanelStack = useSetAtom(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
   const focusedPanelRoute = useAtomValue(focusedPanelRouteAtom)
   const reconcilePanelStack = useSetAtom(reconcilePanelStackAtom)
@@ -407,6 +421,7 @@ function AppShellContent({
   const lastCurrentRouteRef = React.useRef<ViewRoute | null>(null)
   const lastFocusedPanelIdRef = React.useRef<string | null>(null)
   const panelRouteSyncSourceRef = React.useRef<"focus" | "navigation" | null>(null)
+  const savedPanelStackRef = React.useRef<typeof panelStack | null>(null)
 
   // Derive chat filter from navigation state (only when in chats navigator)
   const chatFilter = isChatsNavigation(navState) ? navState.filter : null
@@ -450,6 +465,23 @@ function AppShellContent({
     lastWorkspaceIdRef.current = activeWorkspaceId
     lastCurrentRouteRef.current = currentRoute
 
+    // Documents layout renders via contentSlot, which requires an empty panelStack.
+    if (isDocumentsLayout) {
+      if (panelStack.length > 0) {
+        savedPanelStackRef.current = panelStack
+        panelRouteSyncSourceRef.current = null
+        setPanelStack([])
+      }
+      return
+    }
+
+    // Restore saved panel stack when returning from documents
+    if (savedPanelStackRef.current && panelStack.length === 0 && !didWorkspaceChange) {
+      setPanelStack(savedPanelStackRef.current)
+      savedPanelStackRef.current = null
+      return
+    }
+
     if (didWorkspaceChange || panelStack.length === 0) {
       panelRouteSyncSourceRef.current = null
       reconcilePanelStack({
@@ -477,6 +509,8 @@ function AppShellContent({
     panelStack.length,
     reconcilePanelStack,
     updateFocusedPanelRoute,
+    isDocumentsLayout,
+    setPanelStack,
   ])
 
   React.useEffect(() => {
@@ -1279,6 +1313,35 @@ function AppShellContent({
     navigate(routes.view.documents())
   }, [navigate])
 
+  // Handler for office view — opens in built-in browser (singleton)
+  const officeInstanceIdRef = React.useRef<string | null>(null)
+  const handleOfficeClick = useCallback(async () => {
+    const browserPaneApi = window.electronAPI.browserPane
+    if (!browserPaneApi) {
+      toast.error('Browser is unavailable')
+      return
+    }
+    try {
+      // Reuse existing instance if still alive
+      if (officeInstanceIdRef.current) {
+        try {
+          await browserPaneApi.focus(officeInstanceIdRef.current)
+          return
+        } catch {
+          // Instance was closed, create a new one
+          officeInstanceIdRef.current = null
+        }
+      }
+      const instanceId = await browserPaneApi.create({ show: true })
+      await browserPaneApi.navigate(instanceId, 'http://127.0.0.1:19000/?desktop=1')
+      await browserPaneApi.focus(instanceId)
+      officeInstanceIdRef.current = instanceId
+    } catch (error) {
+      console.error('[AppShell] Failed to open office:', error)
+      toast.error('Failed to open office')
+    }
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1538,6 +1601,7 @@ function AppShellContent({
       result.push({ id: `nav:label:${label.id}`, type: 'nav', action: () => handleLabelClick(label.id) })
     }
     result.push({ id: 'nav:documents', type: 'nav', action: handleDocumentsClick })
+    result.push({ id: 'nav:office', type: 'nav', action: handleOfficeClick })
     // Sources section (with sub-items)
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:sources:api', type: 'nav', action: handleSourcesApiClick })
@@ -1554,7 +1618,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleUnreadClick, handleReadClick, handleFlaggedClick, handleArchivedClick, labelConfigs, handleLabelClick, handleDocumentsClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleUnreadClick, handleReadClick, handleFlaggedClick, handleArchivedClick, labelConfigs, handleLabelClick, handleDocumentsClick, handleOfficeClick, handleSourcesClick, handleSourcesApiClick, handleSourcesMcpClick, handleSourcesLocalClick, handleSkillsClick, handleScheduledClick, handleAutomationsClick, handleAutomationsScheduledClick, handleAutomationsEventClick, handleAutomationsAgenticClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1775,6 +1839,25 @@ function AppShellContent({
           )}
         </AnimatePresence>
 
+        {/* Transport connection banner — shown when remote server is disconnected/reconnecting */}
+        <AnimatePresence>
+          {shouldShowTransportConnectionBanner(transportState) && transportState && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed top-[48px] left-0 right-0 z-overlay"
+              style={{ top: !isOnline ? 80 : 48 }}
+            >
+              <TransportConnectionBanner
+                state={transportState}
+                onRetry={() => window.electronAPI.reconnectTransport()}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       {/* === OUTER LAYOUT: Sidebar | Main Content === */}
       <div
         className="flex items-stretch relative"
@@ -1877,6 +1960,20 @@ function AppShellContent({
                             },
                           ],
                         },
+                        {
+                          id: "nav:documents",
+                          title: t('sidebar.documents'),
+                          icon: FileText,
+                          variant: (isDocumentsNavigation(navState) ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleDocumentsClick,
+                        },
+                        {
+                          id: "nav:office",
+                          title: t('sidebar.office') ?? '办公室',
+                          icon: Building2,
+                          variant: (isOfficeNavigation(navState) ? "default" : "ghost") as "default" | "ghost",
+                          onClick: handleOfficeClick,
+                        },
                         ...(labelConfigs.length > 0 ? [{
                           id: "nav:labels",
                           title: t('sidebar.labels'),
@@ -1894,13 +1991,17 @@ function AppShellContent({
                           },
                         }] : []),
                         {
-                          id: "nav:documents",
-                          title: t('sidebar.documents'),
-                          icon: FileText,
-                          variant: (isDocumentsNavigation(navState) ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleDocumentsClick,
+                          id: "nav:skills",
+                          title: t('sidebar.skills'),
+                          label: String(skills.length),
+                          icon: Zap,
+                          variant: isSkillsNavigation(navState) ? "default" : "ghost",
+                          onClick: handleSkillsClick,
+                          contextMenu: {
+                            type: 'skills',
+                            onAddSkill: openAddSkill,
+                          },
                         },
-                        { id: "separator:chats-sources", type: "separator" },
                         {
                           id: "nav:sources",
                           title: t('sidebar.sources'),
@@ -1961,18 +2062,6 @@ function AppShellContent({
                           ],
                         },
                         {
-                          id: "nav:skills",
-                          title: t('sidebar.skills'),
-                          label: String(skills.length),
-                          icon: Zap,
-                          variant: isSkillsNavigation(navState) ? "default" : "ghost",
-                          onClick: handleSkillsClick,
-                          contextMenu: {
-                            type: 'skills',
-                            onAddSkill: openAddSkill,
-                          },
-                        },
-                        {
                           id: "nav:automations",
                           title: t('sidebar.automations') ?? 'Automations',
                           label: String(automations.length),
@@ -2007,7 +2096,7 @@ function AppShellContent({
                             },
                           ],
                         },
-                        { id: "separator:skills-settings", type: "separator" },
+                        { id: "separator:automations-settings", type: "separator" },
                         {
                           id: "nav:settings",
                           title: t('sidebar.settings'),
@@ -2244,10 +2333,10 @@ function AppShellContent({
           ) : undefined}
           contentSlot={
             <div className={cn(
-              "h-full overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
+              "h-full flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
               isFocusedMode || !showNavigatorPane
-                ? (isRightSidebarVisible && shouldDockRightSidebar && !isFocusedMode && !isDocumentsLayout ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-[14px]")
-                : (isRightSidebarVisible && shouldDockRightSidebar && !isDocumentsLayout ? "rounded-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
+                ? (isRightSidebarVisible && shouldDockRightSidebar && !isFocusedMode && !isDocumentsLayout  ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-[14px]")
+                : (isRightSidebarVisible && shouldDockRightSidebar && !isDocumentsLayout  ? "rounded-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
             )}>
               {isDocumentsLayout ? (
                 <DocumentsWorkspace isFocusedMode={isFocusedMode} navState={navState} />
@@ -2257,7 +2346,7 @@ function AppShellContent({
             </div>
           }
           isSidebarAndNavigatorHidden={isFocusedMode}
-          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible && !isDocumentsLayout}
+          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible && !isDocumentsLayout }
           isResizing={!!isResizing}
         />
 

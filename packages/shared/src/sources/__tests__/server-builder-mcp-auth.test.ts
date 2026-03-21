@@ -42,7 +42,7 @@ describe('SourceServerBuilder MCP auth handling', () => {
   test('reports auth required for authenticated MCP sources without a token', async () => {
     const source = createMockMcpSource({
       isAuthenticated: true,
-      connectionStatus: 'active',
+      connectionStatus: 'connected',
     });
 
     const result = await builder.buildAll([{ source, token: null }]);
@@ -73,7 +73,7 @@ describe('SourceServerBuilder MCP auth handling', () => {
   test('still builds public MCP sources without authentication', () => {
     const source = createMockMcpSource({
       slug: 'public-docs',
-      connectionStatus: 'active',
+      connectionStatus: 'connected',
       mcp: {
         transport: 'http',
         url: 'https://example.com/public',

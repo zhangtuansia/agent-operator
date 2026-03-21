@@ -203,6 +203,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           setError(t('emptyStates.sourceNotFound'))
         }
       } catch (err) {
+        console.error('[SourceInfoPage] Error loading source:', err)
         if (!isMounted) return
         setError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
       } finally {
@@ -240,6 +241,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           setMcpToolsError(result.error || t('sourceInfo.failedToLoad'))
         }
       } catch (err) {
+        console.error('[SourceInfoPage] Error loading MCP tools:', err)
         if (!isMounted) return
         setMcpToolsError(err instanceof Error ? err.message : t('sourceInfo.failedToLoad'))
       } finally {
@@ -365,6 +367,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
       navigate(routes.view.sources())
       onDelete?.()
     } catch (err) {
+      console.error('[SourceInfoPage] Error deleting source:', err)
       toast.error(t('toasts.failedToDeleteSource'), {
         description: err instanceof Error ? err.message : 'Unknown error',
       })

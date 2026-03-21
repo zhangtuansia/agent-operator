@@ -28,6 +28,7 @@ export function FileViewer({ path }: FileViewerProps) {
         const fileContent = await window.electronAPI.readFile(path)
         setContent(fileContent)
       } catch (err) {
+        console.error('[FileViewer] Error loading file:', err)
         setError(err instanceof Error ? err.message : t('fileViewer.failedToLoad'))
         setContent('')
       } finally {

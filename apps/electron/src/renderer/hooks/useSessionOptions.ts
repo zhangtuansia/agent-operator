@@ -22,7 +22,7 @@ export interface SessionOptions {
   ultrathinkEnabled: boolean
   /** Permission mode ('safe', 'ask', 'allow-all') */
   permissionMode: PermissionMode
-  /** Session-level thinking level ('off', 'think', 'max') - sticky, persisted */
+  /** Session-level thinking level ('off', 'low', 'medium', 'high', 'max') - sticky, persisted */
   thinkingLevel: ThinkingLevel
 }
 
@@ -30,7 +30,7 @@ export interface SessionOptions {
 export const defaultSessionOptions: SessionOptions = {
   ultrathinkEnabled: false,
   permissionMode: 'ask', // Default to ask mode (prompt for permissions)
-  thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'think' level
+  thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'medium' level
 }
 
 /** Type for partial updates to session options */

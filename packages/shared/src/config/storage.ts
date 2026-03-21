@@ -18,6 +18,7 @@ import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.
 import { isSafeHttpHeaderValue } from '../utils/mask.ts';
 import { debug } from '../utils/debug.ts';
 import { CONFIG_DIR } from './paths.ts';
+import type { AgentType } from './types.ts';
 import type { StoredAttachment, StoredMessage } from '@agent-operator/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
@@ -82,10 +83,7 @@ export interface OpenTargetPreferences {
   perPath?: Record<string, string>;
 }
 
-/**
- * Agent type - which AI backend to use
- */
-export type AgentType = 'claude' | 'codex';
+// AgentType is defined in types.ts — do not duplicate here
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
@@ -324,7 +322,7 @@ function haveSameConnectionModelIds(
   right: Array<ModelDefinition | string>,
 ): boolean {
   if (!left || left.length !== right.length) return false;
-  return left.every((model, index) => getConnectionModelId(model) === getConnectionModelId(right[index]));
+  return left.every((model, index) => getConnectionModelId(model) === getConnectionModelId(right[index]!));
 }
 
 function normalizeProviderConfig(providerConfig: ProviderConfig): ProviderConfig {

@@ -1,0 +1,16 @@
+[
+  {
+    "agentId": "star",
+    "name": "Star",
+    "isMain": true,
+    "state": "idle",
+    "detail": "待命中，随时准备为你服务",
+    "updated_at": "2026-03-21T09:19:47.719483",
+    "area": "breakroom",
+    "source": "local",
+    "joinKey": null,
+    "authStatus": "approved",
+    "authExpiresAt": null,
+    "lastPushAt": null
+  }
+]

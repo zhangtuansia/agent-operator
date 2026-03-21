@@ -13,11 +13,10 @@
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.56.3",
-    "@mariozechner/pi-agent-core": "0.55.0",
+    "@mariozechner/pi-agent-core": "^0.61.1",
     "@mariozechner/pi-ai": "^0.57.0",
     "@sinclair/typebox": "^0.34.41",
-    "duck-duck-scrape": "^2.2.7"
-    ,
+    "duck-duck-scrape": "^2.2.7",
     "node-html-parser": "^7.0.1",
     "pdfjs-dist": "^5.4.296",
     "turndown": "^7.2.1"

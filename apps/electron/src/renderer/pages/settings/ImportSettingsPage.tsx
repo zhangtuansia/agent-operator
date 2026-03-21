@@ -67,6 +67,7 @@ export default function ImportSettingsPage() {
       // Refresh sessions to show imported chats
       refreshSessions?.()
     } catch (error) {
+      console.error('[ImportSettingsPage] Error importing sessions:', error)
       setLastResult({
         imported: 0,
         failed: 0,

@@ -8,8 +8,10 @@
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, PromptHandlerOptions, AutomationsConfigProvider } from './types.ts';
-import { APP_EVENTS, type AutomationEvent, type PendingPrompt, type AppEvent } from '../types.ts';
-import { matcherMatches, buildEnvFromPayload, buildPendingPromptsForMatcher } from '../utils.ts';
+import { APP_EVENTS, type AutomationEvent, type PromptAction, type PendingPrompt, type AppEvent } from '../types.ts';
+import type { PermissionMode } from '../../agent/mode-types.ts';
+import { matcherMatches, buildEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
+import { deriveAutomationName } from '../name-utils.ts';
 
 const log = createLogger('prompt-handler');
 
@@ -50,22 +52,68 @@ export class PromptHandler implements AutomationHandler {
     const matchers = this.configProvider.getMatchersForEvent(event);
     if (matchers.length === 0) return;
 
-    const env = buildEnvFromPayload(event, payload);
-    const pendingPrompts: PendingPrompt[] = [];
+    // Group prompt actions by matcher for per-matcher history
+    const matcherPrompts: Array<{
+      matcherId: string | undefined;
+      automationName: string;
+      prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: PermissionMode }>;
+    }> = [];
 
     for (const matcher of matchers) {
       if (!matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
-      pendingPrompts.push(...buildPendingPromptsForMatcher(matcher, env, this.options.sessionId));
+
+      const prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: PermissionMode }> = [];
+      for (const action of matcher.actions) {
+        if (action.type === 'prompt') {
+          prompts.push({ prompt: action, labels: matcher.labels, permissionMode: matcher.permissionMode });
+        }
+      }
+      if (prompts.length > 0) {
+        matcherPrompts.push({ matcherId: matcher.id, automationName: deriveAutomationName(event, matcher), prompts });
+      }
     }
 
-    if (pendingPrompts.length === 0) return;
+    if (matcherPrompts.length === 0) return;
 
-    log.debug(`[PromptHandler] Processing ${pendingPrompts.length} prompts for ${event}`);
+    const totalPrompts = matcherPrompts.reduce((s, m) => s + m.prompts.length, 0);
+    log.debug(`[PromptHandler] Processing ${totalPrompts} prompts for ${event}`);
+
+    // Build environment variables
+    const env = buildEnvFromPayload(event, payload);
+
+    // Process prompts per matcher
+    const pendingPrompts: PendingPrompt[] = [];
+
+    for (const { matcherId, automationName, prompts } of matcherPrompts) {
+      for (const { prompt, labels, permissionMode } of prompts) {
+        // Expand environment variables in the prompt
+        const expandedPrompt = expandEnvVars(prompt.prompt, env);
+
+        // Parse references
+        const references = parsePromptReferences(expandedPrompt);
+
+        // Expand labels
+        const expandedLabels = labels?.map(label => expandEnvVars(label, env));
+
+        pendingPrompts.push({
+          sessionId: this.options.sessionId,
+          matcherId,
+          automationName,
+          prompt: expandedPrompt,
+          mentions: references.mentions,
+          labels: expandedLabels,
+          permissionMode,
+          llmConnection: prompt.llmConnection,
+          model: prompt.model,
+        });
+      }
+
+    }
 
     // Deliver prompts via callback
     if (pendingPrompts.length > 0 && this.options.onPromptsReady) {
       log.debug(`[PromptHandler] Delivering ${pendingPrompts.length} prompts`);
-      await this.options.onPromptsReady(pendingPrompts);
+      this.options.onPromptsReady(pendingPrompts);
     }
   }
 

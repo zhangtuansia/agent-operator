@@ -209,6 +209,7 @@ export const CHANNEL_MAP = {
   setDefaultLlmConnection: invoke(IPC_CHANNELS.LLM_CONNECTION_SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(IPC_CHANNELS.LLM_CONNECTION_SET_WORKSPACE_DEFAULT),
   refreshLlmConnectionModels: invoke(IPC_CHANNELS.LLM_CONNECTION_REFRESH_MODELS),
+  onLlmConnectionsChanged: listener(RPC_CHANNELS.llmConnections.CHANGED),
 
   // Settings - Billing
   getBillingMethod: invoke(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD),

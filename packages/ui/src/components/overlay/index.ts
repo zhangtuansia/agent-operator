@@ -8,6 +8,11 @@ export { ContentFrame, type ContentFrameProps } from './ContentFrame'
 export { CopyButton, type CopyButtonProps } from './CopyButton'
 export { ItemNavigator, type ItemNavigatorProps } from './ItemNavigator'
 export { OverlayErrorBanner, type OverlayErrorBannerProps } from './OverlayErrorBanner'
+export { ZoomControls, type ZoomControlsProps, type ZoomControlsTranslations } from './ZoomControls'
+
+// Interaction hooks and specs
+export { useRichBlockInteractions } from './useRichBlockInteractions'
+export { RICH_BLOCK_DEFAULTS, type RichBlockInteractionOptions } from './rich-block-interaction-spec'
 
 // Specialized overlays
 export { CodePreviewOverlay, type CodePreviewOverlayProps } from './CodePreviewOverlay'
@@ -18,7 +23,7 @@ export { GenericOverlay, detectLanguage, detectLanguageFromPath, type GenericOve
 export { JSONPreviewOverlay, type JSONPreviewOverlayProps } from './JSONPreviewOverlay'
 export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay'
 export { DocumentFormattedMarkdownOverlay, type DocumentFormattedMarkdownOverlayProps } from './DocumentFormattedMarkdownOverlay'
-export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePreviewOverlay'
+export { ImagePreviewOverlay, type ImagePreviewOverlayProps, type ImagePreviewOverlayTranslations } from './ImagePreviewOverlay'
 export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
 export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
 export { ExcalidrawPreviewOverlay, type ExcalidrawPreviewOverlayProps } from './ExcalidrawPreviewOverlay'

@@ -12,7 +12,7 @@
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@agent-operator/core/types';
-import type { AgentType } from '../config/storage.ts';
+import type { AgentType } from '../config/types.ts';
 
 /**
  * Session fields that persist to disk.

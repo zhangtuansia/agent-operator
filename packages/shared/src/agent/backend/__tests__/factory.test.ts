@@ -107,7 +107,7 @@ describe('createBackend / createAgent', () => {
         model: undefined,
       });
 
-      const agent = createBackend(config) as OperatorAgent;
+      const agent = createBackend(config) as unknown as OperatorAgent;
 
       expect(agent.getModel()).toBe(getDefaultModelForConnection('bedrock'));
     });

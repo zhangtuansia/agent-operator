@@ -190,6 +190,7 @@ export default function IMSettingsPage() {
         }
       }
     } catch (error) {
+      console.error('[IMSettingsPage] Feishu test error:', error)
       setFeishuTest('error')
       setTestError(error instanceof Error ? error.message : t('imSettings.testFailed'))
     }
@@ -235,6 +236,7 @@ export default function IMSettingsPage() {
         }
       }
     } catch (error) {
+      console.error('[IMSettingsPage] Telegram test error:', error)
       setTelegramTest('error')
       setTestError(error instanceof Error ? error.message : t('imSettings.testFailed'))
     }

@@ -246,6 +246,7 @@ interface CreateSessionBackendConfigArgs {
     authType: BackendConfig['authType']
     defaultModel?: string
     baseUrl?: string
+    piAuthProvider?: string
   } | null
   resolvedModel?: string
   sessionId: string
@@ -368,6 +369,7 @@ export async function createSessionBackendConfig(args: CreateSessionBackendConfi
           nodePath: getBundledBunPath() ?? 'bun',
           piServerPath,
           piInterceptorPath,
+          piAuthProvider: resolvedConnection?.piAuthProvider,
         },
       }
     }

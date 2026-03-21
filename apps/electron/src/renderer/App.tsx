@@ -35,6 +35,8 @@ import {
   updateSessionAtom,
   updateSessionMetaAtom,
   sessionMetaMapAtom,
+  sessionAtomFamily,
+  extractSessionMeta,
   windowWorkspaceIdAtom,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
@@ -45,10 +47,19 @@ import { ShikiThemeProvider, PlatformProvider } from '@agent-operator/ui'
 import { ActionRegistryProvider } from '@/actions'
 import { useSessionDrafts } from '@/hooks/useSessionDrafts'
 import { useSessionEvents } from '@/hooks/useSessionEvents'
+import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { useMenuEvents } from '@/hooks/useMenuEvents'
 import { useSplashScreen } from '@/hooks/useSplashScreen'
 import { networkStatusAtom } from '@/hooks/useNetworkStatus'
 import { normalizePermissionMode } from '@agent-operator/shared/agent/modes'
+import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
+import {
+  ImagePreviewOverlay,
+  PDFPreviewOverlay,
+  CodePreviewOverlay,
+  JSONPreviewOverlay,
+  DocumentFormattedMarkdownOverlay,
+} from '@agent-operator/ui'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -138,7 +149,7 @@ export default function App() {
   // Apply theme via hook (injects CSS variables)
   // shikiTheme is passed to ShikiThemeProvider to ensure correct syntax highlighting
   // theme for dark-only themes in light system mode
-  const { shikiTheme } = useTheme({ appTheme })
+  const { shikiTheme, isDark } = useTheme({ appTheme })
 
   // Ref for sessionOptions to access current value in event handlers without re-registering
   const sessionOptionsRef = useRef(sessionOptions)
@@ -269,12 +280,52 @@ export default function App() {
     setSessionOptions,
   })
 
+  // Stale session recovery — refreshes sessions stuck in isProcessing=true
+  // with no events for 2+ minutes (safety net for dropped events / server crashes)
+  const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const loaded = await window.electronAPI.getSessionMessages(sessionId)
+      if (!loaded) return false
+
+      // Merge loaded data into the existing atom, resetting isProcessing
+      const existing = store.get(sessionAtomFamily(sessionId))
+      const merged = existing
+        ? { ...existing, messages: loaded.messages, isProcessing: false }
+        : { ...loaded, isProcessing: false }
+      updateSessionDirect(sessionId, () => merged)
+
+      // Update metadata map
+      const metaMap = store.get(sessionMetaMapAtom)
+      const newMetaMap = new Map(metaMap)
+      newMetaMap.set(sessionId, extractSessionMeta(merged))
+      store.set(sessionMetaMapAtom, newMetaMap)
+
+      return true
+    } catch (err) {
+      console.error('[App] refreshSessionFromServer failed:', err)
+      return false
+    }
+  }, [store, updateSessionDirect])
+
+  const { trackSessionActivity } = useStaleSessionRecovery({
+    store,
+    refreshSessionFromServer,
+  })
+
+  // Feed session events into the stale-recovery watchdog
+  useEffect(() => {
+    const cleanup = window.electronAPI.onSessionEvent((event) => {
+      trackSessionActivity(event.sessionId)
+    })
+    return cleanup
+  }, [trackSessionActivity])
+
   // Load workspaces, sessions, model, notifications setting, and drafts when app is ready
   useEffect(() => {
     if (appState !== 'ready') return
 
-    window.electronAPI.getWorkspaces().then(setWorkspaces)
-    window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
+    window.electronAPI.getWorkspaces().then(setWorkspaces).catch((err) => console.error('[App] Failed to load workspaces:', err))
+    window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled).catch((err) => console.error('[App] Failed to load notification settings:', err))
     window.electronAPI.getSessions().then((loadedSessions) => {
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
@@ -284,12 +335,12 @@ export default function App() {
       for (const s of loadedSessions) {
         // Only store non-default options to keep the map lean
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'think'
+        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'medium'
         if (hasNonDefaultMode || hasNonDefaultThinking) {
           optionsMap.set(s.id, {
             ultrathinkEnabled: false, // ultrathink is single-shot, never persisted
             permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? 'think',
+            thinkingLevel: s.thinkingLevel ?? 'medium',
           })
         }
       }
@@ -356,6 +407,16 @@ export default function App() {
     refreshLlmConnections()
   }, [appState, windowWorkspaceId, refreshLlmConnections])
 
+  // Subscribe to LLM connection change events (live updates when API keys are modified)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onLlmConnectionsChanged(() => {
+      refreshLlmConnections()
+    })
+    return () => {
+      cleanup()
+    }
+  }, [refreshLlmConnections])
+
   const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
     const normalizedPermissionMode = normalizePermissionMode(options?.permissionMode as string | undefined)
     const sanitizedOptions = options
@@ -371,14 +432,14 @@ export default function App() {
 
     // Apply session defaults to the unified sessionOptions
     const hasNonDefaultMode = session.permissionMode && session.permissionMode !== 'ask'
-    const hasNonDefaultThinking = session.thinkingLevel && session.thinkingLevel !== 'think'
+    const hasNonDefaultThinking = session.thinkingLevel && session.thinkingLevel !== 'medium'
     if (hasNonDefaultMode || hasNonDefaultThinking) {
       setSessionOptions(prev => {
         const next = new Map(prev)
         next.set(session.id, {
           ultrathinkEnabled: false,
           permissionMode: session.permissionMode ?? 'ask',
-          thinkingLevel: session.thinkingLevel ?? 'think',
+          thinkingLevel: session.thinkingLevel ?? 'medium',
         })
         return next
       })
@@ -766,29 +827,65 @@ export default function App() {
     }
   }, [])
 
-  const handleOpenFile = useCallback(async (path: string) => {
+  // File/URL open handlers - external fallbacks
+  const openFileExternal = useCallback(async (path: string) => {
     try {
       await window.electronAPI.openFile(path)
     } catch (error) {
       console.error('Failed to open file:', error)
+      toast.error(t('errors.openFileFailed'))
     }
-  }, [])
+  }, [t])
 
-  const handleOpenUrl = useCallback(async (url: string) => {
+  const openUrlExternal = useCallback(async (url: string) => {
     try {
       await window.electronAPI.openUrl(url)
     } catch (error) {
       console.error('Failed to open URL:', error)
+      toast.error(t('errors.openUrlFailed'))
     }
-  }, [])
+  }, [t])
 
   const handleRevealInFinder = useCallback(async (path: string) => {
     try {
       await window.electronAPI.showInFolder(path)
     } catch (error) {
       console.error('Failed to reveal file in Finder:', error)
+      toast.error(t('errors.revealInFinderFailed'))
     }
-  }, [])
+  }, [t])
+
+  // Link interceptor - routes file opens to in-app preview overlays when possible.
+  // Falls back to opening externally for unsupported file types.
+  const {
+    handleOpenFile,
+    handleOpenUrl,
+    previewState: filePreviewState,
+    closePreview: closeFilePreview,
+    readFileDataUrl,
+    readFileBinary,
+  } = useLinkInterceptor({
+    openFileExternal,
+    openUrl: openUrlExternal,
+    showInFolder: handleRevealInFinder,
+    readFile: (path: string) => window.electronAPI.readFile(path),
+    readFileDataUrl: async (path: string) => {
+      const attachment = await window.electronAPI.readFileAttachment(path)
+      if (!attachment?.base64) throw new Error('Failed to read file')
+      return `data:${attachment.mimeType || 'application/octet-stream'};base64,${attachment.base64}`
+    },
+    readFileBinary: async (path: string) => {
+      const attachment = await window.electronAPI.readFileAttachment(path)
+      const base64 = attachment?.base64
+      if (!base64) throw new Error('Failed to read binary file')
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      return bytes
+    },
+  })
 
   const handleOpenSettings = useCallback(() => {
     navigate(routes.view.settings())
@@ -855,12 +952,12 @@ export default function App() {
     const optionsMap = new Map<string, SessionOptions>()
     for (const s of loadedSessions) {
       const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-      const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'think'
+      const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== 'medium'
       if (hasNonDefaultMode || hasNonDefaultThinking) {
         optionsMap.set(s.id, {
           ultrathinkEnabled: false,
           permissionMode: s.permissionMode ?? 'ask',
-          thinkingLevel: s.thinkingLevel ?? 'think',
+          thinkingLevel: s.thinkingLevel ?? 'medium',
         })
       }
     }
@@ -1133,6 +1230,17 @@ export default function App() {
               onConfirm={executeReset}
               onCancel={() => setShowResetDialog(false)}
             />
+
+            {/* File preview overlays - triggered by link interceptor when clicking files in chat */}
+            {filePreviewState && (
+              <FilePreviewRenderer
+                state={filePreviewState}
+                onClose={closeFilePreview}
+                loadDataUrl={readFileDataUrl}
+                loadPdfData={readFileBinary}
+                isDark={isDark}
+              />
+            )}
           </div>
         </NavigationProvider>
         </TooltipProvider>
@@ -1153,4 +1261,114 @@ export default function App() {
 function WindowCloseHandler() {
   useWindowCloseHandler()
   return null
+}
+
+/**
+ * FilePreviewRenderer - Routes file preview state to the correct overlay component.
+ *
+ * Handles all preview types from the link interceptor:
+ * - image -> ImagePreviewOverlay (binary, loaded via data URL, with zoom/pan)
+ * - pdf -> PDFPreviewOverlay (binary, rendered via react-pdf)
+ * - code/text -> CodePreviewOverlay (syntax highlighted)
+ * - markdown -> DocumentFormattedMarkdownOverlay
+ * - json -> JSONPreviewOverlay (interactive tree view)
+ */
+function FilePreviewRenderer({
+  state,
+  onClose,
+  loadDataUrl,
+  loadPdfData,
+  isDark,
+}: {
+  state: FilePreviewState
+  onClose: () => void
+  loadDataUrl: (path: string) => Promise<string>
+  loadPdfData: (path: string) => Promise<Uint8Array>
+  isDark: boolean
+}) {
+  const theme = isDark ? 'dark' : 'light' as const
+
+  switch (state.type) {
+    case 'image':
+      return (
+        <ImagePreviewOverlay
+          isOpen
+          onClose={onClose}
+          filePath={state.filePath}
+          loadDataUrl={loadDataUrl}
+          theme={theme}
+        />
+      )
+
+    case 'pdf':
+      return (
+        <PDFPreviewOverlay
+          isOpen
+          onClose={onClose}
+          filePath={state.filePath}
+          loadPdfData={loadPdfData}
+          theme={theme}
+        />
+      )
+
+    case 'code':
+    case 'text':
+      return (
+        <CodePreviewOverlay
+          isOpen
+          onClose={onClose}
+          filePath={state.filePath}
+          content={state.content ?? ''}
+          language={state.type === 'code' ? (state as { language: string }).language : 'plaintext'}
+          mode="read"
+          theme={theme}
+          error={state.error}
+        />
+      )
+
+    case 'markdown': {
+      const isPlanFile =
+        (state.filePath.includes('/plans/') || state.filePath.startsWith('plans/')) &&
+        state.filePath.endsWith('.md')
+      return (
+        <DocumentFormattedMarkdownOverlay
+          isOpen
+          onClose={onClose}
+          content={state.content ?? ''}
+          filePath={state.filePath}
+          theme={theme}
+          variant={isPlanFile ? 'plan' : undefined}
+        />
+      )
+    }
+
+    case 'json':
+      try {
+        const parsed = state.content ? JSON.parse(state.content) : {}
+        return (
+          <JSONPreviewOverlay
+            isOpen
+            onClose={onClose}
+            data={parsed}
+            filePath={state.filePath}
+            theme={theme}
+            error={state.error}
+          />
+        )
+      } catch {
+        return (
+          <JSONPreviewOverlay
+            isOpen
+            onClose={onClose}
+            data={{}}
+            filePath={state.filePath}
+            theme={theme}
+            error={state.error || 'Invalid JSON'}
+          />
+        )
+      }
+
+    default:
+      return null
+  }
 }

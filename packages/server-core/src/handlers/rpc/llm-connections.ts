@@ -22,6 +22,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,
   RPC_CHANNELS.llmConnections.GET,
   RPC_CHANNELS.llmConnections.GET_API_KEY,
+  RPC_CHANNELS.llmConnections.SET_API_KEY,
   RPC_CHANNELS.credentials.GET_LLM_API_KEY,
   RPC_CHANNELS.llmConnections.SAVE,
   RPC_CHANNELS.llmConnections.DELETE,
@@ -347,6 +348,49 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return key.slice(0, 7) + '••••••••' + key.slice(-4)
     }
     return '••••••••'
+  })
+
+  // Set (store/update) API key for an LLM connection
+  server.handle(RPC_CHANNELS.llmConnections.SET_API_KEY, async (_ctx, slug: string, apiKey: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const connection = getLlmConnection(slug)
+      if (!connection) {
+        return { success: false, error: 'Connection not found' }
+      }
+
+      const trimmedKey = apiKey?.trim()
+      if (!trimmedKey) {
+        return { success: false, error: 'API key cannot be empty' }
+      }
+
+      const manager = getCredentialManager()
+      await manager.setLlmApiKey(slug, trimmedKey)
+
+      // Touch the connection to update its lastUsed timestamp
+      touchLlmConnection(slug)
+
+      // Reinitialize auth if this is the current default connection
+      const defaultSlug = getDefaultLlmConnection()
+      if (defaultSlug === slug) {
+        await sessionManager.reinitializeAuth()
+      }
+
+      // Auto-refresh model list after API key change
+      try {
+        await getModelRefreshService().refreshNow(slug)
+        deps.platform.logger?.info(`Models refreshed after API key update for: ${slug}`)
+      } catch (refreshErr) {
+        // Non-fatal: key is saved even if model refresh fails
+        deps.platform.logger?.warn(`Model refresh after API key update failed for ${slug}: ${refreshErr instanceof Error ? refreshErr.message : String(refreshErr)}`)
+      }
+
+      deps.platform.logger?.info(`API key updated for LLM connection: ${slug}`)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save API key'
+      deps.platform.logger?.error(`Failed to set API key for ${slug}:`, message)
+      return { success: false, error: message }
+    }
   })
 
   // Save (create or update) an LLM connection

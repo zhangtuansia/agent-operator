@@ -29,7 +29,7 @@ import {
   inferPiAuthProviderForModel,
   resolvePiRuntimeModel,
 } from '../config/models-pi.ts';
-import type { Workspace } from '../config/storage.ts';
+import { getLlmConnection, type Workspace } from '../config/storage.ts';
 
 import { BaseAgent } from './base-agent.ts';
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
@@ -205,7 +205,8 @@ export class PiAgent extends BaseAgent {
 
   private getPiAuthProvider(): string | null {
     return (
-      getPiAuthProviderForConnectionProvider(this.config.providerType, this.config.authType)
+      this.config.piAuthProvider
+      || getPiAuthProviderForConnectionProvider(this.config.providerType, this.config.authType)
       || inferPiAuthProviderForModel(this._model)
       || inferPiAuthProviderForModel(this.config.miniModel || '')
     );
@@ -349,7 +350,7 @@ export class PiAgent extends BaseAgent {
             expiresAt: refreshed.expiresAt,
           });
         } else if (provider === 'github-copilot') {
-          const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/dist/utils/oauth/github-copilot.js');
+          const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/oauth');
           const refreshed = await refreshGitHubCopilotToken(stored.refreshToken);
           await manager.setLlmOAuth(slug, {
             accessToken: refreshed.access,
@@ -402,10 +403,123 @@ export class PiAgent extends BaseAgent {
     await this.spawnSubprocess();
   }
 
-  private buildSubprocessEnv(sessionDir?: string): NodeJS.ProcessEnv {
+  /**
+   * Map Pi auth provider names to the environment variable the Pi SDK checks.
+   * Mirrors the envMap in @mariozechner/pi-ai/dist/env-api-keys.js so that
+   * credentials injected here are discovered by the SDK's getEnvApiKey() fallback.
+   */
+  private static readonly PI_PROVIDER_ENV_VAR_MAP: Record<string, string> = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    google: 'GEMINI_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+    groq: 'GROQ_API_KEY',
+    cerebras: 'CEREBRAS_API_KEY',
+    xai: 'XAI_API_KEY',
+    mistral: 'MISTRAL_API_KEY',
+    huggingface: 'HF_TOKEN',
+    'azure-openai-responses': 'AZURE_OPENAI_API_KEY',
+    'vercel-ai-gateway': 'AI_GATEWAY_API_KEY',
+    zai: 'ZAI_API_KEY',
+    minimax: 'MINIMAX_API_KEY',
+  };
+
+  /**
+   * Resolve all user-configured API keys and return them as env vars for the
+   * Pi subprocess.  This ensures the Pi SDK's env-var fallback path can find
+   * credentials without requiring the user to set shell-level env vars.
+   *
+   * If the connection targets a specific piAuthProvider we inject the
+   * matching env var.  We also attempt to inject keys for ALL providers the
+   * user has configured so Pi can use any of them (e.g. an Anthropic key for
+   * the main model and an OpenAI key for a mini model).
+   */
+  private async resolveApiKeyEnvVars(): Promise<Record<string, string>> {
+    const envVars: Record<string, string> = {};
+
+    try {
+      const cm = getCredentialManager();
+      const slug = this.config.connectionSlug ?? this.config.session?.llmConnection;
+
+      if (!slug) {
+        this.debug('[env] No connection slug — skipping API key env injection');
+        return envVars;
+      }
+
+      // 1. Primary key: the API key for the active connection
+      const apiKey = await cm.getLlmApiKey(slug);
+      const piAuthProvider = this.getPiAuthProvider();
+
+      if (apiKey && piAuthProvider) {
+        const envVar = PiAgent.PI_PROVIDER_ENV_VAR_MAP[piAuthProvider];
+        if (envVar) {
+          envVars[envVar] = apiKey;
+          this.debug(`[env] Injected ${envVar} for provider ${piAuthProvider}`);
+        }
+      }
+
+      // 2. Also inject OAuth access tokens as API keys when applicable
+      if (!apiKey && piAuthProvider) {
+        const oauth = await cm.getLlmOAuth(slug);
+        if (oauth?.accessToken) {
+          if (piAuthProvider === 'anthropic') {
+            envVars.ANTHROPIC_OAUTH_TOKEN = oauth.accessToken;
+            this.debug('[env] Injected ANTHROPIC_OAUTH_TOKEN from OAuth credentials');
+          } else {
+            const envVar = PiAgent.PI_PROVIDER_ENV_VAR_MAP[piAuthProvider];
+            if (envVar) {
+              envVars[envVar] = oauth.accessToken;
+              this.debug(`[env] Injected ${envVar} from OAuth access token`);
+            }
+          }
+        }
+      }
+
+      // 3. Scan all LLM connections and inject keys for any additional
+      //    providers the user has configured, so the Pi subprocess can use
+      //    models from multiple providers without requiring shell-level env vars.
+      const allCredIds = await cm.list({ type: 'llm_api_key' as any });
+      for (const credId of allCredIds) {
+        if (!('connectionSlug' in credId) || !credId.connectionSlug) continue;
+        if (credId.connectionSlug === slug) continue; // already handled above
+
+        try {
+          const conn = getLlmConnection(credId.connectionSlug);
+          if (!conn || conn.providerType !== 'pi') continue;
+
+          const connProvider = conn.piAuthProvider;
+          if (!connProvider) continue;
+
+          const envVar = PiAgent.PI_PROVIDER_ENV_VAR_MAP[connProvider];
+          if (!envVar || envVars[envVar]) continue; // don't overwrite primary key
+
+          const key = await cm.getLlmApiKey(credId.connectionSlug);
+          if (key) {
+            envVars[envVar] = key;
+            this.debug(`[env] Injected ${envVar} from secondary connection ${credId.connectionSlug}`);
+          }
+        } catch {
+          // Skip connections we can't load
+        }
+      }
+    } catch (err) {
+      this.debug(`[env] Failed to resolve API key env vars: ${err instanceof Error ? err.message : err}`);
+    }
+
+    return envVars;
+  }
+
+  private buildSubprocessEnv(
+    sessionDir?: string,
+    apiKeyEnvVars?: Record<string, string>,
+  ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...(this.config.envOverrides ?? {}),
+      // Inject user-configured API keys so the Pi SDK discovers them via
+      // its env-var fallback (getEnvApiKey).  These go AFTER envOverrides so
+      // explicit overrides still win, but before session-specific vars.
+      ...(apiKeyEnvVars ?? {}),
       ...(sessionDir ? { COWORK_SESSION_DIR: sessionDir } : {}),
       COWORK_DEBUG: (process.argv.includes('--debug') || process.env.COWORK_DEBUG === '1') ? '1' : '0',
     };
@@ -432,6 +546,26 @@ export class PiAgent extends BaseAgent {
       ? join(this.config.workspace.rootPath, 'sessions', sessionId)
       : undefined;
 
+    // Resolve credentials BEFORE spawning so we can:
+    // 1. Inject API keys as env vars for the Pi SDK's env-var fallback
+    // 2. Guard against spawning with no credentials at all
+    await this.maybeRefreshTokensBeforeStart();
+
+    const [apiKey, piAuth, apiKeyEnvVars] = await Promise.all([
+      this.getCredential(),
+      this.getPiAuth(),
+      this.resolveApiKeyEnvVars(),
+    ]);
+
+    // Guard: don't spawn if no credentials are available at all
+    if (!apiKey && !piAuth && Object.keys(apiKeyEnvVars).length === 0) {
+      const msg = 'No API key configured. Please add an API key in Settings before using the Pi backend.';
+      this.debug(`[spawn] ${msg}`);
+      this.eventQueue.enqueue({ type: 'error', message: msg });
+      this.eventQueue.complete();
+      return;
+    }
+
     const args = [this.piServerPath];
     if (this.interceptorPath) {
       args.unshift('--require', this.interceptorPath);
@@ -444,7 +578,7 @@ export class PiAgent extends BaseAgent {
     const child = spawn(this.nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: this.buildSubprocessEnv(sessionDir),
+      env: this.buildSubprocessEnv(sessionDir, apiKeyEnvVars),
     });
 
     this.subprocess = child;
@@ -462,13 +596,6 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.enqueue({ type: 'error', message: `Pi subprocess error: ${error.message}` });
       this.eventQueue.complete();
     });
-
-    await this.maybeRefreshTokensBeforeStart();
-
-    const [apiKey, piAuth] = await Promise.all([
-      this.getCredential(),
-      this.getPiAuth(),
-    ]);
     const workingDirectory = this.config.session?.workingDirectory || cwd;
     const sessionPath = getSessionPath(this.config.workspace.rootPath, sessionId);
 
@@ -491,6 +618,7 @@ export class PiAgent extends BaseAgent {
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
       piAuth: piAuth || undefined,
+      baseUrl: this.config.baseUrl,
       branchFromSdkSessionId: this.config.session?.branchFromSdkSessionId,
       branchFromSessionPath: this.config.session?.branchFromSessionPath,
     });
@@ -1335,6 +1463,20 @@ export class PiAgent extends BaseAgent {
 
   private parsePiError(error: Error): AgentError {
     const message = error.message.toLowerCase();
+
+    if (message.includes('no api key found')) {
+      // Extract the provider name from "No API key found for <provider>"
+      const providerMatch = error.message.match(/No API key found for (\w+)/i);
+      const provider = providerMatch?.[1] || 'the selected provider';
+      return {
+        code: 'invalid_api_key',
+        title: 'API Key Not Configured',
+        message: `No API key found for ${provider}. Please add your ${provider} API key in Settings.`,
+        actions: [{ key: 's', label: 'Configure API key', command: '/settings', action: 'settings' }],
+        canRetry: false,
+        originalError: error.message,
+      };
+    }
 
     if (
       message.includes('api key')

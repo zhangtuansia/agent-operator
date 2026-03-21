@@ -105,6 +105,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
       })
       setOpen(false)
     } catch (err) {
+      console.error('[TaskActionMenu] Error loading task output:', err)
       toast.error(t('toasts.failedToLoadTaskOutput'))
     }
   }

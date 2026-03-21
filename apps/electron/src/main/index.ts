@@ -1,3 +1,6 @@
+// Prevent Claude Agent SDK from detecting nested session (when launched from Claude Code)
+delete process.env.CLAUDECODE
+
 // Load user's shell environment first (before other imports that may use env)
 // This ensures tools like Homebrew, nvm, etc. are available to the agent
 import { loadShellEnv } from './shell-env'
@@ -334,10 +337,31 @@ app.whenReady().then(async () => {
     setFetcherPlatform(platform)
     setSessionPlatform(platform)
     const { onSessionStarted, onSessionStopped } = await import('./power-manager')
+    const { officeAgentStarted, officeAgentToolCall, officeAgentFinished, officeAgentError } = await import('./office-state-bridge')
     setSessionRuntimeHooks({
       updateBadgeCount,
-      onSessionStarted,
-      onSessionStopped,
+      onSessionStarted: (sessionId?: string, sessionName?: string) => {
+        onSessionStarted()
+        if (sessionId) {
+          officeAgentStarted(sessionId, sessionName)
+        }
+      },
+      onSessionStopped: (sessionId?: string) => {
+        onSessionStopped()
+        if (sessionId) {
+          officeAgentFinished(sessionId)
+        }
+      },
+      onToolStart: (toolName: string, sessionId?: string) => {
+        if (sessionId) {
+          officeAgentToolCall(sessionId, toolName)
+        }
+      },
+      onSessionError: (errorMessage: string, sessionId?: string) => {
+        if (sessionId) {
+          officeAgentError(sessionId, errorMessage)
+        }
+      },
       captureException: (error, context) => {
         Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
           tags: {
@@ -466,6 +490,11 @@ app.whenReady().then(async () => {
       pendingDeepLink = null
     }
 
+    // Start Star-Office-UI backend
+    import('./office-server').then(({ startOfficeServer }) => {
+      startOfficeServer().catch(err => mainLog.error('[OfficeServer] Failed:', err))
+    })
+
     mainLog.info('App initialized successfully')
     if (isDebugMode) {
       mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
@@ -533,6 +562,14 @@ app.on('before-quit', async (event) => {
     getModelRefreshService().stopAll()
   } catch {
     // Service may not have been initialized if startup failed early
+  }
+
+  // Stop office server
+  try {
+    const { stopOfficeServer } = await import('./office-server')
+    stopOfficeServer()
+  } catch {
+    // Office server may not have been started
   }
 
   // Stop skill services (web-search Bridge Server, etc.)

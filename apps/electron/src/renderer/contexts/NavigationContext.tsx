@@ -58,6 +58,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isDocumentsNavigation,
+  isOfficeNavigation,
   isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
@@ -80,7 +81,7 @@ export type { Route }
 export type { NavigationState, ChatFilter }
 /** @deprecated Use ChatFilter — aliased for OSS component compatibility */
 export type SessionFilter = ChatFilter
-export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isDocumentsNavigation, isAutomationsNavigation }
+export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isDocumentsNavigation, isOfficeNavigation, isAutomationsNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
@@ -183,6 +184,8 @@ export function NavigationProvider({
             return session.labels?.some((label) => label.startsWith('scheduled:')) ?? false
           case 'scheduledTask':
             return session.labels?.includes(`scheduled:${filter.taskId}`) ?? false
+          case 'label':
+            return session.labels?.includes(filter.labelId) ?? false
           default:
             return false
         }
@@ -333,6 +336,14 @@ export function NavigationProvider({
           if (parsed.id) {
             await window.electronAPI.performOAuth({ sourceSlug: parsed.id })
           }
+          break
+
+        case 'add-source':
+          // Navigate to the sources view so the user can add a new source
+          setNavigationState({
+            navigator: 'sources',
+            details: null,
+          })
           break
 
         case 'delete-source':

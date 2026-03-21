@@ -338,6 +338,8 @@ function SidebarDropItem({
             </span>
             {/* Toggle chevron - shown on hover */}
             <span
+              role="button"
+              aria-label={link.expanded ? `Collapse ${link.title}` : `Expand ${link.title}`}
               className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()

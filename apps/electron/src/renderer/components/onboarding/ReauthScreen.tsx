@@ -27,6 +27,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
     try {
       await onLogin()
     } catch (err) {
+      console.error('[ReauthScreen] Error:', err)
       setError(err instanceof Error ? err.message : t('reauthDialog.loginFailed'))
       setIsLoading(false)
     }

@@ -20,7 +20,6 @@ function createMockConfigProvider(matchersByEvent: Partial<Record<AutomationEven
 function createOptions(overrides: Partial<PromptHandlerOptions> = {}): PromptHandlerOptions {
   return {
     workspaceId: 'test-workspace',
-    workspaceRootPath: '/tmp/test-workspace',
     sessionId: 'test-session',
     ...overrides,
   };
@@ -320,7 +319,7 @@ describe('PromptHandler', () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
-          actions: [{ type: 'command', command: 'echo hello' } as any],
+          actions: [{ type: 'webhook', url: 'https://example.com', method: 'POST' } as any],
         }],
       });
 
@@ -429,7 +428,7 @@ describe('PromptHandler', () => {
           actions: [{
             type: 'prompt',
             prompt: 'Quick review',
-            model: 'claude-sonnet-4-5-20250929',
+            model: 'claude-sonnet-4-6',
           }],
         }],
       });
@@ -445,7 +444,7 @@ describe('PromptHandler', () => {
 
       expect(onPromptsReady).toHaveBeenCalledTimes(1);
       const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
-      expect(prompts[0]!.model).toBe('claude-sonnet-4-5-20250929');
+      expect(prompts[0]!.model).toBe('claude-sonnet-4-6');
 
       handler.dispose();
     });
@@ -473,6 +472,81 @@ describe('PromptHandler', () => {
       expect(onPromptsReady).toHaveBeenCalledTimes(1);
       const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
       expect(prompts[0]!.model).toBeUndefined();
+
+      handler.dispose();
+    });
+  });
+
+  describe('automationName propagation', () => {
+    it('should set automationName from matcher.name when provided', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          name: 'Daily Triage',
+          actions: [{ type: 'prompt', prompt: 'Review issues' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('Daily Triage');
+
+      handler.dispose();
+    });
+
+    it('should derive automationName from @mention when matcher has no name', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: '@linear check for issues' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('linear prompt');
+
+      handler.dispose();
+    });
+
+    it('should derive automationName from prompt text when no name or @mention', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: 'Review the code' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.automationName).toBe('Review the code');
 
       handler.dispose();
     });

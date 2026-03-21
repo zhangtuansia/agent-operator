@@ -8,7 +8,7 @@ import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
 // Plan types are used by UI components; not needed in agent-operator.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, getDefaultLlmConnection, getLlmConnection, type Workspace, type AuthType } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel } from '../config/models.ts';
@@ -105,7 +105,7 @@ export interface ClaudeAgentConfig {
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'think')
+  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
   /**
@@ -2148,6 +2148,17 @@ export class ClaudeAgent extends BaseAgent {
         ],
         canRetry: true,
         retryDelayMs: 2000,
+      },
+      'max_output_tokens': {
+        code: 'max_output_tokens',
+        title: 'Max Output Tokens Reached',
+        message: 'The response was truncated because it reached the maximum output token limit.',
+        details: ['Try breaking your request into smaller parts', 'The response may be incomplete'],
+        actions: [
+          { key: 'r', label: 'Retry', action: 'retry' },
+        ],
+        canRetry: true,
+        retryDelayMs: 1000,
       },
       'unknown': {
         code: 'unknown_error',

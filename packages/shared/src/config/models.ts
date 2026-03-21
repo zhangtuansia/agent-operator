@@ -570,8 +570,17 @@ function getBedrockModelAlias(modelId: string): 'Opus' | 'Sonnet' | 'Haiku' | nu
   return null;
 }
 
+/** Safely read an environment variable, returning undefined in renderer/browser contexts */
+function safeEnvGet(key: string): string | undefined {
+  try {
+    return typeof process !== 'undefined' && process?.env ? process.env[key] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function readEnvBedrockModel(slot: BedrockEnvModelSlot): string | undefined {
-  const modelId = process.env[slot.envVar]?.trim();
+  const modelId = safeEnvGet(slot.envVar)?.trim();
   if (!modelId || !isValidBedrockModel(modelId)) {
     return undefined;
   }
@@ -616,12 +625,12 @@ export function getPreferredBedrockPrimaryModelFromEnv(): string | undefined {
 }
 
 export function getPreferredBedrockSmallFastModelFromEnv(): string | undefined {
-  const explicitSmallFast = process.env.ANTHROPIC_SMALL_FAST_MODEL?.trim();
+  const explicitSmallFast = safeEnvGet('ANTHROPIC_SMALL_FAST_MODEL')?.trim();
   if (explicitSmallFast && isValidBedrockModel(explicitSmallFast)) {
     return explicitSmallFast;
   }
 
-  const explicitHaiku = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL?.trim();
+  const explicitHaiku = safeEnvGet('ANTHROPIC_DEFAULT_HAIKU_MODEL')?.trim();
   if (explicitHaiku && isValidBedrockModel(explicitHaiku)) {
     return explicitHaiku;
   }

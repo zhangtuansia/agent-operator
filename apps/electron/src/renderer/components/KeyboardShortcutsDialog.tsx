@@ -7,24 +7,23 @@ import {
 } from "@/components/ui/dialog"
 import { useRegisterModal } from "@/context/ModalContext"
 import { useLanguage } from "@/context/LanguageContext"
+import { actionsByCategory, useActionLabel, type ActionId } from '@/actions'
+import type { ActionDefinition } from '@/actions'
 
 interface KeyboardShortcutsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-interface ShortcutItem {
+interface ManualShortcutItem {
   keys: string[]
-  description: string
+  descriptionKey: string
 }
 
-interface ShortcutSection {
-  title: string
-  shortcuts: ShortcutItem[]
+interface ManualShortcutSection {
+  titleKey: string
+  shortcuts: ManualShortcutItem[]
 }
-
-const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
-const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
@@ -34,62 +33,113 @@ function Kbd({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * A row that auto-generates its label and hotkey from the action registry.
+ * Respects user hotkey overrides and i18n labels.
+ */
+function ActionShortcutRow({ actionId }: { actionId: ActionId }) {
+  const { label, description, hotkey } = useActionLabel(actionId)
+  const { t } = useLanguage()
+
+  // Try i18n key first, fallback to action definition label
+  const i18nKey = `actions.${actionId}`
+  const translatedLabel = t(i18nKey)
+  const displayLabel = translatedLabel !== i18nKey ? translatedLabel : label
+
+  const descI18nKey = `actions.${actionId}.description`
+  const translatedDesc = t(descI18nKey)
+  const displayDesc = translatedDesc !== descI18nKey ? translatedDesc : description
+
+  if (!hotkey) return null
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex-1 min-w-0 pr-3">
+        <span className="text-sm">{displayLabel}</span>
+        {displayDesc && (
+          <span className="text-xs text-muted-foreground ml-1.5">- {displayDesc}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {hotkey.split('').map((char, i) => (
+          <Kbd key={i}>{char}</Kbd>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A row for manually-defined shortcuts (not in action registry).
+ */
+function ManualShortcutRow({ keys, description }: { keys: string[]; description: string }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm">{description}</span>
+      <div className="flex items-center gap-1">
+        {keys.map((key, keyIndex) => (
+          <Kbd key={keyIndex}>{key}</Kbd>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Category order for display. Categories not listed here will appear after
+ * these in alphabetical order.
+ */
+const CATEGORY_ORDER = ['General', 'Navigation', 'View', 'Session List', 'Chat']
+
+/** Category display name i18n keys */
+const CATEGORY_I18N: Record<string, string> = {
+  'General': 'keyboardShortcuts.general',
+  'Navigation': 'keyboardShortcuts.navigation',
+  'View': 'keyboardShortcuts.view',
+  'Session List': 'keyboardShortcuts.sessionList',
+  'Chat': 'keyboardShortcuts.chat',
+}
+
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
   // Register with modal context so X button / Cmd+W closes this dialog first
   useRegisterModal(open, () => onOpenChange(false))
   const { t } = useLanguage()
 
-  const sections: ShortcutSection[] = useMemo(() => [
+  // Build sorted category list from the action registry
+  const sortedCategories = useMemo(() => {
+    const categories = Object.keys(actionsByCategory)
+    return categories.sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a)
+      const bi = CATEGORY_ORDER.indexOf(b)
+      if (ai !== -1 && bi !== -1) return ai - bi
+      if (ai !== -1) return -1
+      if (bi !== -1) return 1
+      return a.localeCompare(b)
+    })
+  }, [])
+
+  // Supplementary manual shortcuts (not in action registry)
+  // These cover contextual and non-hotkey shortcuts users should know about
+  const manualSections: ManualShortcutSection[] = useMemo(() => [
     {
-      title: t('keyboardShortcuts.global'),
+      titleKey: 'keyboardShortcuts.agentTree',
       shortcuts: [
-        { keys: [cmdKey, '1'], description: t('keyboardShortcuts.focusSidebar') },
-        { keys: [cmdKey, '2'], description: t('keyboardShortcuts.focusSessionList') },
-        { keys: [cmdKey, '3'], description: t('keyboardShortcuts.focusChatInput') },
-        { keys: [cmdKey, 'N'], description: t('keyboardShortcuts.newChat') },
-        { keys: [cmdKey, 'Shift', 'N'], description: t('keyboardShortcuts.newWindow') },
-        { keys: [cmdKey, '\\'], description: t('keyboardShortcuts.toggleSidebar') },
-        { keys: [cmdKey, ','], description: t('keyboardShortcuts.openSettings') },
-        { keys: [cmdKey, '/'], description: t('keyboardShortcuts.showThisDialog') },
+        { keys: ['\u2190'], descriptionKey: 'keyboardShortcuts.collapseFolder' },
+        { keys: ['\u2192'], descriptionKey: 'keyboardShortcuts.expandFolder' },
       ],
     },
     {
-      title: t('keyboardShortcuts.navigation'),
+      titleKey: 'keyboardShortcuts.contextActions',
       shortcuts: [
-        { keys: ['Tab'], description: t('keyboardShortcuts.moveToNextZone') },
-        { keys: ['Shift', 'Tab'], description: t('keyboardShortcuts.moveToPreviousZone') },
-        { keys: ['←', '→'], description: t('keyboardShortcuts.moveBetweenZones') },
-        { keys: ['↑', '↓'], description: t('keyboardShortcuts.navigateItems') },
-        { keys: ['Home'], description: t('keyboardShortcuts.goToFirstItem') },
-        { keys: ['End'], description: t('keyboardShortcuts.goToLastItem') },
-        { keys: ['Esc'], description: t('keyboardShortcuts.closeDialogBlur') },
+        { keys: ['Enter'], descriptionKey: 'keyboardShortcuts.sendMessage' },
+        { keys: ['Shift', 'Enter'], descriptionKey: 'keyboardShortcuts.newLine' },
+        { keys: ['Delete'], descriptionKey: 'keyboardShortcuts.deleteSession' },
+        { keys: ['R'], descriptionKey: 'keyboardShortcuts.renameSession' },
+        { keys: ['Home'], descriptionKey: 'keyboardShortcuts.goToFirstItem' },
+        { keys: ['End'], descriptionKey: 'keyboardShortcuts.goToLastItem' },
       ],
     },
-    {
-      title: t('keyboardShortcuts.sessionList'),
-      shortcuts: [
-        { keys: ['Enter'], description: t('keyboardShortcuts.focusChatInput') },
-        { keys: ['Delete'], description: t('keyboardShortcuts.deleteSession') },
-        { keys: ['R'], description: t('keyboardShortcuts.renameSession') },
-        { keys: ['Right-click'], description: t('keyboardShortcuts.openContextMenu') },
-      ],
-    },
-    {
-      title: t('keyboardShortcuts.agentTree'),
-      shortcuts: [
-        { keys: ['←'], description: t('keyboardShortcuts.collapseFolder') },
-        { keys: ['→'], description: t('keyboardShortcuts.expandFolder') },
-      ],
-    },
-    {
-      title: t('keyboardShortcuts.chat'),
-      shortcuts: [
-        { keys: ['Enter'], description: t('keyboardShortcuts.sendMessage') },
-        { keys: ['Shift', 'Enter'], description: t('keyboardShortcuts.newLine') },
-        { keys: [cmdKey, 'Enter'], description: t('keyboardShortcuts.sendMessage') },
-      ],
-    },
-  ], [t])
+  ], [])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,21 +148,48 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
           <DialogTitle>{t('keyboardShortcuts.title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 py-2">
-          {sections.map((section) => (
-            <div key={section.title}>
+          {/* Auto-generated sections from action registry */}
+          {sortedCategories.map((category) => {
+            const actionsInCategory = actionsByCategory[category] || []
+            // Only show actions that have a hotkey
+            const withHotkey = actionsInCategory.filter(
+              (a: ActionDefinition) => a.defaultHotkey !== null
+            )
+            if (withHotkey.length === 0) return null
+
+            const titleKey = CATEGORY_I18N[category]
+            const title = titleKey ? t(titleKey) : category
+
+            return (
+              <div key={category}>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  {title}
+                </h3>
+                <div className="space-y-1.5">
+                  {withHotkey.map((action: ActionDefinition) => (
+                    <ActionShortcutRow
+                      key={action.id}
+                      actionId={action.id as ActionId}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Manual supplementary sections */}
+          {manualSections.map((section) => (
+            <div key={section.titleKey}>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                {section.title}
+                {t(section.titleKey)}
               </h3>
               <div className="space-y-1.5">
                 {section.shortcuts.map((shortcut, index) => (
-                  <div key={index} className="flex items-center justify-between py-1">
-                    <span className="text-sm">{shortcut.description}</span>
-                    <div className="flex items-center gap-1">
-                      {shortcut.keys.map((key, keyIndex) => (
-                        <Kbd key={keyIndex}>{key}</Kbd>
-                      ))}
-                    </div>
-                  </div>
+                  <ManualShortcutRow
+                    key={index}
+                    keys={shortcut.keys}
+                    description={t(shortcut.descriptionKey)}
+                  />
                 ))}
               </div>
             </div>

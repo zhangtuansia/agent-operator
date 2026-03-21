@@ -745,6 +745,9 @@ export interface ElectronAPI {
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
   refreshLlmConnectionModels(slug: string): Promise<void>
 
+  // LLM Connections change listener (live updates when connections are modified)
+  onLlmConnectionsChanged(callback: () => void): () => void
+
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>
   updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
@@ -1042,6 +1045,13 @@ export const isSkillsNavigation = (
 export const isDocumentsNavigation = (
   state: NavigationState
 ): state is Extract<NavigationState, { navigator: 'documents' }> => state.navigator === 'documents'
+
+/**
+ * Type guard to check if state is office navigation
+ */
+export const isOfficeNavigation = (
+  state: NavigationState
+): state is Extract<NavigationState, { navigator: 'office' }> => state.navigator === 'office'
 
 /**
  * Type guard to check if state is automations navigation
