@@ -2035,6 +2035,11 @@ export const zh: TranslationKeys = {
     pressEscAgain: '再次按 {key} 中断',
   },
 
+  // Browser status bar (shown when agent is actively using a browser)
+  browserStatus: {
+    usingHostname: '正在使用 {hostname}',
+  },
+
   // Permission request
   permissionRequest: {
     title: '需要权限',

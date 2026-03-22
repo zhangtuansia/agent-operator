@@ -2033,6 +2033,11 @@ export const en = {
     pressEscAgain: 'Press {key} again to interrupt',
   },
 
+  // Browser status bar (shown when agent is actively using a browser)
+  browserStatus: {
+    usingHostname: 'Using {hostname}',
+  },
+
   // Permission request
   permissionRequest: {
     title: 'Permission Required',

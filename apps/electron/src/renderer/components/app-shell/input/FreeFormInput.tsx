@@ -59,7 +59,7 @@ import type { PermissionMode } from '@agent-operator/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@agent-operator/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS } from '@agent-operator/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
-import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useTranslation } from '@/i18n'
 
@@ -1380,8 +1380,11 @@ export function FreeFormInput({
 
         {/* Bottom Row: Controls - wrapped in relative container for escape overlay */}
         <div className="relative">
-          {/* Escape interrupt overlay - shown on first Esc press during processing */}
-          <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
+          {/* Status slot: escape interrupt hint (highest priority) + browser status bar */}
+          <ToolbarStatusSlot
+            showEscapeOverlay={!!(isProcessing && showEscapeOverlay)}
+            sessionId={sessionId}
+          />
 
           <div
             className={cn(

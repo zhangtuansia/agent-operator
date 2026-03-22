@@ -1034,6 +1034,16 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   50% { opacity: 0.5; }
 }
 
+/* Shimmer loading line - sweeping gradient for browser status bar loading indicator */
+@keyframes shimmer-loading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer-loading {
+  animation: shimmer-loading 1.5s ease-in-out infinite;
+}
+
 /* =============================================================================
    SHAKE ANIMATION
 
