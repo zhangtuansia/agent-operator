@@ -63,7 +63,11 @@ function saveAgentSeats(os: OfficeState): void {
   const seats: Record<number, { palette: number; hueShift: number; seatId: string | null }> = {};
   for (const ch of os.characters.values()) {
     if (ch.isSubagent) continue;
-    seats[ch.id] = { palette: ch.palette, hueShift: ch.hueShift, seatId: ch.seatId };
+    seats[ch.id] = {
+      palette: ch.palette,
+      hueShift: ch.hueShift,
+      seatId: ch.workSeatId,
+    };
   }
   vscode.postMessage({ type: 'saveAgentSeats', seats });
 }
@@ -173,16 +177,29 @@ export function useExtensionMessages(
           { palette?: number; hueShift?: number; seatId?: string }
         >;
         const folderNames = (msg.folderNames || {}) as Record<number, string>;
-        // Buffer agents — they'll be added in layoutLoaded after seats are built
-        for (const id of incoming) {
-          const m = meta[id];
-          pendingAgents.push({
-            id,
-            palette: m?.palette,
-            hueShift: m?.hueShift,
-            seatId: m?.seatId,
-            folderName: folderNames[id],
-          });
+        if (layoutReadyRef.current) {
+          // Layout already loaded — add agents directly (DAZI standalone mode:
+          // existingAgents arrives via WebSocket after layoutLoaded was already
+          // dispatched by browserMock)
+          for (const id of incoming) {
+            const m = meta[id];
+            os.addAgent(id, m?.palette, m?.hueShift, m?.seatId, true, folderNames[id]);
+          }
+          if (os.characters.size > 0) {
+            saveAgentSeats(os);
+          }
+        } else {
+          // Buffer agents — they'll be added in layoutLoaded after seats are built
+          for (const id of incoming) {
+            const m = meta[id];
+            pendingAgents.push({
+              id,
+              palette: m?.palette,
+              hueShift: m?.hueShift,
+              seatId: m?.seatId,
+              folderName: folderNames[id],
+            });
+          }
         }
         setAgents((prev) => {
           const ids = new Set(prev);
@@ -245,6 +262,7 @@ export function useExtensionMessages(
         os.removeAllSubagents(id);
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
         os.setAgentTool(id, null);
+        os.setAgentActive(id, false);
         os.clearPermissionBubble(id);
       } else if (msg.type === 'agentSelected') {
         const id = msg.id as number;
@@ -253,7 +271,7 @@ export function useExtensionMessages(
         const id = msg.id as number;
         const status = msg.status as string;
         setAgentStatuses((prev) => {
-          if (status === 'active') {
+          if (status === 'active' || status === 'inactive') {
             if (!(id in prev)) return prev;
             const next = { ...prev };
             delete next[id];

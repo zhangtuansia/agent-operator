@@ -1315,6 +1315,14 @@ function AppShellContent({
 
   // Handler for office view — opens in built-in browser (singleton)
   const officeInstanceIdRef = React.useRef<string | null>(null)
+  const buildOfficeUrl = React.useCallback(
+    () => `http://127.0.0.1:19000/?desktop=1&cb=${Date.now().toString(36)}`,
+    [],
+  )
+  const buildOfficePartition = React.useCallback(
+    () => `office-${Date.now().toString(36)}`,
+    [],
+  )
   const handleOfficeClick = useCallback(async () => {
     const browserPaneApi = window.electronAPI.browserPane
     if (!browserPaneApi) {
@@ -1332,15 +1340,18 @@ function AppShellContent({
           officeInstanceIdRef.current = null
         }
       }
-      const instanceId = await browserPaneApi.create({ show: true })
-      await browserPaneApi.navigate(instanceId, 'http://127.0.0.1:19000/?desktop=1')
+      const instanceId = await browserPaneApi.create({
+        show: true,
+        url: buildOfficeUrl(),
+        partition: buildOfficePartition(),
+      })
       await browserPaneApi.focus(instanceId)
       officeInstanceIdRef.current = instanceId
     } catch (error) {
       console.error('[AppShell] Failed to open office:', error)
       toast.error('Failed to open office')
     }
-  }, [])
+  }, [buildOfficePartition, buildOfficeUrl])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {

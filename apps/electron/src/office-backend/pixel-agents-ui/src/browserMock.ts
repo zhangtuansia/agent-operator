@@ -39,6 +39,11 @@ interface MockPayload {
 
 let mockPayload: MockPayload | null = null;
 
+function withCacheBust(url: string, cacheBust: string): string {
+  const joiner = url.includes('?') ? '&' : '?';
+  return `${url}${joiner}cb=${cacheBust}`;
+}
+
 // ── PNG decode helpers (browser fallback) ───────────────────────────────────
 
 interface DecodedPng {
@@ -85,7 +90,7 @@ function readSprite(
 }
 
 async function decodePng(url: string): Promise<DecodedPng> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch PNG: ${url} (${res.status.toString()})`);
   }
@@ -107,7 +112,7 @@ async function decodePng(url: string): Promise<DecodedPng> {
 
 async function fetchJsonOptional<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -190,19 +195,32 @@ export async function initBrowserMock(): Promise<void> {
   console.log('[BrowserMock] Loading assets...');
 
   const base = import.meta.env.BASE_URL; // '/' in dev, '/sub/' with a subpath, './' in production
+  const cacheBust = new URLSearchParams(window.location.search).get('cb') || Date.now().toString(36);
 
   const [assetIndex, catalog] = await Promise.all([
-    fetch(`${base}assets/asset-index.json`).then((r) => r.json()) as Promise<AssetIndex>,
-    fetch(`${base}assets/furniture-catalog.json`).then((r) => r.json()) as Promise<CatalogEntry[]>,
+    fetch(withCacheBust(`${base}assets/asset-index.json`, cacheBust), { cache: 'no-store' }).then(
+      (r) => r.json(),
+    ) as Promise<AssetIndex>,
+    fetch(withCacheBust(`${base}assets/furniture-catalog.json`, cacheBust), { cache: 'no-store' }).then(
+      (r) => r.json(),
+    ) as Promise<CatalogEntry[]>,
   ]);
 
   const shouldTryDecoded = import.meta.env.DEV;
   const [decodedCharacters, decodedFloors, decodedWalls, decodedFurniture] = shouldTryDecoded
-    ? await Promise.all([
-        fetchJsonOptional<CharacterDirectionSprites[]>(`${base}assets/decoded/characters.json`),
-        fetchJsonOptional<string[][][]>(`${base}assets/decoded/floors.json`),
-        fetchJsonOptional<string[][][][]>(`${base}assets/decoded/walls.json`),
-        fetchJsonOptional<Record<string, string[][]>>(`${base}assets/decoded/furniture.json`),
+      ? await Promise.all([
+        fetchJsonOptional<CharacterDirectionSprites[]>(
+          withCacheBust(`${base}assets/decoded/characters.json`, cacheBust),
+        ),
+        fetchJsonOptional<string[][][]>(
+          withCacheBust(`${base}assets/decoded/floors.json`, cacheBust),
+        ),
+        fetchJsonOptional<string[][][][]>(
+          withCacheBust(`${base}assets/decoded/walls.json`, cacheBust),
+        ),
+        fetchJsonOptional<Record<string, string[][]>>(
+          withCacheBust(`${base}assets/decoded/furniture.json`, cacheBust),
+        ),
       ])
     : [null, null, null, null];
 
@@ -226,7 +244,9 @@ export async function initBrowserMock(): Promise<void> {
       ]);
 
   const layout = assetIndex.defaultLayout
-    ? await fetch(`${base}assets/${assetIndex.defaultLayout}`).then((r) => r.json())
+    ? await fetch(withCacheBust(`${base}assets/${assetIndex.defaultLayout}`, cacheBust), {
+        cache: 'no-store',
+      }).then((r) => r.json())
     : null;
 
   mockPayload = {

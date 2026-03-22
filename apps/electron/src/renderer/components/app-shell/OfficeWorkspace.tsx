@@ -3,13 +3,16 @@ import { RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 
-const OFFICE_URL = 'http://127.0.0.1:19000/?desktop=1'
+function buildOfficeUrl(): string {
+  return `http://127.0.0.1:19000/?desktop=1&cb=${Date.now().toString(36)}`
+}
 
 type LoadState = 'loading' | 'ready' | 'error'
 
 export function OfficeWorkspace() {
   const { t } = useTranslation()
   const [key, setKey] = React.useState(0)
+  const [src, setSrc] = React.useState(() => buildOfficeUrl())
   const [loadState, setLoadState] = React.useState<LoadState>('loading')
   const retryTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
 
@@ -21,6 +24,7 @@ export function OfficeWorkspace() {
   const handleIframeError = React.useCallback(() => {
     // Auto-retry after 3 seconds (backend may still be starting)
     retryTimerRef.current = setTimeout(() => {
+      setSrc(buildOfficeUrl())
       setKey(k => k + 1)
     }, 3000)
     setLoadState('error')
@@ -40,6 +44,7 @@ export function OfficeWorkspace() {
 
   const handleRetry = React.useCallback(() => {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+    setSrc(buildOfficeUrl())
     setKey(k => k + 1)
   }, [])
 
@@ -74,7 +79,7 @@ export function OfficeWorkspace() {
         {/* iframe — Pixel Agents UI fills available space (it handles its own zoom/pan) */}
         <iframe
           key={key}
-          src={OFFICE_URL}
+          src={src}
           onLoad={handleIframeLoad}
           onError={handleIframeError}
           style={{

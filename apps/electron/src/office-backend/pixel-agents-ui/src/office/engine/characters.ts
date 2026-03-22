@@ -48,7 +48,7 @@ function directionBetween(
 export function createCharacter(
   id: number,
   palette: number,
-  seatId: string | null,
+  workSeatId: string | null,
   seat: Seat | null,
   hueShift = 0,
 ): Character {
@@ -57,7 +57,7 @@ export function createCharacter(
   const center = tileCenter(col, row);
   return {
     id,
-    state: CharacterState.TYPE,
+    state: CharacterState.IDLE,
     dir: seat ? seat.facingDir : Direction.DOWN,
     x: center.x,
     y: center.y,
@@ -70,11 +70,12 @@ export function createCharacter(
     hueShift,
     frame: 0,
     frameTimer: 0,
-    wanderTimer: 0,
+    wanderTimer: randomRange(WANDER_PAUSE_MIN_SEC, WANDER_PAUSE_MAX_SEC),
     wanderCount: 0,
     wanderLimit: randomInt(WANDER_MOVES_BEFORE_REST_MIN, WANDER_MOVES_BEFORE_REST_MAX),
-    isActive: true,
-    seatId,
+    isActive: false,
+    seatId: workSeatId,
+    workSeatId,
     bubbleType: null,
     bubbleTimer: 0,
     seatTimer: 0,
@@ -109,6 +110,11 @@ export function updateCharacter(
           break;
         }
         ch.seatTimer = 0; // clear sentinel
+        if (ch.seatId && ch.workSeatId && ch.seatId !== ch.workSeatId) {
+          const restSeat = seats.get(ch.seatId);
+          if (restSeat) restSeat.assigned = false;
+          ch.seatId = ch.workSeatId;
+        }
         ch.state = CharacterState.IDLE;
         ch.frame = 0;
         ch.frameTimer = 0;
@@ -162,9 +168,30 @@ export function updateCharacter(
       ch.wanderTimer -= dt;
       if (ch.wanderTimer <= 0) {
         // Check if we've wandered enough — return to seat for a rest
-        if (ch.wanderCount >= ch.wanderLimit && ch.seatId) {
-          const seat = seats.get(ch.seatId);
+        if (ch.wanderCount >= ch.wanderLimit) {
+          let restSeatId = ch.seatId;
+          let claimedLoungeSeatId: string | null = null;
+          if (!ch.isActive) {
+            const loungeSeatId = findNearestLoungeSeat(ch, seats);
+            if (loungeSeatId) {
+              const loungeSeat = seats.get(loungeSeatId);
+              if (loungeSeat) {
+                loungeSeat.assigned = true;
+                claimedLoungeSeatId = loungeSeatId;
+                restSeatId = loungeSeatId;
+                ch.seatId = loungeSeatId;
+              }
+            } else if (ch.workSeatId) {
+              restSeatId = ch.workSeatId;
+              ch.seatId = ch.workSeatId;
+            }
+          }
+
+          const seat = restSeatId ? seats.get(restSeatId) : null;
           if (seat) {
+            const seatKey = `${seat.seatCol},${seat.seatRow}`;
+            const shouldUnblockSeat = blockedTiles.has(seatKey);
+            if (shouldUnblockSeat) blockedTiles.delete(seatKey);
             const path = findPath(
               ch.tileCol,
               ch.tileRow,
@@ -173,6 +200,7 @@ export function updateCharacter(
               tileMap,
               blockedTiles,
             );
+            if (shouldUnblockSeat) blockedTiles.add(seatKey);
             if (path.length > 0) {
               ch.path = path;
               ch.moveProgress = 0;
@@ -180,6 +208,26 @@ export function updateCharacter(
               ch.frame = 0;
               ch.frameTimer = 0;
               break;
+            }
+            if (ch.tileCol === seat.seatCol && ch.tileRow === seat.seatRow) {
+              ch.state = CharacterState.TYPE;
+              ch.dir = seat.facingDir;
+              ch.frame = 0;
+              ch.frameTimer = 0;
+              ch.seatTimer = randomRange(SEAT_REST_MIN_SEC, SEAT_REST_MAX_SEC);
+              ch.wanderCount = 0;
+              ch.wanderLimit = randomInt(
+                WANDER_MOVES_BEFORE_REST_MIN,
+                WANDER_MOVES_BEFORE_REST_MAX,
+              );
+              break;
+            }
+          }
+          if (claimedLoungeSeatId) {
+            const claimedLoungeSeat = seats.get(claimedLoungeSeatId);
+            if (claimedLoungeSeat) claimedLoungeSeat.assigned = false;
+            if (ch.workSeatId) {
+              ch.seatId = ch.workSeatId;
             }
           }
         }
@@ -220,15 +268,26 @@ export function updateCharacter(
         ch.x = center.x;
         ch.y = center.y;
 
-        if (ch.isActive) {
+        if (ch.isActive || ch.seatTimer === -2) {
+          // seatTimer === -2: deferred deactivation — task ended while walking to desk.
+          // Still walk to desk, sit down and type for a few seconds before going idle.
+          const isDeferred = ch.seatTimer === -2;
           if (!ch.seatId) {
             // No seat — type in place
             ch.state = CharacterState.TYPE;
+            if (isDeferred) {
+              ch.isActive = false;
+              ch.seatTimer = 3.0; // type for 3 seconds then go idle
+            }
           } else {
             const seat = seats.get(ch.seatId);
             if (seat && ch.tileCol === seat.seatCol && ch.tileRow === seat.seatRow) {
               ch.state = CharacterState.TYPE;
               ch.dir = seat.facingDir;
+              if (isDeferred) {
+                ch.isActive = false;
+                ch.seatTimer = 3.0; // type for 3 seconds then go idle
+              }
             } else {
               ch.state = CharacterState.IDLE;
             }
@@ -336,4 +395,20 @@ function randomRange(min: number, max: number): number {
 
 function randomInt(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function findNearestLoungeSeat(ch: Character, seats: Map<string, Seat>): string | null {
+  let bestSeatId: string | null = null;
+  let bestDist = Infinity;
+
+  for (const [seatId, seat] of seats) {
+    if (seat.assigned || seat.isWorkSeat) continue;
+    const dist = Math.abs(seat.seatCol - ch.tileCol) + Math.abs(seat.seatRow - ch.tileRow);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestSeatId = seatId;
+    }
+  }
+
+  return bestSeatId;
 }

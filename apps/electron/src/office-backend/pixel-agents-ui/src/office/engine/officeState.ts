@@ -91,12 +91,15 @@ export class OfficeState {
       seat.assigned = false;
     }
 
-    // First pass: try to keep characters at their existing seats
+    // First pass: try to keep characters at their work seats
     for (const ch of this.characters.values()) {
-      if (ch.seatId && this.seats.has(ch.seatId)) {
-        const seat = this.seats.get(ch.seatId)!;
+      const preferredSeatId = ch.workSeatId ?? ch.seatId;
+      if (preferredSeatId && this.seats.has(preferredSeatId)) {
+        const seat = this.seats.get(preferredSeatId)!;
         if (!seat.assigned) {
           seat.assigned = true;
+          ch.workSeatId = preferredSeatId;
+          ch.seatId = preferredSeatId;
           // Snap character to seat position
           ch.tileCol = seat.seatCol;
           ch.tileRow = seat.seatRow;
@@ -109,6 +112,7 @@ export class OfficeState {
         }
       }
       ch.seatId = null; // will be reassigned below
+      ch.workSeatId = null;
     }
 
     // Second pass: assign remaining characters to free seats
@@ -118,6 +122,7 @@ export class OfficeState {
       if (seatId) {
         this.seats.get(seatId)!.assigned = true;
         ch.seatId = seatId;
+        ch.workSeatId = seatId;
         const seat = this.seats.get(seatId)!;
         ch.tileCol = seat.seatCol;
         ch.tileRow = seat.seatRow;
@@ -174,7 +179,39 @@ export class OfficeState {
     return result;
   }
 
+  private releaseSeat(seatId: string | null | undefined): void {
+    if (!seatId) return;
+    const seat = this.seats.get(seatId);
+    if (seat) seat.assigned = false;
+  }
+
+  private releaseCharacterSeats(ch: Character): void {
+    const released = new Set<string>();
+    for (const seatId of [ch.seatId, ch.workSeatId]) {
+      if (!seatId || released.has(seatId)) continue;
+      this.releaseSeat(seatId);
+      released.add(seatId);
+    }
+  }
+
+  private restoreWorkSeat(ch: Character): void {
+    if (!ch.workSeatId) return;
+    if (ch.seatId && ch.seatId !== ch.workSeatId) {
+      this.releaseSeat(ch.seatId);
+      ch.seatId = ch.workSeatId;
+      return;
+    }
+    if (!ch.seatId) {
+      ch.seatId = ch.workSeatId;
+    }
+  }
+
   private findFreeSeat(): string | null {
+    // Prefer work seats (next to desks) over lounge seats (sofas/benches)
+    for (const [uid, seat] of this.seats) {
+      if (!seat.assigned && seat.isWorkSeat) return uid;
+    }
+    // Fallback to any seat if no work seats available
     for (const [uid, seat] of this.seats) {
       if (!seat.assigned) return uid;
     }
@@ -245,7 +282,18 @@ export class OfficeState {
     if (seatId) {
       const seat = this.seats.get(seatId)!;
       seat.assigned = true;
+      // Create character with seat assignment but spawn at a random walkable tile.
+      // Character starts idle (wandering) and will walk to their desk when active.
       ch = createCharacter(id, palette, seatId, seat, hueShift);
+      // Override spawn position to a random walkable tile (not at the desk)
+      const spawn =
+        this.walkableTiles.length > 0
+          ? this.walkableTiles[Math.floor(Math.random() * this.walkableTiles.length)]
+          : { col: seat.seatCol, row: seat.seatRow };
+      ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2;
+      ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2;
+      ch.tileCol = spawn.col;
+      ch.tileRow = spawn.row;
     } else {
       // No seats — spawn at random walkable tile
       const spawn =
@@ -275,10 +323,7 @@ export class OfficeState {
     if (!ch) return;
     if (ch.matrixEffect === 'despawn') return; // already despawning
     // Free seat and clear selection immediately
-    if (ch.seatId) {
-      const seat = this.seats.get(ch.seatId);
-      if (seat) seat.assigned = false;
-    }
+    this.releaseCharacterSeats(ch);
     if (this.selectedAgentId === id) this.selectedAgentId = null;
     if (this.cameraFollowId === id) this.cameraFollowId = null;
     // Start despawn animation instead of immediate delete
@@ -300,15 +345,12 @@ export class OfficeState {
   reassignSeat(agentId: number, seatId: string): void {
     const ch = this.characters.get(agentId);
     if (!ch) return;
-    // Unassign old seat
-    if (ch.seatId) {
-      const old = this.seats.get(ch.seatId);
-      if (old) old.assigned = false;
-    }
     // Assign new seat
     const seat = this.seats.get(seatId);
     if (!seat || seat.assigned) return;
+    this.releaseCharacterSeats(ch);
     seat.assigned = true;
+    ch.workSeatId = seatId;
     ch.seatId = seatId;
     // Pathfind to new seat (unblock own seat tile for this query)
     const path = this.withOwnSeatUnblocked(ch, () =>
@@ -335,7 +377,9 @@ export class OfficeState {
   /** Send an agent back to their currently assigned seat */
   sendToSeat(agentId: number): void {
     const ch = this.characters.get(agentId);
-    if (!ch || !ch.seatId) return;
+    if (!ch) return;
+    this.restoreWorkSeat(ch);
+    if (!ch.seatId) return;
     const seat = this.seats.get(ch.seatId);
     if (!seat) return;
     const path = this.withOwnSeatUnblocked(ch, () =>
@@ -459,10 +503,7 @@ export class OfficeState {
         this.subagentMeta.delete(id);
         return;
       }
-      if (ch.seatId) {
-        const seat = this.seats.get(ch.seatId);
-        if (seat) seat.assigned = false;
-      }
+      this.releaseCharacterSeats(ch);
       // Start despawn animation — keep character in map for rendering
       ch.matrixEffect = 'despawn';
       ch.matrixEffectTimer = 0;
@@ -490,10 +531,7 @@ export class OfficeState {
             toRemove.push(key);
             continue;
           }
-          if (ch.seatId) {
-            const seat = this.seats.get(ch.seatId);
-            if (seat) seat.assigned = false;
-          }
+          this.releaseCharacterSeats(ch);
           // Start despawn animation
           ch.matrixEffect = 'despawn';
           ch.matrixEffectTimer = 0;
@@ -516,11 +554,46 @@ export class OfficeState {
     return this.subagentIdMap.get(`${parentAgentId}:${parentToolId}`) ?? null;
   }
 
+  private isAtAssignedSeat(ch: Character): boolean {
+    if (!ch.seatId) return false;
+    const seat = this.seats.get(ch.seatId);
+    return !!seat && ch.tileCol === seat.seatCol && ch.tileRow === seat.seatRow;
+  }
+
   setAgentActive(id: number, active: boolean): void {
     const ch = this.characters.get(id);
     if (ch) {
-      ch.isActive = active;
-      if (!active) {
+      if (active) {
+        this.restoreWorkSeat(ch);
+        ch.isActive = true;
+        if (ch.workSeatId && !this.isAtAssignedSeat(ch)) {
+          this.sendToSeat(id);
+          this.rebuildFurnitureInstances();
+          return;
+        }
+      } else {
+        const shouldFinishGoingToSeat =
+          ch.isActive && ch.seatId && !this.isAtAssignedSeat(ch) && ch.state !== CharacterState.TYPE;
+
+        // If the character is walking to their desk or just started typing,
+        // don't immediately set inactive — let them finish walking and type
+        // for at least a few seconds so the animation looks natural.
+        if (shouldFinishGoingToSeat) {
+          // Character is walking to desk — set a deferred deactivation.
+          // This also covers newly spawned agents that have not started moving
+          // yet (for example while their matrix spawn effect is still running).
+          // The FSM will walk them to the seat first, then type briefly.
+          ch.seatTimer = -2; // sentinel: deferred deactivation
+          return;
+        }
+        if (ch.state === CharacterState.TYPE && ch.isActive && ch.seatTimer === 0) {
+          // Character just sat down and is typing — let them type for at least 3 seconds
+          ch.seatTimer = 3.0;
+          ch.isActive = false;
+          this.rebuildFurnitureInstances();
+          return;
+        }
+        ch.isActive = false;
         // Sentinel -1: signals turn just ended, skip next seat rest timer.
         // Prevents the WALK handler from setting a 2-4 min rest on arrival.
         ch.seatTimer = -1;

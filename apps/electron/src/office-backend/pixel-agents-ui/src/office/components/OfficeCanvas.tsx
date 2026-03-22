@@ -471,7 +471,7 @@ export function OfficeCanvas({
             const seat = officeState.seats.get(seatId);
             if (seat) {
               const selectedCh = officeState.characters.get(officeState.selectedAgentId);
-              if (!seat.assigned || (selectedCh && selectedCh.seatId === seatId)) {
+              if (!seat.assigned || (selectedCh && selectedCh.workSeatId === seatId)) {
                 cursor = 'pointer';
               }
             }
@@ -699,7 +699,7 @@ export function OfficeCanvas({
             if (seatId) {
               const seat = officeState.seats.get(seatId);
               if (seat && selectedCh) {
-                if (selectedCh.seatId === seatId) {
+                if (selectedCh.workSeatId === seatId) {
                   // Clicked own seat — send agent back to it
                   officeState.sendToSeat(officeState.selectedAgentId);
                   officeState.selectedAgentId = null;
@@ -711,10 +711,17 @@ export function OfficeCanvas({
                   officeState.selectedAgentId = null;
                   officeState.cameraFollowId = null;
                   // Persist seat assignments (exclude sub-agents)
-                  const seats: Record<number, { palette: number; seatId: string | null }> = {};
+                  const seats: Record<
+                    number,
+                    { palette: number; hueShift: number; seatId: string | null }
+                  > = {};
                   for (const ch of officeState.characters.values()) {
                     if (ch.isSubagent) continue;
-                    seats[ch.id] = { palette: ch.palette, seatId: ch.seatId };
+                    seats[ch.id] = {
+                      palette: ch.palette,
+                      hueShift: ch.hueShift,
+                      seatId: ch.workSeatId,
+                    };
                   }
                   vscode.postMessage({ type: 'saveAgentSeats', seats });
                   return;

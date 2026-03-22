@@ -13,7 +13,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join, extname, resolve } from 'node:path';
+import { basename, join, extname, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 const PORT = parseInt(process.env.OFFICE_PORT || '19000', 10);
@@ -65,6 +65,15 @@ const MIME_TYPES: Record<string, string> = {
   '.wav': 'audio/wav',
 };
 
+function getCacheControl(filePath: string, ext: string): string {
+  if (ext === '.html') return 'no-cache';
+
+  const fileName = basename(filePath);
+  const hasBundledHash = /-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(fileName);
+
+  return hasBundledHash ? 'public, max-age=31536000, immutable' : 'no-cache';
+}
+
 function serveStatic(req: IncomingMessage, res: ServerResponse): boolean {
   let urlPath = req.url || '/';
 
@@ -103,7 +112,7 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): boolean {
 
   try {
     const content = readFileSync(filePath);
-    const cacheControl = ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable';
+    const cacheControl = getCacheControl(filePath, ext);
     res.writeHead(200, {
       'Content-Type': contentType,
       'Cache-Control': cacheControl,
@@ -158,6 +167,25 @@ function getOrCreateAgentId(sessionId: string, sessionName: string): AgentInfo {
   };
   activeAgents.set(sessionId, info);
   return info;
+}
+
+function ensureAgent(
+  sessionId: string,
+  sessionName = 'Agent',
+): { agent: AgentInfo; created: boolean } {
+  const existing = activeAgents.get(sessionId);
+  if (existing) {
+    existing.sessionName = sessionName;
+    return { agent: existing, created: false };
+  }
+
+  const agent = getOrCreateAgentId(sessionId, sessionName);
+  broadcast({
+    type: 'agentCreated',
+    id: agent.id,
+    folderName: agent.sessionName,
+  });
+  return { agent, created: true };
 }
 
 // ── REST API handling ───────────────────────────────────────────────────────
@@ -224,15 +252,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boo
           res.end(JSON.stringify({ error: 'sessionId required' }));
           return true;
         }
-        const agent = getOrCreateAgentId(sessionId, sessionName);
-        // Broadcast agentCreated to all connected UIs
-        broadcast({
-          type: 'agentCreated',
-          id: agent.id,
-          folderName: sessionName,
-        });
+        const { agent, created } = ensureAgent(sessionId, sessionName);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ agentId: agent.id }));
+        res.end(JSON.stringify({ agentId: agent.id, created }));
         return true;
       }
 
@@ -254,24 +276,22 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boo
       }
 
       case '/api/agent-tool-start': {
-        const { sessionId, toolName = 'unknown', toolId } = body;
+        const { sessionId, sessionName = 'Agent', toolName = 'unknown', toolId } = body;
         if (!sessionId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'sessionId required' }));
           return true;
         }
-        const agent = activeAgents.get(sessionId);
-        if (agent) {
-          // Map DAZI tool names to Pixel Agents status format
-          const status = toolNameToStatus(toolName);
-          const tid = toolId || `tool-${Date.now()}`;
-          broadcast({
-            type: 'agentToolStart',
-            id: agent.id,
-            toolId: tid,
-            status,
-          });
-        }
+        const { agent } = ensureAgent(sessionId, sessionName);
+        // Map DAZI tool names to Pixel Agents status format
+        const status = toolNameToStatus(toolName);
+        const tid = toolId || `tool-${Date.now()}`;
+        broadcast({
+          type: 'agentToolStart',
+          id: agent.id,
+          toolId: tid,
+          status,
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
         return true;
@@ -314,20 +334,18 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boo
       }
 
       case '/api/agent-status': {
-        const { sessionId, status } = body;
+        const { sessionId, sessionName = 'Agent', status } = body;
         if (!sessionId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'sessionId required' }));
           return true;
         }
-        const agent = activeAgents.get(sessionId);
-        if (agent) {
-          broadcast({
-            type: 'agentStatus',
-            id: agent.id,
-            status: status || 'active',
-          });
-        }
+        const { agent } = ensureAgent(sessionId, sessionName);
+        broadcast({
+          type: 'agentStatus',
+          id: agent.id,
+          status: status || 'active',
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
         return true;

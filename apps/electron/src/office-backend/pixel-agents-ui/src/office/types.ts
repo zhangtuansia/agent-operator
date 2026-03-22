@@ -64,6 +64,8 @@ export interface Seat {
   /** Direction character faces when sitting (toward adjacent desk) */
   facingDir: Direction;
   assigned: boolean;
+  /** True if this seat is next to a desk (work seat), false if lounge/sofa */
+  isWorkSeat: boolean;
 }
 
 export interface FurnitureInstance {
@@ -170,8 +172,10 @@ export interface Character {
   wanderLimit: number;
   /** Whether the agent is actively working */
   isActive: boolean;
-  /** Assigned seat uid, or null if no seat */
+  /** Current seat target/occupancy uid, or null if no seat */
   seatId: string | null;
+  /** Fixed workstation uid used whenever the agent becomes active */
+  workSeatId: string | null;
   /** Active speech bubble type, or null if none showing */
   bubbleType: 'permission' | 'waiting' | null;
   /** Countdown timer for bubble (waiting: 2→0, permission: unused) */

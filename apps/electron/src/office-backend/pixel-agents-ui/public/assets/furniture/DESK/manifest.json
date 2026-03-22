@@ -2,6 +2,7 @@
   "id": "DESK",
   "name": "Desk",
   "category": "desks",
+  "isDesk": true,
   "type": "group",
   "groupType": "rotation",
   "rotationScheme": "2-way",

@@ -214,6 +214,18 @@ function isLocalhostTarget(input: string): boolean {
   return /^(localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i.test(input)
 }
 
+function isOfficeTarget(input: string): boolean {
+  try {
+    const url = new URL(input)
+    return (
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
+      url.port === '19000'
+    )
+  } catch {
+    return false
+  }
+}
+
 function shouldOpenExternally(target: string): boolean {
   return /^(mailto|tel|sms):/i.test(target)
 }
@@ -356,8 +368,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       return id
     }
 
-    const sharedSession = session.fromPartition(BROWSER_PANE_SESSION_PARTITION)
-    this.ensureNetworkTracking(sharedSession)
+    const sessionPartition = options.partition || BROWSER_PANE_SESSION_PARTITION
+    const paneSession = session.fromPartition(sessionPartition)
+    this.ensureNetworkTracking(paneSession)
 
     const backgroundColor = nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#f6f3ef'
     const startPageUrl = buildStartPageUrl()
@@ -376,8 +389,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       icon: getBrowserIconPath(),
       autoHideMenuBar: true,
       webPreferences: {
-        partition: BROWSER_PANE_SESSION_PARTITION,
-        session: sharedSession,
+        partition: sessionPartition,
+        session: paneSession,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -386,8 +399,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const toolbarView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_SESSION_PARTITION,
-        session: sharedSession,
+        partition: sessionPartition,
+        session: paneSession,
         preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
@@ -397,8 +410,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const pageView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_SESSION_PARTITION,
-        session: sharedSession,
+        partition: sessionPartition,
+        session: paneSession,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -407,8 +420,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const nativeOverlayView = new BrowserView({
       webPreferences: {
-        partition: BROWSER_PANE_SESSION_PARTITION,
-        session: sharedSession,
+        partition: sessionPartition,
+        session: paneSession,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -554,6 +567,16 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     if (shouldOpenExternally(target)) {
       await shell.openExternal(target)
       return { url: record.info.url, title: record.info.title }
+    }
+
+    if (isOfficeTarget(target)) {
+      const pageSession = record.pageView.webContents.session
+      await pageSession.clearCache()
+      await pageSession.clearStorageData({
+        origin: 'http://127.0.0.1:19000',
+        storages: ['localstorage', 'indexdb', 'serviceworkers', 'cachestorage'],
+      })
+      mainLog.info(`[browser-pane] Cleared cached office data before navigate id=${id}`)
     }
 
     await record.pageView.webContents.loadURL(target)

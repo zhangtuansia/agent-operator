@@ -2,6 +2,7 @@
   "id": "SMALL_TABLE",
   "name": "Small Table",
   "category": "desks",
+  "isDesk": true,
   "type": "group",
   "groupType": "rotation",
   "rotationScheme": "2-way",

@@ -4,7 +4,7 @@
  */
 
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -44,6 +44,7 @@ const uiDistDir = resolve(__dirname, '..', 'pixel-agents-ui', 'dist');
 const targetUiDir = resolve(distDir, 'ui');
 
 if (existsSync(uiDistDir)) {
+  rmSync(targetUiDir, { recursive: true, force: true });
   mkdirSync(targetUiDir, { recursive: true });
   cpSync(uiDistDir, targetUiDir, { recursive: true });
   console.log('[build] UI copied to dist/ui/');

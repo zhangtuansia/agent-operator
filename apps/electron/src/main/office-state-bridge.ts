@@ -20,40 +20,22 @@ const OFFICE_API = 'http://127.0.0.1:19000'
 // Track active tool IDs per session for dedup / done matching
 const activeToolIds = new Map<string, string>()
 
-// Debounce state per session
-const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const DEBOUNCE_MS = 300
-
 // ============================================================================
 // Internal helpers
 // ============================================================================
 
 async function postEvent(endpoint: string, body: Record<string, unknown>): Promise<void> {
   try {
-    await fetch(`${OFFICE_API}${endpoint}`, {
+    console.log(`[office-bridge] POST ${endpoint}`, JSON.stringify(body).substring(0, 100))
+    const res = await fetch(`${OFFICE_API}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-  } catch {
-    // Office server may not be running — silently ignore
-  }
-}
-
-function debounced(sessionId: string, fn: () => void): void {
-  const existing = debounceTimers.get(sessionId)
-  if (existing) clearTimeout(existing)
-  debounceTimers.set(sessionId, setTimeout(() => {
-    debounceTimers.delete(sessionId)
-    fn()
-  }, DEBOUNCE_MS))
-}
-
-function cancelDebounce(sessionId: string): void {
-  const existing = debounceTimers.get(sessionId)
-  if (existing) {
-    clearTimeout(existing)
-    debounceTimers.delete(sessionId)
+    const text = await res.text()
+    console.log(`[office-bridge] POST ${endpoint} → ${res.status} ${text.substring(0, 80)}`)
+  } catch (err: unknown) {
+    console.log(`[office-bridge] POST ${endpoint} FAILED:`, err instanceof Error ? err.message : err)
   }
 }
 
@@ -84,6 +66,7 @@ function toolNameToDetail(toolName: string): string {
  * A new DAZI session was created. Spawn a pixel character.
  */
 export function officeAgentCreated(sessionId: string, sessionName: string): void {
+  createdSessions.add(sessionId)
   postEvent('/api/agent-created', { sessionId, sessionName })
 }
 
@@ -91,7 +74,7 @@ export function officeAgentCreated(sessionId: string, sessionName: string): void
  * A DAZI session was closed/archived. Despawn the pixel character.
  */
 export function officeAgentClosed(sessionId: string): void {
-  cancelDebounce(sessionId)
+  createdSessions.delete(sessionId)
   activeToolIds.delete(sessionId)
   postEvent('/api/agent-closed', { sessionId })
 }
@@ -104,24 +87,14 @@ const createdSessions = new Set<string>()
  * Also lazily creates the pixel character if this is the first time we see this session.
  */
 export function officeAgentStarted(sessionId: string, sessionName?: string): void {
-  // Lazily create the character on first activity
   if (!createdSessions.has(sessionId)) {
     createdSessions.add(sessionId)
-    postEvent('/api/agent-created', {
-      sessionId,
-      sessionName: sessionName || 'Agent',
-    })
   }
-
-  debounced(sessionId, () => {
-    // If no specific tool is running yet, use a generic "thinking" tool
-    const toolId = `thinking-${Date.now()}`
-    activeToolIds.set(sessionId, toolId)
-    postEvent('/api/agent-tool-start', {
-      sessionId,
-      toolName: 'Bash', // Shows as typing
-      toolId,
-    })
+  // Mark the agent active immediately so short turns still walk to the desk.
+  postEvent('/api/agent-status', {
+    sessionId,
+    sessionName: sessionName || 'Agent',
+    status: 'active',
   })
 }
 
@@ -129,7 +102,6 @@ export function officeAgentStarted(sessionId: string, sessionName?: string): voi
  * Agent is calling a specific tool.
  */
 export function officeAgentToolCall(sessionId: string, toolName: string, toolId?: string): void {
-  cancelDebounce(sessionId)
   const tid = toolId || `tool-${Date.now()}`
   activeToolIds.set(sessionId, tid)
   postEvent('/api/agent-tool-start', {
@@ -153,7 +125,6 @@ export function officeAgentToolDone(sessionId: string, toolId?: string): void {
  * Agent finished its turn (all tools done). Character goes idle.
  */
 export function officeAgentFinished(sessionId: string): void {
-  cancelDebounce(sessionId)
   activeToolIds.delete(sessionId)
   postEvent('/api/agent-tools-clear', { sessionId })
 }
@@ -169,7 +140,6 @@ export function officeAgentStatus(sessionId: string, status: 'active' | 'waiting
  * Agent encountered an error.
  */
 export function officeAgentError(sessionId: string, errorMessage?: string): void {
-  cancelDebounce(sessionId)
   activeToolIds.delete(sessionId)
   postEvent('/api/agent-tools-clear', { sessionId })
 }

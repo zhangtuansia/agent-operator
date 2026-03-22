@@ -351,6 +351,7 @@ export interface BrowserPaneCreateOptions {
   id?: string
   show?: boolean
   url?: string
+  partition?: string
   bindToSessionId?: string
   ownerType?: 'session' | 'manual'
   ownerSessionId?: string | null

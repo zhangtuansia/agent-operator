@@ -343,6 +343,7 @@ app.whenReady().then(async () => {
       onSessionStarted: (sessionId?: string, sessionName?: string) => {
         onSessionStarted()
         if (sessionId) {
+          console.log(`[office-bridge] onSessionStarted: ${sessionId} "${sessionName}"`)
           officeAgentStarted(sessionId, sessionName)
         }
       },
@@ -354,6 +355,7 @@ app.whenReady().then(async () => {
       },
       onToolStart: (toolName: string, sessionId?: string) => {
         if (sessionId) {
+          console.log(`[office-bridge] onToolStart: ${toolName} session=${sessionId}`)
           officeAgentToolCall(sessionId, toolName)
         }
       },

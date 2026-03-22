@@ -175,6 +175,23 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
     }
   }
 
+  // Work desks are desks that actually have a computer placed on them.
+  // Lounge tables (like coffee tables) should not attract agents away from PCs.
+  const computerDeskTiles = new Set<string>();
+  for (const item of furniture) {
+    const entry = getCatalogEntry(item.type);
+    if (!entry || !item.type.startsWith('PC_')) continue;
+    for (let dr = 0; dr < entry.footprintH; dr++) {
+      for (let dc = 0; dc < entry.footprintW; dc++) {
+        const key = `${item.col + dc},${item.row + dr}`;
+        if (deskTiles.has(key)) {
+          computerDeskTiles.add(key);
+        }
+      }
+    }
+  }
+  const hasComputerDesks = computerDeskTiles.size > 0;
+
   const dirs: Array<{ dc: number; dr: number; facing: Direction }> = [
     { dc: 0, dr: -1, facing: Direction.UP }, // desk is above chair → face UP
     { dc: 0, dr: 1, facing: Direction.DOWN }, // desk is below chair → face DOWN
@@ -210,6 +227,15 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           }
         }
 
+        let adjacentToDesk = false;
+        let adjacentToComputerDesk = false;
+        for (const d of dirs) {
+          const key = `${tileCol + d.dc},${tileRow + d.dr}`;
+          if (deskTiles.has(key)) adjacentToDesk = true;
+          if (computerDeskTiles.has(key)) adjacentToComputerDesk = true;
+        }
+        const isWorkSeat = hasComputerDesks ? adjacentToComputerDesk : adjacentToDesk;
+
         // First seat uses chair uid (backward compat), subsequent use uid:N
         const seatUid = seatCount === 0 ? item.uid : `${item.uid}:${seatCount}`;
         seats.set(seatUid, {
@@ -218,6 +244,7 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           seatRow: tileRow,
           facingDir,
           assigned: false,
+          isWorkSeat,
         });
         seatCount++;
       }

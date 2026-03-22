@@ -233,7 +233,7 @@ export function renderSeatIndicators(
     const x = offsetX + seat.seatCol * s;
     const y = offsetY + seat.seatRow * s;
 
-    if (selectedChar.seatId === uid) {
+    if (selectedChar.workSeatId === uid) {
       // Selected agent's own seat — blue
       ctx.fillStyle = SEAT_OWN_COLOR;
     } else if (!seat.assigned) {

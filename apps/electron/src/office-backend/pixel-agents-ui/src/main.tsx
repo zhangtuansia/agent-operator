@@ -4,9 +4,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
+import { ensureRandomUUID } from './browserCompat';
 import { initDaziBridge } from './bridge/DaziBridge';
 
 async function main() {
+  ensureRandomUUID();
+
   // Always running in browser/standalone mode for DAZI.
   // Load assets via HTTP (browserMock handles fetching + dispatching).
   const { initBrowserMock } = await import('./browserMock.js');
