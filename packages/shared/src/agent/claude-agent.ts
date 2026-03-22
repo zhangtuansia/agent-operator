@@ -377,6 +377,8 @@ export class ClaudeAgent extends BaseAgent {
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
+  /** Pending steer message — injected via additionalContext on next PreToolUse */
+  private pendingSteerMessage: string | null = null;
   // Last assistant message usage (for accurate context window display)
   // result.modelUsage is cumulative across the session (for billing), but we need per-message usage
   // See: https://github.com/anthropics/claude-agent-sdk-typescript/issues/66
@@ -606,6 +608,9 @@ export class ClaudeAgent extends BaseAgent {
   ): AsyncGenerator<AgentEvent> {
     // Extract options (ChatOptions interface from AgentBackend)
     const _isRetry = options?.isRetry ?? false;
+
+    // Clear any leftover steer from a previous turn (safety net — should already be null)
+    this.pendingSteerMessage = null;
 
     try {
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
@@ -998,6 +1003,13 @@ export class ClaudeAgent extends BaseAgent {
                 modifiedInput = metadataResult.input;
               }
 
+              // Consume pending steer message (if any) — will be injected via additionalContext
+              const steerMsg = this.pendingSteerMessage;
+              if (steerMsg) {
+                this.pendingSteerMessage = null;
+                this.debug(`Injecting steer via additionalContext on ${input.tool_name}`);
+              }
+
               // If any modifications were made, return with updated input
               if (modifiedInput) {
                 return {
@@ -1005,6 +1017,18 @@ export class ClaudeAgent extends BaseAgent {
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse' as const,
                     updatedInput: modifiedInput,
+                    ...(steerMsg ? { additionalContext: `The user just sent a new message while you were working. Stop what you are currently doing and address their message instead:\n\n${steerMsg}` } : {}),
+                  },
+                };
+              }
+
+              // If steer message is pending but no input modifications, inject via additionalContext
+              if (steerMsg) {
+                return {
+                  continue: true,
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    additionalContext: `The user just sent a new message while you were working. Stop what you are currently doing and address their message instead:\n\n${steerMsg}`,
                   },
                 };
               }
@@ -1806,6 +1830,15 @@ export class ClaudeAgent extends BaseAgent {
       // Reset ultrathink override after query completes (single-shot per-message boost)
       // Note: thinkingLevel is NOT reset - it's sticky for the session
       this._ultrathinkOverride = false;
+
+      // If a steer message was never delivered (no PreToolUse fired), notify the session
+      // layer so it can re-queue the message for the next turn.
+      const undeliveredSteer = this.pendingSteerMessage;
+      if (undeliveredSteer) {
+        this.pendingSteerMessage = null;
+        this.debug(`Steer message was not delivered (no tool call fired) — emitting steer_undelivered`);
+        yield { type: 'steer_undelivered' as const, message: undeliveredSteer };
+      }
     }
   }
 
@@ -2787,11 +2820,29 @@ export class ClaudeAgent extends BaseAgent {
    */
   forceAbort(reason: AbortReason = AbortReason.UserStop): void {
     this.lastAbortReason = reason;
+    this.pendingSteerMessage = null; // Clear any undelivered steer
     if (this.currentQueryAbortController) {
       this.currentQueryAbortController.abort(reason);
       this.currentQueryAbortController = null;
     }
     this.currentQuery = null;
+  }
+
+  /**
+   * Redirect mid-stream via additionalContext injection.
+   * Stores the message; the next PreToolUse hook injects it into the conversation.
+   * If no tool call fires before the turn ends, yields steer_undelivered so the
+   * session layer can re-queue the message.
+   */
+  override redirect(message: string): boolean {
+    if (!this.currentQuery || !this.currentQueryAbortController) {
+      // Not actively streaming — fall back to abort + queue
+      this.forceAbort(AbortReason.Redirect);
+      return false;
+    }
+    this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
+    this.pendingSteerMessage = message;
+    return true;
   }
 
   getModel(): string {

@@ -265,9 +265,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   private toolbarIpcRegistered = false
   private networkTrackingRegistered = false
   private downloadTrackingRegistered = false
-  private sessionPathResolver: ((sessionId: string) => string | undefined) | null = null
+  private sessionPathResolver: ((sessionId: string) => string | null) | null = null
 
-  setSessionPathResolver(resolver: ((sessionId: string) => string | undefined) | null): void {
+  setSessionPathResolver(resolver: ((sessionId: string) => string | null) | null): void {
     this.sessionPathResolver = resolver
   }
 
@@ -606,7 +606,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     record.pageView.webContents.stop()
   }
 
-  async focus(id: string): Promise<void> {
+  focus(id: string): void {
     const record = this.requireRecord(id)
 
     if (record.window.isMinimized()) {
@@ -681,7 +681,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return record.cdp.getAccessibilitySnapshot()
   }
 
-  async clickElement(id: string, ref: string, options?: BrowserClickOptions): Promise<BrowserElementGeometry> {
+  async clickElement(id: string, ref: string, options?: BrowserClickOptions): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
     try {
@@ -700,8 +700,6 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       } else if (options?.waitFor === 'network-idle') {
         await this.waitForNetworkIdle(record, options.timeoutMs)
       }
-
-      return geometry
     } catch (error) {
       record.lastAction = {
         tool: 'browser_click',
@@ -713,7 +711,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
   }
 
-  async fillElement(id: string, ref: string, value: string): Promise<BrowserElementGeometry> {
+  async fillElement(id: string, ref: string, value: string): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
     try {
@@ -725,7 +723,6 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         geometry,
         timestamp: Date.now(),
       }
-      return geometry
     } catch (error) {
       record.lastAction = {
         tool: 'browser_fill',
@@ -737,7 +734,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
   }
 
-  async selectOption(id: string, ref: string, value: string): Promise<BrowserElementGeometry> {
+  async selectOption(id: string, ref: string, value: string): Promise<void> {
     const record = this.requireRecord(id)
     await this.prepareInput(record)
     try {
@@ -749,7 +746,6 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         geometry,
         timestamp: Date.now(),
       }
-      return geometry
     } catch (error) {
       record.lastAction = {
         tool: 'browser_select',
@@ -815,9 +811,6 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         const captured = await this.capturePageWithRecovery(record, {
           format,
           jpegQuality: Math.max(1, Math.min(100, options?.jpegQuality ?? 90)),
-          dpr: viewport.dpr,
-          mode,
-          errorPrefix: 'screenshot',
         })
 
         return {
@@ -853,8 +846,6 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       const captured = await this.capturePageWithRecovery(record, {
         format,
         jpegQuality: Math.max(1, Math.min(100, options?.jpegQuality ?? 90)),
-        mode: 'raw',
-        errorPrefix: 'screenshot',
       })
 
       return {
@@ -1152,14 +1143,14 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
   }
 
-  async uploadFiles(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry> {
+  async uploadFiles(id: string, ref: string, filePaths: string[]): Promise<void> {
     const record = this.requireRecord(id)
     const safePaths = filePaths.map((filePath) => this.validateUploadFilePath(filePath))
-    return record.cdp.setFileInputFiles(ref, safePaths)
+    await record.cdp.setFileInputFiles(ref, safePaths)
   }
 
-  async uploadFile(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry> {
-    return this.uploadFiles(id, ref, filePaths)
+  async uploadFile(id: string, ref: string, filePaths: string[]): Promise<void> {
+    await this.uploadFiles(id, ref, filePaths)
   }
 
   async typeText(id: string, text: string): Promise<void> {
@@ -1704,7 +1695,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   private resolveDownloadsDir(record: BrowserPaneRecord): string {
     const sessionId = record.info.boundSessionId ?? record.info.ownerSessionId
-    const sessionPath = sessionId ? this.sessionPathResolver?.(sessionId) : undefined
+    const sessionPath = sessionId ? (this.sessionPathResolver?.(sessionId) ?? undefined) : undefined
     if (sessionPath) {
       const dir = join(sessionPath, 'downloads')
       mkdirSync(dir, { recursive: true })

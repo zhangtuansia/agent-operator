@@ -54,7 +54,7 @@ export function EntityPanel<T>({
     selectionStore,
   })
 
-  useAction('navigator.clearSelection', () => {
+  useAction('sessionList.clearSelection', () => {
     interactions.selection.clear()
   }, {
     enabled: () => interactions.selection.isMultiSelectActive,

@@ -61,6 +61,12 @@ export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
 export type TodoState = string;
 
 /**
+ * @deprecated Use TodoState instead.
+ * Kept as a compatibility alias while older server-core code is migrated.
+ */
+export type SessionStatus = TodoState;
+
+/**
  * Built-in status IDs (for TypeScript consumers)
  * These are the default statuses but users can add/remove custom ones
  */
@@ -109,6 +115,8 @@ export interface SessionConfig {
   permissionMode?: PermissionMode;
   /** User-controlled todo state - determines inbox vs completed */
   todoState?: TodoState;
+  /** @deprecated Use todoState instead. */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -201,6 +209,8 @@ export interface SessionHeader {
   permissionMode?: PermissionMode;
   /** User-controlled todo state - determines inbox vs completed */
   todoState?: TodoState;
+  /** @deprecated Use todoState instead. */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -291,6 +301,8 @@ export interface SessionMetadata {
   isFlagged?: boolean;
   /** User-controlled todo state */
   todoState?: TodoState;
+  /** @deprecated Use todoState instead. */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** Permission mode for this session */

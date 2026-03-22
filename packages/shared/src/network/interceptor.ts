@@ -42,9 +42,7 @@ export {
 export type { LastApiError, ToolMetadata } from './common.ts';
 export { getLastApiError, clearLastApiError } from './common.ts';
 
-// Type alias for fetch's HeadersInit (not in ESNext lib, but available at runtime via Bun)
-// Using string[][] instead of [string, string][] to match RequestInit.headers type
-type HeadersInitType = Headers | Record<string, string> | string[][];
+type HeadersInitType = Headers | Record<string, string> | [string, string][];
 
 
 /**

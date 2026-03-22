@@ -507,13 +507,13 @@ export function SessionList({
   // --- Global keyboard shortcuts ---
   const isFocusWithinZone = () => zoneRef.current?.contains(document.activeElement) ?? false
 
-  useAction('navigator.selectAll', () => {
+  useAction('sessionList.selectAll', () => {
     interactions.selection.selectAll()
   }, {
     enabled: isFocusWithinZone,
   }, [interactions.selection])
 
-  useAction('navigator.clearSelection', () => {
+  useAction('sessionList.clearSelection', () => {
     const selectedId = selectionStore.state.selected
     interactions.selection.clear()
     if (selectedId) navigateToSession(selectedId)
@@ -668,10 +668,7 @@ export function SessionList({
       >
         <button
           onClick={() => {
-            const params: { status?: string; label?: string } = {}
-            if (currentFilter?.kind === 'state') params.status = currentFilter.stateId
-            else if (currentFilter?.kind === 'label') params.label = currentFilter.labelId
-            navigate(routes.action.newSession(Object.keys(params).length > 0 ? params : undefined))
+            navigate(routes.action.newChat())
           }}
           className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
         >

@@ -35,6 +35,10 @@ export interface DocumentFormattedMarkdownOverlayProps {
   typeBadge?: OverlayTypeBadge
   /** Optional error message — renders a tinted error banner above the content card */
   error?: string
+  /** Legacy theme prop kept for compatibility with older callers. */
+  theme?: 'light' | 'dark'
+  /** Legacy translation bag kept for compatibility with older callers. */
+  translations?: Record<string, string>
 }
 
 export function DocumentFormattedMarkdownOverlay({

@@ -584,6 +584,8 @@ export const zh: TranslationKeys = {
     sessionNoLongerExists: '此会话已不存在',
     renameChat: '重命名聊天',
     enterChatName: '输入聊天名称...',
+    queued: '排队中',
+    responseInterrupted: '回复已中断',
   },
 
   // Session List

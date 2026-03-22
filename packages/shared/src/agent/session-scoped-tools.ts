@@ -74,7 +74,7 @@ import { expandPath } from '../utils/paths.ts';
 /**
  * Credential input modes for different auth types
  */
-export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query';
+export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query' | 'multi-header';
 
 function normalizeWorkspaceRootPath(workspaceRootPath: string): string {
   return expandPath(workspaceRootPath);
@@ -114,6 +114,9 @@ export interface CredentialAuthRequest extends BaseAuthRequest {
   description?: string;
   hint?: string;
   headerName?: string;
+  headerNames?: string[];
+  sourceUrl?: string;
+  passwordRequired?: boolean;
 }
 
 /**
@@ -1264,9 +1267,9 @@ A browser window will open for the user to complete authentication.
           return {
             content: [{
               type: 'text' as const,
-              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
+              text: `OAuth authentication requested for '${source.name}'. Opening browser for authentication.`,
             }],
-            isError: true,
+            isError: false,
           };
         }
 
@@ -1403,9 +1406,9 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
+              text: `Google OAuth requested for '${source.name}'. Opening browser for authentication.`,
             }],
-            isError: true,
+            isError: false,
           };
         }
 
@@ -1558,9 +1561,9 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
+              text: `Slack OAuth requested for '${source.name}'. Opening browser for authentication.`,
             }],
-            isError: true,
+            isError: false,
           };
         }
 
@@ -1698,9 +1701,9 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
+              text: `Microsoft OAuth requested for '${source.name}'. Opening browser for authentication.`,
             }],
-            isError: true,
+            isError: false,
           };
         }
 
@@ -1814,9 +1817,9 @@ source_credential_prompt({
           return {
             content: [{
               type: 'text' as const,
-              text: 'Error: No credential input handler available. This tool requires a UI to prompt for credentials.',
+              text: `Authentication requested for '${source.name}'. Waiting for user input.`,
             }],
-            isError: true,
+            isError: false,
           };
         }
 

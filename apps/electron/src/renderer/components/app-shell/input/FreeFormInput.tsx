@@ -104,7 +104,7 @@ export interface FreeFormInputProps {
   /** Callback when model changes */
   onModelChange: (model: string, connection?: string) => void
   // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
+  /** Current thinking level ('off', 'low', 'medium', 'high', 'max') */
   thinkingLevel?: ThinkingLevel
   /** Callback when thinking level changes */
   onThinkingLevelChange?: (level: ThinkingLevel) => void
@@ -329,6 +329,18 @@ export function FreeFormInput({
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
 
+  // Listen for restore-input-text events (dispatched when cancel clears queued messages)
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.sessionId === sessionId && detail?.text) {
+        setInput(prev => prev ? `${prev}\n${detail.text}` : detail.text)
+      }
+    }
+    window.addEventListener('restore-input-text', handler)
+    return () => window.removeEventListener('restore-input-text', handler)
+  }, [sessionId])
+
   // Input settings (loaded from config)
   const [sendMessageKey, setSendMessageKey] = React.useState<'enter' | 'cmd-enter'>('enter')
 
@@ -412,7 +424,9 @@ export function FreeFormInput({
   const getThinkingLevelLabel = React.useCallback((level: ThinkingLevel): string => {
     const labelMap: Record<ThinkingLevel, string> = {
       off: t('input.thinkingOffLabel'),
-      think: t('input.thinkingStandardLabel'),
+      low: t('input.thinkingStandardLabel'),
+      medium: t('input.thinkingStandardLabel'),
+      high: t('input.thinkingMaxLabel'),
       max: t('input.thinkingMaxLabel'),
     }
     return labelMap[level]
@@ -421,7 +435,9 @@ export function FreeFormInput({
   const getThinkingLevelDescription = React.useCallback((level: ThinkingLevel): string => {
     const descriptionMap: Record<ThinkingLevel, string> = {
       off: t('input.thinkingOffDescription'),
-      think: t('input.thinkingStandardDescription'),
+      low: t('input.thinkingStandardDescription'),
+      medium: t('input.thinkingStandardDescription'),
+      high: t('input.thinkingMaxDescription'),
       max: t('input.thinkingMaxDescription'),
     }
     return descriptionMap[level]

@@ -77,6 +77,8 @@ const PatternSchema = z.union([
  * write operations that must always be blocked in Explore mode.
  */
 export const PermissionsConfigSchema = z.object({
+  /** Tool names or patterns to block explicitly. */
+  blockedTools: z.array(PatternSchema).optional(),
   /** Bash command patterns to allow (regex strings) */
   allowedBashPatterns: z.array(PatternSchema).optional(),
   /** MCP tool patterns to allow (regex strings) */

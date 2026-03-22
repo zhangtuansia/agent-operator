@@ -19,6 +19,10 @@ import type { FileAttachment } from '../utils/files.ts';
 import { extractWorkspaceSlug } from '../utils/workspace.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
 import type { AuthRequest } from '@agent-operator/session-tools-core';
+import {
+  registerSessionScopedToolCallbacks,
+  unregisterSessionScopedToolCallbacks,
+} from './session-scoped-tools.ts';
 import { type PermissionMode, shouldAllowToolInMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 
@@ -147,9 +151,11 @@ function resolveCodexModelId(modelId: string, authType?: string): string {
  */
 const THINKING_TO_EFFORT: Record<ThinkingLevel, ReasoningEffort> = {
   off: 'low',
-  think: 'medium',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
   max: 'high',
-};
+}
 
 // ============================================================
 // CodexAgent Implementation
@@ -268,6 +274,19 @@ export class CodexAgent extends BaseAgent {
 
     // Initialize event adapter
     this.adapter = new EventAdapter();
+
+    // Register session-scoped tool callbacks so auth/plan tools can call back
+    // into the Electron SessionManager like the Claude/Operator backends do.
+    registerSessionScopedToolCallbacks(this._sessionId, {
+      onPlanSubmitted: (planPath) => {
+        this.onDebug?.(`[Codex] onPlanSubmitted received: ${planPath}`);
+        this.onPlanSubmitted?.(planPath);
+      },
+      onAuthRequest: (request) => {
+        this.onDebug?.(`[Codex] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
+        this.onAuthRequest?.(request);
+      },
+    });
 
     // Start config watcher for hot-reloading source changes (non-headless only)
     if (!config.isHeadless) {
@@ -2180,6 +2199,8 @@ export class CodexAgent extends BaseAgent {
     // Codex-specific cleanup
     this.client?.disconnect().catch(() => {});
     this.client = null;
+
+    unregisterSessionScopedToolCallbacks(this._sessionId);
 
     // Clear all pending permission/approval promises
     for (const [id, pending] of this.pendingPermissions) {

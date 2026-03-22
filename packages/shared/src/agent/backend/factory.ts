@@ -702,8 +702,7 @@ export async function fetchBackendModels(args: {
     case 'vertex':
       throw new Error('Dynamic model discovery not available for Bedrock/Vertex; using fallback chain.');
 
-    case 'openai':
-    case 'codex': {
+    case 'openai': {
       const apiKey = credentials.apiKey;
       const oauthAccessToken = credentials.oauthAccessToken;
       if (!apiKey && !oauthAccessToken) {

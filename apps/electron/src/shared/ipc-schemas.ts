@@ -29,7 +29,7 @@ export const FilePathSchema = z.string().min(1).max(4096)
 
 export const PermissionModeSchema = z.enum(['safe', 'ask', 'allow-all'])
 
-export const ThinkingLevelSchema = z.enum(['off', 'think', 'max'])
+export const ThinkingLevelSchema = z.enum(['off', 'low', 'medium', 'high', 'max'])
 
 // =============================================================================
 // File Attachment Schemas
@@ -137,6 +137,7 @@ export const CredentialResponseSchema = z.object({
   value: z.string().optional(),
   username: z.string().optional(),
   password: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   cancelled: z.boolean(),
 })
 

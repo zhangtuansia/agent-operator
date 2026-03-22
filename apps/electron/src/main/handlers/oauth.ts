@@ -7,8 +7,13 @@ import {
   exchangeChatGptTokens,
 } from '@agent-operator/shared/auth'
 import { getCredentialManager } from '@agent-operator/shared/credentials'
-import type { Logger } from '../logger'
 import { getModelRefreshService } from '../model-fetchers'
+
+type LoggerLike = {
+  info(...args: unknown[]): void
+  warn(...args: unknown[]): void
+  error(...args: unknown[]): void
+}
 
 let activeChatGptFlow:
   | {
@@ -19,7 +24,7 @@ let activeChatGptFlow:
 
 export async function performLocalChatGptOAuthFlow(
   connectionSlug: string,
-  logger: Pick<Logger, 'info' | 'error' | 'warn'>,
+  logger: LoggerLike,
 ): Promise<{ success: boolean; error?: string }> {
   if (activeChatGptFlow) {
     activeChatGptFlow.callbackServer.close()
@@ -89,14 +94,18 @@ export async function performLocalChatGptOAuthFlow(
     }
   } finally {
     callbackServer?.close()
-    if (activeChatGptFlow?.callbackServer === callbackServer) {
+    const activeFlow = activeChatGptFlow as {
+      callbackServer: CallbackServer
+      reject: (error: Error) => void
+    } | null
+    if (activeFlow && activeFlow.callbackServer === callbackServer) {
       activeChatGptFlow = null
     }
   }
 }
 
 export function cancelLocalChatGptOAuthFlow(
-  logger: Pick<Logger, 'info' | 'error' | 'warn'>,
+  logger: LoggerLike,
 ): { success: boolean } {
   if (activeChatGptFlow) {
     activeChatGptFlow.callbackServer.close()

@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './empty'
-import { getDocUrl, type DocFeature } from '@agent-operator/shared/docs/doc-links'
+import { getDocUrl, type DocKey } from '@agent-operator/shared/docs/doc-links'
 import { useLanguage } from '@/context/LanguageContext'
 
 export interface EntityListEmptyScreenProps {
@@ -15,7 +15,7 @@ export interface EntityListEmptyScreenProps {
   title: string
   description: string
   /** Auto-renders a "Learn more" button linking to this doc key */
-  docKey?: DocFeature
+  docKey?: DocKey
   /** Extra action buttons rendered after "Learn more" */
   children?: React.ReactNode
   className?: string

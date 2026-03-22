@@ -186,6 +186,8 @@ export interface InterruptedEvent {
   type: 'interrupted'
   sessionId: string
   message: Message
+  /** Queued message texts cleared by cancel — UI can restore them to the input field */
+  queuedMessages?: string[]
 }
 
 /**
@@ -424,6 +426,7 @@ export type Effect =
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode }
   | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string }
+  | { type: 'restore_queued_messages'; sessionId: string; messages: string[] }
 
 /**
  * Result of processing an event

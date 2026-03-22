@@ -265,7 +265,7 @@ export function useSessionSearch({
         searchLog.info('ipc:call', { searchId })
         const ipcStart = performance.now()
 
-        const results = await window.electronAPI.searchSessionContent(workspaceId, searchQuery, searchId)
+        const results = await window.electronAPI.searchSessionContent(searchQuery)
 
         if (cancelled) return
 

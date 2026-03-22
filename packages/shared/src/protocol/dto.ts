@@ -146,6 +146,7 @@ export type SessionEvent =
   | { type: 'typed_error'; sessionId: string; error: TypedError; timestamp?: number }
   | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message; queuedMessages?: string[] }
+  | { type: 'steer_undelivered'; sessionId: string; message: string }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success'; timestamp?: number }
   | { type: 'title_generated'; sessionId: string; title: string }
@@ -514,6 +515,7 @@ export interface TestAutomationPromptActionResult {
   type: 'prompt'
   success: boolean
   stderr?: string
+  error?: string
   sessionId?: string
   duration: number
 }

@@ -128,7 +128,9 @@ function getLocalizedModelDescription(description: string, t: (key: string) => s
 function getLocalizedThinkingLevelLabel(level: ThinkingLevel, t: (key: string) => string): string {
   const labelMap: Record<ThinkingLevel, string> = {
     off: t('input.thinkingOffLabel'),
-    think: t('input.thinkingStandardLabel'),
+    low: t('input.thinkingStandardLabel'),
+    medium: t('input.thinkingStandardLabel'),
+    high: t('input.thinkingMaxLabel'),
     max: t('input.thinkingMaxLabel'),
   }
   return labelMap[level]
@@ -137,7 +139,9 @@ function getLocalizedThinkingLevelLabel(level: ThinkingLevel, t: (key: string) =
 function getLocalizedThinkingLevelDescription(level: ThinkingLevel, t: (key: string) => string): string {
   const descriptionMap: Record<ThinkingLevel, string> = {
     off: t('input.thinkingOffDescription'),
-    think: t('input.thinkingStandardDescription'),
+    low: t('input.thinkingStandardDescription'),
+    medium: t('input.thinkingStandardDescription'),
+    high: t('input.thinkingMaxDescription'),
     max: t('input.thinkingMaxDescription'),
   }
   return descriptionMap[level]

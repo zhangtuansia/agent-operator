@@ -582,6 +582,8 @@ export const en = {
     sessionNoLongerExists: 'This session no longer exists',
     renameChat: 'Rename Chat',
     enterChatName: 'Enter chat name...',
+    queued: 'queued',
+    responseInterrupted: 'Response interrupted',
   },
 
   // Session List

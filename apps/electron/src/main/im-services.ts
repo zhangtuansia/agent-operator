@@ -295,14 +295,18 @@ export class IMServiceManager {
               case 'error':
                 if (evt.type === 'error' && 'error' in evt) {
                   callback(evt.error)
-                } else if (evt.type === 'typed_error' && 'message' in evt) {
-                  callback(evt.message)
+                } else if (evt.type === 'typed_error') {
+                  const errorMessage =
+                    typeof evt.error?.message === 'string'
+                      ? evt.error.message
+                      : 'An unknown error occurred'
+                  callback(errorMessage)
                 }
                 break
               case 'permissionRequest':
-                if (evt.type === 'permission_request' && 'requestId' in evt) {
+                if (evt.type === 'permission_request' && 'request' in evt) {
                   // Track requestId → sessionId for respondToPermission
-                  pendingPermissionSessions.set(evt.requestId, sessionId)
+                  pendingPermissionSessions.set(evt.request.requestId, sessionId)
                   callback(evt)
                 }
                 break

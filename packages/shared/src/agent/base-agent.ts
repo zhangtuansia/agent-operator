@@ -22,6 +22,7 @@ import type { ThinkingLevel } from './thinking-levels.ts';
 import { DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
+import type { SpawnSessionRequest, SpawnSessionResult, SpawnSessionHelpResult } from './spawn-session-tool.ts';
 
 import type {
   AgentBackend,
@@ -156,7 +157,7 @@ export abstract class BaseAgent implements AgentBackend {
   onSourceActivationRequest: SourceActivationCallback | null = null;
   onUsageUpdate: ((update: UsageUpdate) => void) | null = null;
   onBackendAuthRequired: ((reason: string) => void) | null = null;
-  onSpawnSession: ((request: unknown) => Promise<unknown>) | null = null;
+  onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult | SpawnSessionHelpResult>) | null = null;
 
   // ============================================================
   // Constructor

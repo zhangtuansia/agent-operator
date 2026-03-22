@@ -34,6 +34,8 @@ export interface BrowserScreenshotOptions {
 }
 
 export interface BrowserScreenshotResult {
+  dataUrl?: string
+  format?: 'png' | 'jpeg'
   imageBuffer: Buffer
   imageFormat: 'png' | 'jpeg'
   metadata?: Record<string, unknown>
@@ -52,14 +54,16 @@ export interface BrowserScreenshotRegionTarget {
 }
 
 export interface BrowserConsoleOptions {
-  level?: 'all' | 'log' | 'info' | 'warn' | 'error'
+  level?: 'all' | 'log' | 'info' | 'warn' | 'warning' | 'error' | 'debug'
   limit?: number
 }
 
 export interface BrowserConsoleEntry {
   timestamp: number
-  level: 'log' | 'info' | 'warn' | 'error'
+  level: 'log' | 'info' | 'warn' | 'warning' | 'error' | 'debug'
   message: string
+  sourceId?: string
+  line?: number
 }
 
 export interface BrowserNetworkOptions {
@@ -71,11 +75,14 @@ export interface BrowserNetworkOptions {
 
 export interface BrowserNetworkEntry {
   timestamp: number
+  id?: number | string
   method: string
   url: string
-  status: number
-  resourceType: string
-  ok: boolean
+  status?: number
+  resourceType?: string
+  errorText?: string
+  state?: 'pending' | 'completed' | 'failed'
+  ok?: boolean
 }
 
 export interface BrowserWaitArgs {
@@ -87,10 +94,12 @@ export interface BrowserWaitArgs {
 }
 
 export interface BrowserWaitResult {
-  ok: true
-  kind: string
+  ok?: true
+  kind: BrowserWaitArgs['kind']
   elapsedMs: number
-  detail: string
+  detail?: string
+  matched?: string
+  timeoutMs?: number
 }
 
 export interface BrowserKeyArgs {
@@ -109,7 +118,7 @@ export interface BrowserDownloadEntry {
   timestamp: number
   url: string
   filename: string
-  state: string
+  state: 'started' | 'completed' | 'interrupted' | 'cancelled'
   bytesReceived: number
   totalBytes: number
   mimeType: string
@@ -211,6 +220,7 @@ export interface IBrowserPaneManager {
   sendKey(id: string, args: BrowserKeyArgs): Promise<void>
   uploadFile(id: string, ref: string, filePaths: string[]): Promise<unknown>
   evaluate(id: string, expression: string): Promise<unknown>
+  paste(id: string, text: string): Promise<void>
 
   // -- Screenshot ----------------------------------------------------------
 
@@ -219,8 +229,10 @@ export interface IBrowserPaneManager {
 
   // -- Monitoring ----------------------------------------------------------
 
+  getConsoleEntries(id: string, limit?: number, level?: BrowserConsoleEntry['level'] | 'all'): BrowserConsoleEntry[]
   getConsoleLogs(id: string, options?: BrowserConsoleOptions): BrowserConsoleEntry[]
   windowResize(id: string, width: number, height: number): { width: number; height: number }
+  getNetworkEntries(id: string, limit?: number, state?: NonNullable<BrowserNetworkEntry['state']> | 'all'): BrowserNetworkEntry[]
   getNetworkLogs(id: string, options?: BrowserNetworkOptions): BrowserNetworkEntry[]
   waitFor(id: string, args: BrowserWaitArgs): Promise<BrowserWaitResult>
   getDownloads(id: string, options?: BrowserDownloadOptions): Promise<BrowserDownloadEntry[]>

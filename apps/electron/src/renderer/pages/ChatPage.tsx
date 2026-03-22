@@ -392,9 +392,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       isFlagged: session.isFlagged,
       todoState: session.todoState,
       labels: session.labels,
-      sharedUrl: (session as Record<string, unknown>).sharedUrl as string | undefined,
-      isArchived: (session as Record<string, unknown>).isArchived as boolean | undefined,
-      lastFinalMessageId: (session as Record<string, unknown>).lastFinalMessageId as string | undefined,
+      sharedUrl: (session as unknown as Record<string, unknown>).sharedUrl as string | undefined,
+      isArchived: (session as unknown as Record<string, unknown>).isArchived as boolean | undefined,
+      lastFinalMessageId: (session as unknown as Record<string, unknown>).lastFinalMessageId as string | undefined,
     } satisfies Partial<import('@/atoms/sessions').SessionMeta> as import('@/atoms/sessions').SessionMeta
   }, [sessionMeta, session])
 

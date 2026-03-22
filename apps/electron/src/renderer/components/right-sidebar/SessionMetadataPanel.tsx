@@ -36,7 +36,7 @@ const MIN_FILES_HEIGHT = 80
 /**
  * Custom hook for debounced callback
  */
-function useDebouncedCallback<T extends (...args: unknown[]) => void>(
+function useDebouncedCallback<T extends (...args: any[]) => void>(
   callback: T,
   delay: number
 ): T {

@@ -17,6 +17,8 @@ interface UseFocusZoneReturn {
   zoneRef: React.RefObject<HTMLDivElement>
   /** Whether this zone currently has focus */
   isFocused: boolean
+  /** Whether the current focus change should move DOM focus into the zone */
+  shouldMoveDOMFocus: boolean
   /** Programmatically focus this zone */
   focus: () => void
 }
@@ -32,9 +34,10 @@ export function useFocusZone({
   focusFirst,
 }: UseFocusZoneOptions): UseFocusZoneReturn {
   const zoneRef = useRef<HTMLDivElement>(null)
-  const { registerZone, unregisterZone, focusZone, isZoneFocused } = useFocusContext()
+  const { registerZone, unregisterZone, focusZone, isZoneFocused, focusState } = useFocusContext()
 
   const isFocused = isZoneFocused(zoneId)
+  const shouldMoveDOMFocus = focusState.zone === zoneId && focusState.shouldMoveDOMFocus
 
   // Track previous focus state for callbacks
   const wasFocusedRef = useRef(isFocused)
@@ -69,6 +72,7 @@ export function useFocusZone({
   return {
     zoneRef,
     isFocused,
+    shouldMoveDOMFocus,
     focus,
   }
 }

@@ -24,8 +24,21 @@ import {
 } from './types.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
-import { CraftOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import {
+  CraftOAuth,
+  getMcpBaseUrl,
+  prepareMcpOAuth,
+  exchangeMcpOAuth,
+  type OAuthCallbacks,
+  type OAuthTokens,
+} from '../auth/oauth.ts';
 import { type OAuthSessionContext } from '../auth/types.ts';
+import type {
+  PreparedOAuthFlow,
+  OAuthExchangeParams,
+  OAuthExchangeResult,
+  OAuthProvider,
+} from '../auth/oauth-flow-types.ts';
 import {
   startGoogleOAuth,
   refreshGoogleToken,
@@ -385,6 +398,64 @@ export class SourceCredentialManager {
     return {
       success: false,
       error: `Source ${source.config.slug} does not use OAuth authentication`,
+    };
+  }
+
+  /**
+   * Compatibility bridge for older server-owned OAuth prepare flow.
+   * MCP OAuth still supports this path; provider-specific OAuth now uses authenticate().
+   */
+  async prepareOAuth(source: LoadedSource, callbackPort: number): Promise<PreparedOAuthFlow> {
+    if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth' && source.config.mcp?.url) {
+      return prepareMcpOAuth(source.config.mcp.url, callbackPort);
+    }
+
+    throw new Error(
+      `Server-owned OAuth prepare flow is no longer available for source '${source.config.slug}'. Use authenticate() instead.`,
+    );
+  }
+
+  /**
+   * Compatibility bridge for older server-owned OAuth exchange flow.
+   * Only MCP OAuth remains supported in this compatibility path.
+   */
+  async exchangeAndStore(
+    source: LoadedSource,
+    provider: OAuthProvider,
+    params: OAuthExchangeParams,
+  ): Promise<AuthResult & OAuthExchangeResult> {
+    if (provider !== 'mcp') {
+      throw new Error(
+        `Server-owned OAuth exchange flow is no longer available for provider '${provider}'. Use authenticate() instead.`,
+      );
+    }
+
+    const result = await exchangeMcpOAuth(params);
+    if (!result.success || !result.accessToken) {
+      return {
+        success: false,
+        error: result.error || 'OAuth exchange failed',
+      };
+    }
+
+    await this.save(source, {
+      value: result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresAt: result.expiresAt,
+      clientId: result.oauthClientId,
+      clientSecret: result.oauthClientSecret,
+    });
+
+    markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+
+    return {
+      success: true,
+      email: result.email,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresAt: result.expiresAt,
+      oauthClientId: result.oauthClientId,
+      oauthClientSecret: result.oauthClientSecret,
     };
   }
 

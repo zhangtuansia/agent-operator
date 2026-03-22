@@ -38,6 +38,10 @@ export interface CodePreviewOverlayProps {
   embedded?: boolean
   /** Original shell command (for Codex reads) - shown above code */
   command?: string
+  /** Legacy callback kept for compatibility with older callers. */
+  onOpenFile?: (path: string) => void
+  /** Legacy header translations kept for compatibility with older callers. */
+  headerTranslations?: Record<string, string>
 }
 
 export function CodePreviewOverlay({

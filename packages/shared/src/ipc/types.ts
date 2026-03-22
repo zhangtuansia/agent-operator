@@ -9,6 +9,7 @@ import type { Message, TypedError, TokenUsage } from '@agent-operator/core/types
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { CredentialAuthRequest, AuthRequest } from '../agent/session-scoped-tools'
+import type { AuthType } from '../config/types'
 
 // =============================================================================
 // Session Types
@@ -22,6 +23,7 @@ import type { CredentialAuthRequest, AuthRequest } from '../agent/session-scoped
  * Falls back to 'todo' if status doesn't exist.
  */
 export type TodoState = string
+export type SessionStatus = TodoState
 
 /** Helper type for TypeScript consumers */
 export type BuiltInStatusId = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
@@ -48,8 +50,12 @@ export interface Session {
   permissionMode?: PermissionMode
   // Todo state (user-controlled) - determines open vs closed
   todoState?: TodoState
+  /** @deprecated Use todoState instead. */
+  sessionStatus?: SessionStatus
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
+  /** Explicit unread flag used for NEW badge state. */
+  hasUnread?: boolean
   // Per-session source selection (source slugs)
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
@@ -103,6 +109,8 @@ export interface Session {
   branchFromSessionPath?: string
   /** Parent session ID when this session is a branch/sub-session */
   parentSessionId?: string
+  /** Optional explicit sibling ordering for sub-sessions. */
+  siblingOrder?: number
   /** Whether branching is currently supported for this session */
   supportsBranching?: boolean
   /** Labels for categorizing sessions (e.g., 'imported:openai', 'imported:anthropic') */
@@ -143,6 +151,7 @@ export type SessionEvent =
   | { type: 'typed_error'; sessionId: string; error: TypedError }
   | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage'] }
   | { type: 'interrupted'; sessionId: string; message?: Message }
+  | { type: 'steer_undelivered'; sessionId: string; message: string }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
   | { type: 'title_generated'; sessionId: string; title: string }
@@ -285,6 +294,7 @@ export interface BillingMethodInfo {
   /** Provider ID if using third-party API (e.g., 'glm', 'minimax', 'deepseek') */
   provider?: string
 }
+export type { AuthType }
 
 /**
  * Auto-update information

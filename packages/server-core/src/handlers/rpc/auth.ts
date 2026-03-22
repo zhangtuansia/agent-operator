@@ -22,7 +22,7 @@ async function clearRuntimeSessions(deps: HandlerDeps): Promise<void> {
   const sessions = await deps.sessionManager.getSessions()
   await Promise.allSettled(
     sessions
-      .filter((session) => session.status === 'running')
+      .filter((session) => session.isProcessing)
       .map((session) => deps.sessionManager.cancelProcessing(session.id)),
   )
 }

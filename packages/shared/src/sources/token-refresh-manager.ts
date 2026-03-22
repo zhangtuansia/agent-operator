@@ -74,6 +74,13 @@ export class TokenRefreshManager {
   }
 
   /**
+   * Clear cooldown for a source (e.g. after successful re-authentication).
+   */
+  clearCooldown(sourceSlug: string): void {
+    this.failedAttempts.delete(sourceSlug);
+  }
+
+  /**
    * Reset all rate limiting state (useful for testing).
    */
   reset(): void {

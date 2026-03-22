@@ -4,7 +4,10 @@ import test from 'node:test';
 import { ensureRandomUUID } from '../src/browserCompat.ts';
 
 test('ensureRandomUUID adds an RFC 4122 v4 compatible fallback', () => {
-  const cryptoLike = {
+  const cryptoLike: {
+    randomUUID?: () => string;
+    getRandomValues(values: Uint8Array): Uint8Array;
+  } = {
     getRandomValues(values: Uint8Array) {
       for (let index = 0; index < values.length; index++) {
         values[index] = index;
@@ -24,7 +27,10 @@ test('ensureRandomUUID adds an RFC 4122 v4 compatible fallback', () => {
 
 test('ensureRandomUUID does not replace an existing implementation', () => {
   const existing = () => 'existing-uuid';
-  const cryptoLike = {
+  const cryptoLike: {
+    randomUUID?: () => string;
+    getRandomValues(values: Uint8Array): Uint8Array;
+  } = {
     randomUUID: existing,
     getRandomValues(values: Uint8Array) {
       return values;

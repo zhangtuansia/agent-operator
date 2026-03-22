@@ -188,6 +188,7 @@ export async function createSession(
     model?: string;
     hidden?: boolean;
     todoState?: SessionConfig['todoState'];
+    sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
     isFlagged?: boolean;
   }
@@ -218,7 +219,7 @@ export async function createSession(
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
     hidden: options?.hidden,
-    todoState: options?.todoState,
+    todoState: options?.todoState ?? options?.sessionStatus,
     labels: options?.labels,
     isFlagged: options?.isFlagged,
   };
@@ -649,14 +650,18 @@ export async function updateSessionMetadata(
     | 'llmConnection'
     | 'isArchived'
     | 'archivedAt'
-  >>
+  >> & {
+    sessionStatus?: SessionConfig['sessionStatus'];
+  }
 ): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session) return;
 
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
   if (updates.name !== undefined) session.name = updates.name;
-  if (updates.todoState !== undefined) session.todoState = updates.todoState;
+  if (updates.todoState !== undefined || updates.sessionStatus !== undefined) {
+    session.todoState = updates.todoState ?? updates.sessionStatus;
+  }
   if (updates.labels !== undefined) session.labels = updates.labels;
   if (updates.enabledSourceSlugs !== undefined) session.enabledSourceSlugs = updates.enabledSourceSlugs;
   if (updates.workingDirectory !== undefined) session.workingDirectory = updates.workingDirectory;

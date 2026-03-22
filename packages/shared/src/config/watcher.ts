@@ -21,7 +21,7 @@ import type { FSWatcher } from 'fs';
 import { CONFIG_DIR } from './paths.ts';
 import { debug } from '../utils/debug.ts';
 import { perf } from '../utils/perf.ts';
-import { loadStoredConfig, type StoredConfig } from './storage.ts';
+import { loadStoredConfig, type StoredConfig, type LlmConnection } from './storage.ts';
 import {
   validateConfig,
   validatePreferences,
@@ -38,6 +38,7 @@ import {
 } from '../sources/storage.ts';
 import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import type { SessionHeader } from '../sessions/types.ts';
 import type { LoadedSkill } from '../skills/types.ts';
 import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
 import {
@@ -118,10 +119,18 @@ export interface ConfigWatcherCallbacks {
   // Labels & Views callbacks
   /** Called when labels config.json or views.json changes */
   onLabelsChange?: (workspaceId: string) => void;
+  /** Called when labels config.json changes */
+  onLabelConfigChange?: (workspaceId: string) => void;
 
   // Automations callbacks
   /** Called when automations.json changes */
   onAutomationsConfigChange?: (workspaceId: string) => void;
+  /** Called when llm-connections config changes */
+  onLlmConnectionsChange?: (connections: LlmConnection[]) => void;
+
+  // Session callbacks
+  /** Called when a session's JSONL header is modified externally. */
+  onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -837,6 +846,7 @@ export class ConfigWatcher {
   private handleLabelsChange(): void {
     debug('[ConfigWatcher] Labels/Views config changed:', this.workspaceId);
     this.callbacks.onLabelsChange?.(this.workspaceId);
+    this.callbacks.onLabelConfigChange?.(this.workspaceId);
   }
 
   /**

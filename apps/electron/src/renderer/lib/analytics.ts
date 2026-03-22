@@ -47,6 +47,7 @@ const SESSION_EVENT_ALIAS: Record<SessionEvent['type'], string> = {
   typed_error: 'message_typed_error',
   complete: 'message_completed',
   interrupted: 'message_interrupted',
+  steer_undelivered: 'message_steer_undelivered',
   status: 'message_status',
   info: 'message_info',
   title_generated: 'session_title_generated',
@@ -58,6 +59,7 @@ const SESSION_EVENT_ALIAS: Record<SessionEvent['type'], string> = {
   permission_mode_changed: 'session_permission_mode_changed',
   plan_submitted: 'plan_submitted',
   sources_changed: 'session_sources_changed',
+  labels_changed: 'session_labels_changed',
   task_backgrounded: 'task_backgrounded',
   shell_backgrounded: 'shell_backgrounded',
   task_progress: 'task_progress_updated',
@@ -70,6 +72,8 @@ const SESSION_EVENT_ALIAS: Record<SessionEvent['type'], string> = {
   session_model_changed: 'session_model_changed',
   connection_changed: 'connection_changed',
   todo_state_changed: 'session_todo_state_changed',
+  session_status_changed: 'session_status_changed',
+  name_changed: 'session_name_changed',
   session_deleted: 'session_deleted',
   session_shared: 'session_shared',
   session_unshared: 'session_unshared',
@@ -404,5 +408,5 @@ export function instrumentElectronApi(api: ElectronAPI): ElectronAPI {
     }
   }
 
-  return wrapped as ElectronAPI
+  return wrapped as unknown as ElectronAPI
 }

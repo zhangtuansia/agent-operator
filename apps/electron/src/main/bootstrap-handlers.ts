@@ -1,5 +1,5 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { createCallbackServer } from '@agent-operator/shared/auth/callback-server'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
+import type { OAuthSessionContext } from '@agent-operator/shared/auth'
 import { getWorkspaceByNameOrId } from '@agent-operator/shared/config'
 import { getSourceCredentialManager, loadSource, loadWorkspaceSources } from '@agent-operator/shared/sources'
 import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
@@ -7,16 +7,27 @@ import type { ISessionManager } from '@agent-operator/server-core/handlers'
 import type { WsRpcServer } from '../transport/server'
 import { pushTyped } from '../transport/server'
 import type { WindowManager } from './window-manager'
-import type { Logger } from './logger'
 import { handleDeepLink } from './deep-link'
 import { performLocalChatGptOAuthFlow, cancelLocalChatGptOAuthFlow } from './handlers/oauth'
+
+type LoggerLike = {
+  info(...args: unknown[]): void
+  warn(...args: unknown[]): void
+  error(...args: unknown[]): void
+}
 
 interface RegisterTransportBootstrapHandlersOptions {
   getRpcServer: () => WsRpcServer | null
   getRpcToken: () => string | null
   getWindowManager: () => WindowManager | null
   getSessionManager: () => ISessionManager | null
-  logger: Pick<Logger, 'info' | 'warn' | 'error'>
+  logger: LoggerLike
+}
+
+function getDeepLinkScheme(): string {
+  return process.env.COWORK_DEEPLINK_SCHEME
+    || process.env.OPERATOR_DEEPLINK_SCHEME
+    || 'agentoperator'
 }
 
 export function registerTransportBootstrapHandlers(options: RegisterTransportBootstrapHandlersOptions): void {
@@ -130,40 +141,23 @@ export function registerTransportBootstrapHandlers(options: RegisterTransportBoo
     }
 
     const credManager = getSourceCredentialManager()
-    let callbackServer: Awaited<ReturnType<typeof createCallbackServer>> | null = null
 
     try {
-      callbackServer = await createCallbackServer({ appType: 'electron' })
-      const callbackPort = parseInt(new URL(callbackServer.url).port, 10)
-      const prepared = await credManager.prepareOAuth(source, callbackPort)
+      const sessionContext: OAuthSessionContext | undefined = args.sessionId
+        ? {
+            sessionId: args.sessionId,
+            deeplinkScheme: getDeepLinkScheme(),
+          }
+        : undefined
 
-      await shell.openExternal(prepared.authUrl)
-
-      const callback = await callbackServer.promise
-      if (callback.query.error) {
-        return {
-          success: false,
-          error: callback.query.error_description || callback.query.error,
-        }
-      }
-
-      const code = callback.query.code
-      if (!code) {
-        return { success: false, error: 'No authorization code received' }
-      }
-
-      if (callback.query.state !== prepared.state) {
-        return { success: false, error: 'OAuth state mismatch' }
-      }
-
-      const result = await credManager.exchangeAndStore(source, prepared.provider, {
-        code,
-        codeVerifier: prepared.codeVerifier,
-        tokenEndpoint: prepared.tokenEndpoint,
-        clientId: prepared.clientId,
-        clientSecret: prepared.clientSecret,
-        redirectUri: prepared.redirectUri,
-      })
+      const result = await credManager.authenticate(
+        source,
+        {
+          onStatus: (message) => options.logger.info(`[oauth] ${args.sourceSlug}: ${message}`),
+          onError: (error) => options.logger.error(`[oauth] ${args.sourceSlug}: ${error}`),
+        },
+        sessionContext,
+      )
 
       if (args.sessionId && args.authRequestId && sessionManager) {
         await sessionManager.completeAuthRequest(args.sessionId, {
@@ -192,8 +186,6 @@ export function registerTransportBootstrapHandlers(options: RegisterTransportBoo
         success: false,
         error: error instanceof Error ? error.message : 'OAuth flow failed',
       }
-    } finally {
-      callbackServer?.close()
     }
   })
 

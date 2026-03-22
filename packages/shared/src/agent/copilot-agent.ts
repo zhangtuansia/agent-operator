@@ -125,9 +125,11 @@ import type { GithubTokens } from '../auth/github-oauth.ts';
  */
 const THINKING_TO_EFFORT: Record<ThinkingLevel, ReasoningEffort> = {
   off: 'low',
-  think: 'medium',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
   max: 'high',
-};
+}
 
 /**
  * Map Copilot CLI lowercase tool names to PascalCase names used by our permission system.

@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getWorkspaceByNameOrId } from '@agent-operator/shared/config'
@@ -42,9 +43,9 @@ async function scanFilesRecursively(
     logError?: (error: unknown, path: string) => void
   },
 ): Promise<DocumentEntry[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>
+  let entries: Dirent<string>[]
   try {
-    entries = await readdir(rootPath, { withFileTypes: true })
+    entries = await readdir(rootPath, { withFileTypes: true, encoding: 'utf8' })
   } catch (error) {
     options.logError?.(error, rootPath)
     return []

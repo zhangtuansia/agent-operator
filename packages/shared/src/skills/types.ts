@@ -31,6 +31,8 @@ export interface SkillMetadata {
    * Supports Chinese characters and English words/phrases.
    */
   triggers?: string[];
+  /** Optional source slugs that should be enabled when the skill is used. */
+  requiredSources?: string[];
 }
 
 /** Source of a loaded skill */

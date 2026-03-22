@@ -199,22 +199,26 @@ class ModeManager {
     sessionId: string,
     mode: PermissionMode,
     metadata?: { changedBy?: PermissionModeChangedBy; changedAt?: string }
-  ): void {
+  ): boolean {
     const existing = this.getState(sessionId);
+    if (existing.permissionMode === mode) {
+      return false;
+    }
+
     const changedAt = metadata?.changedAt ?? new Date().toISOString();
-    const changedBy = metadata?.changedBy ?? 'system';
-    const isChanged = existing.permissionMode !== mode;
+    const changedBy = metadata?.changedBy ?? 'unknown';
+    const shouldTrackTransition = !(existing.modeVersion === 0 && changedBy === 'restore');
     const newState: ModeState = {
       ...existing,
+      previousPermissionMode: shouldTrackTransition ? existing.permissionMode : undefined,
       permissionMode: mode,
-      previousPermissionMode: isChanged ? existing.permissionMode : existing.previousPermissionMode,
-      modeVersion: isChanged ? existing.modeVersion + 1 : existing.modeVersion,
+      modeVersion: existing.modeVersion + 1,
       lastChangedAt: changedAt,
       lastChangedBy: changedBy,
     };
     this.states.set(sessionId, newState);
 
-    debug(`[Mode] Set permission mode to ${mode} for session ${sessionId}`);
+    debug(`[Mode] Set permission mode to ${mode} for session ${sessionId} (changedBy=${changedBy}, modeVersion=${newState.modeVersion})`);
 
     // Notify callbacks (for OperatorAgent internal sync)
     const callbacks = this.callbacks.get(sessionId);
@@ -224,6 +228,7 @@ class ModeManager {
 
     // Notify React subscribers (for useSyncExternalStore)
     this.subscribers.get(sessionId)?.forEach(cb => cb());
+    return true;
   }
 
   /**
@@ -302,8 +307,12 @@ export function getPermissionMode(sessionId: string): PermissionMode {
 /**
  * Set the permission mode for a session
  */
-export function setPermissionMode(sessionId: string, mode: PermissionMode): void {
-  modeManager.setPermissionMode(sessionId, mode);
+export function setPermissionMode(
+  sessionId: string,
+  mode: PermissionMode,
+  metadata?: { changedBy?: PermissionModeChangedBy; changedAt?: string }
+): boolean {
+  return modeManager.setPermissionMode(sessionId, mode, metadata);
 }
 
 export function hydratePreviousPermissionMode(sessionId: string, previousPermissionMode?: PermissionMode): void {

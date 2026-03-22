@@ -64,6 +64,8 @@ export interface SessionMeta {
   archivedAt?: number
   /** Parent session ID when this session is a branch/sub-session */
   parentSessionId?: string
+  /** Order of a child session within its siblings */
+  siblingOrder?: number
   /** Token usage for the session */
   tokenUsage?: {
     inputTokens?: number
@@ -129,6 +131,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     isArchived: session.isArchived,
     archivedAt: session.archivedAt,
     parentSessionId: session.parentSessionId,
+    siblingOrder: session.siblingOrder,
     lastFinalMessageId,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,

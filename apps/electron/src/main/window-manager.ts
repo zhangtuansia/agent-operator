@@ -371,6 +371,14 @@ export class WindowManager implements IWindowManager {
     return managed?.workspaceId ?? null
   }
 
+  getWindowByWebContentsId(webContentsId: number): BrowserWindow | null {
+    const managed = this.windows.get(webContentsId)
+    if (!managed || managed.window.isDestroyed()) {
+      return null
+    }
+    return managed.window
+  }
+
   /**
    * Get and clear pending deep link for a window (by webContents.id)
    * Called by renderer when it's ready to handle deep links

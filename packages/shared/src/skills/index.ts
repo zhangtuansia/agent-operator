@@ -17,5 +17,7 @@ export {
   listSkillSlugs,
   skillNeedsIconDownload,
   downloadSkillIcon,
+  importSkillFromUrl,
+  importSkillFromContent,
 } from './storage.ts';
 export * from './matching.ts';

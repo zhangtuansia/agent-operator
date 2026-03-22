@@ -307,6 +307,8 @@ export interface UseInlineLabelMenuOptions {
   sessionLabels?: string[]
   /** Callback when a label is selected */
   onSelect: (labelId: string) => void
+  /** Optional callback when the user wants to create a new label from the current filter. */
+  onAddLabel?: (prefill: string) => void
 }
 
 export interface UseInlineLabelMenuReturn {
@@ -330,6 +332,7 @@ export function useInlineLabelMenu({
   labels,
   sessionLabels = [],
   onSelect,
+  onAddLabel,
 }: UseInlineLabelMenuOptions): UseInlineLabelMenuReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')

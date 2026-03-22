@@ -157,6 +157,8 @@ export interface Message {
   attachments?: StoredAttachment[];
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
+  /** @deprecated Derived from skill badges in newer builds. */
+  skillSlugs?: string[];
   isError?: boolean;
   isStreaming?: boolean;
   // Pending: streaming text where we don't yet know if it's intermediate
@@ -238,6 +240,8 @@ export interface StoredMessage {
   attachments?: StoredAttachment[];
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
+  /** @deprecated Derived from skill badges in newer builds. */
+  skillSlugs?: string[];
   // Turn grouping - critical for TurnCard rendering after reload
   isIntermediate?: boolean;
   turnId?: string;
@@ -355,7 +359,7 @@ export interface TypedError {
 /**
  * Permission request type categories
  */
-export type PermissionRequestType = 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation';
+export type PermissionRequestType = 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval';
 
 /**
  * Permission request from agent (e.g., bash command approval)
@@ -398,6 +402,7 @@ export type AgentEvent =
   | { type: 'error'; message: string }
   | { type: 'typed_error'; error: TypedError }
   | { type: 'complete'; usage?: AgentEventUsage }
+  | { type: 'steer_undelivered'; message: string }
   | { type: 'working_directory_changed'; workingDirectory: string }
   | { type: 'task_backgrounded'; toolUseId: string; taskId: string; intent?: string; turnId?: string }
   | { type: 'shell_backgrounded'; toolUseId: string; shellId: string; intent?: string; command?: string; turnId?: string }

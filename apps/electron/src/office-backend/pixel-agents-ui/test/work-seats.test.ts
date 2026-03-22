@@ -192,7 +192,7 @@ test('agents leave lounge seating and return to their workstation when activated
   for (let i = 0; i < 200; i++) {
     officeState.update(0.1);
     if (
-      agent!.state === CharacterState.TYPE &&
+      (agent!.state as CharacterState) === CharacterState.TYPE &&
       agent!.seatId === loungeSeatId &&
       agent!.tileCol === loungeSeat!.seatCol &&
       agent!.tileRow === loungeSeat!.seatRow

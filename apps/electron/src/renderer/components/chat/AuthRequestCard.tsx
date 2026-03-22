@@ -230,7 +230,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       }
       onRespondToCredential(sessionId, authRequestId, {
         type: 'credential',
-        headerValues: trimmedValues,
+        headers: trimmedValues,
         cancelled: false
       })
     } else {

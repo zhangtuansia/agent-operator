@@ -27,7 +27,7 @@ export const HANDLED_CHANNELS = [
   IPC_CHANNELS.MENU_NEW_WINDOW_ACTION,
 ] as const
 
-function getWebContentsFromId(id: number | undefined) {
+function getWebContentsFromId(id: number | null | undefined) {
   if (!id) return null
   const contents = webContents.fromId(id)
   if (!contents || contents.isDestroyed()) return null

@@ -31,6 +31,10 @@ export interface TerminalPreviewOverlayProps {
   error?: string
   /** Render inline without dialog (for playground) */
   embedded?: boolean
+  /** Legacy translations kept for compatibility with older callers. */
+  translations?: Record<string, string>
+  /** Legacy header translations kept for compatibility with older callers. */
+  headerTranslations?: Record<string, string>
 }
 
 function getToolConfig(toolType: ToolType): {

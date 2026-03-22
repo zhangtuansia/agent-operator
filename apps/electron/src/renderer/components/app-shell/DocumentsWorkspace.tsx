@@ -20,7 +20,7 @@ import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 
-import type { NavigationState } from '@/contexts/NavigationContext'
+import { isDocumentsNavigation, type NavigationState } from '@/contexts/NavigationContext'
 import type { DocumentEntry, DocumentKind } from '../../../shared/types'
 
 interface DocumentsWorkspaceProps {
@@ -167,7 +167,6 @@ function getSessionArtifactRelativeSegments(document: DocumentEntry): string[] {
         return 'data'
       case 'longResponse':
         return 'long_responses'
-      case 'note':
       case 'workspace':
         return null
     }
@@ -403,7 +402,7 @@ export function DocumentsWorkspace({
     }
   }, [activeWorkspace?.id, t])
 
-  const selectedDocumentId = navState.details?.type === 'document'
+  const selectedDocumentId = isDocumentsNavigation(navState) && navState.details?.type === 'document'
     ? navState.details.documentId
     : null
 

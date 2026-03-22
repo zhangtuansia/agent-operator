@@ -83,6 +83,10 @@ export interface MarkdownMermaidBlockProps {
    *  Set to false when the mermaid block is the first block in a message,
    *  where the TurnCard's own fullscreen button already occupies the same position. */
   showExpandButton?: boolean
+  /** Legacy prop kept for compatibility with older callers. */
+  tapToOpen?: boolean
+  /** Legacy prop kept for compatibility with older callers. */
+  minHeight?: number
 }
 
 export const MarkdownMermaidBlock = React.memo(function MarkdownMermaidBlock({

@@ -10,7 +10,7 @@ export const browserInstancesAtom = atom<BrowserInstanceInfo[]>((get) =>
 
 export const activeBrowserInstanceIdAtom = atom<string | null>(null)
 
-export const removedBrowserInstanceIdsAtom = atom<Set<string>>(new Set())
+export const removedBrowserInstanceIdsAtom = atom<Set<string>>(new Set<string>())
 
 /** Max entries before the removed-IDs set is trimmed to half its cap. */
 const REMOVED_IDS_CAP = 100

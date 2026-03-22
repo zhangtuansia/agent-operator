@@ -577,7 +577,9 @@ export interface SecondaryAction {
   /** Button label (e.g., "Edit File") */
   label: string
   /** File path to open directly in the system editor (bypasses link interceptor) */
-  filePath: string
+  filePath?: string
+  /** Legacy click handler used by a few older settings pages. */
+  onClick?: () => void
 }
 
 export interface EditPopoverProps {

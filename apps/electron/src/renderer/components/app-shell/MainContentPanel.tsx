@@ -212,6 +212,7 @@ export function MainContentPanel({
 function AutomationDetailView({ automationId }: { automationId: string }) {
   const automations = useAtomValue(automationsAtom)
   const { activeWorkspaceId } = useAppShellContext()
+  const { t } = useLanguage()
   const [executions, setExecutions] = useState<ExecutionEntry[]>([])
 
   const automation = automations.find(a => a.id === automationId)

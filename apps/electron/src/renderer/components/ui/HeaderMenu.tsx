@@ -22,11 +22,13 @@ import { useTranslation } from '@/i18n'
 interface HeaderMenuProps {
   /** Route string for Open in New Window action */
   route: string
+  /** Legacy compatibility prop kept for older callers. */
+  helpFeature?: string
   /** Page-specific menu items (rendered before Open in New Window) */
   children?: React.ReactNode
 }
 
-export function HeaderMenu({ route, children }: HeaderMenuProps) {
+export function HeaderMenu({ route, helpFeature: _helpFeature, children }: HeaderMenuProps) {
   const { t } = useTranslation()
 
   const handleOpenInNewWindow = async () => {

@@ -36,6 +36,10 @@ export interface GenericOverlayProps {
   embedded?: boolean
   /** Error message if the tool failed */
   error?: string
+  /** Legacy translations kept for compatibility with older callers. */
+  translations?: Record<string, string>
+  /** Legacy header translations kept for compatibility with older callers. */
+  headerTranslations?: Record<string, string>
 }
 
 /**

@@ -34,25 +34,26 @@ export function AiGenerate3d({
   const reduceMotion = useReducedMotion()
   const prevHoverRef = useRef(isHovered)
   const prevOpenRef = useRef(isMenuOpen)
+  const svgProps = props as Record<string, unknown>
 
   const triggerBlink = (delay = 0) => {
     const blink = {
       ry: [15, 15, 2.25, 15],
       transition: {
         duration: 0.24,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
         times: [0, 0.35, 0.58, 1],
       },
     }
 
-    void leftEyeControls.start(blink)
+    void leftEyeControls.start(blink as any)
     void rightEyeControls.start({
       ...blink,
       transition: {
         ...blink.transition,
         delay,
       },
-    })
+    } as any)
   }
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export function AiGenerate3d({
     ? undefined
     : {
         duration: 3.8,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
         repeat: Infinity,
       }
 
@@ -125,7 +126,7 @@ export function AiGenerate3d({
   const interactionTransition = reduceMotion || blinkOnly
     ? undefined
     : {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 360,
         damping: 24,
         mass: 0.42,
@@ -136,7 +137,7 @@ export function AiGenerate3d({
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 200 230"
       fill="none"
-      {...props}
+      {...svgProps}
     >
       <defs>
         <radialGradient id={bodyGrad} cx="50%" cy="45%" r="60%" fx="48%" fy="40%">
@@ -164,8 +165,8 @@ export function AiGenerate3d({
           <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#000000" floodOpacity="0.12" />
         </filter>
       </defs>
-      <motion.g animate={idleAnimate} transition={idleTransition}>
-        <motion.g animate={interactionAnimate} transition={interactionTransition}>
+      <motion.g animate={idleAnimate} transition={idleTransition as any}>
+        <motion.g animate={interactionAnimate} transition={interactionTransition as any}>
           <g filter={`url(#${shadow})`}>
             <path
               id={ghostId}

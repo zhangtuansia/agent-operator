@@ -393,7 +393,7 @@ app.whenReady().then(async () => {
       }
 
       if (channel === IPC_CHANNELS.SESSION_EVENT && target.to === 'workspace') {
-        const windows = windowManager.getAllWindowsForWorkspace(target.workspaceId)
+        const windows = windowManager?.getAllWindowsForWorkspace(target.workspaceId) ?? []
         for (const window of windows) {
           if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
             try {

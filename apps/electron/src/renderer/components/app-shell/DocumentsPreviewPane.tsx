@@ -614,20 +614,22 @@ export function DocumentsPreviewPane({
     }
 
     if (previewKind === 'json' && jsonData != null) {
+      const jsonTheme = (isDark ? {
+        ...vscodeTheme,
+        '--w-rjv-font-family': 'var(--font-mono, ui-monospace, monospace)',
+        '--w-rjv-background-color': 'transparent',
+      } : {
+        ...githubLightTheme,
+        '--w-rjv-font-family': 'var(--font-mono, ui-monospace, monospace)',
+        '--w-rjv-background-color': 'transparent',
+      }) as React.CSSProperties
+
       return (
         <div className="h-full overflow-auto bg-background">
           <div className="px-6 py-5">
             <JsonView
               value={jsonData as object}
-              style={isDark ? {
-                ...vscodeTheme,
-                '--w-rjv-font-family': 'var(--font-mono, ui-monospace, monospace)',
-                '--w-rjv-background-color': 'transparent',
-              } : {
-                ...githubLightTheme,
-                '--w-rjv-font-family': 'var(--font-mono, ui-monospace, monospace)',
-                '--w-rjv-background-color': 'transparent',
-              }}
+              style={jsonTheme}
               collapsed={false}
               enableClipboard={true}
               displayDataTypes={false}

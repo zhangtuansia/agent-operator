@@ -35,6 +35,10 @@ import { BaseAgent } from './base-agent.ts';
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './backend/pi/constants.ts';
 import { EventQueue } from './backend/event-queue.ts';
+import {
+  registerSessionScopedToolCallbacks,
+  unregisterSessionScopedToolCallbacks,
+} from './session-scoped-tools.ts';
 
 import { getSystemPrompt } from '../prompts/system.ts';
 import { getCredentialManager } from '../credentials/index.ts';
@@ -150,6 +154,17 @@ export class PiAgent extends BaseAgent {
     if (config.session?.id && config.workspace.rootPath) {
       this.adapter.setSessionDir(join(config.workspace.rootPath, 'sessions', config.session.id));
     }
+
+    registerSessionScopedToolCallbacks(this._sessionId, {
+      onPlanSubmitted: (planPath) => {
+        this.onDebug?.(`[pi] onPlanSubmitted received: ${planPath}`);
+        this.onPlanSubmitted?.(planPath);
+      },
+      onAuthRequest: (request) => {
+        this.onDebug?.(`[pi] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
+        this.onAuthRequest?.(request);
+      },
+    });
 
     if (!config.isHeadless) {
       this.startConfigWatcher();
@@ -1401,6 +1416,23 @@ export class PiAgent extends BaseAgent {
     }
   }
 
+  /**
+   * Redirect mid-stream via Pi SDK's steer().
+   * Delivers the message after the current tool finishes, skips remaining
+   * queued tools, and continues with full context intact.
+   * Events flow through the existing generator — no abort needed.
+   */
+  override redirect(message: string): boolean {
+    if (!this._isProcessing || !this.subprocess) {
+      // Not streaming or no subprocess — fall back to abort
+      this.forceAbort(AbortReason.Redirect);
+      return false;
+    }
+    this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
+    this.send({ type: 'steer', message });
+    return true;
+  }
+
   getSessionId(): string | null {
     return this.piSessionId;
   }
@@ -1457,6 +1489,7 @@ export class PiAgent extends BaseAgent {
       void cached.client.close().catch(() => undefined);
     }
     this.sourceMcpClients.clear();
+    unregisterSessionScopedToolCallbacks(this._sessionId);
     this.killSubprocess();
     super.destroy();
   }

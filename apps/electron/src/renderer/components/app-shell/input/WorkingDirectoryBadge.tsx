@@ -74,6 +74,9 @@ export function WorkingDirectoryBadge({
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const electronApiWithGit = window.electronAPI as typeof window.electronAPI & {
+    getGitBranch?: (path: string) => Promise<string | null>
+  }
 
   // Load home directory and recent directories on mount
   React.useEffect(() => {
@@ -86,13 +89,13 @@ export function WorkingDirectoryBadge({
   // Fetch git branch when working directory changes
   React.useEffect(() => {
     if (workingDirectory) {
-      window.electronAPI?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
+      electronApiWithGit?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
         setGitBranch(branch)
       })
     } else {
       setGitBranch(null)
     }
-  }, [workingDirectory])
+  }, [electronApiWithGit, workingDirectory])
 
   // Reset filter and focus input when popover opens
   React.useEffect(() => {

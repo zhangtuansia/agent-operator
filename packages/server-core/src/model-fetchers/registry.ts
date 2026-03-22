@@ -8,11 +8,15 @@
 
 import type { ModelFetcherMap } from '@agent-operator/shared/config'
 import { AnthropicModelFetcher } from './anthropic'
+import { CopilotModelFetcher } from './copilot'
+import { OpenAIModelFetcher } from './openai'
 import { PiModelFetcher } from './pi'
 import { BedrockVertexModelFetcher } from './bedrock-vertex'
 
 // Shared instances — fetchers are stateless
 const anthropicFetcher = new AnthropicModelFetcher()
+const copilotFetcher = new CopilotModelFetcher()
+const openAIFetcher = new OpenAIModelFetcher()
 const piFetcher = new PiModelFetcher()
 const bedrockVertexFetcher = new BedrockVertexModelFetcher()
 
@@ -23,6 +27,8 @@ const bedrockVertexFetcher = new BedrockVertexModelFetcher()
  */
 export const MODEL_FETCHERS: ModelFetcherMap = {
   anthropic: anthropicFetcher,
+  copilot:   copilotFetcher,
+  openai:    openAIFetcher,
   pi:        piFetcher,
   bedrock:   bedrockVertexFetcher,
   vertex:    bedrockVertexFetcher,

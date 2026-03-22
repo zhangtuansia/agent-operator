@@ -1,3 +1,4 @@
+import { RPC_CHANNELS } from '@agent-operator/shared/protocol'
 import {
   IPC_CHANNELS,
   type BrowserClickOptions,
@@ -293,14 +294,14 @@ export function registerBrowserHandlers(server: RpcServer, { browserPaneManager,
   })
 
   browserPaneManager.onStateChange((info) => {
-    pushTyped(server, IPC_CHANNELS.BROWSER_PANE_STATE_CHANGED, { to: 'all' }, info)
+    pushTyped(server, RPC_CHANNELS.browserPane.STATE_CHANGED, { to: 'all' }, info)
   })
 
   browserPaneManager.onRemoved((id) => {
-    pushTyped(server, IPC_CHANNELS.BROWSER_PANE_REMOVED, { to: 'all' }, id)
+    pushTyped(server, RPC_CHANNELS.browserPane.REMOVED, { to: 'all' }, id)
   })
 
   browserPaneManager.onInteracted((id) => {
-    pushTyped(server, IPC_CHANNELS.BROWSER_PANE_INTERACTED, { to: 'all' }, id)
+    pushTyped(server, RPC_CHANNELS.browserPane.INTERACTED, { to: 'all' }, id)
   })
 }

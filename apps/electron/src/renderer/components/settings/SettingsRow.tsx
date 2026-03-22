@@ -11,9 +11,9 @@ import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsRowProps {
   /** Row label */
-  label: string
+  label: React.ReactNode
   /** Optional description below label */
-  description?: string
+  description?: React.ReactNode
   /** Content on the right side */
   children?: React.ReactNode
   /** Click handler for the entire row */
@@ -88,8 +88,8 @@ export function SettingsRowLabel({
   description,
   className,
 }: {
-  label: string
-  description?: string
+  label: React.ReactNode
+  description?: React.ReactNode
   className?: string
 }) {
   return (

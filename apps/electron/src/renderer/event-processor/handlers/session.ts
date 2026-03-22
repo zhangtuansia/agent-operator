@@ -8,6 +8,7 @@
 import type {
   SessionState,
   ProcessResult,
+  Effect,
   CompleteEvent,
   ErrorEvent,
   TypedErrorEvent,
@@ -278,6 +279,16 @@ export function handleInterrupted(
     ? [...updatedMessages, event.message]
     : updatedMessages
 
+  // If cancel cleared queued messages, emit an effect to restore them to the input field
+  const effects: Effect[] = []
+  if (event.queuedMessages && event.queuedMessages.length > 0) {
+    effects.push({
+      type: 'restore_queued_messages',
+      sessionId: session.id,
+      messages: event.queuedMessages,
+    })
+  }
+
   return {
     state: {
       session: {
@@ -288,7 +299,7 @@ export function handleInterrupted(
       },
       streaming: null,
     },
-    effects: [],
+    effects,
   }
 }
 
@@ -465,13 +476,18 @@ export function handleUserMessage(
 
   if (existingIndex >= 0) {
     // Update existing message - remove isPending, add isQueued if status is 'queued'
+    // Guard: never regress from 'processing' back to 'queued' (events may arrive out of order)
     updatedMessages = session.messages.map((m, i) => {
       if (i === existingIndex) {
+        const currentIsQueued = m.isQueued
+        const newIsQueued = status === 'queued'
+        // Don't regress: if message was already un-queued (processing), don't re-queue it
+        const effectiveIsQueued = (currentIsQueued === false && newIsQueued) ? false : newIsQueued
         return {
           ...m,
           id: message.id,  // Use backend's ID as canonical
           isPending: false,
-          isQueued: status === 'queued',
+          isQueued: effectiveIsQueued,
         }
       }
       return m

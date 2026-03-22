@@ -14,6 +14,7 @@
  * - CommandExpansion: $(...) substitution
  */
 
+// @ts-expect-error bash-parser does not ship stable TypeScript types in this repo setup.
 import bashParser from 'bash-parser';
 import { debug } from '../utils/debug.ts';
 import type { CompiledBashPattern } from './mode-types.ts';

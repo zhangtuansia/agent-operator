@@ -154,7 +154,14 @@ function buildBackendHostRuntimeContext(): BackendHostRuntimeContext {
 function resolveSessionMiniModel(connection: { providerType?: string; defaultModel?: string; models?: unknown[] } | null | undefined): string | undefined {
   if (!connection) return undefined
 
-  const fallbackMiniModel = getMiniModel(connection as { models: unknown[] }) ?? connection.defaultModel
+  const lastModel = connection.models?.[connection.models.length - 1]
+  const fallbackMiniModel = (
+    typeof lastModel === 'string'
+      ? lastModel
+      : lastModel && typeof lastModel === 'object' && 'id' in lastModel && typeof lastModel.id === 'string'
+        ? lastModel.id
+        : undefined
+  ) ?? connection.defaultModel
   if (connection.providerType !== 'bedrock') {
     return fallbackMiniModel
   }
@@ -2564,7 +2571,11 @@ export class SessionManager implements ISessionManager {
           return { windows, target: validated.target }
         }
 
-        const browserPaneFns = {
+        const browserPaneFns: BrowserPaneFns & {
+          screenshotRegion: (options: Parameters<IBrowserPaneManager['screenshotRegion']>[1]) => Promise<Awaited<ReturnType<IBrowserPaneManager['screenshotRegion']>>>
+          windowResize: (options: { width: number; height: number }) => Promise<{ width: number; height: number }>
+          detectChallenge: () => Promise<{ detected: boolean; provider: string; signals: string[] }>
+        } = {
             openPanel: async (options) => {
               const instanceId = options?.background
                 ? bpm.createForSession(sid, { show: false })
@@ -2597,7 +2608,7 @@ export class SessionManager implements ISessionManager {
               const instanceId = resolveSessionBrowserInstance('browser_fill')
               return bpm.fillElement(instanceId, ref, value)
             },
-            type: (text) => {
+            typeText: (text) => {
               const instanceId = resolveSessionBrowserInstance('browser_type')
               return bpm.typeText(instanceId, text)
             },
@@ -2613,33 +2624,52 @@ export class SessionManager implements ISessionManager {
               const instanceId = resolveSessionBrowserInstance('browser_get_clipboard')
               return bpm.getClipboard(instanceId)
             },
+            paste: (text) => {
+              const instanceId = resolveSessionBrowserInstance('browser_paste')
+              return bpm.paste(instanceId, text)
+            },
             screenshot: (options) => {
               const instanceId = resolveSessionBrowserInstance('browser_screenshot')
               return bpm.screenshot(instanceId, options)
             },
-            screenshotRegion: (options) => {
+            screenshotRegion: (options: Parameters<IBrowserPaneManager['screenshotRegion']>[1]) => {
               const instanceId = resolveSessionBrowserInstance('browser_screenshot_region')
               return bpm.screenshotRegion(instanceId, options)
             },
-            getConsoleLogs: (options) => {
+            getConsoleEntries: (limit, level) => {
               const instanceId = resolveSessionBrowserInstance('browser_console')
-              return Promise.resolve(bpm.getConsoleLogs(instanceId, options))
+              const entries = bpm.getConsoleEntries(instanceId, limit, level)
+              return Promise.resolve(entries.map((entry) => ({
+                ...entry,
+                level: entry.level === 'warn' ? 'warning' : entry.level,
+              })))
             },
-            windowResize: (options) => {
+            windowResize: (options: { width: number; height: number }) => {
               const instanceId = resolveSessionBrowserInstance('browser_window_resize')
               return Promise.resolve(bpm.windowResize(instanceId, options.width, options.height))
             },
-            getNetworkLogs: (options) => {
+            getNetworkEntries: (limit, state) => {
               const instanceId = resolveSessionBrowserInstance('browser_network')
-              return Promise.resolve(bpm.getNetworkLogs(instanceId, options))
+              const entries = bpm.getNetworkEntries(instanceId, limit, state)
+              return Promise.resolve(entries.map((entry) => ({
+                ...entry,
+                id: entry.id ?? entry.url,
+                state: entry.state ?? (!entry.status ? 'pending' : entry.errorText ? 'failed' : 'completed'),
+              })))
             },
-            waitFor: (options) => {
+            wait: async (options) => {
               const instanceId = resolveSessionBrowserInstance('browser_wait')
-              return bpm.waitFor(instanceId, options)
+              const result = await bpm.waitFor(instanceId, options)
+              return {
+                kind: result.kind,
+                matched: result.matched ?? result.detail ?? `${result.kind} matched`,
+                timeoutMs: result.timeoutMs ?? options.timeoutMs ?? 0,
+                elapsedMs: result.elapsedMs,
+              }
             },
-            sendKey: (options) => {
+            pressKey: (key, options) => {
               const instanceId = resolveSessionBrowserInstance('browser_key')
-              return bpm.sendKey(instanceId, options)
+              return bpm.sendKey(instanceId, { key, modifiers: options?.modifiers })
             },
             getDownloads: (options) => {
               const instanceId = resolveSessionBrowserInstance('browser_downloads')
@@ -2792,11 +2822,16 @@ export class SessionManager implements ISessionManager {
               const instanceId = resolveSessionBrowserInstance('browser_detect_challenge')
               return bpm.detectSecurityChallenge(instanceId)
             },
-          } satisfies BrowserPaneFns
+          }
+
+        const activeAgent = managed.agent
+        if (!activeAgent) {
+          throw new Error(`Agent not initialized for session ${sid}`)
+        }
 
         mergeSessionScopedToolCallbacks(sid, {
           getBrowserPaneFns: () => browserPaneFns,
-          queryFn: request => managed.agent.queryLlm(request),
+          queryFn: request => activeAgent.queryLlm(request),
           spawnSessionFn: async (input) => {
             if (input.help) {
               const defaultConnectionSlug = getDefaultLlmConnection()
@@ -2818,7 +2853,7 @@ export class SessionManager implements ISessionManager {
                 })),
                 defaults: {
                   defaultConnection: defaultConnectionSlug,
-                  permissionMode: managed.permissionMode,
+                  permissionMode: managed.permissionMode ?? 'ask',
                 },
               }
             }
@@ -2828,11 +2863,11 @@ export class SessionManager implements ISessionManager {
               throw new Error('prompt is required when not in help mode. Call with help=true to see available options.')
             }
 
-            if (!managed.agent.onSpawnSession) {
+            if (!activeAgent.onSpawnSession) {
               throw new Error('spawn_session is not available in this context.')
             }
 
-            return managed.agent.onSpawnSession({
+            return activeAgent.onSpawnSession({
               prompt,
               name: typeof input.name === 'string' ? input.name : undefined,
               llmConnection: typeof input.llmConnection === 'string' ? input.llmConnection : undefined,
@@ -4187,6 +4222,8 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        // Mark as queued for persistence — cleared when processNextQueuedMessage picks it up
+        isQueued: !steered,
       }
       managed.messages.push(userMessage)
 
@@ -5276,7 +5313,7 @@ To view this task's output:
   }
 
   /**
-   * Set the thinking level for a session ('off', 'think', 'max')
+   * Set the thinking level for a session ('off', 'low', 'medium', 'high', 'max').
    * This is sticky and persisted across messages.
    */
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {

@@ -154,7 +154,7 @@ export function setStoredError(error: LastApiError | null): void {
   }
 }
 
-export function getLastApiError(): LastApiError | null {
+export function getLastApiError(_scopePath?: string): LastApiError | null {
   const error = getStoredError();
   if (error) {
     const age = Date.now() - error.timestamp;

@@ -109,6 +109,17 @@ export function useSessionEvents({
           }, 100)
           break
         }
+        case 'restore_queued_messages': {
+          // Queue was cleared by cancel — restore queued text to the input field
+          // Combine multiple queued messages into one (separated by newlines)
+          const restoredText = effect.messages.join('\n')
+          console.log('[useSessionEvents] restore_queued_messages: restoring', effect.messages.length, 'message(s) to input')
+          // Dispatch a custom event so the input component can pick it up
+          window.dispatchEvent(new CustomEvent('restore-input-text', {
+            detail: { sessionId: effect.sessionId, text: restoredText },
+          }))
+          break
+        }
       }
     }
 

@@ -11,6 +11,7 @@ import type { LoadedSkill } from '../skills/types'
 import { RPC_CHANNELS } from './channels'
 import type {
   SessionEvent,
+  SessionFilesChangedEvent,
   UnreadSummary,
   UpdateInfo,
   BrowserInstanceInfo,
@@ -21,7 +22,7 @@ export interface BroadcastEventMap {
   // Session events (workspace-scoped via broadcastToWorkspace)
   [RPC_CHANNELS.sessions.EVENT]: [event: SessionEvent]
   [RPC_CHANNELS.sessions.UNREAD_SUMMARY_CHANGED]: [summary: UnreadSummary]
-  [RPC_CHANNELS.sessions.FILES_CHANGED]: [sessionId: string]
+  [RPC_CHANNELS.sessions.FILES_CHANGED]: [event: SessionFilesChangedEvent]
 
   // Domain change broadcasts (global via broadcastToAll)
   [RPC_CHANNELS.sources.CHANGED]: [workspaceId: string, sources: LoadedSource[]]

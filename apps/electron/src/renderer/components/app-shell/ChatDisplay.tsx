@@ -58,6 +58,8 @@ import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { ProcessingIndicator, ScrollOnMount } from "./ProcessingIndicator"
 
+export interface ChatDisplayHandle {}
+
 // ============================================================================
 // Overlay State Types
 // ============================================================================
@@ -1108,10 +1110,15 @@ export function ChatDisplay({
                         for (let i = turnIdx - 1; i >= 0; i--) {
                           const prevTurn = allTurns[i]
                           if (prevTurn.type === 'user') {
+                            const retrySkillSlugs = prevTurn.message.skillSlugs
+                              ?? prevTurn.message.badges
+                                ?.filter((badge) => badge.type === 'skill')
+                                .map((badge) => badge.rawText.replace(/^@/, ''))
+
                             onSendMessage(
                               prevTurn.message.content,
                               prevTurn.message.attachments as FileAttachment[] | undefined,
-                              prevTurn.message.skillSlugs,
+                              retrySkillSlugs,
                             )
                             return
                           }

@@ -25,7 +25,7 @@ const IGNORED_CONSOLE_PATTERNS = [
 // DSN and config are inherited from the main process init.
 sentryInit(
   {
-    integrations: [captureConsoleIntegration({ levels: ['error'] })],
+    integrations: [captureConsoleIntegration({ levels: ['error'] }) as any],
 
     beforeSend(event) {
       const message = event.message || event.exception?.values?.[0]?.value || ''
@@ -56,7 +56,7 @@ sentryInit(
       return event
     },
   },
-  Sentry.init,
+  Sentry.init as any,
 )
 
 /**

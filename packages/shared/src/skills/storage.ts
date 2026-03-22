@@ -35,6 +35,29 @@ export const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
 /** Project-level agent skills directory name */
 export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
 
+/**
+ * Normalize requiredSources frontmatter to a clean string array.
+ * Accepts a single string or array of strings, trims whitespace, and deduplicates.
+ */
+function normalizeRequiredSources(value: unknown): string[] | undefined {
+  const asArray = typeof value === 'string'
+    ? [value]
+    : Array.isArray(value)
+      ? value
+      : undefined;
+
+  if (!asArray) return undefined;
+
+  const normalized = Array.from(new Set(
+    asArray
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map(entry => entry.trim())
+      .filter(Boolean)
+  ));
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 // ============================================================
 // Parsing
 // ============================================================
@@ -63,6 +86,7 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         triggers: parsed.data.triggers as string[] | undefined,
         icon,
+        requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
       },
       body: parsed.content,
     };

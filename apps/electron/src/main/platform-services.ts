@@ -1,6 +1,6 @@
 import { app, nativeImage, nativeTheme, shell } from 'electron'
 import { readFile } from 'node:fs/promises'
-import type { PlatformServices } from '@agent-operator/server-core/runtime/platform'
+import type { PlatformServices } from '@agent-operator/server-core/runtime'
 import { getLogFilePath, isDebugMode, mainLog } from './logger'
 
 async function loadImage(input: Buffer | string) {

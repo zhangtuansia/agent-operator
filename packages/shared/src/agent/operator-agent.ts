@@ -35,6 +35,7 @@ import type {
   PostInitResult,
   BridgeUpdateContext,
 } from './backend/types.ts';
+import type { SpawnSessionRequest, SpawnSessionResult, SpawnSessionHelpResult } from './spawn-session-tool.ts';
 import {
   getPermissionMode,
   setPermissionMode,
@@ -488,7 +489,7 @@ export class OperatorAgent {
   public onBackendAuthRequired: ((reason: string) => void) | null = null;
 
   // Callback when the agent requests spawning a new session.
-  public onSpawnSession: ((request: unknown) => Promise<unknown>) | null = null;
+  public onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult | SpawnSessionHelpResult>) | null = null;
 
   get supportsBranching(): boolean {
     return true;

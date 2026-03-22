@@ -28,6 +28,10 @@ const EXT_TO_MIME: Record<string, string> = {
  */
 const MAX_FILE_SIZE = 50 * 1024;
 
+export interface EncodeIconOptionsAsync {
+  resize?: (buffer: Buffer, targetSize: number) => Promise<Buffer | undefined>;
+}
+
 /**
  * Encode an icon file to a base64 data URL.
  *
@@ -82,7 +86,10 @@ export function encodeIconToDataUrl(iconPath: string | undefined): string | unde
   }
 }
 
-export async function encodeIconToDataUrlAsync(iconPath: string | undefined): Promise<string | undefined> {
+export async function encodeIconToDataUrlAsync(
+  iconPath: string | undefined,
+  _options?: EncodeIconOptionsAsync,
+): Promise<string | undefined> {
   return encodeIconToDataUrl(iconPath);
 }
 

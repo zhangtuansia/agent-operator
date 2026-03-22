@@ -76,6 +76,8 @@ export interface JSONPreviewOverlayProps {
   error?: string
   /** Render inline without dialog (for playground) */
   embedded?: boolean
+  /** Legacy header translations kept for compatibility with older callers. */
+  headerTranslations?: Record<string, string>
 }
 
 /**

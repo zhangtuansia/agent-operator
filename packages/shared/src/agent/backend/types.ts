@@ -23,6 +23,7 @@ import type { SessionConfig as Session } from '../../sessions/storage.ts';
 import type { AutomationSystem } from '../../automations/index.ts';
 import type { SourceManager } from '../core/source-manager.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../llm-tool.ts';
+import type { SpawnSessionRequest, SpawnSessionResult, SpawnSessionHelpResult } from '../spawn-session-tool.ts';
 
 // Import AbortReason and RecoveryMessage from core module (single source of truth)
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
@@ -443,7 +444,7 @@ export interface AgentBackend {
   onBackendAuthRequired: ((reason: string) => void) | null;
 
   /** Called when the backend requests spawning a new session */
-  onSpawnSession: ((request: unknown) => Promise<unknown>) | null;
+  onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult | SpawnSessionHelpResult>) | null;
 }
 
 /**

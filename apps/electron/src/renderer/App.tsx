@@ -233,7 +233,7 @@ export default function App() {
 
         if (needs.isFullyConfigured) {
           setAppState('ready')
-        } else if (needs.needsReauth) {
+        } else if (needs.needsMigration) {
           // Session expired - show simple re-login screen (preserves conversations)
           setAppState('reauth')
         } else {
@@ -922,8 +922,6 @@ export default function App() {
       setWorkspaces([])
       setWindowWorkspaceId(null)
       setSetupNeeds({
-        needsAuth: true,
-        needsReauth: false,
         needsBillingConfig: true,
         needsCredentials: true,
         isFullyConfigured: false,
@@ -1019,6 +1017,7 @@ export default function App() {
     // and useSession(id) hook for individual sessions. This prevents memory leaks.
     workspaces,
     activeWorkspaceId: windowWorkspaceId,
+    activeWorkspaceSlug: null,
     llmConnections,
     workspaceDefaultLlmConnection,
     refreshLlmConnections,
@@ -1035,6 +1034,7 @@ export default function App() {
     onUnflagSession: handleUnflagSession,
     onMarkSessionRead: handleMarkSessionRead,
     onMarkSessionUnread: handleMarkSessionUnread,
+    onSetActiveViewingSession: () => {},
     onSessionStatusChange: handleTodoStateChange,
     onArchiveSession: handleArchiveSession,
     onUnarchiveSession: handleUnarchiveSession,

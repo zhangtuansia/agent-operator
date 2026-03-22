@@ -26,6 +26,12 @@ type ElectronApiMethodKeys = {
   [K in keyof ElectronAPI]-?: Extract<ElectronAPI[K], AnyFn> extends never ? never : K
 }[keyof ElectronAPI] & string
 
+type BrowserPaneApiMethodKeys = NonNullable<ElectronAPI['browserPane']> extends infer T
+  ? {
+      [K in keyof T]-?: Extract<T[K], AnyFn> extends never ? never : `browserPane.${K & string}`
+    }[keyof T] & string
+  : never
+
 type PreloadOnlyElectronApiMethodKeys =
   | 'performOAuth'
   | 'getTransportConnectionState'
@@ -33,7 +39,9 @@ type PreloadOnlyElectronApiMethodKeys =
   | 'reconnectTransport'
   | 'isChannelAvailable'
 
-type ChannelMappedElectronApiMethodKeys = Exclude<ElectronApiMethodKeys, PreloadOnlyElectronApiMethodKeys>
+type ChannelMappedElectronApiMethodKeys =
+  | Exclude<ElectronApiMethodKeys, PreloadOnlyElectronApiMethodKeys>
+  | BrowserPaneApiMethodKeys
 
 export const CHANNEL_MAP = {
   // Session management
@@ -435,7 +443,7 @@ export const CHANNEL_MAP = {
   'browserPane.setClipboard': invoke(IPC_CHANNELS.BROWSER_PANE_SET_CLIPBOARD),
   'browserPane.getClipboard': invoke(IPC_CHANNELS.BROWSER_PANE_GET_CLIPBOARD),
   'browserPane.paste': invoke(IPC_CHANNELS.BROWSER_PANE_PASTE),
-  'browserPane.onStateChanged': listener(IPC_CHANNELS.BROWSER_PANE_STATE_CHANGED),
-  'browserPane.onRemoved': listener(IPC_CHANNELS.BROWSER_PANE_REMOVED),
-  'browserPane.onInteracted': listener(IPC_CHANNELS.BROWSER_PANE_INTERACTED),
+  'browserPane.onStateChanged': listener(RPC_CHANNELS.browserPane.STATE_CHANGED),
+  'browserPane.onRemoved': listener(RPC_CHANNELS.browserPane.REMOVED),
+  'browserPane.onInteracted': listener(RPC_CHANNELS.browserPane.INTERACTED),
 } satisfies Record<ChannelMappedElectronApiMethodKeys, ChannelMapEntry>

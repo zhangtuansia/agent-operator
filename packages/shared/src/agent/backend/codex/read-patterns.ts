@@ -8,6 +8,7 @@
  * Used by EventAdapter to emit these as "Read" tool events for better UI display.
  */
 
+// @ts-expect-error bash-parser does not ship stable TypeScript types in this repo setup.
 import bashParser from 'bash-parser';
 
 // ============================================================

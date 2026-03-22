@@ -778,7 +778,7 @@ function AppShellContent({
     shortcuts: [
       // Zone navigation
       { key: '1', cmd: true, action: () => focusZone('sidebar') },
-      { key: '2', cmd: true, action: () => focusZone('session-list') },
+      { key: '2', cmd: true, action: () => focusZone('navigator') },
       { key: '3', cmd: true, action: () => focusZone('chat') },
       // Tab navigation between zones
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
@@ -1689,7 +1689,7 @@ function AppShellContent({
       case 'ArrowRight': {
         e.preventDefault()
         // Move to next zone (session list)
-        focusZone('session-list')
+        focusZone('navigator')
         break
       }
       case 'Enter':

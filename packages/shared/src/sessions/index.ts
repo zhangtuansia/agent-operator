@@ -11,6 +11,7 @@
 // Types
 export type {
   TodoState,
+  SessionStatus,
   SessionTokenUsage,
   StoredMessage,
   SessionConfig,
@@ -120,5 +121,4 @@ export {
   validateSessionId,
   sanitizeSessionId,
 } from './validation.ts';
-
 

@@ -39,6 +39,7 @@ export type {
 // Use types-only subpaths to avoid pulling in Node.js dependencies
 import type { AuthState, SetupNeeds } from '@agent-operator/shared/auth/types';
 import type { AuthType, AgentType, NetworkProxySettings } from '@agent-operator/shared/config/types';
+import type { DocumentEntry } from '@agent-operator/shared/ipc/types';
 export type { AuthState, SetupNeeds, AuthType, AgentType, NetworkProxySettings };
 
 // Import source types for session source selection
@@ -245,6 +246,8 @@ export interface BrowserScreenshotOptions {
 export interface BrowserScreenshotResult {
   dataUrl: string
   format: 'png' | 'jpeg'
+  imageBuffer: Buffer
+  imageFormat: 'png' | 'jpeg'
   metadata?: {
     mode?: 'raw' | 'agent'
     annotatedRefs?: string[]
@@ -267,6 +270,12 @@ export interface BrowserScreenshotResult {
       ref?: string
       status: 'succeeded' | 'failed'
       timestamp: number
+    }
+    region?: {
+      x: number
+      y: number
+      width: number
+      height: number
     }
     annotationPartial?: boolean
     warnings?: string[]
@@ -380,12 +389,12 @@ export interface BrowserPaneAPI {
   destroy(id: string): Promise<void>
   emptyStateLaunch(payload: BrowserEmptyStateLaunchPayload): Promise<BrowserEmptyStateLaunchResult>
   snapshot(id: string): Promise<BrowserAccessibilitySnapshot>
-  click(id: string, ref: string, options?: BrowserClickOptions): Promise<BrowserElementGeometry>
+  click(id: string, ref: string, options?: BrowserClickOptions): Promise<void>
   clickAt(id: string, x: number, y: number): Promise<void>
   drag(id: string, x1: number, y1: number, x2: number, y2: number): Promise<void>
-  fill(id: string, ref: string, value: string): Promise<BrowserElementGeometry>
-  select(id: string, ref: string, value: string): Promise<BrowserElementGeometry>
-  upload(id: string, ref: string, filePaths: string[]): Promise<BrowserElementGeometry>
+  fill(id: string, ref: string, value: string): Promise<void>
+  select(id: string, ref: string, value: string): Promise<void>
+  upload(id: string, ref: string, filePaths: string[]): Promise<void>
   type(id: string, text: string): Promise<void>
   key(id: string, key: string, options?: BrowserKeyOptions): Promise<void>
   screenshot(id: string, options?: BrowserScreenshotOptions): Promise<BrowserScreenshotResult>
@@ -1100,6 +1109,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
+  }
+  if (state.navigator === 'office') {
+    return 'office'
   }
   // Chats
   const f = state.filter
