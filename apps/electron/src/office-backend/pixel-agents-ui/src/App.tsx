@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { initDaziBridge } from './bridge/DaziBridge.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { DebugView } from './components/DebugView.js';
 import { ZoomControls } from './components/ZoomControls.js';
@@ -121,10 +122,18 @@ function EditActionBar({
 
 function App() {
   // Dispatch mock asset messages after the useExtensionMessages listener
-  // has been registered. Assets are loaded in main.tsx via initBrowserMock(),
-  // but dispatchMockMessages() must happen after the handler is registered.
+  // has been registered, then connect WebSocket bridge.
   useEffect(() => {
-    void import('./browserMock.js').then(({ dispatchMockMessages }) => dispatchMockMessages());
+    void import('./browserMock.js').then(({ dispatchMockMessages }) => {
+      dispatchMockMessages();
+    });
+    // Connect WebSocket after a short delay to ensure:
+    // 1. useExtensionMessages message listener is registered
+    // 2. layoutLoaded has been processed (layoutReadyRef.current = true)
+    const timer = setTimeout(() => {
+      initDaziBridge();
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   const editor = useEditorActions(getOfficeState, editorState);

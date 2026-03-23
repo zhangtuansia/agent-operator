@@ -672,12 +672,16 @@ export interface ElectronAPI {
   openFileWithTarget(targetId: string, path: string): Promise<void>
   setOpenTargetPreference(targetId: string, path?: string): Promise<void>
   getOfficeServerUrl(): Promise<string | null>
+  openOfficeWindow(): Promise<void>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
   onMenuOpenSettings(callback: () => void): () => void
   onMenuOpenSettingsSubpage(callback: (subpage: string) => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
+
+  // Office → navigate to session
+  onOfficeNavigateToSession(callback: (sessionId: string) => void): () => void
 
   // Menu role actions
   menuUndo(): Promise<void>

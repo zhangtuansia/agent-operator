@@ -177,18 +177,19 @@ export function useExtensionMessages(
           { palette?: number; hueShift?: number; seatId?: string }
         >;
         const folderNames = (msg.folderNames || {}) as Record<number, string>;
+        console.log(`[Agents] existingAgents received: ${incoming.length} agents, layoutReady=${layoutReadyRef.current}, seats=${os.seats.size}, walkable=${os.walkableTiles.length}`);
         if (layoutReadyRef.current) {
-          // Layout already loaded — add agents directly (DAZI standalone mode:
-          // existingAgents arrives via WebSocket after layoutLoaded was already
-          // dispatched by browserMock)
+          // Layout already loaded — add agents directly
           for (const id of incoming) {
             const m = meta[id];
             os.addAgent(id, m?.palette, m?.hueShift, m?.seatId, true, folderNames[id]);
+            console.log(`[Agents] Added agent ${id} "${folderNames[id]}", characters.size=${os.characters.size}`);
           }
           if (os.characters.size > 0) {
             saveAgentSeats(os);
           }
         } else {
+          console.log(`[Agents] Layout not ready, buffering ${incoming.length} agents`);
           // Buffer agents — they'll be added in layoutLoaded after seats are built
           for (const id of incoming) {
             const m = meta[id];
@@ -416,8 +417,33 @@ export function useExtensionMessages(
       }
     };
     window.addEventListener('message', handler);
-    vscode.postMessage({ type: 'webviewReady' });
-    return () => window.removeEventListener('message', handler);
+
+    // In DAZI standalone mode, connect WebSocket HERE (after handler is registered)
+    // so existingAgents messages are guaranteed to be received.
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    console.log(`[useExtensionMessages] Connecting WebSocket to ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      console.log('[useExtensionMessages] WebSocket connected, sending webviewReady');
+      ws.send(JSON.stringify({ type: 'webviewReady' }));
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data as string);
+        console.log(`[useExtensionMessages] WS message: ${msg.type}`);
+        window.dispatchEvent(new MessageEvent('message', { data: msg }));
+      } catch (err) {
+        console.error('[useExtensionMessages] Failed to parse WS message:', err);
+      }
+    };
+    ws.onclose = () => console.log('[useExtensionMessages] WebSocket disconnected');
+    ws.onerror = (err) => console.error('[useExtensionMessages] WebSocket error:', err);
+
+    return () => {
+      window.removeEventListener('message', handler);
+      ws.close();
+    };
   }, [getOfficeState]);
 
   return {

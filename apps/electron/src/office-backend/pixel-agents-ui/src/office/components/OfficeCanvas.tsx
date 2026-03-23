@@ -685,6 +685,8 @@ export function OfficeCanvas({
           officeState.cameraFollowId = hitId;
         }
         onClick(hitId); // still focus terminal
+        // In DAZI mode: navigate main window to the corresponding session
+        (window as any).dazi?.focusSession?.(hitId);
         return;
       }
 

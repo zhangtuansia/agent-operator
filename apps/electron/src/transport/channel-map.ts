@@ -120,12 +120,16 @@ export const CHANNEL_MAP = {
   openFileWithTarget: invoke(IPC_CHANNELS.OPEN_FILE_WITH_TARGET),
   setOpenTargetPreference: invoke(IPC_CHANNELS.SET_OPEN_TARGET_PREFERENCE),
   getOfficeServerUrl: invoke(IPC_CHANNELS.OFFICE_GET_SERVER_URL),
+  openOfficeWindow: invoke(IPC_CHANNELS.OFFICE_OPEN_WINDOW),
 
   // Menu event listeners
   onMenuNewChat: listener(IPC_CHANNELS.MENU_NEW_CHAT),
   onMenuOpenSettings: listener(IPC_CHANNELS.MENU_OPEN_SETTINGS),
   onMenuOpenSettingsSubpage: listener(IPC_CHANNELS.MENU_OPEN_SETTINGS_SUBPAGE),
   onMenuKeyboardShortcuts: listener(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS),
+
+  // Office → navigate to session
+  onOfficeNavigateToSession: listener(IPC_CHANNELS.OFFICE_NAVIGATE_TO_SESSION),
 
   // Menu role actions
   menuUndo: invoke(IPC_CHANNELS.MENU_UNDO),

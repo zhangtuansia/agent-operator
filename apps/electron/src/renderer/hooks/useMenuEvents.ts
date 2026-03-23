@@ -36,11 +36,15 @@ export function useMenuEvents({
     const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
       navigate(routes.view.settings('shortcuts'))
     })
+    const unsubOfficeNav = window.electronAPI.onOfficeNavigateToSession((sessionId: string) => {
+      navigate(routes.view.allChats(sessionId))
+    })
     return () => {
       unsubNewChat()
       unsubSettings()
       unsubSettingsSubpage()
       unsubShortcuts()
+      unsubOfficeNav()
     }
   }, [onNewChat, onOpenSettings])
 }

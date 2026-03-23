@@ -1315,10 +1315,10 @@ function AppShellContent({
     navigate(routes.view.documents())
   }, [navigate])
 
-  // Handler for office view
+  // Handler for office view — opens in a separate BrowserWindow
   const handleOfficeClick = useCallback(() => {
-    navigate(routes.view.office())
-  }, [navigate])
+    window.electronAPI.openOfficeWindow()
+  }, [])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {

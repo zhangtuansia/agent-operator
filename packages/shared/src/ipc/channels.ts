@@ -131,6 +131,7 @@ export const IPC_CHANNELS = {
   OPEN_FILE_WITH_TARGET: 'shell:openFileWithTarget',
   SET_OPEN_TARGET_PREFERENCE: 'shell:setOpenTargetPreference',
   OFFICE_GET_SERVER_URL: 'office:getServerUrl',
+  OFFICE_OPEN_WINDOW: 'office:openWindow',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',
@@ -138,6 +139,9 @@ export const IPC_CHANNELS = {
   MENU_OPEN_SETTINGS: 'menu:openSettings',
   MENU_OPEN_SETTINGS_SUBPAGE: 'menu:openSettingsSubpage',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
+
+  // Office → Main window navigation
+  OFFICE_NAVIGATE_TO_SESSION: 'office:navigateToSession',
 
   // Menu role actions (renderer → main)
   MENU_UNDO: 'menu:undo',

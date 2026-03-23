@@ -364,7 +364,10 @@ app.whenReady().then(async () => {
     setFetcherPlatform(platform)
     setSessionPlatform(platform)
     const { onSessionStarted, onSessionStopped } = await import('./power-manager')
-    const { officeAgentStarted, officeAgentToolCall, officeAgentFinished, officeAgentError } = await import('./office-state-bridge')
+    const { officeAgentStarted, officeAgentToolCall, officeAgentFinished, officeAgentError, officeAgentClosed } = await import('./office-state-bridge')
+    const { setMainWindowRef } = await import('./handlers/office')
+    // Set the main window reference so office can navigate to sessions
+    if (mainWindow) setMainWindowRef(mainWindow)
     setSessionRuntimeHooks({
       updateBadgeCount,
       onSessionStarted: (sessionId?: string, sessionName?: string) => {

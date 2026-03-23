@@ -17,20 +17,23 @@
  */
 
 import { startOfficeServer } from './office-server'
+import { dispatchToOfficeWindow } from './handlers/office'
 
 // Track active tool IDs per session for dedup / done matching
 const activeToolIds = new Map<string, string>()
+
+// Map sessionId → numeric agent ID (assigned by server)
+const sessionAgentIds = new Map<string, number>()
 
 // ============================================================================
 // Internal helpers
 // ============================================================================
 
-async function postEvent(endpoint: string, body: Record<string, unknown>): Promise<void> {
+async function postEvent(endpoint: string, body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   try {
     const officeApi = await startOfficeServer()
     if (!officeApi) {
-      console.log(`[office-bridge] POST ${endpoint} skipped: office server unavailable`)
-      return
+      return null
     }
     console.log(`[office-bridge] POST ${endpoint}`, JSON.stringify(body).substring(0, 100))
     const res = await fetch(`${officeApi}${endpoint}`, {
@@ -40,8 +43,10 @@ async function postEvent(endpoint: string, body: Record<string, unknown>): Promi
     })
     const text = await res.text()
     console.log(`[office-bridge] POST ${endpoint} → ${res.status} ${text.substring(0, 80)}`)
+    try { return JSON.parse(text) } catch { return null }
   } catch (err: unknown) {
     console.log(`[office-bridge] POST ${endpoint} FAILED:`, err instanceof Error ? err.message : err)
+    return null
   }
 }
 
@@ -92,11 +97,43 @@ const createdSessions = new Set<string>()
  * Agent started processing (thinking / beginning a turn).
  * Also lazily creates the pixel character if this is the first time we see this session.
  */
-export function officeAgentStarted(sessionId: string, sessionName?: string): void {
+export async function officeAgentStarted(sessionId: string, sessionName?: string): Promise<void> {
   if (!createdSessions.has(sessionId)) {
     createdSessions.add(sessionId)
+    // Create the agent on the server first
+    const result = await postEvent('/api/agent-created', {
+      sessionId,
+      sessionName: sessionName || 'Agent',
+    })
+    if (result?.agentId) {
+      sessionAgentIds.set(sessionId, result.agentId as number)
+      // Also dispatch directly to office window (bypass broken WebSocket)
+      dispatchToOfficeWindow({
+        type: 'agentCreated',
+        id: result.agentId,
+        folderName: sessionName || 'Agent',
+      })
+    }
   }
-  // Mark the agent active immediately so short turns still walk to the desk.
+
+  const agentId = sessionAgentIds.get(sessionId)
+  console.log(`[office-bridge] agentStarted: sessionId=${sessionId} agentId=${agentId} knownIds=${[...sessionAgentIds.entries()].map(([k,v])=>`${k}:${v}`).join(',')}`)
+  if (agentId) {
+    // Dispatch tool start directly to window so character walks to desk
+    const tid = `thinking-${Date.now()}`
+    activeToolIds.set(sessionId, tid)
+    console.log(`[office-bridge] dispatching agentToolStart id=${agentId} tid=${tid}`)
+    dispatchToOfficeWindow({
+      type: 'agentToolStart',
+      id: agentId,
+      toolId: tid,
+      status: 'Thinking',
+    })
+  } else {
+    console.log(`[office-bridge] WARNING: no agentId for ${sessionId}, cannot dispatch to window`)
+  }
+
+  // Also notify server (for persistent state)
   postEvent('/api/agent-status', {
     sessionId,
     sessionName: sessionName || 'Agent',
@@ -110,11 +147,18 @@ export function officeAgentStarted(sessionId: string, sessionName?: string): voi
 export function officeAgentToolCall(sessionId: string, toolName: string, toolId?: string): void {
   const tid = toolId || `tool-${Date.now()}`
   activeToolIds.set(sessionId, tid)
-  postEvent('/api/agent-tool-start', {
-    sessionId,
-    toolName,
-    toolId: tid,
-  })
+
+  const agentId = sessionAgentIds.get(sessionId)
+  if (agentId) {
+    dispatchToOfficeWindow({
+      type: 'agentToolStart',
+      id: agentId,
+      toolId: tid,
+      status: toolNameToDetail(toolName),
+    })
+  }
+
+  postEvent('/api/agent-tool-start', { sessionId, toolName, toolId: tid })
 }
 
 /**
@@ -123,6 +167,14 @@ export function officeAgentToolCall(sessionId: string, toolName: string, toolId?
 export function officeAgentToolDone(sessionId: string, toolId?: string): void {
   const tid = toolId || activeToolIds.get(sessionId)
   if (tid) {
+    const agentId = sessionAgentIds.get(sessionId)
+    if (agentId) {
+      dispatchToOfficeWindow({
+        type: 'agentToolDone',
+        id: agentId,
+        toolId: tid,
+      })
+    }
     postEvent('/api/agent-tool-done', { sessionId, toolId: tid })
   }
 }
@@ -132,6 +184,15 @@ export function officeAgentToolDone(sessionId: string, toolId?: string): void {
  */
 export function officeAgentFinished(sessionId: string): void {
   activeToolIds.delete(sessionId)
+
+  const agentId = sessionAgentIds.get(sessionId)
+  if (agentId) {
+    dispatchToOfficeWindow({
+      type: 'agentToolsClear',
+      id: agentId,
+    })
+  }
+
   postEvent('/api/agent-tools-clear', { sessionId })
 }
 
@@ -153,15 +214,33 @@ export function officeAgentError(sessionId: string, errorMessage?: string): void
 /**
  * Bulk sync all active sessions (e.g., on app startup).
  */
-export function officeAgentBulkSync(
+export async function officeAgentBulkSync(
   sessions: Array<{
     sessionId: string
     sessionName: string
     isActive?: boolean
     currentTool?: string
   }>
-): void {
-  postEvent('/api/bulk-sync', { sessions })
+): Promise<void> {
+  const result = await postEvent('/api/bulk-sync', { sessions })
+  // Track the agent IDs returned by the server
+  if (result?.agentIds && typeof result.agentIds === 'object') {
+    for (const [sid, id] of Object.entries(result.agentIds as Record<string, number>)) {
+      sessionAgentIds.set(sid, id)
+      createdSessions.add(sid)
+    }
+  }
+}
+
+/**
+ * Reverse lookup: get sessionId for a given pixel agent ID.
+ * Used when user clicks a character in the office to navigate to the session.
+ */
+export function getSessionIdForAgent(agentId: number): string | null {
+  for (const [sessionId, id] of sessionAgentIds.entries()) {
+    if (id === agentId) return sessionId
+  }
+  return null
 }
 
 /**

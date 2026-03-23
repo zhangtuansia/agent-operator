@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
 import { ensureRandomUUID } from './browserCompat';
-import { initDaziBridge } from './bridge/DaziBridge';
+// initDaziBridge is now called from App.tsx useEffect (after message listeners are registered)
 
 async function main() {
   ensureRandomUUID();
@@ -15,9 +15,9 @@ async function main() {
   const { initBrowserMock } = await import('./browserMock.js');
   await initBrowserMock();
 
-  // Initialize WebSocket bridge for real-time agent events from DAZI.
-  // This connects to the same server that's serving the static files.
-  initDaziBridge();
+  // NOTE: initDaziBridge() is called from App.tsx useEffect AFTER
+  // useExtensionMessages registers its message listener. This ensures
+  // existingAgents messages are not lost.
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
