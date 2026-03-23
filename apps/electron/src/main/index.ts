@@ -168,6 +168,33 @@ app.on('open-url', (event, url) => {
   }
 })
 
+app.on('web-contents-created', (_event, contents) => {
+  if (contents.getType() !== 'webview') return
+
+  contents.on('did-finish-load', () => {
+    mainLog.info('[webview] did-finish-load:', contents.getURL())
+  })
+
+  contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    mainLog.error('[webview] did-fail-load:', {
+      url: validatedUrl,
+      errorCode,
+      errorDescription,
+      isMainFrame,
+    })
+  })
+
+  contents.on('console-message', (_event, level, message, line, sourceId) => {
+    mainLog.info('[webview] console-message:', {
+      level,
+      message,
+      line,
+      sourceId,
+      url: contents.getURL(),
+    })
+  })
+})
+
 // Handle deeplink on Windows/Linux (single instance check)
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {

@@ -6,6 +6,7 @@ import { isAbsolute, join, normalize as normalizePath, parse, resolve, sep } fro
 import { pathToFileURL } from 'url'
 import { mainLog } from './logger'
 import { BrowserCDP } from './browser-cdp'
+import { getOfficeServerOrigin } from './office-server'
 import { DEFAULT_THEME, loadAppTheme } from '@agent-operator/shared/config'
 import {
   BROWSER_LIVE_FX_BORDER,
@@ -217,10 +218,8 @@ function isLocalhostTarget(input: string): boolean {
 function isOfficeTarget(input: string): boolean {
   try {
     const url = new URL(input)
-    return (
-      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
-      url.port === '19000'
-    )
+    const officeOrigin = getOfficeServerOrigin()
+    return !!officeOrigin && url.origin === officeOrigin
   } catch {
     return false
   }
@@ -570,13 +569,16 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
 
     if (isOfficeTarget(target)) {
+      const officeOrigin = getOfficeServerOrigin()
       const pageSession = record.pageView.webContents.session
       await pageSession.clearCache()
-      await pageSession.clearStorageData({
-        origin: 'http://127.0.0.1:19000',
-        storages: ['localstorage', 'indexdb', 'serviceworkers', 'cachestorage'],
-      })
-      mainLog.info(`[browser-pane] Cleared cached office data before navigate id=${id}`)
+      if (officeOrigin) {
+        await pageSession.clearStorageData({
+          origin: officeOrigin,
+          storages: ['localstorage', 'indexdb', 'serviceworkers', 'cachestorage'],
+        })
+      }
+      mainLog.info(`[browser-pane] Cleared cached office data before navigate id=${id} origin=${officeOrigin ?? 'unknown'}`)
     }
 
     await record.pageView.webContents.loadURL(target)

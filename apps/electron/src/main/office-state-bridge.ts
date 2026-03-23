@@ -12,10 +12,11 @@
  *   Session archived      → POST /api/agent-closed     → character despawns
  *   Session status change → POST /api/agent-status     → waiting/active bubble
  *
- * Pushes events to the Pixel Agents server on port 19000.
+ * Pushes events to the Pixel Agents server over the current dynamic localhost
+ * port managed by office-server.ts.
  */
 
-const OFFICE_API = 'http://127.0.0.1:19000'
+import { startOfficeServer } from './office-server'
 
 // Track active tool IDs per session for dedup / done matching
 const activeToolIds = new Map<string, string>()
@@ -26,8 +27,13 @@ const activeToolIds = new Map<string, string>()
 
 async function postEvent(endpoint: string, body: Record<string, unknown>): Promise<void> {
   try {
+    const officeApi = await startOfficeServer()
+    if (!officeApi) {
+      console.log(`[office-bridge] POST ${endpoint} skipped: office server unavailable`)
+      return
+    }
     console.log(`[office-bridge] POST ${endpoint}`, JSON.stringify(body).substring(0, 100))
-    const res = await fetch(`${OFFICE_API}${endpoint}`, {
+    const res = await fetch(`${officeApi}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

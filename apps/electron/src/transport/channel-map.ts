@@ -119,6 +119,7 @@ export const CHANNEL_MAP = {
   listOpenTargets: invoke(IPC_CHANNELS.OPEN_TARGETS_LIST),
   openFileWithTarget: invoke(IPC_CHANNELS.OPEN_FILE_WITH_TARGET),
   setOpenTargetPreference: invoke(IPC_CHANNELS.SET_OPEN_TARGET_PREFERENCE),
+  getOfficeServerUrl: invoke(IPC_CHANNELS.OFFICE_GET_SERVER_URL),
 
   // Menu event listeners
   onMenuNewChat: listener(IPC_CHANNELS.MENU_NEW_CHAT),

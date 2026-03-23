@@ -18,6 +18,7 @@ import {
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
   createBackendFromConnection,
+  createBackendFromResolvedContext,
   resolveBackendProvider,
   resolveBackendSelection,
 } from '../factory.ts';
@@ -282,6 +283,41 @@ describe('resolveBackendSelection', () => {
       provider: 'anthropic',
       anthropicRuntime: 'operator',
     });
+  });
+});
+
+describe('createBackendFromResolvedContext', () => {
+  it('preserves environment auth when constructing a Pi backend from a bedrock connection', () => {
+    const agent = createBackendFromResolvedContext({
+      context: {
+        provider: 'pi',
+        authType: 'environment',
+        resolvedModel: 'arn:aws:bedrock:us-west-2:123:application-inference-profile/demo',
+        capabilities: {
+          supportsImages: true,
+          supportsReasoning: true,
+          supportsBranching: true,
+          needsHttpPoolServer: true,
+        },
+        connection: {
+          slug: 'bedrock',
+          name: 'AWS Bedrock',
+          providerType: 'bedrock',
+          authType: 'environment',
+          defaultModel: 'arn:aws:bedrock:us-west-2:123:application-inference-profile/demo',
+          awsRegion: 'us-west-2',
+          createdAt: Date.now(),
+        } as LlmConnection,
+      },
+      coreConfig: {
+        workspace: createTestWorkspace(),
+        session: createTestSession(),
+        isHeadless: true,
+      },
+    }) as any;
+
+    expect(agent.config.authType).toBe('environment');
+    expect(agent.config.providerType).toBe('bedrock');
   });
 });
 

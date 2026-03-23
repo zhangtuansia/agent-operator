@@ -130,6 +130,7 @@ export const IPC_CHANNELS = {
   OPEN_TARGETS_LIST: 'shell:listOpenTargets',
   OPEN_FILE_WITH_TARGET: 'shell:openFileWithTarget',
   SET_OPEN_TARGET_PREFERENCE: 'shell:setOpenTargetPreference',
+  OFFICE_GET_SERVER_URL: 'office:getServerUrl',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',

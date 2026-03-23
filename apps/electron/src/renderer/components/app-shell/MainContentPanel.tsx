@@ -26,6 +26,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isDocumentsNavigation,
+  isOfficeNavigation,
   isAutomationsNavigation,
   type NavigationState,
 } from '@/contexts/NavigationContext'
@@ -36,6 +37,7 @@ import SkillInfoPage from '@/pages/SkillInfoPage'
 import { useLanguage } from '@/context/LanguageContext'
 import { AutomationInfoPage } from '@/components/automations/AutomationInfoPage'
 import { DocumentsWorkspace } from './DocumentsWorkspace'
+import { OfficeWorkspace } from './OfficeWorkspace'
 import { automationsAtom } from '@/atoms/automations'
 import type { ExecutionEntry } from '@/components/automations/types'
 
@@ -131,6 +133,11 @@ export function MainContentPanel({
         navState={navState}
       />
     )
+  }
+
+  // Office navigator - dedicated workspace surface
+  if (isOfficeNavigation(navState)) {
+    return wrapWithStoplight(<OfficeWorkspace />)
   }
 
   // Automations navigator - show automation info or empty state

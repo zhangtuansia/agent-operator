@@ -65,6 +65,7 @@ import {
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { DocumentsWorkspace } from "./DocumentsWorkspace"
+import { OfficeWorkspace } from "./OfficeWorkspace"
 import { LeftSidebar } from "./LeftSidebar"
 import { TopBar } from "./TopBar"
 import { PanelStackContainer } from "./PanelStackContainer"
@@ -431,7 +432,8 @@ function AppShellContent({
 
   const showSessionListPanel = !isFocusedMode
   const isDocumentsLayout = isDocumentsNavigation(navState)
-  const showNavigatorPane = showSessionListPanel && !isDocumentsLayout
+  const isOfficeLayout = isOfficeNavigation(navState)
+  const showNavigatorPane = showSessionListPanel && !isDocumentsLayout && !isOfficeLayout
 
   // Derive right sidebar panel from navigation state (defaults to sessionMetadata)
   const rightSidebarPanel: RightSidebarPanel = navState.rightSidebar || { type: 'sessionMetadata' }
@@ -1313,45 +1315,10 @@ function AppShellContent({
     navigate(routes.view.documents())
   }, [navigate])
 
-  // Handler for office view — opens in built-in browser (singleton)
-  const officeInstanceIdRef = React.useRef<string | null>(null)
-  const buildOfficeUrl = React.useCallback(
-    () => `http://127.0.0.1:19000/?desktop=1&cb=${Date.now().toString(36)}`,
-    [],
-  )
-  const buildOfficePartition = React.useCallback(
-    () => `office-${Date.now().toString(36)}`,
-    [],
-  )
-  const handleOfficeClick = useCallback(async () => {
-    const browserPaneApi = window.electronAPI.browserPane
-    if (!browserPaneApi) {
-      toast.error('Browser is unavailable')
-      return
-    }
-    try {
-      // Reuse existing instance if still alive
-      if (officeInstanceIdRef.current) {
-        try {
-          await browserPaneApi.focus(officeInstanceIdRef.current)
-          return
-        } catch {
-          // Instance was closed, create a new one
-          officeInstanceIdRef.current = null
-        }
-      }
-      const instanceId = await browserPaneApi.create({
-        show: true,
-        url: buildOfficeUrl(),
-        partition: buildOfficePartition(),
-      })
-      await browserPaneApi.focus(instanceId)
-      officeInstanceIdRef.current = instanceId
-    } catch (error) {
-      console.error('[AppShell] Failed to open office:', error)
-      toast.error('Failed to open office')
-    }
-  }, [buildOfficePartition, buildOfficeUrl])
+  // Handler for office view
+  const handleOfficeClick = useCallback(() => {
+    navigate(routes.view.office())
+  }, [navigate])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
@@ -2351,13 +2318,15 @@ function AppShellContent({
             )}>
               {isDocumentsLayout ? (
                 <DocumentsWorkspace isFocusedMode={isFocusedMode} navState={navState} />
+              ) : isOfficeLayout ? (
+                <OfficeWorkspace />
               ) : (
                 <MainContentPanel isFocusedMode={isFocusedMode} />
               )}
             </div>
           }
           isSidebarAndNavigatorHidden={isFocusedMode}
-          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible && !isDocumentsLayout }
+          isRightSidebarVisible={!isFocusedMode && shouldDockRightSidebar && isRightSidebarVisible && !isDocumentsLayout && !isOfficeLayout}
           isResizing={!!isResizing}
         />
 
@@ -2422,7 +2391,7 @@ function AppShellContent({
         )}
 
           {/* Right Sidebar - Inline Mode (≥ 920px) */}
-          {!isFocusedMode && shouldDockRightSidebar && !isDocumentsLayout && (
+          {!isFocusedMode && shouldDockRightSidebar && !isDocumentsLayout && !isOfficeLayout && (
             <>
               {/* Resize Handle */}
               {isRightSidebarVisible && (
@@ -2480,7 +2449,7 @@ function AppShellContent({
           )}
 
           {/* Right Sidebar - Overlay Mode (< 920px) */}
-          {!isFocusedMode && !shouldDockRightSidebar && !isDocumentsLayout && (
+          {!isFocusedMode && !shouldDockRightSidebar && !isDocumentsLayout && !isOfficeLayout && (
             <AnimatePresence>
               {isRightSidebarVisible && (
                 <>

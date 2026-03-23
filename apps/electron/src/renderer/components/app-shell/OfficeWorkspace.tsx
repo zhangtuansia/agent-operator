@@ -3,32 +3,69 @@ import { RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 
-function buildOfficeUrl(): string {
-  return `http://127.0.0.1:19000/?desktop=1&cb=${Date.now().toString(36)}`
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string
+        allowpopups?: string
+      }
+    }
+  }
+}
+
+async function buildOfficeUrl(): Promise<string | null> {
+  const baseUrl = await window.electronAPI.getOfficeServerUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/?desktop=1&cb=${Date.now().toString(36)}`
 }
 
 type LoadState = 'loading' | 'ready' | 'error'
+type OfficeWebview = HTMLElement & {
+  reload: () => void
+  src: string
+  addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+  removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+}
 
 export function OfficeWorkspace() {
   const { t } = useTranslation()
   const [key, setKey] = React.useState(0)
-  const [src, setSrc] = React.useState(() => buildOfficeUrl())
+  const [src, setSrc] = React.useState<string>('')
   const [loadState, setLoadState] = React.useState<LoadState>('loading')
   const retryTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const webviewRef = React.useRef<OfficeWebview | null>(null)
 
-  // Listen for iframe load/error events
-  const handleIframeLoad = React.useCallback(() => {
-    setLoadState('ready')
-  }, [])
-
-  const handleIframeError = React.useCallback(() => {
+  const handleLoadError = React.useCallback(() => {
     // Auto-retry after 3 seconds (backend may still be starting)
     retryTimerRef.current = setTimeout(() => {
-      setSrc(buildOfficeUrl())
-      setKey(k => k + 1)
+      void buildOfficeUrl().then((nextUrl) => {
+        if (!nextUrl) {
+          setLoadState('error')
+          return
+        }
+        setSrc(nextUrl)
+        setKey(k => k + 1)
+      })
     }, 3000)
     setLoadState('error')
   }, [])
+
+  React.useEffect(() => {
+    const webview = webviewRef.current
+    if (!webview) return
+
+    const handleFinishLoad = () => setLoadState('ready')
+    const handleFailLoad = () => handleLoadError()
+
+    webview.addEventListener('did-finish-load', handleFinishLoad)
+    webview.addEventListener('did-fail-load', handleFailLoad)
+
+    return () => {
+      webview.removeEventListener('did-finish-load', handleFinishLoad)
+      webview.removeEventListener('did-fail-load', handleFailLoad)
+    }
+  }, [src, key, handleLoadError])
 
   // Cleanup retry timer
   React.useEffect(() => {
@@ -40,11 +77,22 @@ export function OfficeWorkspace() {
   // Reset load state when key changes (retry)
   React.useEffect(() => {
     setLoadState('loading')
+    let mounted = true
+    void buildOfficeUrl().then((nextUrl) => {
+      if (!mounted) return
+      if (!nextUrl) {
+        setLoadState('error')
+        return
+      }
+      setSrc(nextUrl)
+    })
+    return () => {
+      mounted = false
+    }
   }, [key])
 
   const handleRetry = React.useCallback(() => {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
-    setSrc(buildOfficeUrl())
     setKey(k => k + 1)
   }, [])
 
@@ -76,19 +124,22 @@ export function OfficeWorkspace() {
           </div>
         )}
 
-        {/* iframe — Pixel Agents UI fills available space (it handles its own zoom/pan) */}
-        <iframe
-          key={key}
-          src={src}
-          onLoad={handleIframeLoad}
-          onError={handleIframeError}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-          }}
-          allow="autoplay"
-        />
+        {/* webview — Pixel Agents UI runs in its own guest page process */}
+        {src ? (
+          <webview
+            key={key}
+            ref={node => {
+              webviewRef.current = node as OfficeWebview | null
+            }}
+            src={src}
+            allowpopups="false"
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+            }}
+          />
+        ) : null}
       </div>
     </div>
   )

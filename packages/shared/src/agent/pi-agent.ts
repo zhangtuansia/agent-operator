@@ -554,6 +554,18 @@ export class PiAgent extends BaseAgent {
     return env;
   }
 
+  private hasRuntimeCredentialChain(): boolean {
+    if (
+      this.config.authType === 'environment'
+      || this.config.authType === 'iam_credentials'
+      || this.config.authType === 'service_account_file'
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
   private async spawnSubprocess(): Promise<void> {
     const cwd = this.resolvedCwd();
     const sessionId = this.config.session?.id || `agent-${Date.now()}`;
@@ -573,8 +585,8 @@ export class PiAgent extends BaseAgent {
     ]);
 
     // Guard: don't spawn if no credentials are available at all
-    if (!apiKey && !piAuth && Object.keys(apiKeyEnvVars).length === 0) {
-      const msg = 'No API key configured. Please add an API key in Settings before using the Pi backend.';
+    if (!apiKey && !piAuth && Object.keys(apiKeyEnvVars).length === 0 && !this.hasRuntimeCredentialChain()) {
+      const msg = 'No credentials configured. Configure an API key/OAuth login, or ensure runtime provider credentials are available before using the Pi backend.';
       this.debug(`[spawn] ${msg}`);
       this.eventQueue.enqueue({ type: 'error', message: msg });
       this.eventQueue.complete();

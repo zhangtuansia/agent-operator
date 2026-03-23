@@ -71,6 +71,35 @@ interface ManagedWindow {
   workspaceId: string
 }
 
+function buildPersistedRestoreUrl(currentUrl: string, workspaceId: string, focused: boolean): string | undefined {
+  if (!currentUrl) return undefined
+
+  try {
+    const parsed = new URL(currentUrl)
+    const params = new URLSearchParams()
+
+    params.set('workspaceId', parsed.searchParams.get('workspaceId') || workspaceId)
+
+    const route = parsed.searchParams.get('route')
+    if (route) {
+      params.set('route', route)
+    }
+
+    const sidebar = parsed.searchParams.get('sidebar')
+    if (sidebar) {
+      params.set('sidebar', sidebar)
+    }
+
+    if (focused || parsed.searchParams.get('focused') === 'true') {
+      params.set('focused', 'true')
+    }
+
+    return `app://window?${params.toString()}`
+  } catch {
+    return undefined
+  }
+}
+
 export interface CreateWindowOptions {
   /** The workspace to open (empty string for onboarding) */
   workspaceId: string
@@ -487,7 +516,8 @@ export class WindowManager implements IWindowManager {
     return this.getAllWindows().map(managed => {
       const webContentsId = managed.window.webContents.id
       const isFocused = this.focusedModeWindows.has(webContentsId)
-      const url = managed.window.webContents.getURL()
+      const currentUrl = managed.window.webContents.getURL()
+      const url = buildPersistedRestoreUrl(currentUrl, managed.workspaceId, isFocused)
       return {
         type: 'main' as const,
         workspaceId: managed.workspaceId,

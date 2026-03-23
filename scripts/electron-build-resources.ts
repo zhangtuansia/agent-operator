@@ -128,7 +128,68 @@ function bundleGoogleWorkspaceCli(): void {
   console.log("[resources] Bundled Google Workspace CLI");
 }
 
+function buildOfficeBackend(): void {
+  const officeDir = join(ELECTRON_DIR, "src", "office-backend");
+  const officeUiDir = join(officeDir, "pixel-agents-ui");
+  const officeServerDir = join(officeDir, "pixel-agents-server");
+  const officeServerEntry = join(officeServerDir, "server.ts");
+  const officeUiPackage = join(officeUiDir, "package.json");
+
+  if (!existsSync(officeServerEntry) || !existsSync(officeUiPackage)) {
+    console.log("[resources] Office backend sources not found; skipping office bundle");
+    return;
+  }
+
+  const ensureDeps = (dir: string, requiredPath: string): void => {
+    if (existsSync(join(dir, requiredPath))) return;
+    console.log(`[resources] Installing office dependencies in ${dir}`);
+    const install = spawnSync("bun", ["install", "--frozen-lockfile"], {
+      cwd: dir,
+      stdio: "inherit",
+      env: process.env,
+    });
+    if (install.status !== 0) {
+      throw new Error(`[resources] Failed to install office dependencies in ${dir} (exit ${install.status ?? "unknown"})`);
+    }
+  };
+
+  ensureDeps(officeUiDir, "node_modules/pngjs");
+  ensureDeps(officeServerDir, "node_modules/ws");
+
+  console.log("[resources] Building office UI");
+  const uiBuild = spawnSync("bun", ["x", "vite", "build"], {
+    cwd: officeUiDir,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (uiBuild.status !== 0) {
+    throw new Error(`[resources] Failed to build office UI (exit ${uiBuild.status ?? "unknown"})`);
+  }
+
+  console.log("[resources] Building office server");
+  const serverBuild = spawnSync("bun", ["build.mjs"], {
+    cwd: officeServerDir,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (serverBuild.status !== 0) {
+    throw new Error(`[resources] Failed to build office server (exit ${serverBuild.status ?? "unknown"})`);
+  }
+
+  const builtServerDist = join(officeServerDir, "dist");
+  if (!existsSync(join(builtServerDist, "server.mjs"))) {
+    throw new Error(`[resources] Office server build did not produce ${join(builtServerDist, "server.mjs")}`);
+  }
+
+  const officeDestDir = join(destDir, "office-backend", "pixel-agents-server", "dist");
+  rmSync(join(destDir, "office-backend"), { recursive: true, force: true });
+  mkdirSync(officeDestDir, { recursive: true });
+  cpSync(builtServerDist, officeDestDir, { recursive: true, force: true });
+  console.log(`[resources] Bundled office backend from ${builtServerDist}`);
+}
+
 syncMcpServer("bridge-mcp-server");
 syncMcpServer("session-mcp-server");
 syncMcpServer("pi-agent-server");
 bundleGoogleWorkspaceCli();
+buildOfficeBackend();

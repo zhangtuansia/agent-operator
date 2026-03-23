@@ -671,6 +671,7 @@ export interface ElectronAPI {
   listOpenTargets(path: string): Promise<{ targets: OpenTargetInfo[]; defaultTargetId: string | null }>
   openFileWithTarget(targetId: string, path: string): Promise<void>
   setOpenTargetPreference(targetId: string, path?: string): Promise<void>
+  getOfficeServerUrl(): Promise<string | null>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void

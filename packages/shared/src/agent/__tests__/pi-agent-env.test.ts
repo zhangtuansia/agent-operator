@@ -73,4 +73,28 @@ describe('PiAgent subprocess env', () => {
     expect(env.AWS_PROFILE).toBe('override-profile')
     expect(env.AWS_REGION).toBe('eu-central-1')
   })
+
+  it('treats environment auth as a valid runtime credential chain', () => {
+    const agent = new PiAgent({
+      provider: 'pi',
+      providerType: 'bedrock',
+      authType: 'environment',
+      workspace: {
+        id: 'workspace-id',
+        name: 'Workspace',
+        rootPath: '/tmp/workspace',
+        createdAt: Date.now(),
+      },
+      session: {
+        id: 'session-id',
+        workspaceRootPath: '/tmp/workspace',
+        createdAt: Date.now(),
+        lastUsedAt: Date.now(),
+      },
+      model: 'pi/us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      isHeadless: true,
+    })
+
+    expect((agent as any).hasRuntimeCredentialChain()).toBe(true)
+  })
 })

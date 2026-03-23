@@ -457,9 +457,7 @@ export function resolveBackendContext(args: {
     fallbackProvider: args.fallbackProvider,
   });
   const provider = selection.provider;
-  const authType = connection
-    ? connectionAuthTypeToBackendAuthType(connection.authType)
-    : undefined;
+  const authType = connection?.authType;
   const resolvedModel =
     args.managedModel
     || connection?.defaultModel
