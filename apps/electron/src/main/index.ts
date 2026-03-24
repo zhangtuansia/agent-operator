@@ -91,6 +91,7 @@ import { RPC_CHANNELS, type SessionEvent } from '@agent-operator/shared/protocol
 import { createElectronPlatformServices } from './platform-services'
 import { registerTransportBootstrapHandlers } from './bootstrap-handlers'
 import { applyConfiguredProxySettings } from './network-proxy'
+import { syncOfficeMainWindowRef } from './office-main-window-ref'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -123,6 +124,7 @@ let rpcServer: WsRpcServer | null = null
 let rpcToken: string | null = null
 let sessionEventHub: SessionEventHub | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
+let setOfficeMainWindowRef: ((win: BrowserWindow) => void) | null = null
 
 registerPiModelResolver((piAuthProvider?: string) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels(),
@@ -366,8 +368,7 @@ app.whenReady().then(async () => {
     const { onSessionStarted, onSessionStopped } = await import('./power-manager')
     const { officeAgentStarted, officeAgentToolCall, officeAgentFinished, officeAgentError, officeAgentClosed } = await import('./office-state-bridge')
     const { setMainWindowRef } = await import('./handlers/office')
-    // Set the main window reference so office can navigate to sessions
-    if (mainWindow) setMainWindowRef(mainWindow)
+    setOfficeMainWindowRef = setMainWindowRef
     setSessionRuntimeHooks({
       updateBadgeCount,
       onSessionStarted: (sessionId?: string, sessionName?: string) => {
@@ -503,6 +504,7 @@ app.whenReady().then(async () => {
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()
+    syncOfficeMainWindowRef(windowManager, setOfficeMainWindowRef)
 
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
@@ -532,7 +534,14 @@ app.whenReady().then(async () => {
       mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
     }
   } catch (error) {
-    mainLog.error('Failed to initialize app:', error)
+    if (error instanceof Error) {
+      mainLog.error('Failed to initialize app:', {
+        message: error.message,
+        stack: error.stack,
+      })
+    } else {
+      mainLog.error('Failed to initialize app:', error)
+    }
     // Continue anyway - the app will show errors in the UI
   }
 
@@ -546,13 +555,19 @@ app.whenReady().then(async () => {
         const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
         // Verify workspace still exists
         if (workspaces.some(ws => ws.id === wsId)) {
-          windowManager.createWindow({ workspaceId: wsId })
+          const win = windowManager.createWindow({ workspaceId: wsId })
+          syncOfficeMainWindowRef(windowManager, setOfficeMainWindowRef, win)
         } else {
-          windowManager.createWindow({ workspaceId: workspaces[0].id })
+          const win = windowManager.createWindow({ workspaceId: workspaces[0].id })
+          syncOfficeMainWindowRef(windowManager, setOfficeMainWindowRef, win)
         }
       }
     }
   })
+})
+
+app.on('browser-window-focus', (_event, window) => {
+  syncOfficeMainWindowRef(windowManager, setOfficeMainWindowRef, window)
 })
 
 app.on('window-all-closed', () => {

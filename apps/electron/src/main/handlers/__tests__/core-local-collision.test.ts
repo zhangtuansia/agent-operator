@@ -61,11 +61,15 @@ const LOCAL_HANDLER_DIR = path.resolve(import.meta.dir, '..')
 const CORE_HANDLER_DIR = path.resolve(import.meta.dir, '../../../../../../packages/server-core/src/handlers/rpc')
 
 const ALLOWED_DUPLICATES = new Set<string>()
+const NON_HANDLER_SUPPORT_FILES = new Set([
+  'office-session-sync.ts',
+])
 const EXPECTED_LOCAL_HANDLER_FILES = [
   'browser.ts',
   'file-ops.ts',
   'im.ts',
   'oauth.ts',
+  'office.ts',
   'open-targets.ts',
   'permissions.ts',
   'settings.ts',
@@ -78,7 +82,13 @@ const EXPECTED_LOCAL_HANDLER_FILES = [
 describe('core/local handler channel collisions', () => {
   it('keeps only the expected Electron-local handler modules', () => {
     const files = readdirSync(LOCAL_HANDLER_DIR, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.ts') && entry.name !== 'index.ts' && entry.name !== 'handler-deps.ts')
+      .filter((entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        entry.name !== 'index.ts' &&
+        entry.name !== 'handler-deps.ts' &&
+        !NON_HANDLER_SUPPORT_FILES.has(entry.name),
+      )
       .map((entry) => entry.name)
       .sort()
 
